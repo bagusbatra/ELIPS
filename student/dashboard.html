@@ -140,7 +140,19 @@
         </main>
     </div>
 
-    <script src="../assets/js/main.js"></script>
+    <script src="../assets/js/core.js"></script>
+    <script src="../assets/js/utils.js"></script>
+    <script src="../assets/js/data.js"></script>
+    <script src="../assets/js/seed.js"></script>
+    <script src="../assets/js/sync.js"></script>
+    <script src="../assets/js/progress.js"></script>
+    <script src="../assets/js/auth.js"></script>
+    <script src="../assets/js/crud-users.js"></script>
+    <script src="../assets/js/crud-courses.js"></script>
+    <script src="../assets/js/crud-enrollments.js"></script>
+    <script src="../assets/js/crud-content.js"></script>
+    <script src="../assets/js/crud-grades.js"></script>
+    <script src="../assets/js/ui.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function () {
             // Pastikan hanya akun peserta yang dapat membuka halaman ini.
@@ -163,15 +175,12 @@
             const tbody = document.getElementById('studentCoursesBody');
             const overview = ELIPS.getStudentCourseOverview(student.id);
             const activeOverview = overview.filter(function (item) { return item.enrollment.status === 'active'; });
-            const certificates = ELIPS.getCertificatesByStudent(student.id);
-            const publishedCerts = certificates.filter(function (cert) { return cert.status === 'publish'; });
-            const pendingCerts = certificates.filter(function (cert) { return cert.status === 'draft'; });
+            const publishedCerts = ELIPS.getPublishedCertificatesByStudent(student.id);
             const awaitingGrade = activeOverview.filter(function (item) { return item.state === 'awaiting-grade'; });
 
             const stateMap = {
                 'locked': { label: 'Belum Dibuka', className: 'badge-warning', icon: 'bi-lock-fill' },
                 'certified': { label: 'Sertifikat Terbit', className: 'badge-success', icon: 'bi-patch-check-fill' },
-                'pending-approval': { label: 'Menunggu Persetujuan', className: 'badge-warning', icon: 'bi-hourglass-split' },
                 'completed': { label: 'Selesai', className: 'badge-success', icon: 'bi-check-circle-fill' },
                 'awaiting-grade': { label: 'Menunggu Penilaian', className: 'badge-warning', icon: 'bi-hourglass-split' },
                 'learning': { label: 'Sedang Belajar', className: 'badge-warning', icon: 'bi-play-circle' },
@@ -251,9 +260,6 @@
             document.getElementById('statCertificates').textContent = publishedCerts.length;
 
             const notices = [];
-            if (pendingCerts.length > 0) {
-                notices.push(pendingCerts.length + ' sertifikat sedang menunggu persetujuan Admin.');
-            }
             if (awaitingGrade.length > 0) {
                 notices.push(awaitingGrade.length + ' kursus sudah selesai dan menunggu penilaian instruktur.');
             }

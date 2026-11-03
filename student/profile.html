@@ -165,7 +165,19 @@
         </main>
     </div>
 
-    <script src="../assets/js/main.js"></script>
+    <script src="../assets/js/core.js"></script>
+    <script src="../assets/js/utils.js"></script>
+    <script src="../assets/js/data.js"></script>
+    <script src="../assets/js/seed.js"></script>
+    <script src="../assets/js/sync.js"></script>
+    <script src="../assets/js/progress.js"></script>
+    <script src="../assets/js/auth.js"></script>
+    <script src="../assets/js/crud-users.js"></script>
+    <script src="../assets/js/crud-courses.js"></script>
+    <script src="../assets/js/crud-enrollments.js"></script>
+    <script src="../assets/js/crud-content.js"></script>
+    <script src="../assets/js/crud-grades.js"></script>
+    <script src="../assets/js/ui.js"></script>
     <script>
         let currentStudent = null;
 
@@ -216,9 +228,7 @@
                 return item.enrollment.status === 'active';
             });
             const completedLessons = overview.reduce(function (sum, item) { return sum + item.progress.completed; }, 0);
-            const publishedCerts = ELIPS.getCertificatesByStudent(student.id).filter(function (cert) {
-                return cert.status === 'publish';
-            });
+            const publishedCerts = ELIPS.getPublishedCertificatesByStudent(student.id);
 
             document.getElementById('statCourses').textContent = overview.length;
             document.getElementById('statLessons').textContent = completedLessons;
@@ -237,19 +247,13 @@
                 return;
             }
 
-            const users = ELIPS.getUsers();
-            const user = users.find(function (item) { return item.id === currentStudent.id; });
-            if (!user) {
-                ELIPS.toast('Data pengguna tidak ditemukan');
+            const result = ELIPS.updateUser(currentStudent.id, { name: name, phone: phone });
+            if (!result.ok) {
+                ELIPS.toast(result.message);
                 return;
             }
 
-            user.name = name;
-            user.phone = phone;
-            user.updatedAt = new Date().toISOString();
-            ELIPS.setUsers(users);
-
-            currentStudent = user;
+            currentStudent = result.data;
             fillProfile(currentStudent);
             ELIPS.toast('Profil berhasil diperbarui');
         }

@@ -149,11 +149,8 @@
                 </div>
                 <div class="form-group">
                     <label class="form-label">Status</label>
-                    <select id="courseStatus" class="form-input">
-                        <option value="draft">Draft</option>
-                        <option value="published">Published (Dipublikasi)</option>
-                    </select>
-                    <small class="form-hint">Kursus baru otomatis berstatus Draft. Ubah ke Published agar terlihat oleh siswa.</small>
+                    <input type="text" class="form-input" value="Draft (otomatis)" disabled>
+                    <small class="form-hint">Kursus baru selalu berstatus Draft. Publikasi dilakukan lewat tombol Publikasi setelah modul dan materi tersedia.</small>
                 </div>
             </div>
             <div style="padding: 1.5rem; border-top: 1px solid var(--border); display: flex; gap: 0.75rem; justify-content: flex-end;">
@@ -163,7 +160,19 @@
         </div>
     </div>
 
-    <script src="../assets/js/main.js"></script>
+    <script src="../assets/js/core.js"></script>
+    <script src="../assets/js/utils.js"></script>
+    <script src="../assets/js/data.js"></script>
+    <script src="../assets/js/seed.js"></script>
+    <script src="../assets/js/sync.js"></script>
+    <script src="../assets/js/progress.js"></script>
+    <script src="../assets/js/auth.js"></script>
+    <script src="../assets/js/crud-users.js"></script>
+    <script src="../assets/js/crud-courses.js"></script>
+    <script src="../assets/js/crud-enrollments.js"></script>
+    <script src="../assets/js/crud-content.js"></script>
+    <script src="../assets/js/crud-grades.js"></script>
+    <script src="../assets/js/ui.js"></script>
     <script>
         let editingCourseId = null;
 
@@ -204,6 +213,7 @@
                     '    <button class="btn btn-ghost" style="padding: 0.375rem 0.625rem; font-size: 0.8125rem;" onclick="openCourseModal(' + course.id + ')"><i class="bi bi-pencil"></i></button>',
                     '    <button class="btn btn-ghost" style="padding: 0.375rem 0.625rem; font-size: 0.8125rem;" onclick="togglePublish(' + course.id + ')"><i class="bi ' + (course.status === 'published' ? 'bi-eye-slash' : 'bi-send-check') + '"></i> ' + (course.status === 'published' ? 'Draft' : 'Publikasi') + '</button>',
                     '    <a href="../course-detail.html?id=' + course.id + '" class="btn btn-ghost" style="padding: 0.375rem 0.625rem; font-size: 0.8125rem;"><i class="bi bi-eye"></i></a>',
+                    '    <button class="btn btn-ghost" style="padding: 0.375rem 0.625rem; font-size: 0.8125rem; color: var(--danger);" onclick="removeCourse(' + course.id + ')" title="Hapus kursus"><i class="bi bi-trash"></i></button>',
                     '  </div>',
                     '</td>'
                 ].join('');
@@ -226,14 +236,12 @@
                 document.getElementById('courseCategory').value = course.category || '';
                 document.getElementById('courseDesc').value = course.description || '';
                 select.value = String(course.instructorId || '');
-                document.getElementById('courseStatus').value = course.status || 'draft';
             } else {
                 document.getElementById('courseModalTitle').textContent = 'Tambah Kursus Baru';
                 document.getElementById('courseTitle').value = '';
                 document.getElementById('courseCategory').value = '';
                 document.getElementById('courseDesc').value = '';
                 select.value = '';
-                document.getElementById('courseStatus').value = 'draft';
             }
             document.getElementById('courseModal').style.display = 'flex';
         }
@@ -244,63 +252,46 @@
         }
 
         function saveCourse() {
-            const title = document.getElementById('courseTitle').value.trim();
-            const category = document.getElementById('courseCategory').value.trim();
-            const description = document.getElementById('courseDesc').value.trim();
-            const instructorId = parseInt(document.getElementById('courseInstructor').value, 10);
-            const status = document.getElementById('courseStatus').value;
-            const instructor = ELIPS.getUserById(instructorId);
+            const payload = {
+                title: document.getElementById('courseTitle').value.trim(),
+                category: document.getElementById('courseCategory').value.trim(),
+                description: document.getElementById('courseDesc').value.trim(),
+                instructorId: parseInt(document.getElementById('courseInstructor').value, 10)
+            };
 
-            if (!title || !category || !instructorId) {
-                alert('Mohon lengkapi judul, kategori, dan pilih instruktur.');
+            const result = editingCourseId
+                ? ELIPS.updateCourse(editingCourseId, payload)
+                : ELIPS.createCourse(payload);
+
+            if (!result.ok) {
+                ELIPS.toast(result.message);
                 return;
             }
 
-            const courses = ELIPS.getCourses();
-
-            if (editingCourseId) {
-                const course = courses.find(function (c) { return c.id === editingCourseId; });
-                if (!course) return;
-                course.title = title;
-                course.category = category;
-                course.description = description;
-                course.instructorId = instructorId;
-                course.instructorName = instructor ? instructor.name : '';
-                course.status = status;
-                course.updatedAt = new Date().toISOString();
-                ELIPS.toast('Kursus berhasil diperbarui');
-            } else {
-                courses.push({
-                    id: ELIPS.nextId(courses),
-                    title: title,
-                    category: category,
-                    description: description,
-                    instructorId: instructorId,
-                    instructorName: instructor ? instructor.name : '',
-                    modules: 0,
-                    lessons: 0,
-                    totalLessons: 0,
-                    status: status || 'draft',
-                    createdAt: new Date().toISOString().split('T')[0]
-                });
-                ELIPS.toast('Kursus baru berhasil ditambahkan');
-            }
-
-            ELIPS.setCourses(courses);
+            ELIPS.toast(result.message);
             closeCourseModal();
             renderCourses();
         }
 
         function togglePublish(courseId) {
-            const courses = ELIPS.getCourses();
-            const course = courses.find(function (c) { return c.id === courseId; });
+            const course = ELIPS.getCourseById(courseId);
             if (!course) return;
             const nextStatus = course.status === 'published' ? 'draft' : 'published';
             const label = nextStatus === 'published' ? 'mempublikasikan' : 'mengubah ke draft';
             if (!confirm('Yakin ' + label + ' kursus "' + course.title + '"?')) return;
-            course.status = nextStatus;
-            ELIPS.setCourses(courses);
-            ELIPS.toast('Status kursus: ' + (nextStatus === 'published' ? 'Dipublikasi' : 'Draft'));
+
+            const result = ELIPS.toggleCourseStatus(courseId);
+            ELIPS.toast(result.message);
+            renderCourses();
+        }
+
+        function removeCourse(courseId) {
+            const course = ELIPS.getCourseById(courseId);
+            if (!course) return;
+            if (!confirm('Hapus kursus "' + course.title + '"? Modul, materi, penugasan, nilai, dan sertifikat terkait juga akan dihapus.')) return;
+
+            const result = ELIPS.deleteCourse(courseId);
+            ELIPS.toast(result.message);
             renderCourses();
         }
 

@@ -60,7 +60,19 @@
             </div>
         </div>
     </div>
-    <script src="assets/js/main.js"></script>
+    <script src="assets/js/core.js"></script>
+    <script src="assets/js/utils.js"></script>
+    <script src="assets/js/data.js"></script>
+    <script src="assets/js/seed.js"></script>
+    <script src="assets/js/sync.js"></script>
+    <script src="assets/js/progress.js"></script>
+    <script src="assets/js/auth.js"></script>
+    <script src="assets/js/crud-users.js"></script>
+    <script src="assets/js/crud-courses.js"></script>
+    <script src="assets/js/crud-enrollments.js"></script>
+    <script src="assets/js/crud-content.js"></script>
+    <script src="assets/js/crud-grades.js"></script>
+    <script src="assets/js/ui.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function () {
             const form = document.getElementById('registerForm');
@@ -88,24 +100,20 @@
                     return;
                 }
 
-                const users = ELIPS.getUsers();
-                if (users.some(function (u) { return String(u.email).toLowerCase() === email; })) {
-                    ELIPS.toast('Email sudah terdaftar. Silakan masuk.');
-                    return;
-                }
-
-                const newUser = {
-                    id: ELIPS.nextId(users),
+                const result = ELIPS.createUser({
                     name: firstName + ' ' + lastName,
                     email: email,
                     phone: phone,
+                    password: password,
                     role: 'peserta',
-                    status: 'aktif',
-                    createdAt: new Date().toISOString().split('T')[0]
-                };
-                users.push(newUser);
-                ELIPS.setUsers(users);
-                ELIPS.setCurrentUser(newUser.id);
+                    status: 'aktif'
+                });
+                if (!result.ok) {
+                    ELIPS.toast(result.message);
+                    return;
+                }
+
+                ELIPS.setCurrentUser(result.data.id);
                 ELIPS.toast('Pendaftaran berhasil. Selamat datang!');
                 setTimeout(function () {
                     window.location.href = 'student/dashboard.html';

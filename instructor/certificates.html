@@ -161,7 +161,19 @@
         </main>
     </div>
 
-    <script src="../assets/js/main.js"></script>
+    <script src="../assets/js/core.js"></script>
+    <script src="../assets/js/utils.js"></script>
+    <script src="../assets/js/data.js"></script>
+    <script src="../assets/js/seed.js"></script>
+    <script src="../assets/js/sync.js"></script>
+    <script src="../assets/js/progress.js"></script>
+    <script src="../assets/js/auth.js"></script>
+    <script src="../assets/js/crud-users.js"></script>
+    <script src="../assets/js/crud-courses.js"></script>
+    <script src="../assets/js/crud-enrollments.js"></script>
+    <script src="../assets/js/crud-content.js"></script>
+    <script src="../assets/js/crud-grades.js"></script>
+    <script src="../assets/js/ui.js"></script>
     <script>
         let currentInstructor = null;
         let pendingRows = [];
@@ -320,36 +332,10 @@
         function createDraftCertificate(enrollmentId) {
             const row = pendingRows.find(function (item) { return item.enrollment.id === enrollmentId; });
             if (!row) return;
-
-            const course = ELIPS.getCourseById(row.course.id);
-            if (!course || course.instructorId !== currentInstructor.id) {
-                ELIPS.toast('Anda tidak berhak mengajukan sertifikat kursus ini.');
-                return;
-            }
-            if (ELIPS.getCertificate(row.enrollment.studentId, row.course.id)) {
-                ELIPS.toast('Sertifikat peserta ini sudah ada.');
-                renderAll();
-                return;
-            }
             if (!confirm('Ajukan e-sertifikat Draft untuk ' + (row.student.name || 'peserta') + '?')) return;
 
-            const certificates = ELIPS.getCertificates();
-            certificates.push({
-                id: ELIPS.nextId(certificates),
-                studentId: row.enrollment.studentId,
-                courseId: row.course.id,
-                enrollmentId: row.enrollment.id,
-                certificateNumber: 'CERT-DRAFT-' + Date.now().toString().slice(-6),
-                status: 'draft',
-                grade: row.grade.grade,
-                score: row.grade.score,
-                issuedByInstructorAt: new Date().toISOString(),
-                approvedByAdminId: null,
-                approvedAt: null,
-                createdAt: new Date().toISOString()
-            });
-            ELIPS.setCertificates(certificates);
-            ELIPS.toast('E-sertifikat Draft berhasil diajukan ke Admin.');
+            const result = ELIPS.createDraftCertificateForEnrollment(enrollmentId, currentInstructor.id);
+            ELIPS.toast(result.message);
             renderAll();
         }
     </script>

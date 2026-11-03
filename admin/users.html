@@ -195,7 +195,19 @@
         </div>
     </div>
 
-    <script src="../assets/js/main.js"></script>
+    <script src="../assets/js/core.js"></script>
+    <script src="../assets/js/utils.js"></script>
+    <script src="../assets/js/data.js"></script>
+    <script src="../assets/js/seed.js"></script>
+    <script src="../assets/js/sync.js"></script>
+    <script src="../assets/js/progress.js"></script>
+    <script src="../assets/js/auth.js"></script>
+    <script src="../assets/js/crud-users.js"></script>
+    <script src="../assets/js/crud-courses.js"></script>
+    <script src="../assets/js/crud-enrollments.js"></script>
+    <script src="../assets/js/crud-content.js"></script>
+    <script src="../assets/js/crud-grades.js"></script>
+    <script src="../assets/js/ui.js"></script>
     <script>
         let editingUserId = null;
         let assigningInstructorId = null;
@@ -279,49 +291,24 @@
             const status = document.getElementById('userStatus').value;
             const password = document.getElementById('userPassword').value;
 
-            if (!name || !email) {
-                alert('Nama dan email wajib diisi.');
+            const payload = {
+                name: name,
+                email: email,
+                phone: phone,
+                role: role,
+                status: status,
+                password: password || undefined
+            };
+            const result = editingUserId
+                ? ELIPS.updateUser(editingUserId, payload)
+                : ELIPS.createUser(payload);
+
+            if (!result.ok) {
+                ELIPS.toast(result.message);
                 return;
             }
 
-            const users = ELIPS.getUsers();
-            const duplicate = users.find(function (u) { return String(u.email).toLowerCase() === email && u.id !== editingUserId; });
-            if (duplicate) {
-                alert('Email sudah digunakan oleh pengguna lain.');
-                return;
-            }
-
-            if (editingUserId) {
-                const user = users.find(function (u) { return u.id === editingUserId; });
-                if (!user) return;
-                user.name = name;
-                user.email = email;
-                user.phone = phone;
-                user.role = role;
-                user.status = status;
-                if (password) user.password = password;
-
-                // Keep denormalized instructor name in courses up to date
-                const courses = ELIPS.getCourses();
-                courses.forEach(function (course) {
-                    if (course.instructorId === user.id) course.instructorName = user.name;
-                });
-                ELIPS.setCourses(courses);
-                ELIPS.toast('Pengguna berhasil diperbarui');
-            } else {
-                users.push({
-                    id: ELIPS.nextId(users),
-                    name: name,
-                    email: email,
-                    phone: phone,
-                    role: role,
-                    status: status,
-                    createdAt: new Date().toISOString().split('T')[0]
-                });
-                ELIPS.toast('Pengguna berhasil ditambahkan');
-            }
-
-            ELIPS.setUsers(users);
+            ELIPS.toast(result.message);
             closeUserModal();
             renderUsers();
         }
@@ -329,26 +316,15 @@
         function deleteUser(id) {
             const user = ELIPS.getUserById(id);
             if (!user) return;
-            if (user.id === 1) {
-                alert('Akun Administrator utama tidak dapat dihapus.');
-                return;
-            }
             if (!confirm('Hapus pengguna "' + user.name + '"? Data penugasan terkait juga akan dihapus.')) return;
 
-            ELIPS.setUsers(ELIPS.getUsers().filter(function (u) { return u.id !== id; }));
-            ELIPS.setEnrollments(ELIPS.getEnrollments().filter(function (e) { return e.studentId !== id; }));
-            ELIPS.setCertificates(ELIPS.getCertificates().filter(function (c) { return c.studentId !== id; }));
-            ELIPS.setGrades(ELIPS.getGrades().filter(function (g) { return g.studentId !== id; }));
+            const result = ELIPS.deleteUser(id);
+            if (!result.ok) {
+                ELIPS.toast(result.message);
+                return;
+            }
 
-            const courses = ELIPS.getCourses();
-            courses.forEach(function (course) {
-                if (course.instructorId === id) {
-                    course.instructorId = null;
-                    course.instructorName = '';
-                }
-            });
-            ELIPS.setCourses(courses);
-            ELIPS.toast('Pengguna dihapus');
+            ELIPS.toast(result.message);
             renderUsers();
         }
 
@@ -383,26 +359,16 @@
 
         function saveAssignment() {
             if (!assigningInstructorId) return;
-            const instructor = ELIPS.getUserById(assigningInstructorId);
             const selectedIds = Array.from(document.querySelectorAll('#assignCourseList input[type="checkbox"]:checked'))
                 .map(function (input) { return parseInt(input.value, 10); });
-            const courses = ELIPS.getCourses();
-            let changed = 0;
 
-            courses.forEach(function (course) {
-                if (selectedIds.indexOf(course.id) !== -1) {
-                    if (course.instructorId !== assigningInstructorId) changed++;
-                    course.instructorId = assigningInstructorId;
-                    course.instructorName = instructor ? instructor.name : '';
-                } else if (course.instructorId === assigningInstructorId) {
-                    course.instructorId = null;
-                    course.instructorName = '';
-                    changed++;
-                }
-            });
+            const result = ELIPS.assignInstructorToCourses(assigningInstructorId, selectedIds);
+            if (!result.ok) {
+                ELIPS.toast(result.message);
+                return;
+            }
 
-            ELIPS.setCourses(courses);
-            ELIPS.toast(changed + ' penugasan kursus diperbarui');
+            ELIPS.toast(result.message);
             closeAssignModal();
             renderUsers();
         }

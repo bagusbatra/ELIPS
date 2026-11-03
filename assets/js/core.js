@@ -1,0 +1,94 @@
+// ============================================================
+// ELIPS LMS - core.js
+// Namespace global, konfigurasi storage, dan helper dasar.
+// Dimuat pertama sebelum modul JavaScript lainnya.
+// ============================================================
+
+(function (window) {
+    'use strict';
+
+    const ELIPS = window.ELIPS = window.ELIPS || {};
+
+    const KEYS = {
+        users: 'elips_users',
+        courses: 'elips_courses',
+        enrollments: 'elips_enrollments',
+        modules: 'elips_modules',
+        lessons: 'elips_lessons',
+        grades: 'elips_grades',
+        certificates: 'elips_certificates',
+        completedLessons: 'elips_completedLessons',
+        session: 'elips_session'
+    };
+
+    // ---------- Generic storage helpers ----------
+    function read(key, fallback) {
+        try {
+            const raw = localStorage.getItem(key);
+            if (raw === null) return fallback;
+            const parsed = JSON.parse(raw);
+            return parsed === null || parsed === undefined ? fallback : parsed;
+        } catch (err) {
+            console.warn('[ELIPS] Gagal membaca', key, err);
+            return fallback;
+        }
+    }
+
+    function write(key, value) {
+        localStorage.setItem(key, JSON.stringify(value));
+        return value;
+    }
+
+    function nextId(items) {
+        return items.reduce(function (max, item) {
+            const id = Number(item.id) || 0;
+            return id > max ? id : max;
+        }, 0) + 1;
+    }
+
+    // ---------- Shared result & validation helpers ----------
+    function todayString() {
+        return new Date().toISOString().split('T')[0];
+    }
+
+    function success(message, data) {
+        return { ok: true, message: message || '', data: data === undefined ? null : data };
+    }
+
+    function failure(message) {
+        return { ok: false, message: message || 'Operasi gagal.' };
+    }
+
+    function isValidEmail(email) {
+        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email || ''));
+    }
+
+    function isValidRole(role) {
+        return role === 'admin' || role === 'instruktur' || role === 'peserta';
+    }
+
+    function isValidUserStatus(status) {
+        return status === 'aktif' || status === 'nonaktif';
+    }
+
+    function isActiveInstructor(id) {
+        const user = typeof ELIPS.getUserById === 'function' ? ELIPS.getUserById(id) : null;
+        return !!user && user.role === 'instruktur' && user.status === 'aktif';
+    }
+
+    ELIPS.KEYS = KEYS;
+    ELIPS.read = read;
+    ELIPS.write = write;
+    ELIPS.nextId = nextId;
+
+    // Helper internal yang dipakai lintas modul.
+    ELIPS._ = {
+        todayString: todayString,
+        success: success,
+        failure: failure,
+        isValidEmail: isValidEmail,
+        isValidRole: isValidRole,
+        isValidUserStatus: isValidUserStatus,
+        isActiveInstructor: isActiveInstructor
+    };
+})(window);

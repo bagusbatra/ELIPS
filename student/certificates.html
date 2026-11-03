@@ -84,15 +84,6 @@
                     </div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-card-icon orange">
-                        <i class="bi bi-hourglass-split"></i>
-                    </div>
-                    <div class="stat-card-info">
-                        <div class="stat-card-value" id="statPending">0</div>
-                        <div class="stat-card-label">Menunggu Persetujuan</div>
-                    </div>
-                </div>
-                <div class="stat-card">
                     <div class="stat-card-icon blue">
                         <i class="bi bi-collection"></i>
                     </div>
@@ -113,19 +104,6 @@
                 </div>
             </div>
 
-            <div class="dashboard-section" id="pendingSection" style="display: none;">
-                <div class="dashboard-section-header">
-                    <h2 class="dashboard-section-title">Menunggu Persetujuan Admin</h2>
-                    <span class="badge badge-warning"><i class="bi bi-hourglass-split"></i> Draft</span>
-                </div>
-                <div class="dashboard-section-body">
-                    <div style="padding: 0.875rem 1rem; margin-bottom: 1rem; background: #fffbeb; border: 1px solid #fde68a; border-radius: var(--radius); color: #92400e; font-size: 0.875rem;">
-                        <i class="bi bi-info-circle"></i> Sertifikat berikut sudah dinilai oleh instruktur dan sedang menunggu persetujuan Admin sebelum dapat dilihat atau diverifikasi.
-                    </div>
-                    <div id="pendingList" class="cert-grid"></div>
-                </div>
-            </div>
-
             <div id="certificatesEmpty" class="dashboard-section" style="display: none;">
                 <div class="dashboard-section-body" style="text-align: center; padding: 3rem;">
                     <i class="bi bi-award" style="font-size: 3rem; margin-bottom: 1rem; display: block; opacity: 0.5;"></i>
@@ -140,7 +118,19 @@
         </main>
     </div>
 
-    <script src="../assets/js/main.js"></script>
+    <script src="../assets/js/core.js"></script>
+    <script src="../assets/js/utils.js"></script>
+    <script src="../assets/js/data.js"></script>
+    <script src="../assets/js/seed.js"></script>
+    <script src="../assets/js/sync.js"></script>
+    <script src="../assets/js/progress.js"></script>
+    <script src="../assets/js/auth.js"></script>
+    <script src="../assets/js/crud-users.js"></script>
+    <script src="../assets/js/crud-courses.js"></script>
+    <script src="../assets/js/crud-enrollments.js"></script>
+    <script src="../assets/js/crud-content.js"></script>
+    <script src="../assets/js/crud-grades.js"></script>
+    <script src="../assets/js/ui.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function () {
             const sessionUser = ELIPS.getSessionUser();
@@ -158,16 +148,13 @@
             document.getElementById('studentName').textContent = student.name;
             document.getElementById('studentAvatar').textContent = (student.name || 'S').substring(0, 2).toUpperCase();
 
-            const certificates = ELIPS.getCertificatesByStudent(student.id);
-            const published = certificates.filter(function (cert) { return cert.status === 'publish'; });
-            const pending = certificates.filter(function (cert) { return cert.status === 'draft'; });
+            // Hanya sertifikat Publish yang boleh tampil di halaman siswa.
+            const certificates = ELIPS.getPublishedCertificatesByStudent(student.id);
 
-            document.getElementById('statPublished').textContent = published.length;
-            document.getElementById('statPending').textContent = pending.length;
+            document.getElementById('statPublished').textContent = certificates.length;
             document.getElementById('statTotal').textContent = certificates.length;
 
             const publishedSection = document.getElementById('publishedSection');
-            const pendingSection = document.getElementById('pendingSection');
             const emptySection = document.getElementById('certificatesEmpty');
 
             if (certificates.length === 0) {
@@ -184,7 +171,7 @@
                 });
             }
 
-            function buildCard(cert, isPublished) {
+            function buildCard(cert) {
                 const course = courses.find(function (c) { return c.id === cert.courseId; }) || {};
                 const grade = ELIPS.getGrade(cert.studentId, cert.courseId);
                 const issuedDate = cert.approvedAt || cert.issuedByInstructorAt || cert.issuedAt;
@@ -193,56 +180,33 @@
 
                 const card = document.createElement('div');
                 card.className = 'cert-card';
-                if (!isPublished) {
-                    card.style.borderColor = '#fcd34d';
-                }
-
-                const badge = isPublished
-                    ? '<span class="badge badge-success" style="position: absolute; top: 0.75rem; right: 0.75rem;"><i class="bi bi-patch-check-fill"></i> Terbit</span>'
-                    : '<span class="badge badge-warning" style="position: absolute; top: 0.75rem; right: 0.75rem;"><i class="bi bi-hourglass-split"></i> Draft</span>';
-
-                const actions = isPublished
-                    ? '<div class="cert-card-actions">' +
-                        '<a href="../certificate-view.html?no=' + encodeURIComponent(cert.certificateNumber) + '" class="btn btn-primary" style="flex: 1; padding: 0.5rem 0.875rem; font-size: 0.875rem;"><i class="bi bi-eye"></i> Lihat Sertifikat</a>' +
-                        '<a href="../verify-certificate.html?no=' + encodeURIComponent(cert.certificateNumber) + '" class="btn btn-outline" style="padding: 0.5rem 0.875rem; font-size: 0.875rem;" title="Verifikasi"><i class="bi bi-patch-check"></i></a>' +
-                        '</div>'
-                    : '<div class="cert-card-actions">' +
-                        '<span class="badge badge-warning" style="width: 100%; justify-content: center; padding: 0.5rem 0.75rem;"><i class="bi bi-hourglass-split"></i> Menunggu persetujuan Admin</span>' +
-                        '</div>';
 
                 card.innerHTML = [
-                    '<div class="cert-card-preview">' + badge + '</div>',
+                    '<div class="cert-card-preview"><span class="badge badge-success" style="position: absolute; top: 0.75rem; right: 0.75rem;"><i class="bi bi-patch-check-fill"></i> Terbit</span></div>',
                     '<div class="cert-card-body">',
                     '  <h3 class="cert-card-title">' + ELIPS.escapeHtml(course.title || cert.courseName || '-') + '</h3>',
                     '  <div class="cert-card-meta">',
                     '    <div><strong>No. Sertifikat:</strong> ' + ELIPS.escapeHtml(cert.certificateNumber || '-') + '</div>',
-                    '    <div><strong>' + (isPublished ? 'Tanggal Terbit' : 'Diajukan') + ':</strong> ' + ELIPS.formatDate(issuedDate) + '</div>',
+                    '    <div><strong>Tanggal Terbit:</strong> ' + ELIPS.formatDate(issuedDate) + '</div>',
                     '    <div><strong>Peserta:</strong> ' + ELIPS.escapeHtml(student.name) + '</div>',
                     '    <div><strong>Grade:</strong> ' + ELIPS.escapeHtml(cert.grade || '-') + scoreText + '</div>',
                     '    <div><strong>Instruktur:</strong> ' + ELIPS.escapeHtml(course.instructorName || '-') + '</div>',
                     note ? '    <div><strong>Catatan:</strong> ' + ELIPS.escapeHtml(note) + '</div>' : '',
                     '  </div>',
-                    actions,
+                    '  <div class="cert-card-actions">',
+                    '    <a href="../certificate-view.html?no=' + encodeURIComponent(cert.certificateNumber) + '" class="btn btn-primary" style="flex: 1; padding: 0.5rem 0.875rem; font-size: 0.875rem;"><i class="bi bi-eye"></i> Lihat Sertifikat</a>',
+                    '    <a href="../verify-certificate.html?no=' + encodeURIComponent(cert.certificateNumber) + '" class="btn btn-outline" style="padding: 0.5rem 0.875rem; font-size: 0.875rem;" title="Verifikasi"><i class="bi bi-patch-check"></i></a>',
+                    '  </div>',
                     '</div>'
                 ].join('');
                 return card;
             }
 
-            if (published.length > 0) {
-                publishedSection.style.display = 'block';
-                const publishedList = document.getElementById('publishedList');
-                sortByDate(published).forEach(function (cert) {
-                    publishedList.appendChild(buildCard(cert, true));
-                });
-            }
-
-            if (pending.length > 0) {
-                pendingSection.style.display = 'block';
-                const pendingList = document.getElementById('pendingList');
-                sortByDate(pending).forEach(function (cert) {
-                    pendingList.appendChild(buildCard(cert, false));
-                });
-            }
+            publishedSection.style.display = 'block';
+            const publishedList = document.getElementById('publishedList');
+            sortByDate(certificates).forEach(function (cert) {
+                publishedList.appendChild(buildCard(cert));
+            });
         });
     </script>
 </body>

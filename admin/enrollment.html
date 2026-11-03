@@ -194,7 +194,19 @@
         </div>
     </div>
 
-    <script src="../assets/js/main.js"></script>
+    <script src="../assets/js/core.js"></script>
+    <script src="../assets/js/utils.js"></script>
+    <script src="../assets/js/data.js"></script>
+    <script src="../assets/js/seed.js"></script>
+    <script src="../assets/js/sync.js"></script>
+    <script src="../assets/js/progress.js"></script>
+    <script src="../assets/js/auth.js"></script>
+    <script src="../assets/js/crud-users.js"></script>
+    <script src="../assets/js/crud-courses.js"></script>
+    <script src="../assets/js/crud-enrollments.js"></script>
+    <script src="../assets/js/crud-content.js"></script>
+    <script src="../assets/js/crud-grades.js"></script>
+    <script src="../assets/js/ui.js"></script>
     <script>
         function renderEnrollments() {
             const tbody = document.getElementById('enrollmentTable');
@@ -313,42 +325,29 @@
                 return;
             }
 
-            const enrollments = ELIPS.getEnrollments();
-            let added = 0;
-            checked.forEach(function (courseId) {
-                const exists = enrollments.some(function (e) { return e.studentId === studentId && e.courseId === courseId; });
-                if (exists) return;
-                enrollments.push({
-                    id: ELIPS.nextId(enrollments),
-                    studentId: studentId,
-                    courseId: courseId,
-                    enrolledBy: 'admin',
-                    enrolledAt: date,
-                    status: 'active'
-                });
-                added++;
-            });
+            const result = ELIPS.assignStudentToCourses(studentId, checked, date);
+            if (!result.ok) {
+                alert(result.message);
+                return;
+            }
 
-            ELIPS.setEnrollments(enrollments);
-            ELIPS.toast(added + ' penugasan berhasil dibuat');
+            ELIPS.toast(result.message);
             closeEnrollModal();
             renderEnrollments();
         }
 
         function toggleEnrollment(id) {
-            const enrollments = ELIPS.getEnrollments();
-            const enr = enrollments.find(function (e) { return e.id === id; });
-            if (!enr) return;
-            enr.status = enr.status === 'active' ? 'dihentikan' : 'active';
-            ELIPS.setEnrollments(enrollments);
-            ELIPS.toast('Status penugasan: ' + (enr.status === 'active' ? 'Aktif' : 'Dihentikan'));
+            const enrollment = ELIPS.getEnrollments().find(function (e) { return e.id === id; });
+            if (!enrollment) return;
+            const result = ELIPS.setEnrollmentStatus(id, enrollment.status === 'active' ? 'dihentikan' : 'active');
+            ELIPS.toast(result.message);
             renderEnrollments();
         }
 
         function removeEnrollment(id) {
-            if (!confirm('Hapus penugasan ini? Siswa tidak akan bisa mengakses kursus tersebut.')) return;
-            ELIPS.setEnrollments(ELIPS.getEnrollments().filter(function (e) { return e.id !== id; }));
-            ELIPS.toast('Penugasan dihapus');
+            if (!confirm('Hapus penugasan ini? Progres, nilai, dan sertifikat siswa pada kursus tersebut juga akan dihapus.')) return;
+            const result = ELIPS.deleteEnrollment(id);
+            ELIPS.toast(result.message);
             renderEnrollments();
         }
 

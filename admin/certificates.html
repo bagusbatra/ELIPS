@@ -142,7 +142,19 @@
         </main>
     </div>
 
-    <script src="../assets/js/main.js"></script>
+    <script src="../assets/js/core.js"></script>
+    <script src="../assets/js/utils.js"></script>
+    <script src="../assets/js/data.js"></script>
+    <script src="../assets/js/seed.js"></script>
+    <script src="../assets/js/sync.js"></script>
+    <script src="../assets/js/progress.js"></script>
+    <script src="../assets/js/auth.js"></script>
+    <script src="../assets/js/crud-users.js"></script>
+    <script src="../assets/js/crud-courses.js"></script>
+    <script src="../assets/js/crud-enrollments.js"></script>
+    <script src="../assets/js/crud-content.js"></script>
+    <script src="../assets/js/crud-grades.js"></script>
+    <script src="../assets/js/ui.js"></script>
     <script>
         function renderAdminCerts() {
             const tbody = document.getElementById('adminCertsTable');
@@ -199,19 +211,9 @@
         function approveCert(id) {
             if (!confirm('Setujui dan terbitkan e-sertifikat ini? Sertifikat akan berstatus Publish dan muncul di halaman siswa.')) return;
 
-            const certificates = ELIPS.getCertificates();
-            const cert = certificates.find(function (c) { return c.id === id; });
-            if (!cert) return;
-
             const admin = ELIPS.getCurrentUser();
-            cert.status = 'publish';
-            cert.approvedByAdminId = admin ? admin.id : 1;
-            cert.approvedAt = new Date().toISOString();
-            if (!cert.certificateNumber || cert.certificateNumber.indexOf('CERT-DRAFT') === 0) {
-                cert.certificateNumber = ELIPS.generateCertificateNumber();
-            }
-            ELIPS.setCertificates(certificates);
-            ELIPS.toast('Sertifikat berhasil disetujui dan diterbitkan');
+            const result = ELIPS.approveCertificate(id, admin ? admin.id : 1);
+            ELIPS.toast(result.message);
             renderAdminCerts();
         }
 

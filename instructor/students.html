@@ -187,7 +187,19 @@
         </div>
     </div>
 
-    <script src="../assets/js/main.js"></script>
+    <script src="../assets/js/core.js"></script>
+    <script src="../assets/js/utils.js"></script>
+    <script src="../assets/js/data.js"></script>
+    <script src="../assets/js/seed.js"></script>
+    <script src="../assets/js/sync.js"></script>
+    <script src="../assets/js/progress.js"></script>
+    <script src="../assets/js/auth.js"></script>
+    <script src="../assets/js/crud-users.js"></script>
+    <script src="../assets/js/crud-courses.js"></script>
+    <script src="../assets/js/crud-enrollments.js"></script>
+    <script src="../assets/js/crud-content.js"></script>
+    <script src="../assets/js/crud-grades.js"></script>
+    <script src="../assets/js/ui.js"></script>
     <script>
         let currentInstructor = null;
         let allRows = [];
@@ -433,74 +445,21 @@
                 return;
             }
 
-            const course = ELIPS.getCourseById(currentGradeTarget.courseId);
-            if (!course || course.instructorId !== currentInstructor.id) {
-                ELIPS.toast('Anda tidak berhak menilai kursus ini.');
+            const result = ELIPS.saveGrade({
+                studentId: currentGradeTarget.studentId,
+                courseId: currentGradeTarget.courseId,
+                enrollmentId: currentGradeTarget.enrollmentId,
+                score: score,
+                note: document.getElementById('gradeNote').value.trim(),
+                instructorId: currentInstructor.id
+            });
+
+            if (!result.ok) {
+                ELIPS.toast(result.message);
                 return;
             }
 
-            const note = document.getElementById('gradeNote').value.trim();
-            const gradeLetter = ELIPS.gradeLetter(score);
-            const grades = ELIPS.getGrades();
-            const existingGrade = grades.find(function (grade) {
-                return grade.enrollmentId === currentGradeTarget.enrollmentId ||
-                    (grade.studentId === currentGradeTarget.studentId && grade.courseId === currentGradeTarget.courseId);
-            });
-
-            if (existingGrade) {
-                existingGrade.enrollmentId = currentGradeTarget.enrollmentId;
-                existingGrade.score = score;
-                existingGrade.grade = gradeLetter;
-                existingGrade.note = note;
-                existingGrade.instructorId = currentInstructor.id;
-                existingGrade.updatedAt = new Date().toISOString();
-            } else {
-                grades.push({
-                    id: ELIPS.nextId(grades),
-                    enrollmentId: currentGradeTarget.enrollmentId,
-                    courseId: currentGradeTarget.courseId,
-                    studentId: currentGradeTarget.studentId,
-                    instructorId: currentInstructor.id,
-                    score: score,
-                    grade: gradeLetter,
-                    note: note,
-                    createdAt: new Date().toISOString()
-                });
-            }
-            ELIPS.setGrades(grades);
-
-            // Buat/perbarui e-sertifikat Draft untuk penugasan ini.
-            const certificates = ELIPS.getCertificates();
-            const existingCert = certificates.find(function (cert) {
-                return cert.enrollmentId === currentGradeTarget.enrollmentId ||
-                    (cert.studentId === currentGradeTarget.studentId && cert.courseId === currentGradeTarget.courseId);
-            });
-
-            if (existingCert) {
-                existingCert.enrollmentId = currentGradeTarget.enrollmentId;
-                existingCert.grade = gradeLetter;
-                existingCert.score = score;
-                existingCert.issuedByInstructorAt = new Date().toISOString();
-                if (existingCert.status !== 'publish') existingCert.status = 'draft';
-            } else {
-                certificates.push({
-                    id: ELIPS.nextId(certificates),
-                    studentId: currentGradeTarget.studentId,
-                    courseId: currentGradeTarget.courseId,
-                    enrollmentId: currentGradeTarget.enrollmentId,
-                    certificateNumber: 'CERT-DRAFT-' + Date.now().toString().slice(-6),
-                    status: 'draft',
-                    grade: gradeLetter,
-                    score: score,
-                    issuedByInstructorAt: new Date().toISOString(),
-                    approvedByAdminId: null,
-                    approvedAt: null,
-                    createdAt: new Date().toISOString()
-                });
-            }
-            ELIPS.setCertificates(certificates);
-
-            ELIPS.toast('Nilai disimpan. E-sertifikat Draft menunggu persetujuan Admin.');
+            ELIPS.toast(result.message);
             closeGradeModal();
             refreshData();
         }

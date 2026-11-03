@@ -194,7 +194,19 @@
         </div>
     </div>
 
-    <script src="../assets/js/main.js"></script>
+    <script src="../assets/js/core.js"></script>
+    <script src="../assets/js/utils.js"></script>
+    <script src="../assets/js/data.js"></script>
+    <script src="../assets/js/seed.js"></script>
+    <script src="../assets/js/sync.js"></script>
+    <script src="../assets/js/progress.js"></script>
+    <script src="../assets/js/auth.js"></script>
+    <script src="../assets/js/crud-users.js"></script>
+    <script src="../assets/js/crud-courses.js"></script>
+    <script src="../assets/js/crud-enrollments.js"></script>
+    <script src="../assets/js/crud-content.js"></script>
+    <script src="../assets/js/crud-grades.js"></script>
+    <script src="../assets/js/ui.js"></script>
     <script>
         let currentInstructor = null;
         let selectedCourseId = null;
@@ -383,16 +395,6 @@
             }).join('');
         }
 
-        function syncCourseCounters(courseId) {
-            const courses = ELIPS.getCourses();
-            const course = courses.find(function (item) { return item.id === Number(courseId); });
-            if (!course) return;
-            course.modules = ELIPS.getModulesByCourse(course.id).length;
-            course.lessons = ELIPS.getLessonsByCourse(course.id).length;
-            course.totalLessons = course.lessons;
-            ELIPS.setCourses(courses);
-        }
-
         function fillCourseSelect(selectId, selectedId) {
             const select = document.getElementById(selectId);
             select.innerHTML = '';
@@ -447,49 +449,24 @@
             if (!currentInstructor) return;
 
             const courseId = parseInt(document.getElementById('moduleCourse').value, 10);
-            const title = document.getElementById('moduleTitle').value.trim();
-            const description = document.getElementById('moduleDesc').value.trim();
+            const payload = {
+                title: document.getElementById('moduleTitle').value.trim(),
+                description: document.getElementById('moduleDesc').value.trim()
+            };
 
-            if (!courseId || !title) {
-                ELIPS.toast('Pilih kursus dan isi judul modul.');
+            const result = editingModuleId
+                ? ELIPS.updateModule(editingModuleId, payload, currentInstructor.id)
+                : ELIPS.createModule(courseId, payload, currentInstructor.id);
+
+            if (!result.ok) {
+                ELIPS.toast(result.message);
                 return;
             }
-            if (!myCourses().some(function (course) { return course.id === courseId; })) {
-                ELIPS.toast('Anda tidak ditugaskan pada kursus ini.');
-                return;
-            }
 
-            const modules = ELIPS.getModules();
-
-            if (editingModuleId) {
-                const module = modules.find(function (item) { return item.id === editingModuleId; });
-                if (!module) {
-                    ELIPS.toast('Modul tidak ditemukan.');
-                    return;
-                }
-                module.title = title;
-                module.description = description;
-                module.instructorId = currentInstructor.id;
-                module.updatedAt = new Date().toISOString();
-                ELIPS.setModules(modules);
-                ELIPS.toast('Modul berhasil diperbarui');
-            } else {
-                modules.push({
-                    id: ELIPS.nextId(modules),
-                    courseId: courseId,
-                    instructorId: currentInstructor.id,
-                    title: title,
-                    description: description,
-                    order: ELIPS.getModulesByCourse(courseId).length + 1,
-                    createdAt: new Date().toISOString()
-                });
-                ELIPS.setModules(modules);
-                ELIPS.toast('Modul berhasil ditambahkan');
-            }
-
-            syncCourseCounters(courseId);
+            ELIPS.toast(result.message);
+            const targetCourseId = result.data ? result.data.courseId : courseId;
             closeModuleModal();
-            initInstructor(courseId);
+            initInstructor(targetCourseId);
         }
 
         function refreshLessonModules(selectedModuleId) {
@@ -584,104 +561,50 @@
 
             const courseId = parseInt(document.getElementById('lessonCourse').value, 10);
             const moduleId = parseInt(document.getElementById('lessonModule').value, 10);
-            const title = document.getElementById('lessonTitle').value.trim();
-            const type = document.getElementById('contentType').value;
-            const content = document.getElementById('lessonContent').value.trim();
+            const payload = {
+                moduleId: moduleId,
+                title: document.getElementById('lessonTitle').value.trim(),
+                type: document.getElementById('contentType').value,
+                content: document.getElementById('lessonContent').value.trim()
+            };
 
-            if (!courseId || !moduleId || !title) {
-                ELIPS.toast('Pilih kursus, modul, dan isi judul pelajaran.');
-                return;
-            }
-            if (!myCourses().some(function (course) { return course.id === courseId; })) {
-                ELIPS.toast('Anda tidak ditugaskan pada kursus ini.');
-                return;
-            }
-            if (!ELIPS.getModulesByCourse(courseId).some(function (module) { return module.id === moduleId; })) {
-                ELIPS.toast('Modul tidak ditemukan pada kursus ini.');
-                return;
-            }
-            if (type !== 'text' && !content) {
-                ELIPS.toast('Isi URL atau nama file untuk tipe konten ini.');
+            const result = editingLessonId
+                ? ELIPS.updateLesson(editingLessonId, payload, currentInstructor.id)
+                : ELIPS.createLesson(moduleId, payload, currentInstructor.id);
+
+            if (!result.ok) {
+                ELIPS.toast(result.message);
                 return;
             }
 
-            const lessons = ELIPS.getLessons();
-
-            if (editingLessonId) {
-                const lesson = lessons.find(function (item) { return item.id === editingLessonId; });
-                if (!lesson) {
-                    ELIPS.toast('Materi tidak ditemukan.');
-                    return;
-                }
-                lesson.moduleId = moduleId;
-                lesson.courseId = courseId;
-                lesson.instructorId = currentInstructor.id;
-                lesson.title = title;
-                lesson.type = type;
-                lesson.content = content;
-                lesson.updatedAt = new Date().toISOString();
-                ELIPS.setLessons(lessons);
-                ELIPS.toast('Materi berhasil diperbarui');
-            } else {
-                lessons.push({
-                    id: ELIPS.nextId(lessons),
-                    moduleId: moduleId,
-                    courseId: courseId,
-                    instructorId: currentInstructor.id,
-                    title: title,
-                    type: type,
-                    content: content,
-                    order: ELIPS.getLessonsByModule(moduleId).length + 1,
-                    createdAt: new Date().toISOString()
-                });
-                ELIPS.setLessons(lessons);
-                ELIPS.toast('Materi berhasil ditambahkan');
-            }
-
-            syncCourseCounters(courseId);
+            ELIPS.toast(result.message);
+            const targetCourseId = result.data ? result.data.courseId : courseId;
             closeLessonModal();
-            initInstructor(courseId);
+            initInstructor(targetCourseId);
         }
 
         function deleteModule(moduleId) {
             const module = ELIPS.getModules().find(function (item) { return item.id === Number(moduleId); });
             if (!module) return;
-            if (!myCourses().some(function (course) { return course.id === module.courseId; })) {
-                ELIPS.toast('Anda tidak berhak menghapus modul ini.');
-                return;
-            }
 
-            const lessonIds = ELIPS.getLessonsByModule(module.id).map(function (lesson) { return lesson.id; });
+            const lessonCount = ELIPS.getLessonsByModule(module.id).length;
             const message = 'Hapus modul "' + module.title + '"' +
-                (lessonIds.length > 0 ? ' beserta ' + lessonIds.length + ' materinya?' : '?');
+                (lessonCount > 0 ? ' beserta ' + lessonCount + ' materinya?' : '?');
             if (!confirm(message)) return;
 
-            ELIPS.setModules(ELIPS.getModules().filter(function (item) { return item.id !== module.id; }));
-            ELIPS.setLessons(ELIPS.getLessons().filter(function (lesson) { return lesson.moduleId !== module.id; }));
-            ELIPS.setCompletedLessons(ELIPS.getCompletedLessons().filter(function (progress) {
-                return lessonIds.indexOf(progress.lessonId) === -1;
-            }));
-            syncCourseCounters(module.courseId);
-            ELIPS.toast('Modul dihapus');
-            initInstructor(module.courseId);
+            const result = ELIPS.deleteModule(module.id, currentInstructor.id);
+            ELIPS.toast(result.message);
+            if (result.ok) initInstructor(module.courseId);
         }
 
         function deleteLesson(lessonId) {
             const lesson = ELIPS.getLessons().find(function (item) { return item.id === Number(lessonId); });
             if (!lesson) return;
-            if (!myCourses().some(function (course) { return course.id === lesson.courseId; })) {
-                ELIPS.toast('Anda tidak berhak menghapus materi ini.');
-                return;
-            }
             if (!confirm('Hapus materi "' + lesson.title + '"?')) return;
 
-            ELIPS.setLessons(ELIPS.getLessons().filter(function (item) { return item.id !== lesson.id; }));
-            ELIPS.setCompletedLessons(ELIPS.getCompletedLessons().filter(function (progress) {
-                return progress.lessonId !== lesson.id;
-            }));
-            syncCourseCounters(lesson.courseId);
-            ELIPS.toast('Materi dihapus');
-            initInstructor(lesson.courseId);
+            const result = ELIPS.deleteLesson(lesson.id, currentInstructor.id);
+            ELIPS.toast(result.message);
+            if (result.ok) initInstructor(lesson.courseId);
         }
     </script>
 </body>
