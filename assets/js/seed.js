@@ -256,6 +256,25 @@
             write(KEYS.auditLogs, auditLogs);
         }
 
+        // Outbox notifikasi email (simulasi): selalu array dan field minimum lengkap.
+        if (!Array.isArray(read(KEYS.notifications, null))) {
+            write(KEYS.notifications, []);
+        } else {
+            const notifications = read(KEYS.notifications, []);
+            notifications.forEach(function (item) {
+                if (!item.type) item.type = 'course_published';
+                if (!item.channel) item.channel = 'email';
+                if (item.simulated === undefined) item.simulated = true;
+                if (!item.status) item.status = 'sent';
+                if (!item.subject) item.subject = '(tanpa subjek)';
+                if (!item.body) item.body = '';
+                if (!item.recipientName) item.recipientName = item.recipientEmail || 'Penerima';
+                if (!item.recipientRole) item.recipientRole = 'peserta';
+                if (!item.createdAt) item.createdAt = new Date().toISOString();
+            });
+            write(KEYS.notifications, notifications);
+        }
+
         // Normalize certificates (migrate legacy ones)
         const certificates = ELIPS.getCertificates();
         const changed = certificates.map(function (cert) {

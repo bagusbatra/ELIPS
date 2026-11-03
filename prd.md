@@ -1,8 +1,8 @@
 # PRD: Learning Management System (LMS) ELIPS
 
-**Versi:** 1.6  
+**Versi:** 1.7  
 **Tanggal:** 2026-11-03  
-**Status:** Implemented (Demo - Vanilla HTML/CSS/JS + localStorage); seluruh aturan alur kursus telah diterapkan, JavaScript telah dimodularisasi, dan audit trail P1 aktif  
+**Status:** Implemented (Demo - Vanilla HTML/CSS/JS + localStorage); seluruh aturan alur kursus telah diterapkan, JavaScript telah dimodularisasi, audit trail P1 aktif, dan notifikasi email P2 disimulasikan melalui outbox  
 **Log pengembangan:** `log.md`
 **Nama Aplikasi:** ELIPS LMS
 
@@ -42,6 +42,7 @@ Instruktur ── beri nilai akhir ──────▶ Nilai
 Nilai ── terintegrasi ───────────────▶ E-Sertifikat [Draft]
 E-Sertifikat [Draft] ── tidak tampil ▶ Halaman siswa
 Admin ── approve ────────────────────▶ E-Sertifikat [Publish] ── tampil ▶ Halaman siswa
+Sistem ── kursus Publish / sertifikat terbit ▶ Notifikasi email (simulasi) ── outbox ▶ Admin
 ```
 
 ### 3.2 Langkah Detail
@@ -151,6 +152,7 @@ Admin ── approve ───────────────────�
 | Penghapusan instruktur mengembalikan kursus ke Draft | ✅ Selesai | `ELIPS.deleteUser`/`updateUser` melepas kursus dan memaksa status Draft |
 | CRUD terpusat di JavaScript | ✅ Selesai | Seluruh CRUD pengguna, kursus, enrollment, modul, materi, nilai, dan sertifikat memakai modul CRUD di `assets/js/` (lihat §4) |
 | Audit trail perubahan kursus, nilai, dan sertifikat | ✅ Selesai | `assets/js/audit.js` mencatat aktor, aksi, entitas, waktu, dan detail; halaman `admin/audit.html` menyediakan filter, ekspor CSV, dan pembersihan log |
+| Notifikasi email simulasi | ✅ Selesai | `assets/js/notifications.js` mencatat outbox saat kursus dipublikasikan atau sertifikat terbit; `admin/notifications.html` menyediakan filter, ekspor CSV, dan pembersihan outbox |
 
 ---
 
@@ -165,12 +167,13 @@ Admin ── approve ───────────────────�
   - `progress.js` - struktur kursus, progres, dan ringkasan siswa/instruktur;
   - `auth.js` - session dan role guard;
   - `audit.js` - pencatatan audit trail, filter log, dan daftar aktor;
+  - `notifications.js` - outbox notifikasi email simulasi, filter, daftar penerima, dan pembersihan outbox;
   - `crud-users.js`, `crud-courses.js`, `crud-enrollments.js`, `crud-content.js`, `crud-grades.js` - CRUD dan aturan bisnis per domain;
   - `utils.js` - helper format, escape HTML, dan toast;
   - `ui.js` - perilaku UI bersama (navigasi, sidebar, katalog, login, logout).
   - Halaman hanya menangani rendering dan interaksi UI, tidak menulis langsung ke `localStorage`.
   - Setiap fungsi CRUD mengembalikan `{ ok, message, data }` agar pesan sukses/gagal konsisten.
-  - Modul dimuat berurutan: `core → utils → data → seed → sync → progress → auth → audit → crud-* → ui`.
+  - Modul dimuat berurutan: `core → utils → data → seed → sync → progress → auth → audit → notifications → crud-* → ui`.
 - **Penyimpanan Data:** `localStorage` (demo)
   - `elips_users` - Data pengguna (admin, instruktur, peserta)
   - `elips_courses` - Data kursus beserta instruktur pengampu dan status
@@ -181,6 +184,7 @@ Admin ── approve ───────────────────�
   - `elips_certificates` - Data e-sertifikat (Draft/Terbit)
   - `elips_completedLessons` - Tracking pelajaran yang diselesaikan
   - `elips_auditLogs` - Jejak audit perubahan kursus, nilai, sertifikat, pengguna, penugasan, dan konten
+  - `elips_notifications` - Outbox notifikasi email simulasi (publikasi kursus dan penerbitan sertifikat)
   - `elips_session` - Sesi pengguna yang sedang masuk
 - **Styling:** Custom CSS (`assets/css/style.css`), Bootstrap Icons, Google Fonts (Inter)
 - **Struktur Folder:** Berbasis role (`admin/`, `instructor/`, `student/`)
@@ -208,6 +212,7 @@ Admin ── approve ───────────────────�
 | `admin/courses.html` | ✅ Selesai | Tambah/edit kursus, tugaskan 1 instruktur per kursus, publikasi/Draft, filter status & pencarian |
 | `admin/enrollment.html` | ✅ Selesai | Penugasan siswa ke satu atau beberapa kursus, filter kursus/status, aktif/nonaktifkan penugasan |
 | `admin/certificates.html` | ✅ Selesai | Persetujuan e-sertifikat: Draft → Publish, filter status, dan tampilan nomor/tanggal persetujuan |
+| `admin/notifications.html` | ✅ Selesai | Outbox notifikasi email simulasi: statistik, filter jenis/penerima/tanggal/pencarian, detail isi, ekspor CSV, dan pembersihan outbox |
 | `admin/audit.html` | ✅ Selesai | Audit trail: statistik aktivitas, filter aktor/aksi/entitas/tanggal/pencarian, ekspor CSV, dan pembersihan log |
 | `admin/reports.html` | ✅ Selesai | Laporan progres peserta per kursus, statistik per kursus, export PDF/Excel (UI) |
 | `admin/settings.html` | ✅ Selesai | Pengaturan umum, pengaturan sertifikat, pengaturan pembelajaran |
@@ -241,6 +246,7 @@ Admin ── approve ───────────────────�
 | `assets/js/progress.js` | ✅ Selesai | Struktur kursus, progres belajar, overview siswa/instruktur |
 | `assets/js/auth.js` | ✅ Selesai | Session, user aktif, redirect, dan role guard |
 | `assets/js/audit.js` | ✅ Selesai | Pencatatan audit trail, filter log, daftar aktor, dan pembersihan log |
+| `assets/js/notifications.js` | ✅ Selesai | Outbox notifikasi email simulasi, filter, daftar penerima, dan pembersihan outbox |
 | `assets/js/crud-users.js` | ✅ Selesai | CRUD pengguna dan penugasan instruktur |
 | `assets/js/crud-courses.js` | ✅ Selesai | CRUD kursus dan aturan Draft/Publish |
 | `assets/js/crud-enrollments.js` | ✅ Selesai | CRUD penugasan peserta ke kursus |
@@ -324,6 +330,16 @@ Admin ── approve ───────────────────�
 | Filter & ekspor | ✅ Selesai | `admin/audit.html` memfilter berdasarkan aktor, aksi, entitas, tanggal, pencarian, dan limit; dapat diekspor ke CSV |
 | Batas penyimpanan | ✅ Selesai | Maksimal 1000 entri terbaru disimpan agar `localStorage` tidak tumbuh tanpa kendali |
 
+### 6.8 Notifikasi Email (Simulasi)
+| Fitur | Status | Keterangan |
+|---|---|---|
+| Notifikasi publikasi kursus | ✅ Selesai | Saat kursus berhasil Published, outbox mencatat email untuk peserta aktif yang terdaftar dan instruktur aktif pengampu |
+| Notifikasi sertifikat terbit | ✅ Selesai | Saat Admin menyetujui sertifikat Draft → Publish, outbox mencatat email untuk peserta |
+| Outbox notifikasi (Admin) | ✅ Selesai | `admin/notifications.html` menampilkan waktu, penerima, jenis, subjek, isi, dan status simulasi |
+| Filter & ekspor | ✅ Selesai | Filter jenis, penerima, rentang tanggal, pencarian, dan limit; hasil dapat diekspor ke CSV |
+| Batas penyimpanan | ✅ Selesai | Maksimal 1000 notifikasi terbaru disimpan di `elips_notifications` |
+| Pengiriman email sungguhan | ⏳ Belum | Demo tanpa backend hanya mencatat email ke outbox; pengiriman nyata memerlukan SMTP/email service di produksi |
+
 ---
 
 ## 7. Logika Bisnis Penting
@@ -382,6 +398,17 @@ else                            -> student/dashboard.html
 - Log diurutkan terbaru lebih dulu, dibatasi 1000 entri, dan dapat difilter berdasarkan aktor, aksi, entitas, rentang tanggal, pencarian, serta limit.
 - Admin dapat mengekspor hasil filter ke CSV dan membersihkan seluruh log dari `admin/audit.html`.
 
+### Notifikasi Email (Simulasi)
+- Demo berjalan tanpa backend, sehingga email **tidak benar-benar dikirim**. Setiap notifikasi disimpan sebagai entri outbox di `localStorage` key `elips_notifications` dengan `channel: 'email'`, `status: 'sent'`, dan `simulated: true`.
+- Notifikasi publikasi kursus dibuat setelah `setCourseStatus` berhasil mengubah status menjadi `published`:
+  - penerima: peserta dengan enrollment `active` pada kursus tersebut dan akun berstatus `aktif`;
+  - ditambah instruktur pengampu yang berstatus `aktif`;
+  - penerima duplikat dihindari.
+- Notifikasi sertifikat terbit dibuat setelah `approveCertificate` berhasil mengubah status Draft → Publish; penerimanya adalah peserta pemilik sertifikat.
+- Operasi yang gagal (publikasi ditolak atau approval ditolak) tidak membuat notifikasi.
+- Outbox diurutkan terbaru lebih dulu, dibatasi 1000 entri, dan dapat difilter berdasarkan jenis, penerima, rentang tanggal, pencarian, serta limit.
+- Admin dapat mengekspor hasil filter ke CSV dan membersihkan seluruh outbox dari `admin/notifications.html`.
+
 ---
 
 ## 8. Testing Checklist
@@ -412,6 +439,10 @@ else                            -> student/dashboard.html
 | Audit trail perubahan kursus/nilai/sertifikat | ✅ Lulus uji | `test-audit` memverifikasi aktor, aksi, detail, filter, fallback "Sistem", dan halaman `admin/audit.html` |
 | Operasi gagal tidak dicatat | ✅ Lulus uji | Publikasi kursus kosong ditolak tanpa menambah entri audit |
 | Ekspor & pembersihan log | ✅ Lulus uji | Tombol CSV dan bersihkan log tersedia di `admin/audit.html` |
+| Notifikasi publikasi kursus | ✅ Lulus uji | `test-notifications` memverifikasi notifikasi untuk peserta aktif dan instruktur, termasuk isi subjek/body |
+| Notifikasi sertifikat terbit | ✅ Lulus uji | Approval Draft → Publish membuat satu notifikasi untuk peserta dengan nomor sertifikat final |
+| Operasi gagal tidak membuat notifikasi | ✅ Lulus uji | Approval ulang dan publikasi tanpa perubahan status tidak menambah outbox |
+| Filter, ekspor & pembersihan outbox | ✅ Lulus uji | Filter jenis/penerima/tanggal/pencarian dan tombol CSV/bersihkan tersedia di `admin/notifications.html` |
 
 ---
 
@@ -429,7 +460,7 @@ else                            -> student/dashboard.html
 
 Jika ingin dikembangkan menjadi aplikasi production:
 
-Audit trail (P1) sudah diimplementasikan pada versi demo. Untuk production, pencatatan perlu dipindahkan ke server agar immutable dan tidak dapat dihapus dari browser.
+Audit trail (P1) dan notifikasi email (P2) sudah diimplementasikan dalam bentuk simulasi pada versi demo. Untuk production, audit perlu dipindahkan ke server agar immutable, sedangkan notifikasi perlu dihubungkan ke layanan email sungguhan.
 
 | Fitur | Prioritas | Keterangan |
 |---|---|---|
@@ -438,7 +469,7 @@ Audit trail (P1) sudah diimplementasikan pada versi demo. Untuk production, penc
 | Upload file materi | P0 | Upload PDF, video, gambar |
 | Backend validasi status & kepemilikan | P0 | Validasi 1 kursus = 1 instruktur, enrollment, approval, dan CRUD di server |
 | Audit trail server-side | P1 | Versi demo sudah mencatat audit di localStorage; produksi perlu log immutable di server dengan retensi dan akses terbatas |
-| Notifikasi email | P2 | Kirim pemberitahuan saat kursus dipublikasikan atau sertifikat terbit |
+| Notifikasi email | P2 | Versi demo mencatat email simulasi di outbox `localStorage`; produksi perlu integrasi SMTP/email service saat kursus dipublikasikan atau sertifikat terbit |
 | Generate PDF sertifikat | P0 | Generate PDF yang sebenarnya |
 | Role middleware | P0 | Proteksi halaman berdasarkan role |
 | Database relasional | P0 | Users, Courses, Modules, Lessons, Enrollments, Progress, Certificates |

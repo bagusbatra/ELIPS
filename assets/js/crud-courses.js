@@ -157,6 +157,10 @@
                     ? 'Mempublikasikan kursus "' + course.title + '".'
                     : 'Mengembalikan kursus "' + course.title + '" ke Draft.'
             });
+
+            if (status === 'published' && typeof ELIPS.notifyCoursePublished === 'function') {
+                ELIPS.notifyCoursePublished(course);
+            }
         }
         return success(status === 'published' ? 'Kursus berhasil dipublikasikan.' : 'Kursus dikembalikan ke Draft.', course);
     }

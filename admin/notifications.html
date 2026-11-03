@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Notifikasi Email - ELIPS LMS</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../assets/css/style.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+</head>
+<body>
+    <header class="navbar">
+        <div class="container nav-container">
+            <div class="nav-brand">
+                <i class="bi bi-mortarboard-fill brand-icon"></i>
+                <span class="brand-text">ELIPS LMS</span>
+            </div>
+            <nav class="nav-menu" id="navMenu">
+                <a href="../index.html" class="nav-link">Beranda</a>
+                <a href="../index.html#courses" class="nav-link">Kursus</a>
+                <a href="../verify-certificate.html" class="nav-link">Verifikasi Sertifikat</a>
+            </nav>
+            <div class="nav-actions">
+                <a href="dashboard.html" class="btn btn-ghost">Dashboard</a>
+                <a href="../index.html" class="btn btn-outline" data-logout>Keluar</a>
+            </div>
+            <button class="nav-toggle" id="navToggle">
+                <i class="bi bi-list"></i>
+            </button>
+        </div>
+    </header>
+
+    <div class="dashboard-layout">
+        <aside class="dashboard-sidebar">
+            <div class="dashboard-sidebar-header">
+                <div class="dashboard-user">
+                    <div class="dashboard-avatar">AD</div>
+                    <div class="dashboard-user-info">
+                        <div class="dashboard-user-name">Administrator</div>
+                        <div class="dashboard-user-role">Admin</div>
+                    </div>
+                </div>
+            </div>
+            <nav class="dashboard-nav">
+                <a href="dashboard.html" class="dashboard-nav-link">
+                    <i class="bi bi-speedometer2"></i>
+                    <span>Dashboard</span>
+                </a>
+                <a href="users.html" class="dashboard-nav-link">
+                    <i class="bi bi-people"></i>
+                    <span>Kelola Pengguna</span>
+                </a>
+                <a href="courses.html" class="dashboard-nav-link">
+                    <i class="bi bi-journal-bookmark"></i>
+                    <span>Kelola Kursus</span>
+                </a>
+                <a href="enrollment.html" class="dashboard-nav-link">
+                    <i class="bi bi-person-check"></i>
+                    <span>Penugasan Siswa</span>
+                </a>
+                <a href="certificates.html" class="dashboard-nav-link">
+                    <i class="bi bi-award"></i>
+                    <span>Kelola Sertifikat</span>
+                </a>
+                <a href="reports.html" class="dashboard-nav-link">
+                    <i class="bi bi-file-earmark-bar-graph"></i>
+                    <span>Laporan</span>
+                </a>
+                <a href="notifications.html" class="dashboard-nav-link active">
+                    <i class="bi bi-envelope"></i>
+                    <span>Notifikasi</span>
+                </a>
+                <a href="audit.html" class="dashboard-nav-link">
+                    <i class="bi bi-clock-history"></i>
+                    <span>Audit Trail</span>
+                </a>
+                <a href="settings.html" class="dashboard-nav-link">
+                    <i class="bi bi-gear"></i>
+                    <span>Pengaturan</span>
+                </a>
+            </nav>
+        </aside>
+
+        <main class="dashboard-main">
+            <div class="dashboard-header">
+                <div>
+                    <h1 class="dashboard-title">Notifikasi Email</h1>
+                    <p class="dashboard-subtitle">Outbox simulasi email untuk publikasi kursus dan penerbitan sertifikat. Demo berjalan tanpa backend, sehingga email tidak benar-benar dikirim dan seluruh isi disimpan di localStorage.</p>
+                </div>
+                <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                    <button type="button" class="btn btn-primary" id="exportNotifications">
+                        <i class="bi bi-download"></i> Ekspor CSV
+                    </button>
+                    <button type="button" class="btn btn-ghost" id="clearNotifications">
+                        <i class="bi bi-trash"></i> Bersihkan Outbox
+                    </button>
+                </div>
+            </div>
+
+            <div class="dashboard-stats">
+                <div class="stat-card">
+                    <div class="stat-card-icon blue">
+                        <i class="bi bi-envelope-paper"></i>
+                    </div>
+                    <div class="stat-card-info">
+                        <div class="stat-card-value" id="statNotifTotal">0</div>
+                        <div class="stat-card-label">Total Notifikasi</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-card-icon green">
+                        <i class="bi bi-calendar-check"></i>
+                    </div>
+                    <div class="stat-card-info">
+                        <div class="stat-card-value" id="statNotifToday">0</div>
+                        <div class="stat-card-label">Terkirim Hari Ini</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-card-icon purple">
+                        <i class="bi bi-people"></i>
+                    </div>
+                    <div class="stat-card-info">
+                        <div class="stat-card-value" id="statNotifRecipients">0</div>
+                        <div class="stat-card-label">Penerima Unik</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="dashboard-section">
+                <div class="dashboard-section-header">
+                    <h2 class="dashboard-section-title">Filter Notifikasi</h2>
+                </div>
+                <div class="dashboard-section-body">
+                    <form id="notificationFilterForm">
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem;">
+                            <div class="form-group">
+                                <label class="form-label" for="notificationSearch">Cari</label>
+                                <input class="form-input" type="search" id="notificationSearch" placeholder="Penerima, subjek, atau isi...">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" for="filterType">Jenis</label>
+                                <select class="form-input" id="filterType">
+                                    <option value="">Semua jenis</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" for="filterRecipient">Penerima</label>
+                                <select class="form-input" id="filterRecipient">
+                                    <option value="">Semua penerima</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" for="filterFrom">Dari Tanggal</label>
+                                <input class="form-input" type="date" id="filterFrom">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" for="filterTo">Sampai Tanggal</label>
+                                <input class="form-input" type="date" id="filterTo">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" for="filterLimit">Tampilkan</label>
+                                <select class="form-input" id="filterLimit">
+                                    <option value="50">50 entri</option>
+                                    <option value="200" selected>200 entri</option>
+                                    <option value="500">500 entri</option>
+                                    <option value="1000">1000 entri</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 1rem;">
+                            <button type="submit" class="btn btn-primary"><i class="bi bi-funnel"></i> Terapkan Filter</button>
+                            <button type="button" class="btn btn-ghost" id="resetNotificationFilter"><i class="bi bi-arrow-counterclockwise"></i> Reset</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <div class="dashboard-section">
+                <div class="dashboard-section-header">
+                    <h2 class="dashboard-section-title">Outbox Notifikasi</h2>
+                    <span id="notificationCount" style="color: var(--text-secondary); font-size: 0.875rem;"></span>
+                </div>
+                <div class="dashboard-section-body" style="padding: 0; overflow-x: auto;">
+                    <table class="dashboard-table">
+                        <thead>
+                            <tr>
+                                <th>Waktu</th>
+                                <th>Penerima</th>
+                                <th>Jenis</th>
+                                <th>Subjek &amp; Isi</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="notificationTable"></tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="../assets/js/core.js"></script>
+    <script src="../assets/js/utils.js"></script>
+    <script src="../assets/js/data.js"></script>
+    <script src="../assets/js/seed.js"></script>
+    <script src="../assets/js/sync.js"></script>
+    <script src="../assets/js/progress.js"></script>
+    <script src="../assets/js/auth.js"></script>
+    <script src="../assets/js/audit.js"></script>
+    <script src="../assets/js/notifications.js"></script>
+    <script src="../assets/js/crud-users.js"></script>
+    <script src="../assets/js/crud-courses.js"></script>
+    <script src="../assets/js/crud-enrollments.js"></script>
+    <script src="../assets/js/crud-content.js"></script>
+    <script src="../assets/js/crud-grades.js"></script>
+    <script src="../assets/js/ui.js"></script>
+    <script>
+        function roleLabel(role) {
+            if (role === 'admin') return 'Admin';
+            if (role === 'instruktur') return 'Instruktur';
+            if (role === 'peserta') return 'Peserta';
+            return 'Sistem';
+        }
+
+        function formatDateTime(value) {
+            const date = new Date(value);
+            if (isNaN(date.getTime())) return { time: '-', date: '-' };
+            return {
+                time: date.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+                date: date.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })
+            };
+        }
+
+        function localDateKey(value) {
+            const date = value ? new Date(value) : new Date();
+            if (isNaN(date.getTime())) return '';
+            return date.getFullYear() + '-' +
+                String(date.getMonth() + 1).padStart(2, '0') + '-' +
+                String(date.getDate()).padStart(2, '0');
+        }
+
+        function option(value, label) {
+            const item = document.createElement('option');
+            item.value = value;
+            item.textContent = label;
+            return item;
+        }
+
+        function populateSelects() {
+            const typeSelect = document.getElementById('filterType');
+            Object.keys(ELIPS.NOTIFICATION_TYPE_LABELS).forEach(function (type) {
+                typeSelect.appendChild(option(type, ELIPS.NOTIFICATION_TYPE_LABELS[type]));
+            });
+            refreshRecipientOptions();
+        }
+
+        function refreshRecipientOptions() {
+            const recipientSelect = document.getElementById('filterRecipient');
+            const current = recipientSelect.value;
+            recipientSelect.innerHTML = '';
+            recipientSelect.appendChild(option('', 'Semua penerima'));
+            ELIPS.getNotificationRecipients().forEach(function (recipient) {
+                recipientSelect.appendChild(option(
+                    recipient.id === null ? recipient.email : String(recipient.id),
+                    recipient.name + ' — ' + recipient.email
+                ));
+            });
+            recipientSelect.value = current;
+            if (recipientSelect.value !== current) recipientSelect.value = '';
+        }
+
+        function readFilters() {
+            return {
+                search: document.getElementById('notificationSearch').value.trim(),
+                type: document.getElementById('filterType').value,
+                recipient: document.getElementById('filterRecipient').value,
+                from: document.getElementById('filterFrom').value,
+                to: document.getElementById('filterTo').value,
+                limit: Number(document.getElementById('filterLimit').value) || 200
+            };
+        }
+
+        function renderStats(allNotifications) {
+            const todayKey = localDateKey();
+            const recipients = {};
+            let today = 0;
+
+            allNotifications.forEach(function (item) {
+                if (localDateKey(item.createdAt) === todayKey) today++;
+                const key = item.recipientId === null || item.recipientId === undefined
+                    ? String(item.recipientEmail || '')
+                    : String(item.recipientId);
+                if (key) recipients[key] = true;
+            });
+
+            document.getElementById('statNotifTotal').textContent = allNotifications.length;
+            document.getElementById('statNotifToday').textContent = today;
+            document.getElementById('statNotifRecipients').textContent = Object.keys(recipients).length;
+        }
+
+        function renderNotifications() {
+            const tbody = document.getElementById('notificationTable');
+            const filters = readFilters();
+            const notifications = ELIPS.getNotifications(filters);
+            const allNotifications = ELIPS.getNotifications();
+
+            renderStats(allNotifications);
+            refreshRecipientOptions();
+            document.getElementById('notificationCount').textContent =
+                'Menampilkan ' + notifications.length + ' dari ' + allNotifications.length + ' notifikasi';
+
+            tbody.innerHTML = '';
+            if (notifications.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--text-secondary); padding: 2rem;">Belum ada notifikasi. Notifikasi tercatat otomatis saat kursus dipublikasikan atau sertifikat disetujui Admin.</td></tr>';
+                return;
+            }
+
+            notifications.forEach(function (item) {
+                const when = formatDateTime(item.createdAt);
+                const typeClass = item.type === 'certificate_published' ? 'badge-success' : 'badge-primary';
+                const tr = document.createElement('tr');
+                tr.innerHTML = [
+                    '<td>',
+                    '  <div style="font-weight: 600;">' + ELIPS.escapeHtml(when.time) + '</div>',
+                    '  <div class="table-course-meta">' + ELIPS.escapeHtml(when.date) + '</div>',
+                    '</td>',
+                    '<td>',
+                    '  <div style="font-weight: 500;">' + ELIPS.escapeHtml(item.recipientName || 'Penerima') + '</div>',
+                    '  <div class="table-course-meta">' + ELIPS.escapeHtml(item.recipientEmail || '-') + '</div>',
+                    '  <div class="table-course-meta">' + ELIPS.escapeHtml(roleLabel(item.recipientRole)) + '</div>',
+                    '</td>',
+                    '<td><span class="badge ' + typeClass + '">' + ELIPS.escapeHtml(ELIPS.notificationTypeLabel(item.type)) + '</span></td>',
+                    '<td>',
+                    '  <details>',
+                    '    <summary style="cursor: pointer; font-weight: 500;">' + ELIPS.escapeHtml(item.subject || '(tanpa subjek)') + '</summary>',
+                    '    <div style="white-space: pre-line; color: var(--text-secondary); margin-top: 0.5rem; font-size: 0.875rem;">' + ELIPS.escapeHtml(item.body || '-') + '</div>',
+                    '  </details>',
+                    '</td>',
+                    '<td><span class="badge badge-success">Terkirim (simulasi)</span></td>'
+                ].join('');
+                tbody.appendChild(tr);
+            });
+        }
+
+        function resetFilters() {
+            document.getElementById('notificationFilterForm').reset();
+            document.getElementById('filterLimit').value = '200';
+            renderNotifications();
+        }
+
+        function csvCell(value) {
+            return '"' + String(value === undefined || value === null ? '' : value).replace(/"/g, '""') + '"';
+        }
+
+        function exportCsv() {
+            const notifications = ELIPS.getNotifications(readFilters());
+            if (notifications.length === 0) {
+                ELIPS.toast('Tidak ada data notifikasi untuk diekspor.');
+                return;
+            }
+
+            const rows = [['Waktu', 'Penerima', 'Email', 'Role', 'Jenis', 'Subjek', 'Isi']];
+            notifications.forEach(function (item) {
+                rows.push([
+                    item.createdAt,
+                    item.recipientName,
+                    item.recipientEmail,
+                    roleLabel(item.recipientRole),
+                    ELIPS.notificationTypeLabel(item.type),
+                    item.subject,
+                    item.body
+                ]);
+            });
+
+            const csv = '\ufeff' + rows.map(function (row) {
+                return row.map(csvCell).join(',');
+            }).join('\r\n');
+
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'elips-notifikasi-' + new Date().toISOString().slice(0, 10) + '.csv';
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+            ELIPS.toast(notifications.length + ' notifikasi diekspor.');
+        }
+
+        function clearOutbox() {
+            if (!confirm('Bersihkan seluruh outbox notifikasi? Tindakan ini tidak dapat dibatalkan.')) return;
+            const result = ELIPS.clearNotifications();
+            ELIPS.toast(result.message);
+            renderNotifications();
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            populateSelects();
+            renderNotifications();
+
+            document.getElementById('notificationFilterForm').addEventListener('submit', function (event) {
+                event.preventDefault();
+                renderNotifications();
+            });
+            document.getElementById('resetNotificationFilter').addEventListener('click', resetFilters);
+            document.getElementById('filterLimit').addEventListener('change', renderNotifications);
+            document.getElementById('exportNotifications').addEventListener('click', exportCsv);
+            document.getElementById('clearNotifications').addEventListener('click', clearOutbox);
+        });
+    </script>
+</body>
+</html>

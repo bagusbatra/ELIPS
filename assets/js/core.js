@@ -19,6 +19,7 @@
         certificates: 'elips_certificates',
         completedLessons: 'elips_completedLessons',
         auditLogs: 'elips_auditLogs',
+        notifications: 'elips_notifications',
         session: 'elips_session'
     };
 

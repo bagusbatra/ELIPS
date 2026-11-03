@@ -223,6 +223,10 @@
                 certificate.certificateNumber + ') untuk ' + (student ? student.name : 'Peserta #' + certificate.studentId) +
                 ' pada kursus "' + (course ? course.title : 'Kursus #' + certificate.courseId) + '".'
         });
+
+        if (typeof ELIPS.notifyCertificatePublished === 'function') {
+            ELIPS.notifyCertificatePublished(certificate);
+        }
         return success('Sertifikat berhasil disetujui dan diterbitkan.', certificate);
     }
 

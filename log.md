@@ -1,6 +1,6 @@
 # Log Pengembangan ELIPS LMS
 
-**Versi dokumen:** 1.1  
+**Versi dokumen:** 1.2  
 **Terakhir diperbarui:** 2026-11-03  
 **Status proyek:** Demo — Vanilla HTML/CSS/JavaScript + `localStorage`  
 **Dokumen terkait:** `prd.md`
@@ -15,7 +15,7 @@ Tiga role utama:
 
 | Role | Tanggung jawab |
 |---|---|
-| **Admin** | Membuat kursus Draft, menugaskan 1 instruktur per kursus, mengelola pengguna, menugaskan peserta ke kursus, menyetujui sertifikat Draft → Publish |
+| **Admin** | Membuat kursus Draft, menugaskan 1 instruktur per kursus, mengelola pengguna, menugaskan peserta ke kursus, menyetujui sertifikat Draft → Publish, menelusuri audit trail, dan memantau outbox notifikasi |
 | **Instruktur** | Mengelola modul/materi pada kursus yang diampu, memantau progres peserta, memberi nilai akhir |
 | **Peserta** | Belajar materi kursus yang ditugaskan, menandai pelajaran selesai, melihat sertifikat yang sudah Publish |
 
@@ -31,6 +31,8 @@ Admin buat kursus (Draft)
   → Sistem buat e-sertifikat Draft (tidak tampil ke peserta)
   → Admin setujui
   → E-sertifikat Publish (tampil & dapat diverifikasi)
+  → Setiap perubahan kursus, nilai, dan sertifikat tercatat di audit trail
+  → Notifikasi email simulasi tercatat saat kursus Publish / sertifikat terbit
 ```
 
 ---
@@ -54,6 +56,7 @@ ELIPS/
 │   ├── users.html
 │   ├── enrollment.html
 │   ├── certificates.html
+│   ├── notifications.html
 │   ├── reports.html
 │   ├── audit.html
 │   └── settings.html
@@ -79,6 +82,7 @@ ELIPS/
         ├── progress.js
         ├── auth.js
         ├── audit.js
+        ├── notifications.js
         ├── crud-users.js
         ├── crud-courses.js
         ├── crud-enrollments.js
@@ -92,7 +96,7 @@ ELIPS/
 Semua halaman memuat modul dengan urutan berikut:
 
 ```text
-core → utils → data → seed → sync → progress → auth → audit
+core → utils → data → seed → sync → progress → auth → audit → notifications
 → crud-users → crud-courses → crud-enrollments
 → crud-content → crud-grades → ui
 ```
@@ -107,6 +111,7 @@ core → utils → data → seed → sync → progress → auth → audit
 | `progress.js` | Struktur kursus, progres belajar, overview siswa dan instruktur | `getCourseStructure`, `getCourseProgress`, `isLessonUnlocked`, `getStudentCourseOverview`, `getInstructorCourses`, `getInstructorSummary` |
 | `auth.js` | Session, user aktif, path dashboard per role, guard halaman | `getSessionUser`, `getCurrentUser`, `requireRole`, `setCurrentUser`, `logout` |
 | `audit.js` | Audit trail: pencatatan aktor/aksi/entitas, filter log, daftar aktor, pembersihan log | `logAudit`, `getAuditLogs`, `getAuditActors`, `clearAuditLogs`, `auditActionLabel`, `auditEntityLabel` |
+| `notifications.js` | Outbox notifikasi email simulasi: pembuatan saat kursus Published/sertifikat terbit, filter, penerima, pembersihan | `createNotification`, `notifyCoursePublished`, `notifyCertificatePublished`, `getNotifications`, `getNotificationRecipients`, `clearNotifications`, `notificationTypeLabel` |
 | `crud-users.js` | CRUD pengguna dan penugasan instruktur ke kursus | `createUser`, `updateUser`, `deleteUser`, `assignInstructorToCourses` |
 | `crud-courses.js` | CRUD kursus dan aturan Draft/Publish | `createCourse`, `updateCourse`, `deleteCourse`, `setCourseStatus`, `toggleCourseStatus` |
 | `crud-enrollments.js` | CRUD penugasan peserta ke kursus | `assignStudentToCourses`, `setEnrollmentStatus`, `deleteEnrollment` |
@@ -124,6 +129,37 @@ Prinsip yang dipakai:
 ---
 
 ## 3. Riwayat Perubahan
+
+### v1.7 — 2026-11-03 — P2 notifikasi email (simulasi)
+
+**Tujuan:** mencatat pemberitahuan email saat kursus dipublikasikan atau sertifikat terbit, tanpa memerlukan backend pada fase demo.
+
+Perubahan:
+
+- Ditambahkan key `elips_notifications` pada `core.js` dan normalisasi data pada `seed.js`.
+- Ditambahkan modul `assets/js/notifications.js`:
+  - `notifyCoursePublished(course)` membuat notifikasi untuk peserta aktif yang terdaftar dan instruktur aktif pengampu;
+  - `notifyCertificatePublished(certificate)` membuat notifikasi untuk peserta saat sertifikat Draft disetujui;
+  - `getNotifications(filters)` mendukung filter jenis, penerima, rentang tanggal, pencarian, dan limit;
+  - `getNotificationRecipients()` menyediakan daftar penerima untuk dropdown;
+  - `clearNotifications()` membersihkan seluruh outbox;
+  - batas 1000 notifikasi terbaru agar `localStorage` tetap terkendali.
+- Notifikasi memakai `channel: 'email'`, `status: 'sent'`, dan `simulated: true` karena email tidak benar-benar dikirim pada demo.
+- Hook notifikasi ditambahkan ke `setCourseStatus` (hanya saat berubah menjadi Published) dan `approveCertificate` (Draft → Publish). Operasi gagal tidak membuat notifikasi.
+- Ditambahkan halaman `admin/notifications.html`:
+  - statistik total notifikasi, notifikasi hari ini, dan penerima unik;
+  - filter pencarian, jenis, penerima, rentang tanggal, dan limit;
+  - tabel outbox dengan detail subjek/isi, ekspor CSV, dan tombol bersihkan outbox.
+- Seluruh 24 halaman lama memuat `notifications.js` setelah `audit.js`; 8 halaman admin lama mendapat tautan sidebar "Notifikasi", sehingga total 9 halaman admin (termasuk halaman baru) memiliki tautan tersebut.
+- PRD diperbarui ke v1.7 dan roadmap P2 ditandai selesai untuk versi demo (pengiriman email nyata tetap memerlukan backend).
+
+Dampak:
+
+- Publikasi kursus dan approval sertifikat kini menghasilkan entri outbox tanpa mengubah alur bisnis utama.
+- Kegagalan notifikasi tidak menggagalkan publikasi atau approval.
+- Seluruh regresi lama tetap lulus; ditambahkan pengujian `test-notifications`.
+
+---
 
 ### v1.6 — 2026-11-03 — P1 audit trail
 
@@ -257,6 +293,16 @@ Perubahan sentralisasi:
 | Nomor final dibuat saat approval | Nomor `CERT-DRAFT-*` diganti `CERT-YYYY-*` |
 | Hapus kursus = hapus data terkait | `deleteCourse` menghapus modul, materi, enrollment, nilai, sertifikat, progres |
 | Hapus enrollment = hapus data peserta di kursus | `deleteEnrollment` menghapus nilai, sertifikat, dan progres terkait |
+| Operasi berhasil dicatat ke audit | Setiap CRUD memanggil `ELIPS.logAudit` setelah data tersimpan |
+| Operasi gagal tidak dicatat | Validasi mengembalikan `failure` sebelum `logAudit` dipanggil |
+| Aktor audit tidak salah atribusi | Prioritas `actorId` eksplisit → sesi → "Sistem"; tidak memakai fallback path halaman |
+| Log audit dibatasi | Maksimal 1000 entri terbaru disimpan di `elips_auditLogs` |
+| Publikasi kursus membuat notifikasi | `setCourseStatus` memanggil `notifyCoursePublished` hanya saat status berubah menjadi `published` |
+| Penerima notifikasi kursus | Peserta dengan enrollment `active` dan akun `aktif`, ditambah instruktur aktif pengampu |
+| Approval sertifikat membuat notifikasi | `approveCertificate` memanggil `notifyCertificatePublished` setelah Draft → Publish |
+| Penerima notifikasi sertifikat | Peserta pemilik sertifikat yang akunnya aktif dan memiliki email valid |
+| Notifikasi gagal tidak menggagalkan bisnis | Pembuatan notifikasi dibungkus try/catch dan tidak mengubah hasil CRUD |
+| Outbox notifikasi dibatasi | Maksimal 1000 notifikasi terbaru disimpan di `elips_notifications` |
 
 ---
 
@@ -272,6 +318,8 @@ Perubahan sentralisasi:
 | `elips_grades` | Nilai akhir peserta per kursus |
 | `elips_certificates` | Sertifikat Draft/Publish, nomor, grade, approver |
 | `elips_completedLessons` | Progres pelajaran yang diselesaikan |
+| `elips_auditLogs` | Jejak audit perubahan kursus, nilai, sertifikat, pengguna, penugasan, modul, dan materi |
+| `elips_notifications` | Outbox notifikasi email simulasi: penerima, subjek, isi, entitas, dan waktu |
 | `elips_session` | Sesi pengguna yang sedang login |
 
 Akun demo utama:
@@ -290,17 +338,19 @@ Akun demo utama:
 
 ## 6. Hasil Pengujian Terakhir
 
-Pengujian dijalankan setelah modularisasi v1.5:
+Pengujian dijalankan setelah implementasi P2 notifikasi email simulasi (v1.7):
 
 | Pemeriksaan | Hasil |
 |---|---|
-| Syntax 23 HTML + 13 JS | ✅ Lulus |
+| Syntax 25 HTML + 15 JS | ✅ Lulus |
+| Notifikasi email (`test-notifications`) | ✅ Lulus |
+| Audit trail (`test-audit`) | ✅ Lulus |
 | CRUD & aturan bisnis (`test-crud`) | ✅ Lulus |
 | Render halaman peserta (`test-render`) | ✅ Lulus |
 | Alur instruktur (`test-instructor`) | ✅ Lulus |
 | Alur belajar (`test-learning`) | ✅ Lulus |
 | Halaman admin (`test-admin-pages`) | ✅ Lulus |
-| Semua 23 halaman dimuat tanpa error (`test-all-pages`) | ✅ Lulus |
+| Semua 25 halaman dimuat tanpa error (`test-all-pages`) | ✅ Lulus |
 | Semua tautan lokal (`check-links`) | ✅ Lulus |
 | Data layer (`test-data`) | ✅ Lulus |
 
@@ -312,6 +362,14 @@ Catatan penting yang diuji:
 - Instruktur lain tidak dapat mengelola konten atau menilai kursus yang bukan miliknya.
 - Menghapus instruktur mengembalikan kursus ke Draft.
 - Menghapus kursus/enrollment membersihkan data turunannya.
+- Audit mencatat aktor yang benar untuk aksi admin, instruktur, dan sistem.
+- Filter audit (aktor, aksi, entitas, tanggal, pencarian) bekerja dan hasilnya dapat diekspor.
+- Operasi yang ditolak tidak menghasilkan entri audit.
+- Publikasi kursus membuat notifikasi untuk peserta aktif dan instruktur pengampu, tanpa duplikasi penerima.
+- Approval sertifikat membuat tepat satu notifikasi untuk peserta dengan nomor sertifikat final.
+- Publikasi/approval yang ditolak atau diulang tidak menambah outbox.
+- Filter notifikasi (jenis, penerima, tanggal, pencarian) bekerja dan hasilnya dapat diekspor.
+- Halaman `admin/notifications.html` dapat membersihkan outbox dan menampilkan empty state.
 
 ---
 
@@ -322,15 +380,16 @@ Keterbatasan saat ini:
 - Data hanya tersimpan di `localStorage`, sehingga hilang jika penyimpanan browser dibersihkan.
 - Belum ada backend, autentikasi server-side, atau validasi lintas perangkat.
 - Belum ada upload file materi sungguhan.
-- Belum ada audit trail dan notifikasi email.
+- Audit trail tersimpan di `localStorage`, sehingga dapat diubah/dihapus dari browser dan belum immutable seperti log server.
+- Notifikasi email masih berupa simulasi/outbox di `localStorage`; email belum benar-benar dikirim karena belum ada backend.
 
 Rencana lanjutan (opsional, sesuai `prd.md`):
 
 | Prioritas | Item |
 |---|---|
 | P0 | Backend + database, autentikasi server, upload file, validasi status/kepemilikan di server |
-| P1 | Audit trail perubahan kursus, nilai, dan sertifikat |
-| P2 | Notifikasi email saat kursus dipublikasikan atau sertifikat terbit |
+| P1 | Audit trail server-side yang immutable dengan retensi dan akses terbatas (versi demo sudah mencatat audit di `localStorage`) |
+| P2 | Notifikasi email nyata saat kursus dipublikasikan atau sertifikat terbit (demo sudah mencatat outbox simulasi) |
 
 ---
 
