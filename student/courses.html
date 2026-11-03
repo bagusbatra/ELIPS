@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kursus Saya - ELIPS LMS</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../assets/css/style.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+</head>
+<body>
+    <header class="navbar">
+        <div class="container nav-container">
+            <div class="nav-brand">
+                <i class="bi bi-mortarboard-fill brand-icon"></i>
+                <span class="brand-text">ELIPS LMS</span>
+            </div>
+            <nav class="nav-menu" id="navMenu">
+                <a href="../index.html" class="nav-link">Beranda</a>
+                <a href="../index.html#courses" class="nav-link">Kursus</a>
+                <a href="../verify-certificate.html" class="nav-link">Verifikasi Sertifikat</a>
+            </nav>
+            <div class="nav-actions">
+                <a href="dashboard.html" class="btn btn-ghost">Dashboard</a>
+                <a href="../index.html" class="btn btn-outline" data-logout>Keluar</a>
+            </div>
+            <button class="nav-toggle" id="navToggle" aria-label="Buka menu">
+                <i class="bi bi-list"></i>
+            </button>
+        </div>
+    </header>
+
+    <div class="dashboard-layout">
+        <aside class="dashboard-sidebar">
+            <div class="dashboard-sidebar-header">
+                <div class="dashboard-user">
+                    <div class="dashboard-avatar" id="studentAvatar">BS</div>
+                    <div class="dashboard-user-info">
+                        <div class="dashboard-user-name" id="studentName">Budi Santoso</div>
+                        <div class="dashboard-user-role">Peserta</div>
+                    </div>
+                </div>
+            </div>
+            <nav class="dashboard-nav">
+                <a href="dashboard.html" class="dashboard-nav-link">
+                    <i class="bi bi-speedometer2"></i>
+                    <span>Dashboard</span>
+                </a>
+                <a href="courses.html" class="dashboard-nav-link active">
+                    <i class="bi bi-journal-bookmark"></i>
+                    <span>Kursus Saya</span>
+                </a>
+                <a href="../index.html#courses" class="dashboard-nav-link">
+                    <i class="bi bi-compass"></i>
+                    <span>Jelajahi Kursus</span>
+                </a>
+                <a href="certificates.html" class="dashboard-nav-link">
+                    <i class="bi bi-award"></i>
+                    <span>Sertifikat Saya</span>
+                </a>
+                <a href="profile.html" class="dashboard-nav-link">
+                    <i class="bi bi-person"></i>
+                    <span>Profil Saya</span>
+                </a>
+            </nav>
+        </aside>
+
+        <main class="dashboard-main">
+            <div class="dashboard-header">
+                <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; flex-wrap: wrap;">
+                    <div>
+                        <h1 class="dashboard-title">Kursus Saya</h1>
+                        <p class="dashboard-subtitle">Semua kursus yang ditugaskan Admin kepada Anda beserta progres belajarnya.</p>
+                    </div>
+                    <a href="../index.html#courses" class="btn btn-outline"><i class="bi bi-compass"></i> Jelajahi Kursus</a>
+                </div>
+            </div>
+
+            <div class="dashboard-stats">
+                <div class="stat-card">
+                    <div class="stat-card-icon blue">
+                        <i class="bi bi-journal-bookmark"></i>
+                    </div>
+                    <div class="stat-card-info">
+                        <div class="stat-card-value" id="statActiveCourses">0</div>
+                        <div class="stat-card-label">Kursus Aktif</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-card-icon green">
+                        <i class="bi bi-check-circle"></i>
+                    </div>
+                    <div class="stat-card-info">
+                        <div class="stat-card-value" id="statCompletedCourses">0</div>
+                        <div class="stat-card-label">Materi Selesai</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-card-icon orange">
+                        <i class="bi bi-journal-check"></i>
+                    </div>
+                    <div class="stat-card-info">
+                        <div class="stat-card-value" id="statCompletedLessons">0</div>
+                        <div class="stat-card-label">Pelajaran Selesai</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-card-icon purple">
+                        <i class="bi bi-award"></i>
+                    </div>
+                    <div class="stat-card-info">
+                        <div class="stat-card-value" id="statCertificates">0</div>
+                        <div class="stat-card-label">Sertifikat Terbit</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="dashboard-section">
+                <div class="dashboard-section-header" style="flex-wrap: wrap; gap: 0.75rem;">
+                    <h2 class="dashboard-section-title">Daftar Kursus</h2>
+                    <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center;">
+                        <select id="courseFilter" class="form-input" style="max-width: 190px;" onchange="renderCourseRows()">
+                            <option value="all">Semua Kursus</option>
+                            <option value="active">Sedang Berjalan</option>
+                            <option value="completed">Selesai</option>
+                            <option value="inactive">Dihentikan</option>
+                        </select>
+                        <input type="text" id="courseSearch" class="form-input" style="max-width: 220px;" placeholder="Cari kursus / instruktur..." onkeyup="renderCourseRows()">
+                    </div>
+                </div>
+                <div class="dashboard-section-body" style="padding: 0; overflow-x: auto;">
+                    <table class="dashboard-table">
+                        <thead>
+                            <tr>
+                                <th>Kursus</th>
+                                <th>Instruktur</th>
+                                <th>Progres</th>
+                                <th>Nilai</th>
+                                <th>Status</th>
+                                <th>Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody id="studentCoursesBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="../assets/js/main.js"></script>
+    <script>
+        let studentOverview = [];
+
+        const stateMap = {
+            'locked': { label: 'Belum Dibuka', className: 'badge-warning', icon: 'bi-lock-fill', group: 'active' },
+            'certified': { label: 'Sertifikat Terbit', className: 'badge-success', icon: 'bi-patch-check-fill', group: 'completed' },
+            'pending-approval': { label: 'Menunggu Persetujuan', className: 'badge-warning', icon: 'bi-hourglass-split', group: 'completed' },
+            'completed': { label: 'Selesai', className: 'badge-success', icon: 'bi-check-circle-fill', group: 'completed' },
+            'awaiting-grade': { label: 'Menunggu Penilaian', className: 'badge-warning', icon: 'bi-hourglass-split', group: 'completed' },
+            'learning': { label: 'Sedang Belajar', className: 'badge-warning', icon: 'bi-play-circle', group: 'active' },
+            'not-started': { label: 'Belum Dimulai', className: 'badge-primary', icon: 'bi-circle', group: 'active' }
+        };
+
+        document.addEventListener('DOMContentLoaded', function () {
+            const sessionUser = ELIPS.getSessionUser();
+            if (sessionUser && sessionUser.role !== 'peserta') {
+                window.location.href = ELIPS.dashboardPathForRole(sessionUser.role);
+                return;
+            }
+
+            const student = ELIPS.getCurrentUser();
+            if (!student) {
+                window.location.href = '../login.html';
+                return;
+            }
+
+            document.getElementById('studentName').textContent = student.name;
+            document.getElementById('studentAvatar').textContent = (student.name || 'S').substring(0, 2).toUpperCase();
+
+            studentOverview = ELIPS.getStudentCourseOverview(student.id);
+            const activeOverview = studentOverview.filter(function (item) { return item.enrollment.status === 'active'; });
+            const completedCourses = activeOverview.filter(function (item) { return item.isComplete; });
+            const completedLessons = activeOverview.reduce(function (sum, item) { return sum + item.progress.completed; }, 0);
+            const publishedCerts = ELIPS.getCertificatesByStudent(student.id).filter(function (cert) { return cert.status === 'publish'; });
+
+            document.getElementById('statActiveCourses').textContent = activeOverview.length;
+            document.getElementById('statCompletedCourses').textContent = completedCourses.length;
+            document.getElementById('statCompletedLessons').textContent = completedLessons;
+            document.getElementById('statCertificates').textContent = publishedCerts.length;
+
+            renderCourseRows();
+        });
+
+        function renderCourseRows() {
+            const tbody = document.getElementById('studentCoursesBody');
+            const filter = document.getElementById('courseFilter').value;
+            const search = document.getElementById('courseSearch').value.trim().toLowerCase();
+
+            const filtered = studentOverview.filter(function (item) {
+                const course = item.course;
+                const isActive = item.enrollment.status === 'active';
+                const state = stateMap[item.state] || stateMap['not-started'];
+                const group = isActive ? state.group : 'inactive';
+
+                if (filter === 'active' && group !== 'active') return false;
+                if (filter === 'completed' && group !== 'completed') return false;
+                if (filter === 'inactive' && group !== 'inactive') return false;
+
+                if (search) {
+                    const haystack = (course.title + ' ' + (course.instructorName || '') + ' ' + (course.category || '')).toLowerCase();
+                    if (haystack.indexOf(search) === -1) return false;
+                }
+                return true;
+            });
+
+            tbody.innerHTML = '';
+
+            if (filtered.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 2rem; color: var(--text-secondary);">Tidak ada kursus yang sesuai dengan filter.</td></tr>';
+                return;
+            }
+
+            filtered.forEach(function (item) {
+                const course = item.course;
+                const progress = item.progress;
+                const grade = item.grade;
+                const certificate = item.certificate;
+                const isActive = item.enrollment.status === 'active';
+                const state = stateMap[item.state] || stateMap['not-started'];
+                const modules = ELIPS.getModulesByCourse(course.id).length;
+                const gradeText = grade
+                    ? ELIPS.escapeHtml(grade.score) + ' (' + ELIPS.escapeHtml(grade.grade) + ')'
+                    : '-';
+                const statusClass = isActive ? state.className : '';
+                const statusStyle = isActive ? '' : ' style="background: #fee2e2; color: #991b1b;"';
+                const statusIcon = isActive ? state.icon : 'bi-slash-circle';
+                const statusLabel = isActive ? state.label : 'Dihentikan';
+
+                let action = '';
+                if (!isActive) {
+                    action = '<span class="badge" style="background: #fee2e2; color: #991b1b;"><i class="bi bi-slash-circle"></i> Akses ditutup</span>';
+                } else if (course.status !== 'published') {
+                    action = '<span class="badge badge-warning"><i class="bi bi-lock-fill"></i> Belum Dibuka</span>';
+                } else {
+                    const learnLabel = item.isComplete ? 'Lihat Materi' : (progress.completed > 0 ? 'Lanjutkan' : 'Mulai');
+                    const learnIcon = item.isComplete ? 'bi-journal-check' : 'bi-play-fill';
+                    action = '<div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">' +
+                        '<a href="../learning.html?id=' + course.id + '" class="btn btn-primary" style="padding: 0.5rem 0.875rem; font-size: 0.875rem;"><i class="bi ' + learnIcon + '"></i> ' + learnLabel + '</a>' +
+                        '<a href="../course-detail.html?id=' + course.id + '" class="btn btn-ghost" style="padding: 0.5rem 0.75rem; font-size: 0.875rem;" title="Detail Kursus"><i class="bi bi-info-circle"></i></a>' +
+                        (certificate && certificate.status === 'publish'
+                            ? '<a href="../certificate-view.html?no=' + encodeURIComponent(certificate.certificateNumber) + '" class="btn btn-ghost" style="padding: 0.5rem 0.75rem; font-size: 0.875rem;" title="Lihat Sertifikat"><i class="bi bi-award"></i></a>'
+                            : '') +
+                        '</div>';
+                }
+
+                const tr = document.createElement('tr');
+                tr.innerHTML = [
+                    '<td>',
+                    '  <div class="table-course">',
+                    '    <div class="table-course-img"></div>',
+                    '    <div class="table-course-info">',
+                    '      <div class="table-course-title">' + ELIPS.escapeHtml(course.title) + '</div>',
+                    '      <div class="table-course-meta">' + ELIPS.escapeHtml(course.category || 'Kursus') + ' &bull; ' + modules + ' Modul &bull; ' + progress.total + ' Pelajaran</div>',
+                    '    </div>',
+                    '  </div>',
+                    '</td>',
+                    '<td><span>' + ELIPS.escapeHtml(course.instructorName || '-') + '</span></td>',
+                    '<td>',
+                    '  <div class="progress-inline">',
+                    '    <div class="progress-inline-bar"><div class="progress-inline-fill" style="width: ' + progress.percentage + '%;' + (progress.percentage >= 100 ? ' background: var(--success);' : '') + '"></div></div>',
+                    '    <span class="progress-inline-text">' + progress.percentage + '%</span>',
+                    '  </div>',
+                    '  <small style="color: var(--text-secondary);">' + progress.completed + '/' + progress.total + ' pelajaran</small>',
+                    '</td>',
+                    '<td><span>' + gradeText + '</span></td>',
+                    '<td><span class="badge ' + statusClass + '"' + statusStyle + '><i class="bi ' + statusIcon + '"></i> ' + statusLabel + '</span></td>',
+                    '<td>' + action + '</td>'
+                ].join('');
+                tbody.appendChild(tr);
+            });
+        }
+    </script>
+</body>
+</html>

@@ -26,7 +26,7 @@
                 <a href="dashboard.html" class="btn btn-ghost">Dashboard</a>
                 <a href="../index.html" class="btn btn-outline" data-logout>Keluar</a>
             </div>
-            <button class="nav-toggle" id="navToggle">
+            <button class="nav-toggle" id="navToggle" aria-label="Buka menu">
                 <i class="bi bi-list"></i>
             </button>
         </div>
@@ -48,15 +48,19 @@
                     <i class="bi bi-speedometer2"></i>
                     <span>Dashboard</span>
                 </a>
-                <a href="../index.html#courses" class="dashboard-nav-link">
+                <a href="courses.html" class="dashboard-nav-link">
                     <i class="bi bi-journal-bookmark"></i>
-                    <span>Kursus Tersedia</span>
+                    <span>Kursus Saya</span>
+                </a>
+                <a href="../index.html#courses" class="dashboard-nav-link">
+                    <i class="bi bi-compass"></i>
+                    <span>Jelajahi Kursus</span>
                 </a>
                 <a href="certificates.html" class="dashboard-nav-link active">
                     <i class="bi bi-award"></i>
                     <span>Sertifikat Saya</span>
                 </a>
-                <a href="#" class="dashboard-nav-link">
+                <a href="profile.html" class="dashboard-nav-link">
                     <i class="bi bi-person"></i>
                     <span>Profil Saya</span>
                 </a>
@@ -66,24 +70,71 @@
         <main class="dashboard-main">
             <div class="dashboard-header">
                 <h1 class="dashboard-title">Sertifikat Saya</h1>
-                <p class="dashboard-subtitle">Hanya sertifikat yang sudah disetujui dan diterbitkan (Publish) yang ditampilkan di sini</p>
+                <p class="dashboard-subtitle">Pantau status e-sertifikat Anda. Sertifikat terbit dapat dilihat dan diverifikasi secara publik.</p>
             </div>
 
-            <div class="dashboard-section">
+            <div class="dashboard-stats">
+                <div class="stat-card">
+                    <div class="stat-card-icon green">
+                        <i class="bi bi-patch-check"></i>
+                    </div>
+                    <div class="stat-card-info">
+                        <div class="stat-card-value" id="statPublished">0</div>
+                        <div class="stat-card-label">Sertifikat Terbit</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-card-icon orange">
+                        <i class="bi bi-hourglass-split"></i>
+                    </div>
+                    <div class="stat-card-info">
+                        <div class="stat-card-value" id="statPending">0</div>
+                        <div class="stat-card-label">Menunggu Persetujuan</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-card-icon blue">
+                        <i class="bi bi-collection"></i>
+                    </div>
+                    <div class="stat-card-info">
+                        <div class="stat-card-value" id="statTotal">0</div>
+                        <div class="stat-card-label">Total Sertifikat</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="dashboard-section" id="publishedSection" style="display: none;">
                 <div class="dashboard-section-header">
                     <h2 class="dashboard-section-title">Sertifikat Terbit</h2>
+                    <span class="badge badge-success"><i class="bi bi-patch-check-fill"></i> Publish</span>
                 </div>
                 <div class="dashboard-section-body">
-                    <div id="certificatesEmpty" style="text-align: center; padding: 3rem; color: var(--text-secondary);">
-                        <i class="bi bi-award" style="font-size: 3rem; margin-bottom: 1rem; display: block; opacity: 0.5;"></i>
-                        <p style="margin-bottom: 0.5rem;">Belum ada sertifikat terbit</p>
-                        <p style="font-size: 0.875rem;">Sertifikat akan muncul setelah instruktur memberi nilai dan Admin menyetujui penerbitannya</p>
-                        <a href="../index.html#courses" class="btn btn-primary" style="margin-top: 1rem;">
-                            <i class="bi bi-journal-plus"></i>
-                            Lihat Kursus
-                        </a>
+                    <div id="publishedList" class="cert-grid"></div>
+                </div>
+            </div>
+
+            <div class="dashboard-section" id="pendingSection" style="display: none;">
+                <div class="dashboard-section-header">
+                    <h2 class="dashboard-section-title">Menunggu Persetujuan Admin</h2>
+                    <span class="badge badge-warning"><i class="bi bi-hourglass-split"></i> Draft</span>
+                </div>
+                <div class="dashboard-section-body">
+                    <div style="padding: 0.875rem 1rem; margin-bottom: 1rem; background: #fffbeb; border: 1px solid #fde68a; border-radius: var(--radius); color: #92400e; font-size: 0.875rem;">
+                        <i class="bi bi-info-circle"></i> Sertifikat berikut sudah dinilai oleh instruktur dan sedang menunggu persetujuan Admin sebelum dapat dilihat atau diverifikasi.
                     </div>
-                    <div id="certificatesList" style="display: none;" class="cert-grid"></div>
+                    <div id="pendingList" class="cert-grid"></div>
+                </div>
+            </div>
+
+            <div id="certificatesEmpty" class="dashboard-section" style="display: none;">
+                <div class="dashboard-section-body" style="text-align: center; padding: 3rem;">
+                    <i class="bi bi-award" style="font-size: 3rem; margin-bottom: 1rem; display: block; opacity: 0.5;"></i>
+                    <p style="margin-bottom: 0.5rem; font-weight: 600; color: var(--text-primary);">Belum ada sertifikat</p>
+                    <p style="font-size: 0.875rem;">Sertifikat akan muncul setelah instruktur memberi nilai dan Admin menyetujui penerbitannya.</p>
+                    <a href="courses.html" class="btn btn-primary" style="margin-top: 1rem;">
+                        <i class="bi bi-journal-bookmark"></i>
+                        Lihat Kursus Saya
+                    </a>
                 </div>
             </div>
         </main>
@@ -92,6 +143,12 @@
     <script src="../assets/js/main.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function () {
+            const sessionUser = ELIPS.getSessionUser();
+            if (sessionUser && sessionUser.role !== 'peserta') {
+                window.location.href = ELIPS.dashboardPathForRole(sessionUser.role);
+                return;
+            }
+
             const student = ELIPS.getCurrentUser();
             if (!student) {
                 window.location.href = '../login.html';
@@ -101,50 +158,91 @@
             document.getElementById('studentName').textContent = student.name;
             document.getElementById('studentAvatar').textContent = (student.name || 'S').substring(0, 2).toUpperCase();
 
-            const emptyDiv = document.getElementById('certificatesEmpty');
-            const listDiv = document.getElementById('certificatesList');
-            const courses = ELIPS.getCourses();
+            const certificates = ELIPS.getCertificatesByStudent(student.id);
+            const published = certificates.filter(function (cert) { return cert.status === 'publish'; });
+            const pending = certificates.filter(function (cert) { return cert.status === 'draft'; });
 
-            const certificates = ELIPS.getCertificates().filter(function (cert) {
-                return cert.studentId === student.id && cert.status === 'publish';
-            });
+            document.getElementById('statPublished').textContent = published.length;
+            document.getElementById('statPending').textContent = pending.length;
+            document.getElementById('statTotal').textContent = certificates.length;
+
+            const publishedSection = document.getElementById('publishedSection');
+            const pendingSection = document.getElementById('pendingSection');
+            const emptySection = document.getElementById('certificatesEmpty');
 
             if (certificates.length === 0) {
-                emptyDiv.style.display = 'block';
-                listDiv.style.display = 'none';
+                emptySection.style.display = 'block';
                 return;
             }
 
-            emptyDiv.style.display = 'none';
-            listDiv.style.display = 'grid';
-            listDiv.innerHTML = '';
+            const courses = ELIPS.getCourses();
 
-            certificates.slice().sort(function (a, b) {
-                return new Date(b.approvedAt || b.issuedByInstructorAt || 0) - new Date(a.approvedAt || a.issuedByInstructorAt || 0);
-            }).forEach(function (cert) {
+            function sortByDate(list) {
+                return list.slice().sort(function (a, b) {
+                    return new Date(b.approvedAt || b.issuedByInstructorAt || b.issuedAt || 0) -
+                        new Date(a.approvedAt || a.issuedByInstructorAt || a.issuedAt || 0);
+                });
+            }
+
+            function buildCard(cert, isPublished) {
                 const course = courses.find(function (c) { return c.id === cert.courseId; }) || {};
+                const grade = ELIPS.getGrade(cert.studentId, cert.courseId);
                 const issuedDate = cert.approvedAt || cert.issuedByInstructorAt || cert.issuedAt;
-                const grade = cert.grade || '-';
+                const scoreText = cert.score !== undefined && cert.score !== null ? ' (' + ELIPS.escapeHtml(cert.score) + ')' : '';
+                const note = grade && grade.note ? grade.note : '';
+
                 const card = document.createElement('div');
                 card.className = 'cert-card';
+                if (!isPublished) {
+                    card.style.borderColor = '#fcd34d';
+                }
+
+                const badge = isPublished
+                    ? '<span class="badge badge-success" style="position: absolute; top: 0.75rem; right: 0.75rem;"><i class="bi bi-patch-check-fill"></i> Terbit</span>'
+                    : '<span class="badge badge-warning" style="position: absolute; top: 0.75rem; right: 0.75rem;"><i class="bi bi-hourglass-split"></i> Draft</span>';
+
+                const actions = isPublished
+                    ? '<div class="cert-card-actions">' +
+                        '<a href="../certificate-view.html?no=' + encodeURIComponent(cert.certificateNumber) + '" class="btn btn-primary" style="flex: 1; padding: 0.5rem 0.875rem; font-size: 0.875rem;"><i class="bi bi-eye"></i> Lihat Sertifikat</a>' +
+                        '<a href="../verify-certificate.html?no=' + encodeURIComponent(cert.certificateNumber) + '" class="btn btn-outline" style="padding: 0.5rem 0.875rem; font-size: 0.875rem;" title="Verifikasi"><i class="bi bi-patch-check"></i></a>' +
+                        '</div>'
+                    : '<div class="cert-card-actions">' +
+                        '<span class="badge badge-warning" style="width: 100%; justify-content: center; padding: 0.5rem 0.75rem;"><i class="bi bi-hourglass-split"></i> Menunggu persetujuan Admin</span>' +
+                        '</div>';
+
                 card.innerHTML = [
-                    '<div class="cert-card-preview"></div>',
+                    '<div class="cert-card-preview">' + badge + '</div>',
                     '<div class="cert-card-body">',
                     '  <h3 class="cert-card-title">' + ELIPS.escapeHtml(course.title || cert.courseName || '-') + '</h3>',
                     '  <div class="cert-card-meta">',
-                    '    <div><strong>No. Sertifikat:</strong> ' + ELIPS.escapeHtml(cert.certificateNumber) + '</div>',
-                    '    <div><strong>Tanggal Terbit:</strong> ' + ELIPS.formatDate(issuedDate) + '</div>',
+                    '    <div><strong>No. Sertifikat:</strong> ' + ELIPS.escapeHtml(cert.certificateNumber || '-') + '</div>',
+                    '    <div><strong>' + (isPublished ? 'Tanggal Terbit' : 'Diajukan') + ':</strong> ' + ELIPS.formatDate(issuedDate) + '</div>',
                     '    <div><strong>Peserta:</strong> ' + ELIPS.escapeHtml(student.name) + '</div>',
-                    '    <div><strong>Grade:</strong> ' + ELIPS.escapeHtml(grade) + '</div>',
+                    '    <div><strong>Grade:</strong> ' + ELIPS.escapeHtml(cert.grade || '-') + scoreText + '</div>',
+                    '    <div><strong>Instruktur:</strong> ' + ELIPS.escapeHtml(course.instructorName || '-') + '</div>',
+                    note ? '    <div><strong>Catatan:</strong> ' + ELIPS.escapeHtml(note) + '</div>' : '',
                     '  </div>',
-                    '  <div class="cert-card-actions">',
-                    '    <a href="../certificate-view.html?no=' + encodeURIComponent(cert.certificateNumber) + '" class="btn btn-primary" style="flex: 1; padding: 0.5rem 0.875rem; font-size: 0.875rem;"><i class="bi bi-eye"></i> Lihat Sertifikat</a>',
-                    '    <a href="../verify-certificate.html" class="btn btn-outline" style="padding: 0.5rem 0.875rem; font-size: 0.875rem;"><i class="bi bi-patch-check"></i></a>',
-                    '  </div>',
+                    actions,
                     '</div>'
                 ].join('');
-                listDiv.appendChild(card);
-            });
+                return card;
+            }
+
+            if (published.length > 0) {
+                publishedSection.style.display = 'block';
+                const publishedList = document.getElementById('publishedList');
+                sortByDate(published).forEach(function (cert) {
+                    publishedList.appendChild(buildCard(cert, true));
+                });
+            }
+
+            if (pending.length > 0) {
+                pendingSection.style.display = 'block';
+                const pendingList = document.getElementById('pendingList');
+                sortByDate(pending).forEach(function (cert) {
+                    pendingList.appendChild(buildCard(cert, false));
+                });
+            }
         });
     </script>
 </body>

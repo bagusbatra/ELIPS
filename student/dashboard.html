@@ -26,7 +26,7 @@
                 <a href="dashboard.html" class="btn btn-ghost">Dashboard</a>
                 <a href="../index.html" class="btn btn-outline" data-logout>Keluar</a>
             </div>
-            <button class="nav-toggle" id="navToggle">
+            <button class="nav-toggle" id="navToggle" aria-label="Buka menu">
                 <i class="bi bi-list"></i>
             </button>
         </div>
@@ -48,15 +48,19 @@
                     <i class="bi bi-speedometer2"></i>
                     <span>Dashboard</span>
                 </a>
-                <a href="../index.html#courses" class="dashboard-nav-link">
+                <a href="courses.html" class="dashboard-nav-link">
                     <i class="bi bi-journal-bookmark"></i>
-                    <span>Kursus Tersedia</span>
+                    <span>Kursus Saya</span>
+                </a>
+                <a href="../index.html#courses" class="dashboard-nav-link">
+                    <i class="bi bi-compass"></i>
+                    <span>Jelajahi Kursus</span>
                 </a>
                 <a href="certificates.html" class="dashboard-nav-link">
                     <i class="bi bi-award"></i>
                     <span>Sertifikat Saya</span>
                 </a>
-                <a href="#" class="dashboard-nav-link">
+                <a href="profile.html" class="dashboard-nav-link">
                     <i class="bi bi-person"></i>
                     <span>Profil Saya</span>
                 </a>
@@ -67,6 +71,11 @@
             <div class="dashboard-header">
                 <h1 class="dashboard-title">Dashboard Peserta</h1>
                 <p class="dashboard-subtitle" id="dashboardGreeting">Selamat datang! Lanjutkan pembelajaranmu</p>
+            </div>
+
+            <div id="studentNotice" style="display: none; align-items: flex-start; gap: 0.75rem; padding: 1rem 1.25rem; margin-bottom: 1.5rem; background: #fffbeb; border: 1px solid #fde68a; border-radius: var(--radius-lg); color: #92400e;">
+                <i class="bi bi-hourglass-split" style="font-size: 1.25rem; margin-top: 0.125rem;"></i>
+                <span id="studentNoticeText"></span>
             </div>
 
             <div class="dashboard-stats">
@@ -111,7 +120,7 @@
             <div class="dashboard-section">
                 <div class="dashboard-section-header">
                     <h2 class="dashboard-section-title">Kursus yang Ditugaskan</h2>
-                    <a href="../index.html#courses" class="btn btn-ghost">Jelajahi Kursus <i class="bi bi-arrow-right"></i></a>
+                    <a href="courses.html" class="btn btn-ghost">Lihat Semua <i class="bi bi-arrow-right"></i></a>
                 </div>
                 <div class="dashboard-section-body" style="padding: 0; overflow-x: auto;">
                     <table class="dashboard-table">
@@ -119,6 +128,7 @@
                             <tr>
                                 <th>Kursus</th>
                                 <th>Progres</th>
+                                <th>Nilai</th>
                                 <th>Status</th>
                                 <th>Aksi</th>
                             </tr>
@@ -133,6 +143,13 @@
     <script src="../assets/js/main.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function () {
+            // Pastikan hanya akun peserta yang dapat membuka halaman ini.
+            const sessionUser = ELIPS.getSessionUser();
+            if (sessionUser && sessionUser.role !== 'peserta') {
+                window.location.href = ELIPS.dashboardPathForRole(sessionUser.role);
+                return;
+            }
+
             const student = ELIPS.getCurrentUser();
             if (!student) {
                 window.location.href = '../login.html';
@@ -143,30 +160,62 @@
             document.getElementById('studentAvatar').textContent = (student.name || 'S').substring(0, 2).toUpperCase();
             document.getElementById('dashboardGreeting').textContent = 'Selamat datang, ' + student.name + '! Lanjutkan pembelajaranmu.';
 
-            const enrollments = ELIPS.getEnrollmentsByStudent(student.id).filter(function (e) { return e.status === 'active'; });
-            const courses = ELIPS.getCourses();
             const tbody = document.getElementById('studentCoursesBody');
-            let completedLessons = 0;
-            let progressSum = 0;
-            let counted = 0;
+            const overview = ELIPS.getStudentCourseOverview(student.id);
+            const activeOverview = overview.filter(function (item) { return item.enrollment.status === 'active'; });
+            const certificates = ELIPS.getCertificatesByStudent(student.id);
+            const publishedCerts = certificates.filter(function (cert) { return cert.status === 'publish'; });
+            const pendingCerts = certificates.filter(function (cert) { return cert.status === 'draft'; });
+            const awaitingGrade = activeOverview.filter(function (item) { return item.state === 'awaiting-grade'; });
+
+            const stateMap = {
+                'locked': { label: 'Belum Dibuka', className: 'badge-warning', icon: 'bi-lock-fill' },
+                'certified': { label: 'Sertifikat Terbit', className: 'badge-success', icon: 'bi-patch-check-fill' },
+                'pending-approval': { label: 'Menunggu Persetujuan', className: 'badge-warning', icon: 'bi-hourglass-split' },
+                'completed': { label: 'Selesai', className: 'badge-success', icon: 'bi-check-circle-fill' },
+                'awaiting-grade': { label: 'Menunggu Penilaian', className: 'badge-warning', icon: 'bi-hourglass-split' },
+                'learning': { label: 'Sedang Belajar', className: 'badge-warning', icon: 'bi-play-circle' },
+                'not-started': { label: 'Belum Dimulai', className: 'badge-primary', icon: 'bi-circle' }
+            };
 
             tbody.innerHTML = '';
 
-            if (enrollments.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--text-secondary);">Belum ada kursus yang ditugaskan. Hubungi Admin untuk mendapatkan penugasan.</td></tr>';
+            if (activeOverview.length === 0) {
+                tbody.innerHTML = [
+                    '<tr><td colspan="5" style="text-align: center; padding: 2.5rem 1rem; color: var(--text-secondary);">',
+                    '  <i class="bi bi-journal-x" style="display: block; font-size: 2.5rem; opacity: .45; margin-bottom: .75rem;"></i>',
+                    '  <div style="font-weight: 600; color: var(--text-primary); margin-bottom: .25rem;">Belum ada kursus yang ditugaskan</div>',
+                    '  <div style="font-size: .875rem; margin-bottom: 1rem;">Hubungi Admin untuk mendapatkan penugasan kursus.</div>',
+                    '  <a href="../index.html#courses" class="btn btn-outline"><i class="bi bi-compass"></i> Jelajahi Kursus</a>',
+                    '</td></tr>'
+                ].join('');
             }
 
-            enrollments.forEach(function (enr) {
-                const course = courses.find(function (c) { return c.id === enr.courseId; });
-                if (!course) return;
-
-                const progress = ELIPS.getCourseProgress(student.id, course.id);
+            activeOverview.forEach(function (item) {
+                const course = item.course;
+                const progress = item.progress;
+                const grade = item.grade;
+                const certificate = item.certificate;
+                const state = stateMap[item.state] || stateMap['not-started'];
                 const modules = ELIPS.getModulesByCourse(course.id).length;
-                const isComplete = progress.total > 0 && progress.completed === progress.total;
-                const available = course.status === 'published';
-                completedLessons += progress.completed;
-                progressSum += progress.percentage;
-                counted++;
+                const canLearn = course.status === 'published';
+                const gradeText = grade
+                    ? ELIPS.escapeHtml(grade.score) + ' (' + ELIPS.escapeHtml(grade.grade) + ')'
+                    : '-';
+
+                let action = '';
+                if (!canLearn) {
+                    action = '<span class="badge badge-warning"><i class="bi bi-lock-fill"></i> Belum Dibuka</span>';
+                } else {
+                    const learnLabel = item.isComplete ? 'Lihat Materi' : (progress.completed > 0 ? 'Lanjutkan' : 'Mulai');
+                    const learnIcon = item.isComplete ? 'bi-journal-check' : 'bi-play-fill';
+                    action = '<div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">' +
+                        '<a href="../learning.html?id=' + course.id + '" class="btn btn-primary" style="padding: 0.5rem 0.875rem; font-size: 0.875rem;"><i class="bi ' + learnIcon + '"></i> ' + learnLabel + '</a>' +
+                        (certificate && certificate.status === 'publish'
+                            ? '<a href="../certificate-view.html?no=' + encodeURIComponent(certificate.certificateNumber) + '" class="btn btn-ghost" style="padding: 0.5rem 0.75rem; font-size: 0.875rem;" title="Lihat Sertifikat"><i class="bi bi-award"></i></a>'
+                            : '') +
+                        '</div>';
+                }
 
                 const tr = document.createElement('tr');
                 tr.innerHTML = [
@@ -175,32 +224,43 @@
                     '    <div class="table-course-img"></div>',
                     '    <div class="table-course-info">',
                     '      <div class="table-course-title">' + ELIPS.escapeHtml(course.title) + '</div>',
-                    '      <div class="table-course-meta">' + modules + ' Modul &bull; ' + progress.total + ' Pelajaran</div>',
+                    '      <div class="table-course-meta">' + ELIPS.escapeHtml(course.category || 'Kursus') + ' &bull; ' + modules + ' Modul &bull; ' + progress.total + ' Pelajaran</div>',
                     '    </div>',
                     '  </div>',
                     '</td>',
                     '<td>',
                     '  <div class="progress-inline">',
-                    '    <div class="progress-inline-bar"><div class="progress-inline-fill" style="width: ' + progress.percentage + '%;"></div></div>',
+                    '    <div class="progress-inline-bar"><div class="progress-inline-fill" style="width: ' + progress.percentage + '%;' + (progress.percentage >= 100 ? ' background: var(--success);' : '') + '"></div></div>',
                     '    <span class="progress-inline-text">' + progress.percentage + '%</span>',
                     '  </div>',
+                    '  <small style="color: var(--text-secondary);">' + progress.completed + '/' + progress.total + ' pelajaran</small>',
                     '</td>',
-                    '<td><span class="badge ' + (isComplete ? 'badge-success' : 'badge-warning') + '">' + (isComplete ? 'Selesai Materi' : 'Sedang Belajar') + '</span>' + (!available ? ' <span class="badge badge-warning">Draft</span>' : '') + '</td>',
-                    '<td>',
-                    available
-                        ? '  <a href="../learning.html?id=' + course.id + '" class="btn btn-primary" style="padding: 0.5rem 0.875rem; font-size: 0.875rem;"><i class="bi bi-play-fill"></i> ' + (progress.percentage > 0 ? 'Lanjutkan' : 'Mulai') + '</a>'
-                        : '  <span class="badge badge-warning">Belum Dibuka</span>',
-                    '</td>'
+                    '<td><span>' + gradeText + '</span></td>',
+                    '<td><span class="badge ' + state.className + '"><i class="bi ' + state.icon + '"></i> ' + state.label + '</span></td>',
+                    '<td>' + action + '</td>'
                 ].join('');
                 tbody.appendChild(tr);
             });
 
-            document.getElementById('statCourses').textContent = counted;
+            const completedLessons = activeOverview.reduce(function (sum, item) { return sum + item.progress.completed; }, 0);
+            const progressSum = activeOverview.reduce(function (sum, item) { return sum + item.progress.percentage; }, 0);
+
+            document.getElementById('statCourses').textContent = activeOverview.length;
             document.getElementById('statLessons').textContent = completedLessons;
-            document.getElementById('statProgress').textContent = counted > 0 ? Math.round(progressSum / counted) + '%' : '0%';
-            document.getElementById('statCertificates').textContent = ELIPS.getCertificates().filter(function (c) {
-                return c.studentId === student.id && c.status === 'publish';
-            }).length;
+            document.getElementById('statProgress').textContent = activeOverview.length > 0 ? Math.round(progressSum / activeOverview.length) + '%' : '0%';
+            document.getElementById('statCertificates').textContent = publishedCerts.length;
+
+            const notices = [];
+            if (pendingCerts.length > 0) {
+                notices.push(pendingCerts.length + ' sertifikat sedang menunggu persetujuan Admin.');
+            }
+            if (awaitingGrade.length > 0) {
+                notices.push(awaitingGrade.length + ' kursus sudah selesai dan menunggu penilaian instruktur.');
+            }
+            if (notices.length > 0) {
+                document.getElementById('studentNoticeText').textContent = notices.join(' ');
+                document.getElementById('studentNotice').style.display = 'flex';
+            }
         });
     </script>
 </body>

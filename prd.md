@@ -69,8 +69,10 @@ Membangun sistem Learning Management System (LMS) berbasis web untuk pelatihan d
 ### Role Peserta (`student/`)
 | File | Status | Deskripsi |
 |---|---|---|
-| `student/dashboard.html` | ✅ Selesai | Dashboard peserta dengan kursus yang diikuti dan progres |
-| `student/certificates.html` | ✅ Selesai | Daftar sertifikat dinamis dari localStorage |
+| `student/dashboard.html` | ✅ Selesai | Dashboard peserta dengan kursus yang diikuti, progres, nilai, status sertifikat, dan ringkasan statistik |
+| `student/courses.html` | ✅ Selesai | Daftar seluruh kursus peserta dengan filter status, pencarian, progres, nilai, dan akses belajar |
+| `student/certificates.html` | ✅ Selesai | Daftar sertifikat peserta (Terbit & Draft/menunggu persetujuan) dari localStorage |
+| `student/profile.html` | ✅ Selesai | Profil peserta dan pembaruan nama/no. telepon |
 
 ### Assets
 | File | Status | Deskripsi |

@@ -324,9 +324,15 @@
     function getGrade(studentId, courseId) {
         return getGrades().find(function (g) { return g.studentId === Number(studentId) && g.courseId === Number(courseId); }) || null;
     }
+    function getGradesByStudent(studentId) {
+        return getGrades().filter(function (g) { return g.studentId === Number(studentId); });
+    }
 
     function getCertificates() { return read(KEYS.certificates, []); }
     function setCertificates(list) { return write(KEYS.certificates, list); }
+    function getCertificatesByStudent(studentId) {
+        return getCertificates().filter(function (c) { return c.studentId === Number(studentId); });
+    }
     function getCertificateByNumber(number) {
         const target = String(number || '').trim().toUpperCase();
         return getCertificates().find(function (c) { return String(c.certificateNumber).toUpperCase() === target; }) || null;
@@ -388,6 +394,58 @@
         return true;
     }
 
+    // ---------- Student overview ----------
+    function getStudentCourseOverview(studentId) {
+        const courses = getCourses();
+        return getEnrollmentsByStudent(studentId).map(function (enrollment) {
+            const course = courses.find(function (c) { return c.id === enrollment.courseId; });
+            if (!course) return null;
+
+            const progress = getCourseProgress(studentId, course.id);
+            const grade = getGrade(studentId, course.id);
+            const certificate = getCertificate(studentId, course.id);
+            const isComplete = progress.total > 0 && progress.completed === progress.total;
+            let state = 'not-started';
+
+            if (course.status !== 'published') {
+                state = 'locked';
+            } else if (certificate && certificate.status === 'publish') {
+                state = 'certified';
+            } else if (certificate && certificate.status === 'draft') {
+                state = 'pending-approval';
+            } else if (isComplete && grade) {
+                state = 'completed';
+            } else if (isComplete) {
+                state = 'awaiting-grade';
+            } else if (progress.completed > 0) {
+                state = 'learning';
+            }
+
+            return {
+                enrollment: enrollment,
+                course: course,
+                progress: progress,
+                grade: grade,
+                certificate: certificate,
+                isComplete: isComplete,
+                state: state
+            };
+        }).filter(Boolean).sort(function (a, b) {
+            const rank = {
+                'learning': 1,
+                'not-started': 2,
+                'awaiting-grade': 3,
+                'pending-approval': 4,
+                'completed': 5,
+                'certified': 6,
+                'locked': 7
+            };
+            const diff = (rank[a.state] || 99) - (rank[b.state] || 99);
+            if (diff !== 0) return diff;
+            return Number(b.enrollment.id) - Number(a.enrollment.id);
+        });
+    }
+
     // ---------- Session ----------
     function defaultUserForPage() {
         const path = (window.location.pathname || '').toLowerCase().replace(/\\/g, '/');
@@ -400,14 +458,27 @@
     }
 
     function getCurrentUser() {
+        return getSessionUser() || defaultUserForPage();
+    }
+
+    function getSessionUser() {
         const session = read(KEYS.session, null);
         const id = session && (session.userId || session);
-        if (id) {
-            const user = getUserById(id);
-            if (user) return user;
-        }
-        const fallback = defaultUserForPage();
-        return fallback;
+        if (!id) return null;
+        return getUserById(id);
+    }
+
+    function basePathPrefix() {
+        const path = (window.location.pathname || '').replace(/\\/g, '/');
+        if (/\/(admin|instructor|student)\/[^/]*$/.test(path)) return '../';
+        return '';
+    }
+
+    function dashboardPathForRole(role) {
+        const prefix = basePathPrefix();
+        if (role === 'admin') return prefix + 'admin/dashboard.html';
+        if (role === 'instruktur') return prefix + 'instructor/dashboard.html';
+        return prefix + 'student/dashboard.html';
     }
 
     function setCurrentUser(userId) {
@@ -507,8 +578,10 @@
         getGrades: getGrades,
         setGrades: setGrades,
         getGrade: getGrade,
+        getGradesByStudent: getGradesByStudent,
         getCertificates: getCertificates,
         setCertificates: setCertificates,
+        getCertificatesByStudent: getCertificatesByStudent,
         getCertificateByNumber: getCertificateByNumber,
         getCertificate: getCertificate,
         getCompletedLessons: getCompletedLessons,
@@ -518,7 +591,10 @@
         getCourseStructure: getCourseStructure,
         getCourseProgress: getCourseProgress,
         isLessonUnlocked: isLessonUnlocked,
+        getStudentCourseOverview: getStudentCourseOverview,
         getCurrentUser: getCurrentUser,
+        getSessionUser: getSessionUser,
+        dashboardPathForRole: dashboardPathForRole,
         setCurrentUser: setCurrentUser,
         logout: logout,
         gradeLetter: gradeLetter,
@@ -542,6 +618,78 @@
         if (navToggle && navMenu) {
             navToggle.addEventListener('click', function () {
                 navMenu.classList.toggle('active');
+            });
+        }
+
+        // Session-aware navigation (public pages & mobile menu)
+        const sessionUser = getSessionUser();
+        if (sessionUser) {
+            const dashboardPath = dashboardPathForRole(sessionUser.role);
+            const authActions = document.querySelector('.nav-actions');
+            if (authActions && authActions.querySelector('a[href$="login.html"]')) {
+                authActions.innerHTML = [
+                    '<a href="' + dashboardPath + '" class="btn btn-ghost"><i class="bi bi-speedometer2"></i> Dashboard</a>',
+                    '<a href="' + basePathPrefix() + 'index.html" class="btn btn-outline" data-logout>Keluar</a>'
+                ].join('');
+            }
+
+            if (navMenu && !navMenu.querySelector('[data-session-link]')) {
+                const dashboardLink = document.createElement('a');
+                dashboardLink.href = dashboardPath;
+                dashboardLink.className = 'nav-link mobile-session-link';
+                dashboardLink.setAttribute('data-session-link', '1');
+                dashboardLink.textContent = 'Dashboard';
+
+                const logoutLink = document.createElement('a');
+                logoutLink.href = basePathPrefix() + 'index.html';
+                logoutLink.className = 'nav-link mobile-session-link';
+                logoutLink.setAttribute('data-session-link', '1');
+                logoutLink.setAttribute('data-logout', '1');
+                logoutLink.textContent = 'Keluar';
+
+                navMenu.appendChild(dashboardLink);
+                navMenu.appendChild(logoutLink);
+            }
+        }
+
+        // Dashboard sidebar (mobile drawer)
+        const dashboardLayout = document.querySelector('.dashboard-layout');
+        const dashboardSidebar = dashboardLayout ? dashboardLayout.querySelector('.dashboard-sidebar') : null;
+        if (dashboardLayout && dashboardSidebar && !document.getElementById('dashboardSidebarToggle')) {
+            const sidebarButton = document.createElement('button');
+            sidebarButton.type = 'button';
+            sidebarButton.id = 'dashboardSidebarToggle';
+            sidebarButton.className = 'dashboard-sidebar-toggle';
+            sidebarButton.setAttribute('aria-label', 'Buka menu navigasi');
+            sidebarButton.setAttribute('aria-expanded', 'false');
+            sidebarButton.innerHTML = '<i class="bi bi-list"></i>';
+
+            const backdrop = document.createElement('div');
+            backdrop.className = 'dashboard-sidebar-backdrop';
+
+            dashboardLayout.appendChild(sidebarButton);
+            dashboardLayout.appendChild(backdrop);
+
+            function setSidebarOpen(open) {
+                dashboardSidebar.classList.toggle('active', open);
+                backdrop.classList.toggle('active', open);
+                sidebarButton.setAttribute('aria-expanded', open ? 'true' : 'false');
+                sidebarButton.innerHTML = '<i class="bi ' + (open ? 'bi-x-lg' : 'bi-list') + '"></i>';
+            }
+
+            sidebarButton.addEventListener('click', function () {
+                setSidebarOpen(!dashboardSidebar.classList.contains('active'));
+            });
+            backdrop.addEventListener('click', function () {
+                setSidebarOpen(false);
+            });
+            dashboardSidebar.querySelectorAll('a').forEach(function (link) {
+                link.addEventListener('click', function () {
+                    if (window.innerWidth <= 968) setSidebarOpen(false);
+                });
+            });
+            window.addEventListener('resize', function () {
+                if (window.innerWidth > 968) setSidebarOpen(false);
             });
         }
 

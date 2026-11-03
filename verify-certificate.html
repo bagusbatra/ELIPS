@@ -165,6 +165,12 @@
             verifyInput.addEventListener('keypress', function (e) {
                 if (e.key === 'Enter') verifyCertificate();
             });
+
+            const requestedNumber = new URLSearchParams(window.location.search).get('no');
+            if (requestedNumber) {
+                verifyInput.value = requestedNumber;
+                verifyCertificate();
+            }
         });
     </script>
 </body>

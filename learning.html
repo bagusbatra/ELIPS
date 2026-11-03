@@ -14,7 +14,7 @@
     <header class="learning-header">
         <div class="learning-header-container">
             <div class="learning-header-left">
-                <a href="student/dashboard.html" class="learning-back">
+                <a href="student/dashboard.html" class="learning-back" id="learningBackLink">
                     <i class="bi bi-arrow-left"></i>
                     <span>Kembali ke Dashboard</span>
                 </a>
@@ -65,6 +65,9 @@
                 renderBlocked('Sesi tidak ditemukan', 'Silakan masuk terlebih dahulu untuk mengakses materi.');
                 return;
             }
+
+            const backLink = document.getElementById('learningBackLink');
+            if (backLink) backLink.href = ELIPS.dashboardPathForRole(activeStudent.role);
 
             const requestedId = parseInt(params.get('id') || params.get('courseId'), 10);
             let courseId = requestedId;
@@ -143,6 +146,7 @@
             document.getElementById('learningProgressText').textContent = 'Progres tidak tersedia';
             document.getElementById('learningProgressFill').style.width = '0%';
 
+            const backPath = activeStudent ? ELIPS.dashboardPathForRole(activeStudent.role) : 'student/dashboard.html';
             const layout = document.getElementById('learningLayout');
             layout.style.display = 'block';
             layout.innerHTML = [
@@ -151,7 +155,7 @@
                 '    <i class="bi bi-lock-fill" style="font-size: 3rem; color: var(--warning);"></i>',
                 '    <h1 class="learning-article-title" style="margin-top: 1rem; font-size: 1.5rem;">' + ELIPS.escapeHtml(title) + '</h1>',
                 '    <p style="color: var(--text-secondary); margin: 1rem 0 1.5rem;">' + ELIPS.escapeHtml(message) + '</p>',
-                '    <a href="student/dashboard.html" class="btn btn-primary"><i class="bi bi-arrow-left"></i> Kembali ke Dashboard</a>',
+                '    <a href="' + backPath + '" class="btn btn-primary"><i class="bi bi-arrow-left"></i> Kembali ke Dashboard</a>',
                 '  </div>',
                 '</div>'
             ].join('');
@@ -173,6 +177,8 @@
         function renderSidebar() {
             const container = document.getElementById('learningModules');
             const structure = ELIPS.getCourseStructure(activeCourse.id);
+            const activeEntry = flatLessons.find(function (entry) { return entry.lesson.id === activeLessonId; });
+            const activeModuleId = activeEntry ? activeEntry.module.id : null;
             container.innerHTML = '';
 
             structure.forEach(function (item, moduleIndex) {
@@ -195,12 +201,14 @@
                         '</a>';
                 }).join('');
 
+                const isModuleOpen = activeModuleId ? item.module.id === activeModuleId : moduleIndex === 0;
+
                 moduleEl.innerHTML =
                     '<div class="learning-module-header">' +
                     '<span class="learning-module-name">' + ELIPS.escapeHtml(item.module.title) + '</span>' +
                     '<i class="bi bi-chevron-down"></i>' +
                     '</div>' +
-                    '<div class="learning-lesson-list" style="display: ' + (moduleIndex === 0 ? 'flex' : 'none') + ';">' + moduleLessons + '</div>';
+                    '<div class="learning-lesson-list" style="display: ' + (isModuleOpen ? 'flex' : 'none') + ';">' + moduleLessons + '</div>';
 
                 const header = moduleEl.querySelector('.learning-module-header');
                 header.addEventListener('click', function () {
