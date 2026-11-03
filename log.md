@@ -186,7 +186,7 @@ Perubahan:
   - statistik total aktivitas, aktivitas hari ini, dan jumlah aktor;
   - filter pencarian, aksi, entitas, aktor, rentang tanggal, dan limit;
   - tabel riwayat, ekspor CSV, dan tombol bersihkan log.
-- Seluruh 24 halaman HTML memuat `audit.js` setelah `auth.js`; seluruh 7 halaman admin mendapat tautan sidebar "Audit Trail".
+- Seluruh 24 halaman HTML memuat `audit.js` setelah `auth.js`; 7 halaman admin lama mendapat tautan sidebar "Audit Trail" (ditambah halaman audit baru).
 - PRD diperbarui ke v1.6 dan roadmap P1 ditandai selesai untuk versi demo.
 
 Dampak:
