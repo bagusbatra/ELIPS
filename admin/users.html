@@ -90,7 +90,7 @@
                         <h1 class="dashboard-title">Kelola Pengguna</h1>
                         <p class="dashboard-subtitle">Tambah Admin, Instruktur, atau Peserta. Instruktur juga bisa langsung ditugaskan ke kursus.</p>
                     </div>
-                    <button class="btn btn-primary" onclick="openUserModal()">
+                    <button class="btn btn-primary" onclick="openUserTypeModal()">
                         <i class="bi bi-person-plus"></i>
                         Tambah Pengguna
                     </button>
@@ -127,6 +127,53 @@
                 </div>
             </div>
         </main>
+    </div>
+
+    <!-- Modal Pilih Role Pengguna -->
+    <div id="userTypeModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; padding: 1rem;">
+        <div style="background: white; border-radius: var(--radius-lg); max-width: 520px; width: 100%; max-height: 90vh; overflow-y: auto;">
+            <div style="padding: 1.5rem; border-bottom: 1px solid var(--border); display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem;">
+                <div>
+                    <h3 style="font-size: 1.25rem; font-weight: 600;">Tambah Pengguna</h3>
+                    <p style="font-size: 0.875rem; color: var(--text-secondary); margin-top: 0.25rem;">Pilih role pengguna yang akan ditambahkan.</p>
+                </div>
+                <button onclick="closeUserTypeModal()" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--text-secondary); line-height: 1;">
+                    <i class="bi bi-x"></i>
+                </button>
+            </div>
+            <div style="padding: 1.5rem; display: flex; flex-direction: column; gap: 0.75rem;">
+                <button type="button" class="user-role-choice" onclick="chooseUserRole('admin')">
+                    <span class="user-role-choice-icon" style="background: #fee2e2; color: #991b1b;">
+                        <i class="bi bi-shield-lock"></i>
+                    </span>
+                    <span class="user-role-choice-info">
+                        <span class="user-role-choice-title">Admin</span>
+                        <span class="user-role-choice-desc">Akses penuh pengelolaan sistem dan persetujuan sertifikat.</span>
+                    </span>
+                    <i class="bi bi-chevron-right" style="color: var(--text-light);"></i>
+                </button>
+                <button type="button" class="user-role-choice" onclick="chooseUserRole('instruktur')">
+                    <span class="user-role-choice-icon" style="background: #fef3c7; color: #b45309;">
+                        <i class="bi bi-easel"></i>
+                    </span>
+                    <span class="user-role-choice-info">
+                        <span class="user-role-choice-title">Instruktur</span>
+                        <span class="user-role-choice-desc">Mengelola modul, materi, dan memberi nilai pada kursus yang diampu.</span>
+                    </span>
+                    <i class="bi bi-chevron-right" style="color: var(--text-light);"></i>
+                </button>
+                <button type="button" class="user-role-choice" onclick="chooseUserRole('peserta')">
+                    <span class="user-role-choice-icon" style="background: #dbeafe; color: #1d4ed8;">
+                        <i class="bi bi-mortarboard"></i>
+                    </span>
+                    <span class="user-role-choice-info">
+                        <span class="user-role-choice-title">Peserta</span>
+                        <span class="user-role-choice-desc">Mengikuti kursus yang ditugaskan dan melihat sertifikat yang terbit.</span>
+                    </span>
+                    <i class="bi bi-chevron-right" style="color: var(--text-light);"></i>
+                </button>
+            </div>
+        </div>
     </div>
 
     <!-- Modal User -->
@@ -228,6 +275,26 @@
             return '<span class="badge badge-primary">Peserta</span>';
         }
 
+        function userRoleLabel(role) {
+            if (role === 'admin') return 'Admin';
+            if (role === 'instruktur') return 'Instruktur';
+            return 'Peserta';
+        }
+
+        function openUserTypeModal() {
+            document.getElementById('userTypeModal').style.display = 'flex';
+        }
+
+        function closeUserTypeModal() {
+            document.getElementById('userTypeModal').style.display = 'none';
+        }
+
+        function chooseUserRole(role) {
+            if (['admin', 'instruktur', 'peserta'].indexOf(role) === -1) role = 'peserta';
+            closeUserTypeModal();
+            openUserModal(null, role);
+        }
+
         function renderUsers() {
             const tbody = document.getElementById('usersTableBody');
             const users = ELIPS.getUsers();
@@ -264,7 +331,7 @@
             });
         }
 
-        function openUserModal(userId) {
+        function openUserModal(userId, presetRole) {
             editingUserId = userId || null;
             const title = document.getElementById('userModalTitle');
             document.getElementById('userPassword').value = '';
@@ -278,11 +345,12 @@
                 document.getElementById('userRole').value = user.role || 'peserta';
                 document.getElementById('userStatus').value = user.status || 'aktif';
             } else {
-                title.textContent = 'Tambah Pengguna';
+                const role = presetRole || 'peserta';
+                title.textContent = 'Tambah ' + userRoleLabel(role);
                 document.getElementById('userName').value = '';
                 document.getElementById('userEmail').value = '';
                 document.getElementById('userPhone').value = '';
-                document.getElementById('userRole').value = 'peserta';
+                document.getElementById('userRole').value = role;
                 document.getElementById('userStatus').value = 'aktif';
             }
             document.getElementById('userModal').style.display = 'flex';

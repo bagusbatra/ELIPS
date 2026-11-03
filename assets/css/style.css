@@ -1818,6 +1818,59 @@ body {
     color: var(--text-secondary);
 }
 
+/* Pilihan role pada modal tambah pengguna */
+.user-role-choice {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem;
+    background: var(--bg-white);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    color: inherit;
+    font-family: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.user-role-choice:hover,
+.user-role-choice:focus-visible {
+    border-color: var(--primary);
+    background: var(--primary-light);
+    box-shadow: var(--shadow-sm);
+    outline: none;
+}
+
+.user-role-choice-icon {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.15rem;
+    flex-shrink: 0;
+}
+
+.user-role-choice-info {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 0.125rem;
+}
+
+.user-role-choice-title {
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+.user-role-choice-desc {
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+}
+
 /* Responsive */
 @media (max-width: 968px) {
     .hero-container {

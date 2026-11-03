@@ -1,6 +1,6 @@
 # PRD: Learning Management System (LMS) ELIPS
 
-**Versi:** 1.7  
+**Versi:** 1.8  
 **Tanggal:** 2026-11-03  
 **Status:** Implemented (Demo - Vanilla HTML/CSS/JS + localStorage); seluruh aturan alur kursus telah diterapkan, JavaScript telah dimodularisasi, audit trail P1 aktif, dan notifikasi email P2 disimulasikan melalui outbox  
 **Log pengembangan:** `log.md`
@@ -208,7 +208,7 @@ Sistem ── kursus Publish / sertifikat terbit ▶ Notifikasi email (simulasi)
 | File | Status | Deskripsi |
 |---|---|---|
 | `admin/dashboard.html` | ✅ Selesai | Dashboard admin dengan ringkasan statistik |
-| `admin/users.html` | ✅ Selesai | Tambah/edit/hapus pengguna, filter role & pencarian, serta penugasan instruktur ke kursus |
+| `admin/users.html` | ✅ Selesai | Tambah pengguna diawali modal pilihan role Admin/Instruktur/Peserta, edit/hapus pengguna, filter role & pencarian, serta penugasan instruktur ke kursus |
 | `admin/courses.html` | ✅ Selesai | Tambah/edit kursus, tugaskan 1 instruktur per kursus, publikasi/Draft, filter status & pencarian |
 | `admin/enrollment.html` | ✅ Selesai | Penugasan siswa ke satu atau beberapa kursus, filter kursus/status, aktif/nonaktifkan penugasan |
 | `admin/certificates.html` | ✅ Selesai | Persetujuan e-sertifikat: Draft → Publish, filter status, dan tampilan nomor/tanggal persetujuan |
@@ -315,6 +315,7 @@ Sistem ── kursus Publish / sertifikat terbit ▶ Notifikasi email (simulasi)
 |---|---|---|
 | Daftar pengguna | ✅ Selesai | `admin/users.html` |
 | Tambah/edit/hapus pengguna | ✅ Selesai | Form pengguna dengan nama, email, telepon, role, dan status |
+| Pilihan role saat tambah pengguna | ✅ Selesai | Klik **Tambah Pengguna** membuka modal pertama berisi 3 tombol: Admin, Instruktur, dan Peserta; role terpilih langsung mengisi form |
 | Penugasan instruktur ke kursus | ✅ Selesai | Modal penugasan pada `admin/users.html`; satu kursus hanya punya satu instruktur |
 | Filter role & pencarian | ✅ Selesai | Filter Semua/Admin/Instruktur/Peserta + search |
 | Registrasi mandiri peserta | ✅ Selesai | `register.html` membuat akun role Peserta, lalu diarahkan ke dashboard siswa |
@@ -418,6 +419,7 @@ else                            -> student/dashboard.html
 | Login redirect berdasarkan role akun | ✅ Lulus uji | Validasi email terhadap `elips_users`, redirect admin/instruktur/peserta |
 | Admin menambah kursus baru | ✅ Lulus uji | Kursus baru tersimpan dan berstatus Draft |
 | Admin menambah instruktur | ✅ Lulus uji | Akun instruktur aktif dapat dipilih pada form kursus |
+| Modal pilih role tambah pengguna | ✅ Lulus uji | Modal pertama menampilkan 3 tombol role dan mempreset role pada form pengguna |
 | Penugasan 1 kursus = 1 instruktur | ✅ Lulus uji | Penugasan ulang menggantikan instruktur sebelumnya |
 | Admin menambah siswa | ✅ Lulus uji | Akun peserta aktif dapat ditugaskan ke kursus |
 | Admin mengaitkan siswa ke beberapa kursus | ✅ Lulus uji | Multi-checkbox pada `admin/enrollment.html` |

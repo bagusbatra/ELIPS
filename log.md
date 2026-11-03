@@ -1,6 +1,6 @@
 # Log Pengembangan ELIPS LMS
 
-**Versi dokumen:** 1.2  
+**Versi dokumen:** 1.3  
 **Terakhir diperbarui:** 2026-11-03  
 **Status proyek:** Demo — Vanilla HTML/CSS/JavaScript + `localStorage`  
 **Dokumen terkait:** `prd.md`
@@ -129,6 +129,27 @@ Prinsip yang dipakai:
 ---
 
 ## 3. Riwayat Perubahan
+
+### v1.8 — 2026-11-03 — Modal pilih role tambah pengguna
+
+**Tujuan:** memudahkan Admin memilih jenis akun yang akan dibuat sebelum mengisi form pengguna.
+
+Perubahan:
+
+- Tombol **Tambah Pengguna** pada `admin/users.html` sekarang membuka modal pertama berisi 3 pilihan role: Admin, Instruktur, dan Peserta.
+- Setiap pilihan menampilkan ikon dan deskripsi singkat tanggung jawab role.
+- Fungsi `chooseUserRole(role)` menutup modal pilihan, membuka form pengguna, dan mempreset role serta judul form sesuai pilihan.
+- `openUserModal(userId, presetRole)` mendukung preset role untuk penambahan; alur edit pengguna tetap memakai data pengguna yang dipilih.
+- Ditambahkan style `.user-role-choice` pada `assets/css/style.css` untuk tombol pilihan role.
+- PRD diperbarui ke v1.8.
+
+Dampak:
+
+- Admin tidak lagi langsung masuk ke form kosong; role dipilih lebih dulu.
+- Role masih dapat diubah melalui dropdown pada form sebelum disimpan.
+- Tidak ada perubahan pada API CRUD maupun alur edit/hapus pengguna.
+
+---
 
 ### v1.7 — 2026-11-03 — P2 notifikasi email (simulasi)
 
@@ -338,7 +359,7 @@ Akun demo utama:
 
 ## 6. Hasil Pengujian Terakhir
 
-Pengujian dijalankan setelah implementasi P2 notifikasi email simulasi (v1.7):
+Pengujian dijalankan setelah implementasi modal pilih role tambah pengguna (v1.8):
 
 | Pemeriksaan | Hasil |
 |---|---|
@@ -350,6 +371,7 @@ Pengujian dijalankan setelah implementasi P2 notifikasi email simulasi (v1.7):
 | Alur instruktur (`test-instructor`) | ✅ Lulus |
 | Alur belajar (`test-learning`) | ✅ Lulus |
 | Halaman admin (`test-admin-pages`) | ✅ Lulus |
+| Modal pilih role tambah pengguna | ✅ Lulus |
 | Semua 25 halaman dimuat tanpa error (`test-all-pages`) | ✅ Lulus |
 | Semua tautan lokal (`check-links`) | ✅ Lulus |
 | Data layer (`test-data`) | ✅ Lulus |
