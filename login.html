@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Masuk - ELIPS LMS</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="assets/css/style.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+</head>
+<body>
+    <div class="auth-container">
+        <div class="auth-card">
+            <div class="auth-header">
+                <a href="index.html" class="auth-logo">
+                    <i class="bi bi-mortarboard-fill"></i>
+                    <span>ELIPS LMS</span>
+                </a>
+                <h1 class="auth-title">Selamat Datang Kembali</h1>
+                <p class="auth-subtitle">Masuk untuk melanjutkan pembelajaran</p>
+            </div>
+            <div class="auth-body">
+                <form class="auth-form" id="loginForm" action="#" method="get">
+                    <div class="form-group">
+                        <label class="form-label" for="email">Email</label>
+                        <input type="email" id="email" class="form-input" placeholder="nama@example.com" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="password">Password</label>
+                        <input type="password" id="password" class="form-input" placeholder="Masukkan password" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-lg" style="width: 100%;">
+                        <i class="bi bi-box-arrow-in-right"></i>
+                        Masuk
+                    </button>
+                </form>
+            </div>
+            <div class="auth-footer">
+                Belum punya akun? <a href="register.html">Daftar sekarang</a>
+            </div>
+            <div style="padding: 1rem 2rem 1.5rem; border-top: 1px solid var(--border); font-size: 0.8125rem; color: var(--text-secondary); line-height: 1.7;">
+                <strong>Akun demo:</strong><br>
+                Admin: admin@example.com<br>
+                Instruktur: ahmad@example.com / siti@example.com<br>
+                Peserta: budi.student@example.com / ani@example.com<br>
+                <span style="font-size: 0.75rem;">(password bebas untuk demo)</span>
+            </div>
+        </div>
+    </div>
+    <script src="assets/js/main.js"></script>
+</body>
+</html>

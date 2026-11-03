@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lihat Sertifikat - ELIPS LMS</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="assets/css/style.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+</head>
+<body>
+    <header class="navbar">
+        <div class="container nav-container">
+            <div class="nav-brand">
+                <i class="bi bi-mortarboard-fill brand-icon"></i>
+                <span class="brand-text">ELIPS LMS</span>
+            </div>
+            <nav class="nav-menu" id="navMenu">
+                <a href="index.html" class="nav-link">Beranda</a>
+                <a href="index.html#courses" class="nav-link">Kursus</a>
+                <a href="verify-certificate.html" class="nav-link">Verifikasi Sertifikat</a>
+            </nav>
+            <div class="nav-actions">
+                <a href="student/dashboard.html" class="btn btn-ghost">Dashboard</a>
+                <a href="index.html" class="btn btn-outline" data-logout>Keluar</a>
+            </div>
+            <button class="nav-toggle" id="navToggle">
+                <i class="bi bi-list"></i>
+            </button>
+        </div>
+    </header>
+
+    <main>
+        <section class="page-header">
+            <div class="container">
+                <div class="breadcrumb">
+                    <a href="student/dashboard.html">Dashboard</a>
+                    <i class="bi bi-chevron-right"></i>
+                    <a href="student/certificates.html">Sertifikat Saya</a>
+                    <i class="bi bi-chevron-right"></i>
+                    <span>Lihat Sertifikat</span>
+                </div>
+            </div>
+        </section>
+
+        <section class="certificate-view-container">
+            <div id="certUnavailable" style="display: none; max-width: 560px; margin: 0 auto; text-align: center; background: white; border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 3rem 2rem;">
+                <i class="bi bi-shield-lock" style="font-size: 3rem; color: var(--warning);"></i>
+                <h2 style="margin: 1rem 0 0.5rem; font-size: 1.25rem;">Sertifikat Tidak Dapat Ditampilkan</h2>
+                <p id="certUnavailableMessage" style="color: var(--text-secondary); margin-bottom: 1.5rem;">Sertifikat tidak ditemukan atau belum berstatus Publish.</p>
+                <a href="verify-certificate.html" class="btn btn-primary"><i class="bi bi-patch-check"></i> Verifikasi Sertifikat</a>
+            </div>
+
+            <div id="certFrame" class="certificate-frame">
+                <div class="certificate-image">
+                    <div class="certificate-content">
+                        <div class="certificate-logo">
+                            <i class="bi bi-mortarboard-fill"></i>
+                            <span>ELIPS LMS</span>
+                        </div>
+                        <div class="certificate-title">SERTIFIKAT</div>
+                        <div class="certificate-subtitle">Diberikan Kepada</div>
+                        <div class="certificate-name" id="certName">Budi Santoso</div>
+                        <div class="certificate-text">
+                            Telah berhasil menyelesaikan seluruh materi pelatihan dengan predikat<br>
+                            <strong id="certGrade">LULUS</strong> pada pelatihan
+                        </div>
+                        <div class="certificate-course" id="certCourse">Pelatihan Manajemen Dasar</div>
+                        <div class="certificate-text">yang dilaksanakan secara daring melalui ELIPS LMS</div>
+                        <div class="certificate-footer">
+                            <div class="certificate-signature">
+                                <div class="certificate-signature-line"></div>
+                                <div class="certificate-signature-name" id="certInstructor">Ahmad Fauzi, M.M.</div>
+                                <div class="certificate-signature-title">Instruktur</div>
+                            </div>
+                            <div class="certificate-signature">
+                                <div class="certificate-signature-line"></div>
+                                <div class="certificate-signature-name" id="certAdmin">Administrator</div>
+                                <div class="certificate-signature-title">Administrator</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="certificate-number" id="certNumber">No. Sertifikat: -</div>
+                </div>
+            </div>
+
+            <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;" id="certActions">
+                <button id="downloadCertBtn" class="btn btn-primary btn-lg">
+                    <i class="bi bi-printer"></i>
+                    Cetak / Simpan PDF
+                </button>
+                <a href="verify-certificate.html" class="btn btn-outline btn-lg">
+                    <i class="bi bi-patch-check"></i>
+                    Verifikasi Sertifikat
+                </a>
+                <a href="student/certificates.html" class="btn btn-ghost btn-lg">
+                    <i class="bi bi-arrow-left"></i>
+                    Kembali ke Daftar
+                </a>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-brand">
+                    <div class="nav-brand">
+                        <i class="bi bi-mortarboard-fill brand-icon"></i>
+                        <span class="brand-text">ELIPS LMS</span>
+                    </div>
+                    <p class="footer-desc">Platform Learning Management System untuk pelatihan dan kursus.</p>
+                </div>
+                <div class="footer-links">
+                    <div class="footer-column">
+                        <h4 class="footer-title">Navigasi</h4>
+                        <a href="index.html" class="footer-link">Beranda</a>
+                        <a href="index.html#courses" class="footer-link">Kursus</a>
+                        <a href="verify-certificate.html" class="footer-link">Verifikasi Sertifikat</a>
+                    </div>
+                    <div class="footer-column">
+                        <h4 class="footer-title">Akun</h4>
+                        <a href="login.html" class="footer-link">Masuk</a>
+                        <a href="register.html" class="footer-link">Daftar</a>
+                    </div>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>&copy; 2026 ELIPS LMS. All rights reserved.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="assets/js/main.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const params = new URLSearchParams(window.location.search);
+            const certNumber = params.get('no') || params.get('cert') || params.get('certificate');
+            const cert = certNumber ? ELIPS.getCertificateByNumber(certNumber) : null;
+            const frame = document.getElementById('certFrame');
+            const unavailable = document.getElementById('certUnavailable');
+            const actions = document.getElementById('certActions');
+
+            if (!cert || cert.status !== 'publish') {
+                frame.style.display = 'none';
+                actions.style.display = 'none';
+                unavailable.style.display = 'block';
+                document.getElementById('certUnavailableMessage').textContent = cert
+                    ? 'Sertifikat ini masih berstatus Draft dan belum disetujui Admin. Sertifikat hanya dapat dilihat setelah berstatus Publish.'
+                    : 'Nomor sertifikat tidak ditemukan. Pastikan nomor yang dimasukkan benar.';
+                return;
+            }
+
+            const student = ELIPS.getUserById(cert.studentId) || {};
+            const course = ELIPS.getCourseById(cert.courseId) || {};
+            const instructor = ELIPS.getUserById(cert.instructorId || course.instructorId);
+            const admin = ELIPS.getUserById(cert.approvedByAdminId);
+            const issuedDate = cert.approvedAt || cert.issuedByInstructorAt || cert.issuedAt;
+
+            document.getElementById('certName').textContent = student.name || '-';
+            document.getElementById('certCourse').textContent = course.title || cert.courseName || '-';
+            document.getElementById('certGrade').textContent = cert.grade || '-';
+            document.getElementById('certInstructor').textContent = instructor ? instructor.name : (course.instructorName || '-');
+            document.getElementById('certAdmin').textContent = admin ? admin.name : 'Administrator';
+            document.getElementById('certNumber').textContent =
+                'No. Sertifikat: ' + cert.certificateNumber + ' • Terbit: ' + ELIPS.formatDate(issuedDate);
+
+            document.getElementById('downloadCertBtn').addEventListener('click', function () {
+                window.print();
+            });
+        });
+    </script>
+</body>
+</html>

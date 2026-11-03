@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Daftar - ELIPS LMS</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="assets/css/style.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+</head>
+<body>
+    <div class="auth-container">
+        <div class="auth-card">
+            <div class="auth-header">
+                <a href="index.html" class="auth-logo">
+                    <i class="bi bi-mortarboard-fill"></i>
+                    <span>ELIPS LMS</span>
+                </a>
+                <h1 class="auth-title">Buat Akun Baru</h1>
+                <p class="auth-subtitle">Daftar untuk mulai mengikuti pelatihan</p>
+            </div>
+            <div class="auth-body">
+                <form class="auth-form" id="registerForm" action="login.html" method="get">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label" for="firstName">Nama Depan</label>
+                            <input type="text" id="firstName" class="form-input" placeholder="Budi" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="lastName">Nama Belakang</label>
+                            <input type="text" id="lastName" class="form-input" placeholder="Santoso" required>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="email">Email</label>
+                        <input type="email" id="email" class="form-input" placeholder="nama@example.com" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="phone">No. Telepon</label>
+                        <input type="tel" id="phone" class="form-input" placeholder="08xxxxxxxxxx" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="password">Password</label>
+                        <input type="password" id="password" class="form-input" placeholder="Minimal 8 karakter" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="passwordConfirm">Konfirmasi Password</label>
+                        <input type="password" id="passwordConfirm" class="form-input" placeholder="Ulangi password" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-lg" style="width: 100%;">
+                        <i class="bi bi-person-plus"></i>
+                        Daftar
+                    </button>
+                </form>
+            </div>
+            <div class="auth-footer">
+                Sudah punya akun? <a href="login.html">Masuk disini</a>
+            </div>
+        </div>
+    </div>
+    <script src="assets/js/main.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const form = document.getElementById('registerForm');
+            if (!form) return;
+
+            form.addEventListener('submit', function (e) {
+                e.preventDefault();
+                const firstName = document.getElementById('firstName').value.trim();
+                const lastName = document.getElementById('lastName').value.trim();
+                const email = document.getElementById('email').value.trim().toLowerCase();
+                const phone = document.getElementById('phone').value.trim();
+                const password = document.getElementById('password').value;
+                const confirmPassword = document.getElementById('passwordConfirm').value;
+
+                if (!firstName || !lastName || !email || !phone || !password) {
+                    ELIPS.toast('Mohon lengkapi semua field.');
+                    return;
+                }
+                if (password.length < 8) {
+                    ELIPS.toast('Password minimal 8 karakter.');
+                    return;
+                }
+                if (password !== confirmPassword) {
+                    ELIPS.toast('Konfirmasi password tidak sesuai.');
+                    return;
+                }
+
+                const users = ELIPS.getUsers();
+                if (users.some(function (u) { return String(u.email).toLowerCase() === email; })) {
+                    ELIPS.toast('Email sudah terdaftar. Silakan masuk.');
+                    return;
+                }
+
+                const newUser = {
+                    id: ELIPS.nextId(users),
+                    name: firstName + ' ' + lastName,
+                    email: email,
+                    phone: phone,
+                    role: 'peserta',
+                    status: 'aktif',
+                    createdAt: new Date().toISOString().split('T')[0]
+                };
+                users.push(newUser);
+                ELIPS.setUsers(users);
+                ELIPS.setCurrentUser(newUser.id);
+                ELIPS.toast('Pendaftaran berhasil. Selamat datang!');
+                setTimeout(function () {
+                    window.location.href = 'student/dashboard.html';
+                }, 600);
+            });
+        });
+    </script>
+</body>
+</html>

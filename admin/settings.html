@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pengaturan - ELIPS LMS</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../assets/css/style.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+</head>
+<body>
+    <header class="navbar">
+        <div class="container nav-container">
+            <div class="nav-brand">
+                <i class="bi bi-mortarboard-fill brand-icon"></i>
+                <span class="brand-text">ELIPS LMS</span>
+            </div>
+            <nav class="nav-menu" id="navMenu">
+                <a href="../index.html" class="nav-link">Beranda</a>
+                <a href="../index.html#courses" class="nav-link">Kursus</a>
+                <a href="../verify-certificate.html" class="nav-link">Verifikasi Sertifikat</a>
+            </nav>
+            <div class="nav-actions">
+                <a href="dashboard.html" class="btn btn-ghost">Dashboard</a>
+                <a href="../index.html" class="btn btn-outline">Keluar</a>
+            </div>
+            <button class="nav-toggle" id="navToggle">
+                <i class="bi bi-list"></i>
+            </button>
+        </div>
+    </header>
+
+    <div class="dashboard-layout">
+        <aside class="dashboard-sidebar">
+            <div class="dashboard-sidebar-header">
+                <div class="dashboard-user">
+                    <div class="dashboard-avatar">AD</div>
+                    <div class="dashboard-user-info">
+                        <div class="dashboard-user-name">Administrator</div>
+                        <div class="dashboard-user-role">Admin</div>
+                    </div>
+                </div>
+            </div>
+            <nav class="dashboard-nav">
+                <a href="dashboard.html" class="dashboard-nav-link">
+                    <i class="bi bi-speedometer2"></i>
+                    <span>Dashboard</span>
+                </a>
+                <a href="users.html" class="dashboard-nav-link">
+                    <i class="bi bi-people"></i>
+                    <span>Kelola Pengguna</span>
+                </a>
+                <a href="courses.html" class="dashboard-nav-link">
+                    <i class="bi bi-journal-bookmark"></i>
+                    <span>Kelola Kursus</span>
+                </a>
+                <a href="enrollment.html" class="dashboard-nav-link">
+                    <i class="bi bi-person-check"></i>
+                    <span>Enrolment</span>
+                </a>
+                <a href="certificates.html" class="dashboard-nav-link">
+                    <i class="bi bi-award"></i>
+                    <span>Kelola Sertifikat</span>
+                </a>
+                <a href="reports.html" class="dashboard-nav-link">
+                    <i class="bi bi-file-earmark-bar-graph"></i>
+                    <span>Laporan</span>
+                </a>
+                <a href="settings.html" class="dashboard-nav-link active">
+                    <i class="bi bi-gear"></i>
+                    <span>Pengaturan</span>
+                </a>
+            </nav>
+        </aside>
+
+        <main class="dashboard-main">
+            <div class="dashboard-header">
+                <div>
+                    <h1 class="dashboard-title">Pengaturan Sistem</h1>
+                    <p class="dashboard-subtitle">Konfigurasi umum aplikasi LMS</p>
+                </div>
+            </div>
+
+            <div class="dashboard-section">
+                <div class="dashboard-section-header">
+                    <h2 class="dashboard-section-title">Pengaturan Umum</h2>
+                </div>
+                <div class="dashboard-section-body">
+                    <div style="display: flex; flex-direction: column; gap: 1.25rem; max-width: 600px;">
+                        <div class="form-group">
+                            <label class="form-label">Nama Aplikasi</label>
+                            <input type="text" class="form-input" value="ELIPS LMS">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Deskripsi Aplikasi</label>
+                            <textarea class="form-input" rows="3">Platform Learning Management System untuk pelatihan dan kursus</textarea>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Email Kontak</label>
+                            <input type="email" class="form-input" value="admin@elipslms.com">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Nomor Telepon</label>
+                            <input type="tel" class="form-input" value="081234567890">
+                        </div>
+                        <button class="btn btn-primary" style="align-self: flex-start;" onclick="alert('Pengaturan berhasil disimpan!')">
+                            <i class="bi bi-save"></i>
+                            Simpan Pengaturan
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="dashboard-section">
+                <div class="dashboard-section-header">
+                    <h2 class="dashboard-section-title">Pengaturan Sertifikat</h2>
+                </div>
+                <div class="dashboard-section-body">
+                    <div style="display: flex; flex-direction: column; gap: 1.25rem; max-width: 600px;">
+                        <div class="form-group">
+                            <label class="form-label">Format Nomor Sertifikat</label>
+                            <input type="text" class="form-input" value="CERT-YYYY-XXXXXX">
+                            <small style="color: var(--text-secondary); font-size: 0.8125rem;">YYYY = Tahun, XXXXXX = Nomor urut acak</small>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Nama Penandatangan 1</label>
+                            <input type="text" class="form-input" value="Ahmad Fauzi, M.M.">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Jabatan Penandatangan 1</label>
+                            <input type="text" class="form-input" value="Instruktur">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Nama Penandatangan 2</label>
+                            <input type="text" class="form-input" value="Dr. H. Suryanto, M.Pd.">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Jabatan Penandatangan 2</label>
+                            <input type="text" class="form-input" value="Direktur">
+                        </div>
+                        <button class="btn btn-primary" style="align-self: flex-start;" onclick="alert('Pengaturan sertifikat berhasil disimpan!')">
+                            <i class="bi bi-save"></i>
+                            Simpan Pengaturan
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="dashboard-section">
+                <div class="dashboard-section-header">
+                    <h2 class="dashboard-section-title">Pengaturan Pembelajaran</h2>
+                </div>
+                <div class="dashboard-section-body">
+                    <div style="display: flex; flex-direction: column; gap: 1rem; max-width: 600px;">
+                        <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer;">
+                            <input type="checkbox" checked style="width: 18px; height: 18px;">
+                            <div>
+                                <div style="font-weight: 500; color: var(--text-primary);">Penerbitan sertifikat otomatis</div>
+                                <div style="font-size: 0.875rem; color: var(--text-secondary);">Terbitkan sertifikat otomatis saat peserta menyelesaikan 100% kursus</div>
+                            </div>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer;">
+                            <input type="checkbox" checked style="width: 18px; height: 18px;">
+                            <div>
+                                <div style="font-weight: 500; color: var(--text-primary);">Izinkan pendaftaran mandiri</div>
+                                <div style="font-size: 0.875rem; color: var(--text-secondary);">Peserta bisa mendaftar kursus sendiri tanpa persetujuan admin</div>
+                            </div>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer;">
+                            <input type="checkbox" style="width: 18px; height: 18px;">
+                            <div>
+                                <div style="font-weight: 500; color: var(--text-primary);">Wajib verifikasi email</div>
+                                <div style="font-size: 0.875rem; color: var(--text-secondary);">Peserta harus verifikasi email saat mendaftar</div>
+                            </div>
+                        </label>
+                        <button class="btn btn-primary" style="align-self: flex-start; margin-top: 0.5rem;" onclick="alert('Pengaturan pembelajaran berhasil disimpan!')">
+                            <i class="bi bi-save"></i>
+                            Simpan Pengaturan
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="../assets/js/main.js"></script>
+</body>
+</html>

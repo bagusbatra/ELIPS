@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Detail Kursus - ELIPS LMS</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="assets/css/style.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+</head>
+<body>
+    <header class="navbar">
+        <div class="container nav-container">
+            <div class="nav-brand">
+                <i class="bi bi-mortarboard-fill brand-icon"></i>
+                <span class="brand-text">ELIPS LMS</span>
+            </div>
+            <nav class="nav-menu" id="navMenu">
+                <a href="index.html" class="nav-link">Beranda</a>
+                <a href="index.html#courses" class="nav-link">Kursus</a>
+                <a href="verify-certificate.html" class="nav-link">Verifikasi Sertifikat</a>
+            </nav>
+            <div class="nav-actions">
+                <a href="login.html" class="btn btn-ghost">Masuk</a>
+                <a href="register.html" class="btn btn-primary">Daftar</a>
+            </div>
+            <button class="nav-toggle" id="navToggle">
+                <i class="bi bi-list"></i>
+            </button>
+        </div>
+    </header>
+
+    <main>
+        <section class="page-header">
+            <div class="container">
+                <div class="breadcrumb">
+                    <a href="index.html">Beranda</a>
+                    <i class="bi bi-chevron-right"></i>
+                    <a href="index.html#courses">Kursus</a>
+                    <i class="bi bi-chevron-right"></i>
+                    <span>Detail Kursus</span>
+                </div>
+            </div>
+        </section>
+
+        <section class="section">
+            <div class="container">
+                <div class="course-detail-layout">
+                    <div class="course-detail-main">
+                        <div class="course-detail-header">
+                            <div class="course-detail-category" id="courseCategory">Pelatihan</div>
+                            <h1 class="course-detail-title" id="courseTitle">Pelatihan Manajemen Dasar</h1>
+                            <p class="course-detail-desc" id="courseDesc">Pelatihan ini membahas konsep dasar manajemen, perencanaan, organisasi, kepemimpinan, dan pengendalian untuk meningkatkan efektivitas kerja.</p>
+                            <div class="course-detail-meta">
+                                <div class="meta-item">
+                                    <i class="bi bi-person"></i>
+                                    <span>Instruktur: <strong id="courseInstructor">Ahmad Fauzi, M.M.</strong></span>
+                                </div>
+                                <div class="meta-item">
+                                    <i class="bi bi-collection"></i>
+                                    <span id="courseMeta">8 Modul • 24 Pelajaran</span>
+                                </div>
+                                <div class="meta-item">
+                                    <i class="bi bi-clock"></i>
+                                    <span>Estimasi: 12 Jam</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="course-section">
+                            <h2 class="course-section-title">Tentang Kursus</h2>
+                            <p class="course-section-text">Kursus ini dirancang untuk memberikan pemahaman komprehensif tentang manajemen dasar. Peserta akan mempelajari fungsi-fungsi manajemen, pengambilan keputusan, komunikasi efektif, serta manajemen waktu dan sumber daya.</p>
+                        </div>
+
+                        <div class="course-section">
+                            <h2 class="course-section-title">Daftar Modul & Pelajaran</h2>
+                            <div class="modules-list" id="courseModulesList">
+                                <div class="module-item">
+                                    <div class="module-header">
+                                        <div class="module-info">
+                                            <i class="bi bi-folder"></i>
+                                            <span class="module-title">Modul 1: Pengantar Manajemen</span>
+                                        </div>
+                                        <span class="module-count">3 Pelajaran</span>
+                                    </div>
+                                    <div class="module-lessons">
+                                        <div class="lesson-item">
+                                            <i class="bi bi-file-text"></i>
+                                            <span>1.1 Konsep Dasar Manajemen</span>
+                                        </div>
+                                        <div class="lesson-item">
+                                            <i class="bi bi-file-text"></i>
+                                            <span>1.2 Sejarah dan Perkembangan Manajemen</span>
+                                        </div>
+                                        <div class="lesson-item">
+                                            <i class="bi bi-play-circle"></i>
+                                            <span>1.3 Fungsi-Fungsi Manajemen</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="module-item">
+                                    <div class="module-header">
+                                        <div class="module-info">
+                                            <i class="bi bi-folder"></i>
+                                            <span class="module-title">Modul 2: Perencanaan (Planning)</span>
+                                        </div>
+                                        <span class="module-count">3 Pelajaran</span>
+                                    </div>
+                                    <div class="module-lessons">
+                                        <div class="lesson-item">
+                                            <i class="bi bi-file-text"></i>
+                                            <span>2.1 Pengertian dan Pentingnya Perencanaan</span>
+                                        </div>
+                                        <div class="lesson-item">
+                                            <i class="bi bi-file-text"></i>
+                                            <span>2.2 Jenis-Jenis Perencanaan</span>
+                                        </div>
+                                        <div class="lesson-item">
+                                            <i class="bi bi-play-circle"></i>
+                                            <span>2.3 Proses Perencanaan</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="module-item">
+                                    <div class="module-header">
+                                        <div class="module-info">
+                                            <i class="bi bi-folder"></i>
+                                            <span class="module-title">Modul 3: Pengorganisasian (Organizing)</span>
+                                        </div>
+                                        <span class="module-count">3 Pelajaran</span>
+                                    </div>
+                                    <div class="module-lessons">
+                                        <div class="lesson-item">
+                                            <i class="bi bi-file-text"></i>
+                                            <span>3.1 Struktur Organisasi</span>
+                                        </div>
+                                        <div class="lesson-item">
+                                            <i class="bi bi-file-text"></i>
+                                            <span>3.2 Pembagian Kerja & Wewenang</span>
+                                        </div>
+                                        <div class="lesson-item">
+                                            <i class="bi bi-play-circle"></i>
+                                            <span>3.3 Koordinasi & Rentang Kendali</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="module-item">
+                                    <div class="module-header">
+                                        <div class="module-info">
+                                            <i class="bi bi-folder"></i>
+                                            <span class="module-title">Modul 4: Kepemimpinan (Leading)</span>
+                                        </div>
+                                        <span class="module-count">3 Pelajaran</span>
+                                    </div>
+                                    <div class="module-lessons">
+                                        <div class="lesson-item">
+                                            <i class="bi bi-file-text"></i>
+                                            <span>4.1 Teori Kepemimpinan</span>
+                                        </div>
+                                        <div class="lesson-item">
+                                            <i class="bi bi-file-text"></i>
+                                            <span>4.2 Motivasi Kerja</span>
+                                        </div>
+                                        <div class="lesson-item">
+                                            <i class="bi bi-play-circle"></i>
+                                            <span>4.3 Komunikasi Efektiv</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="module-item">
+                                    <div class="module-header">
+                                        <div class="module-info">
+                                            <i class="bi bi-folder"></i>
+                                            <span class="module-title">Modul 5: Pengendalian (Controlling)</span>
+                                        </div>
+                                        <span class="module-count">3 Pelajaran</span>
+                                    </div>
+                                    <div class="module-lessons">
+                                        <div class="lesson-item">
+                                            <i class="bi bi-file-text"></i>
+                                            <span>5.1 Konsep Pengendalian</span>
+                                        </div>
+                                        <div class="lesson-item">
+                                            <i class="bi bi-file-text"></i>
+                                            <span>5.2 Standar & Pengukuran</span>
+                                        </div>
+                                        <div class="lesson-item">
+                                            <i class="bi bi-play-circle"></i>
+                                            <span>5.3 Tindak Lanjut & Perbaikan</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="module-item">
+                                    <div class="module-header">
+                                        <div class="module-info">
+                                            <i class="bi bi-folder"></i>
+                                            <span class="module-title">Modul 6: Manajemen Sumber Daya Manusia</span>
+                                        </div>
+                                        <span class="module-count">3 Pelajaran</span>
+                                    </div>
+                                    <div class="module-lessons">
+                                        <div class="lesson-item">
+                                            <i class="bi bi-file-text"></i>
+                                            <span>6.1 Rekrutmen & Seleksi</span>
+                                        </div>
+                                        <div class="lesson-item">
+                                            <i class="bi bi-file-text"></i>
+                                            <span>6.2 Pelatihan & Pengembangan</span>
+                                        </div>
+                                        <div class="lesson-item">
+                                            <i class="bi bi-play-circle"></i>
+                                            <span>6.3 Penilaian Kinerja</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="module-item">
+                                    <div class="module-header">
+                                        <div class="module-info">
+                                            <i class="bi bi-folder"></i>
+                                            <span class="module-title">Modul 7: Manajemen Waktu & Produktivitas</span>
+                                        </div>
+                                        <span class="module-count">3 Pelajaran</span>
+                                    </div>
+                                    <div class="module-lessons">
+                                        <div class="lesson-item">
+                                            <i class="bi bi-file-text"></i>
+                                            <span>7.1 Prioritas & Perencanaan Harian</span>
+                                        </div>
+                                        <div class="lesson-item">
+                                            <i class="bi bi-file-text"></i>
+                                            <span>7.2 Mengatasi Procrastination</span>
+                                        </div>
+                                        <div class="lesson-item">
+                                            <i class="bi bi-play-circle"></i>
+                                            <span>7.3 Tools Produktivitas</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="module-item">
+                                    <div class="module-header">
+                                        <div class="module-info">
+                                            <i class="bi bi-folder"></i>
+                                            <span class="module-title">Modul 8: Evaluasi & Studi Kasus</span>
+                                        </div>
+                                        <span class="module-count">3 Pelajaran</span>
+                                    </div>
+                                    <div class="module-lessons">
+                                        <div class="lesson-item">
+                                            <i class="bi bi-file-text"></i>
+                                            <span>8.1 Studi Kasus Manajemen</span>
+                                        </div>
+                                        <div class="lesson-item">
+                                            <i class="bi bi-file-text"></i>
+                                            <span>8.2 Ringkasan Materi</span>
+                                        </div>
+                                        <div class="lesson-item">
+                                            <i class="bi bi-file-text"></i>
+                                            <span>8.3 Persiapan Sertifikat</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="course-detail-sidebar">
+                        <div class="enroll-card">
+                            <div class="enroll-card-header">
+                                <div class="enroll-price">Gratis</div>
+                            </div>
+                            <div class="enroll-card-body">
+                                <button id="enrollBtn" class="btn btn-primary btn-lg btn-block">
+                                    <i class="bi bi-journal-plus"></i>
+                                    <span id="enrollBtnText">Daftar Kursus</span>
+                                </button>
+                                <div class="enroll-features">
+                                    <div class="enroll-feature">
+                                        <i class="bi bi-check-circle"></i>
+                                        <span>Akses selamanya</span>
+                                    </div>
+                                    <div class="enroll-feature">
+                                        <i class="bi bi-check-circle"></i>
+                                        <span>Semua materi tersedia</span>
+                                    </div>
+                                    <div class="enroll-feature">
+                                        <i class="bi bi-check-circle"></i>
+                                        <span>Sertifikat otomatis</span>
+                                    </div>
+                                    <div class="enroll-feature">
+                                        <i class="bi bi-check-circle"></i>
+                                        <span>Pantau progres belajar</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-brand">
+                    <div class="nav-brand">
+                        <i class="bi bi-mortarboard-fill brand-icon"></i>
+                        <span class="brand-text">ELIPS LMS</span>
+                    </div>
+                    <p class="footer-desc">Platform Learning Management System untuk pelatihan dan kursus.</p>
+                </div>
+                <div class="footer-links">
+                    <div class="footer-column">
+                        <h4 class="footer-title">Navigasi</h4>
+                        <a href="index.html" class="footer-link">Beranda</a>
+                        <a href="index.html#courses" class="footer-link">Kursus</a>
+                        <a href="verify-certificate.html" class="footer-link">Verifikasi Sertifikat</a>
+                    </div>
+                    <div class="footer-column">
+                        <h4 class="footer-title">Akun</h4>
+                        <a href="login.html" class="footer-link">Masuk</a>
+                        <a href="register.html" class="footer-link">Daftar</a>
+                    </div>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>&copy; 2026 ELIPS LMS. All rights reserved.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="assets/js/main.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const params = new URLSearchParams(window.location.search);
+            const courseId = parseInt(params.get('id'), 10) || 1;
+            const course = ELIPS.getCourseById(courseId);
+            const user = ELIPS.getCurrentUser();
+            const enrollBtn = document.getElementById('enrollBtn');
+            const enrollBtnText = document.getElementById('enrollBtnText');
+            const modulesList = document.getElementById('courseModulesList');
+
+            if (!course) {
+                document.getElementById('courseTitle').textContent = 'Kursus Tidak Ditemukan';
+                if (enrollBtn) enrollBtn.style.display = 'none';
+                modulesList.innerHTML = '<p style="color: var(--text-secondary);">Kursus tidak tersedia.</p>';
+                return;
+            }
+
+            document.title = course.title + ' - ELIPS LMS';
+            document.getElementById('courseCategory').textContent = course.category || 'Kursus';
+            document.getElementById('courseTitle').textContent = course.title;
+            document.getElementById('courseDesc').textContent = course.description || '';
+            document.getElementById('courseInstructor').textContent = course.instructorName || 'Belum ditugaskan';
+
+            const structure = ELIPS.getCourseStructure(course.id);
+            let totalLessons = 0;
+            structure.forEach(function (item) { totalLessons += item.lessons.length; });
+            document.getElementById('courseMeta').textContent = structure.length + ' Modul • ' + totalLessons + ' Pelajaran';
+
+            if (structure.length === 0) {
+                modulesList.innerHTML = '<p style="color: var(--text-secondary);">Instruktur belum menambahkan modul untuk kursus ini.</p>';
+            } else {
+                modulesList.innerHTML = structure.map(function (item) {
+                    const lessons = item.lessons.map(function (lesson) {
+                        const icon = lesson.type === 'video' ? 'bi-play-circle' : 'bi-file-text';
+                        return '<div class="lesson-item"><i class="bi ' + icon + '"></i><span>' + ELIPS.escapeHtml(lesson.title) + '</span></div>';
+                    }).join('');
+                    return '<div class="module-item">' +
+                        '<div class="module-header">' +
+                        '<div class="module-info"><i class="bi bi-folder"></i><span class="module-title">' + ELIPS.escapeHtml(item.module.title) + '</span></div>' +
+                        '<span class="module-count">' + item.lessons.length + ' Pelajaran</span>' +
+                        '</div>' +
+                        '<div class="module-lessons">' + lessons + '</div>' +
+                        '</div>';
+                }).join('');
+            }
+
+            const enrollment = user ? ELIPS.getEnrollment(user.id, course.id) : null;
+            const isEnrolled = enrollment && enrollment.status === 'active';
+            const isAdmin = user && user.role === 'admin';
+            const isInstructor = user && user.role === 'instruktur' && course.instructorId === user.id;
+
+            if (!isEnrolled && !isAdmin && !isInstructor) {
+                enrollBtnText.textContent = 'Belum Ditugaskan - Hubungi Admin';
+                enrollBtn.disabled = true;
+                enrollBtn.style.opacity = '0.7';
+                enrollBtn.style.cursor = 'not-allowed';
+                enrollBtn.onclick = function () {
+                    ELIPS.toast('Siswa hanya dapat mengakses kursus yang ditugaskan oleh Admin.');
+                };
+                const note = document.createElement('p');
+                note.style.cssText = 'margin-top: 0.75rem; font-size: 0.8125rem; color: var(--text-secondary);';
+                note.innerHTML = '<i class="bi bi-info-circle"></i> Penugasan siswa ke kursus dilakukan oleh Admin melalui menu Penugasan Siswa.';
+                enrollBtn.parentElement.appendChild(note);
+                return;
+            }
+
+            if (course.status !== 'published' && !isAdmin && !isInstructor) {
+                enrollBtnText.textContent = 'Kursus Belum Dibuka';
+                enrollBtn.disabled = true;
+                enrollBtn.style.opacity = '0.7';
+                enrollBtn.style.cursor = 'not-allowed';
+                return;
+            }
+
+            enrollBtn.innerHTML = '<i class="bi bi-play-circle"></i> ' + (isEnrolled || isAdmin || isInstructor ? 'Lanjutkan Belajar' : 'Mulai Belajar');
+            enrollBtn.onclick = function () {
+                window.location.href = 'learning.html?id=' + course.id;
+            };
+        });
+    </script>
+</body>
+</html>

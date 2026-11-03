@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kelola Kursus - ELIPS LMS</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../assets/css/style.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+</head>
+<body>
+    <header class="navbar">
+        <div class="container nav-container">
+            <div class="nav-brand">
+                <i class="bi bi-mortarboard-fill brand-icon"></i>
+                <span class="brand-text">ELIPS LMS</span>
+            </div>
+            <nav class="nav-menu" id="navMenu">
+                <a href="../index.html" class="nav-link">Beranda</a>
+                <a href="../index.html#courses" class="nav-link">Kursus</a>
+                <a href="../verify-certificate.html" class="nav-link">Verifikasi Sertifikat</a>
+            </nav>
+            <div class="nav-actions">
+                <a href="dashboard.html" class="btn btn-ghost">Dashboard</a>
+                <a href="../index.html" class="btn btn-outline" data-logout>Keluar</a>
+            </div>
+            <button class="nav-toggle" id="navToggle">
+                <i class="bi bi-list"></i>
+            </button>
+        </div>
+    </header>
+
+    <div class="dashboard-layout">
+        <aside class="dashboard-sidebar">
+            <div class="dashboard-sidebar-header">
+                <div class="dashboard-user">
+                    <div class="dashboard-avatar" id="instructorAvatar">AF</div>
+                    <div class="dashboard-user-info">
+                        <div class="dashboard-user-name" id="instructorName">Ahmad Fauzi, M.M.</div>
+                        <div class="dashboard-user-role">Instruktur</div>
+                    </div>
+                </div>
+            </div>
+            <nav class="dashboard-nav">
+                <a href="dashboard.html" class="dashboard-nav-link">
+                    <i class="bi bi-speedometer2"></i>
+                    <span>Dashboard</span>
+                </a>
+                <a href="manage-course.html" class="dashboard-nav-link active">
+                    <i class="bi bi-journal-plus"></i>
+                    <span>Kelola Kursus</span>
+                </a>
+                <a href="students.html" class="dashboard-nav-link">
+                    <i class="bi bi-people"></i>
+                    <span>Peserta &amp; Penilaian</span>
+                </a>
+                <a href="students.html" class="dashboard-nav-link">
+                    <i class="bi bi-award"></i>
+                    <span>Penilaian &amp; Sertifikat</span>
+                </a>
+            </nav>
+        </aside>
+
+        <main class="dashboard-main">
+            <div class="dashboard-header">
+                <div>
+                    <h1 class="dashboard-title">Kelola Kursus</h1>
+                    <p class="dashboard-subtitle">Hanya kursus yang ditugaskan admin yang dapat dikelola. Buat modul dan materi untuk kursus tersebut.</p>
+                </div>
+            </div>
+
+            <div class="dashboard-section">
+                <div class="dashboard-section-header">
+                    <h2 class="dashboard-section-title">Kursus yang Ditugaskan</h2>
+                </div>
+                <div class="dashboard-section-body" style="padding: 0; overflow-x: auto;">
+                    <table class="dashboard-table">
+                        <thead>
+                            <tr>
+                                <th>Kursus</th>
+                                <th>Modul / Pelajaran</th>
+                                <th>Peserta</th>
+                                <th>Status</th>
+                                <th>Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody id="instructorCoursesBody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="dashboard-section">
+                <div class="dashboard-section-header" style="flex-wrap: wrap; gap: 1rem;">
+                    <div>
+                        <h2 class="dashboard-section-title">Struktur Kursus</h2>
+                        <span style="color: var(--text-secondary); font-size: 0.875rem;">Pilih kursus, lalu tambahkan modul dan materi</span>
+                    </div>
+                    <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                        <select id="structureCourseSelect" class="form-input" style="max-width: 280px;" onchange="selectCourseForStructure(this.value)"></select>
+                        <button class="btn btn-primary" onclick="openModuleModal()"><i class="bi bi-folder-plus"></i> Tambah Modul</button>
+                    </div>
+                </div>
+                <div class="dashboard-section-body">
+                    <div style="padding: 1rem; background: #eff6ff; border-radius: var(--radius); color: #1e40af; font-size: 0.875rem;">
+                        <i class="bi bi-info-circle"></i> Instruktur hanya bisa membuat modul dan materi pada kursus yang telah ditugaskan oleh Admin (1 kursus = 1 instruktur).
+                    </div>
+                    <div class="modules-list" style="margin-top: 1rem;" id="instructorModules"></div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modal Modul -->
+    <div id="moduleModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; padding: 1rem;">
+        <div style="background: white; border-radius: var(--radius-lg); max-width: 520px; width: 100%;">
+            <div style="padding: 1.5rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between;">
+                <h3 style="font-size: 1.25rem; font-weight: 600;">Tambah Modul</h3>
+                <button onclick="closeModuleModal()" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--text-secondary);">
+                    <i class="bi bi-x"></i>
+                </button>
+            </div>
+            <div style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem;">
+                <div class="form-group">
+                    <label class="form-label">Kursus *</label>
+                    <select id="moduleCourse" class="form-input"></select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Judul Modul *</label>
+                    <input type="text" id="moduleTitle" class="form-input" placeholder="Contoh: Modul 1: Pengantar Manajemen">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Deskripsi (Opsional)</label>
+                    <textarea id="moduleDesc" class="form-input" rows="3" placeholder="Deskripsi singkat modul..."></textarea>
+                </div>
+            </div>
+            <div style="padding: 1.5rem; border-top: 1px solid var(--border); display: flex; gap: 0.75rem; justify-content: flex-end;">
+                <button class="btn btn-ghost" onclick="closeModuleModal()">Batal</button>
+                <button class="btn btn-primary" onclick="saveModule()">Simpan Modul</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Pelajaran -->
+    <div id="lessonModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; padding: 1rem;">
+        <div style="background: white; border-radius: var(--radius-lg); max-width: 620px; width: 100%; max-height: 90vh; overflow-y: auto;">
+            <div style="padding: 1.5rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between;">
+                <h3 style="font-size: 1.25rem; font-weight: 600;">Tambah Pelajaran / Materi</h3>
+                <button onclick="closeLessonModal()" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--text-secondary);">
+                    <i class="bi bi-x"></i>
+                </button>
+            </div>
+            <div style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem;">
+                <div class="form-group">
+                    <label class="form-label">Kursus *</label>
+                    <select id="lessonCourse" class="form-input" onchange="refreshLessonModules()"></select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Pilih Modul *</label>
+                    <select id="lessonModule" class="form-input"></select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Judul Pelajaran *</label>
+                    <input type="text" id="lessonTitle" class="form-input" placeholder="Contoh: 1.1 Konsep Dasar Manajemen">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Tipe Konten</label>
+                    <select class="form-input" id="contentType" onchange="toggleContentFields()">
+                        <option value="text">Teks (Rich Text)</option>
+                        <option value="video">Video (Embed URL)</option>
+                        <option value="file">File (Nama/Link File)</option>
+                        <option value="link">Link Eksternal</option>
+                    </select>
+                </div>
+                <div id="contentField" class="form-group">
+                    <label class="form-label" id="contentLabel">Konten Teks</label>
+                    <textarea class="form-input" id="lessonContent" rows="6" placeholder="Tulis materi pelajaran di sini..."></textarea>
+                </div>
+            </div>
+            <div style="padding: 1.5rem; border-top: 1px solid var(--border); display: flex; gap: 0.75rem; justify-content: flex-end;">
+                <button class="btn btn-ghost" onclick="closeLessonModal()">Batal</button>
+                <button class="btn btn-primary" onclick="saveLesson()">Simpan Pelajaran</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="../assets/js/main.js"></script>
+    <script>
+        const currentInstructor = ELIPS.getCurrentUser();
+        let selectedCourseId = null;
+
+        function myCourses() {
+            if (!currentInstructor) return [];
+            return ELIPS.getCourses().filter(function (c) { return c.instructorId === currentInstructor.id; });
+        }
+
+        function initInstructor() {
+            if (currentInstructor) {
+                document.getElementById('instructorName').textContent = currentInstructor.name;
+                document.getElementById('instructorAvatar').textContent = (currentInstructor.name || 'I').substring(0, 2).toUpperCase();
+            }
+
+            const courses = myCourses();
+            const select = document.getElementById('structureCourseSelect');
+            select.innerHTML = '';
+
+            if (courses.length === 0) {
+                select.innerHTML = '<option value="">Belum ada kursus ditugaskan</option>';
+            } else {
+                courses.forEach(function (c) {
+                    select.innerHTML += '<option value="' + c.id + '">' + ELIPS.escapeHtml(c.title) + '</option>';
+                });
+            }
+
+            selectedCourseId = courses.length > 0 ? courses[0].id : null;
+            if (selectedCourseId) select.value = String(selectedCourseId);
+
+            renderInstructorCourses();
+            renderStructure();
+        }
+
+        function renderInstructorCourses() {
+            const tbody = document.getElementById('instructorCoursesBody');
+            const courses = myCourses();
+            tbody.innerHTML = '';
+
+            if (courses.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--text-secondary);">Belum ada kursus yang ditugaskan oleh Admin</td></tr>';
+                return;
+            }
+
+            courses.forEach(function (course) {
+                const modules = ELIPS.getModulesByCourse(course.id).length;
+                const lessons = ELIPS.getLessonsByCourse(course.id).length;
+                const participants = ELIPS.getEnrollmentsByCourse(course.id).filter(function (e) { return e.status === 'active'; }).length;
+                const tr = document.createElement('tr');
+                tr.innerHTML = [
+                    '<td>',
+                    '  <div class="table-course">',
+                    '    <div class="table-course-img"></div>',
+                    '    <div class="table-course-info">',
+                    '      <div class="table-course-title">' + ELIPS.escapeHtml(course.title) + '</div>',
+                    '      <div class="table-course-meta">' + ELIPS.escapeHtml(course.category) + '</div>',
+                    '    </div>',
+                    '  </div>',
+                    '</td>',
+                    '<td><span>' + modules + ' Modul &bull; ' + lessons + ' Pelajaran</span></td>',
+                    '<td><span>' + participants + ' Peserta</span></td>',
+                    '<td><span class="badge ' + (course.status === 'published' ? 'badge-success' : 'badge-warning') + '">' + (course.status === 'published' ? 'Dipublikasi' : 'Draft') + '</span></td>',
+                    '<td><button class="btn btn-ghost" style="padding: 0.5rem 0.75rem; font-size: 0.875rem;" onclick="selectCourseForStructure(' + course.id + ')"><i class="bi bi-folder2-open"></i> Kelola Struktur</button></td>'
+                ].join('');
+                tbody.appendChild(tr);
+            });
+        }
+
+        function selectCourseForStructure(courseId) {
+            selectedCourseId = parseInt(courseId, 10) || null;
+            const select = document.getElementById('structureCourseSelect');
+            if (select && selectedCourseId) select.value = String(selectedCourseId);
+            renderStructure();
+        }
+
+        function renderStructure() {
+            const container = document.getElementById('instructorModules');
+            const course = selectedCourseId ? ELIPS.getCourseById(selectedCourseId) : null;
+
+            if (!course || !myCourses().some(function (c) { return c.id === course.id; })) {
+                container.innerHTML = '<p style="color: var(--text-secondary);">Pilih kursus yang ditugaskan untuk melihat strukturnya.</p>';
+                return;
+            }
+
+            const structure = ELIPS.getCourseStructure(course.id);
+            if (structure.length === 0) {
+                container.innerHTML = '<p style="color: var(--text-secondary);">Belum ada modul. Klik "Tambah Modul" untuk memulai.</p>';
+                return;
+            }
+
+            container.innerHTML = structure.map(function (item) {
+                const lessons = item.lessons.map(function (lesson) {
+                    const icon = lesson.type === 'video' ? 'bi-play-circle' : lesson.type === 'link' ? 'bi-link-45deg' : lesson.type === 'file' ? 'bi-file-earmark' : 'bi-file-text';
+                    return '<div class="lesson-item" style="justify-content: space-between;">' +
+                        '<span style="display: flex; align-items: center; gap: 0.5rem;"><i class="bi ' + icon + '"></i> ' + ELIPS.escapeHtml(lesson.title) + '</span>' +
+                        '<button class="btn btn-ghost" style="padding: 0.125rem 0.5rem; font-size: 0.75rem; color: var(--danger);" onclick="deleteLesson(' + lesson.id + ')"><i class="bi bi-trash"></i></button>' +
+                        '</div>';
+                }).join('') || '<div class="lesson-item" style="color: var(--text-secondary);">Belum ada materi</div>';
+
+                return '<div class="module-item">' +
+                    '<div class="module-header" style="flex-wrap: wrap; gap: 0.5rem;">' +
+                    '<div class="module-info"><i class="bi bi-folder"></i><span class="module-title">' + ELIPS.escapeHtml(item.module.title) + '</span></div>' +
+                    '<div style="display: flex; align-items: center; gap: 0.5rem;">' +
+                    '<span class="module-count">' + item.lessons.length + ' Pelajaran</span>' +
+                    '<button class="btn btn-ghost" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" onclick="openLessonModal(' + item.module.id + ')"><i class="bi bi-plus-lg"></i> Materi</button>' +
+                    '<button class="btn btn-ghost" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; color: var(--danger);" onclick="deleteModule(' + item.module.id + ')"><i class="bi bi-trash"></i></button>' +
+                    '</div>' +
+                    '</div>' +
+                    '<div class="module-lessons">' + lessons + '</div>' +
+                    '</div>';
+            }).join('');
+        }
+
+        function syncCourseCounters(courseId) {
+            const courses = ELIPS.getCourses();
+            const course = courses.find(function (c) { return c.id === courseId; });
+            if (!course) return;
+            course.modules = ELIPS.getModulesByCourse(courseId).length;
+            course.lessons = ELIPS.getLessonsByCourse(courseId).length;
+            course.totalLessons = course.lessons;
+            ELIPS.setCourses(courses);
+        }
+
+        function fillCourseSelect(selectId, selectedId) {
+            const select = document.getElementById(selectId);
+            select.innerHTML = '';
+            const courses = myCourses();
+            courses.forEach(function (c) {
+                select.innerHTML += '<option value="' + c.id + '">' + ELIPS.escapeHtml(c.title) + '</option>';
+            });
+            if (selectedId) select.value = String(selectedId);
+        }
+
+        function openModuleModal() {
+            if (myCourses().length === 0) {
+                alert('Belum ada kursus yang ditugaskan kepada Anda.');
+                return;
+            }
+            fillCourseSelect('moduleCourse', selectedCourseId);
+            document.getElementById('moduleTitle').value = '';
+            document.getElementById('moduleDesc').value = '';
+            document.getElementById('moduleModal').style.display = 'flex';
+        }
+
+        function closeModuleModal() {
+            document.getElementById('moduleModal').style.display = 'none';
+        }
+
+        function saveModule() {
+            const courseId = parseInt(document.getElementById('moduleCourse').value, 10);
+            const title = document.getElementById('moduleTitle').value.trim();
+            const description = document.getElementById('moduleDesc').value.trim();
+
+            if (!courseId || !title) {
+                alert('Pilih kursus dan isi judul modul.');
+                return;
+            }
+            if (!myCourses().some(function (c) { return c.id === courseId; })) {
+                alert('Anda tidak ditugaskan pada kursus ini.');
+                return;
+            }
+
+            const modules = ELIPS.getModules();
+            const order = ELIPS.getModulesByCourse(courseId).length + 1;
+            modules.push({
+                id: ELIPS.nextId(modules),
+                courseId: courseId,
+                instructorId: currentInstructor.id,
+                title: title,
+                description: description,
+                order: order,
+                createdAt: new Date().toISOString()
+            });
+            ELIPS.setModules(modules);
+            syncCourseCounters(courseId);
+            ELIPS.toast('Modul berhasil ditambahkan');
+            closeModuleModal();
+            selectedCourseId = courseId;
+            initInstructor();
+        }
+
+        function refreshLessonModules() {
+            const courseId = parseInt(document.getElementById('lessonCourse').value, 10);
+            const select = document.getElementById('lessonModule');
+            select.innerHTML = '';
+            const modules = ELIPS.getModulesByCourse(courseId);
+            if (modules.length === 0) {
+                select.innerHTML = '<option value="">(Belum ada modul - buat modul dulu)</option>';
+            } else {
+                modules.forEach(function (m) {
+                    select.innerHTML += '<option value="' + m.id + '">' + ELIPS.escapeHtml(m.title) + '</option>';
+                });
+            }
+        }
+
+        function openLessonModal(moduleId) {
+            if (myCourses().length === 0) {
+                alert('Belum ada kursus yang ditugaskan kepada Anda.');
+                return;
+            }
+            let courseId = selectedCourseId;
+            if (moduleId) {
+                const mod = ELIPS.getModules().find(function (m) { return m.id === moduleId; });
+                if (mod) courseId = mod.courseId;
+            }
+            fillCourseSelect('lessonCourse', courseId);
+            refreshLessonModules();
+            if (moduleId) {
+                const select = document.getElementById('lessonModule');
+                if (Array.from(select.options).some(function (o) { return o.value === String(moduleId); })) {
+                    select.value = String(moduleId);
+                }
+            }
+            document.getElementById('lessonTitle').value = '';
+            document.getElementById('lessonContent').value = '';
+            document.getElementById('contentType').value = 'text';
+            toggleContentFields();
+            document.getElementById('lessonModal').style.display = 'flex';
+        }
+
+        function closeLessonModal() {
+            document.getElementById('lessonModal').style.display = 'none';
+        }
+
+        function toggleContentFields() {
+            const type = document.getElementById('contentType').value;
+            const label = document.getElementById('contentLabel');
+            const field = document.getElementById('lessonContent');
+            if (type === 'text') {
+                label.textContent = 'Konten Teks';
+                field.placeholder = 'Tulis materi pelajaran di sini...';
+                field.rows = 6;
+            } else if (type === 'video') {
+                label.textContent = 'URL Video (YouTube/Vimeo)';
+                field.placeholder = 'https://www.youtube.com/watch?v=...';
+                field.rows = 2;
+            } else if (type === 'file') {
+                label.textContent = 'Nama File / URL File';
+                field.placeholder = 'materi-modul-1.pdf';
+                field.rows = 2;
+            } else {
+                label.textContent = 'URL Link Eksternal';
+                field.placeholder = 'https://...';
+                field.rows = 2;
+            }
+        }
+
+        function saveLesson() {
+            const courseId = parseInt(document.getElementById('lessonCourse').value, 10);
+            const moduleId = parseInt(document.getElementById('lessonModule').value, 10);
+            const title = document.getElementById('lessonTitle').value.trim();
+            const type = document.getElementById('contentType').value;
+            const content = document.getElementById('lessonContent').value.trim();
+
+            if (!courseId || !moduleId || !title) {
+                alert('Pilih kursus, modul, dan isi judul pelajaran.');
+                return;
+            }
+            if (!myCourses().some(function (c) { return c.id === courseId; })) {
+                alert('Anda tidak ditugaskan pada kursus ini.');
+                return;
+            }
+
+            const lessons = ELIPS.getLessons();
+            lessons.push({
+                id: ELIPS.nextId(lessons),
+                moduleId: moduleId,
+                courseId: courseId,
+                instructorId: currentInstructor.id,
+                title: title,
+                type: type,
+                content: content,
+                order: ELIPS.getLessonsByModule(moduleId).length + 1,
+                createdAt: new Date().toISOString()
+            });
+            ELIPS.setLessons(lessons);
+            syncCourseCounters(courseId);
+            ELIPS.toast('Materi berhasil ditambahkan');
+            closeLessonModal();
+            selectedCourseId = courseId;
+            initInstructor();
+        }
+
+        function deleteModule(moduleId) {
+            if (!confirm('Hapus modul ini beserta seluruh materinya?')) return;
+            const module = ELIPS.getModules().find(function (m) { return m.id === moduleId; });
+            if (!module) return;
+
+            const lessonIds = ELIPS.getLessonsByModule(moduleId).map(function (l) { return l.id; });
+            ELIPS.setModules(ELIPS.getModules().filter(function (m) { return m.id !== moduleId; }));
+            ELIPS.setLessons(ELIPS.getLessons().filter(function (l) { return l.moduleId !== moduleId; }));
+            ELIPS.setCompletedLessons(ELIPS.getCompletedLessons().filter(function (p) { return lessonIds.indexOf(p.lessonId) === -1; }));
+            syncCourseCounters(module.courseId);
+            ELIPS.toast('Modul dihapus');
+            selectedCourseId = module.courseId;
+            initInstructor();
+        }
+
+        function deleteLesson(lessonId) {
+            if (!confirm('Hapus materi ini?')) return;
+            const lesson = ELIPS.getLessons().find(function (l) { return l.id === lessonId; });
+            if (!lesson) return;
+            ELIPS.setLessons(ELIPS.getLessons().filter(function (l) { return l.id !== lessonId; }));
+            ELIPS.setCompletedLessons(ELIPS.getCompletedLessons().filter(function (p) { return p.lessonId !== lessonId; }));
+            syncCourseCounters(lesson.courseId);
+            ELIPS.toast('Materi dihapus');
+            selectedCourseId = lesson.courseId;
+            initInstructor();
+        }
+
+        document.addEventListener('DOMContentLoaded', initInstructor);
+    </script>
+</body>
+</html>

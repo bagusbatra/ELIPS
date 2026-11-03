@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Peserta - ELIPS LMS</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../assets/css/style.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+</head>
+<body>
+    <header class="navbar">
+        <div class="container nav-container">
+            <div class="nav-brand">
+                <i class="bi bi-mortarboard-fill brand-icon"></i>
+                <span class="brand-text">ELIPS LMS</span>
+            </div>
+            <nav class="nav-menu" id="navMenu">
+                <a href="../index.html" class="nav-link">Beranda</a>
+                <a href="../index.html#courses" class="nav-link">Kursus</a>
+                <a href="../verify-certificate.html" class="nav-link">Verifikasi Sertifikat</a>
+            </nav>
+            <div class="nav-actions">
+                <a href="dashboard.html" class="btn btn-ghost">Dashboard</a>
+                <a href="../index.html" class="btn btn-outline" data-logout>Keluar</a>
+            </div>
+            <button class="nav-toggle" id="navToggle">
+                <i class="bi bi-list"></i>
+            </button>
+        </div>
+    </header>
+
+    <div class="dashboard-layout">
+        <aside class="dashboard-sidebar">
+            <div class="dashboard-sidebar-header">
+                <div class="dashboard-user">
+                    <div class="dashboard-avatar" id="studentAvatar">BS</div>
+                    <div class="dashboard-user-info">
+                        <div class="dashboard-user-name" id="studentName">Budi Santoso</div>
+                        <div class="dashboard-user-role">Peserta</div>
+                    </div>
+                </div>
+            </div>
+            <nav class="dashboard-nav">
+                <a href="dashboard.html" class="dashboard-nav-link active">
+                    <i class="bi bi-speedometer2"></i>
+                    <span>Dashboard</span>
+                </a>
+                <a href="../index.html#courses" class="dashboard-nav-link">
+                    <i class="bi bi-journal-bookmark"></i>
+                    <span>Kursus Tersedia</span>
+                </a>
+                <a href="certificates.html" class="dashboard-nav-link">
+                    <i class="bi bi-award"></i>
+                    <span>Sertifikat Saya</span>
+                </a>
+                <a href="#" class="dashboard-nav-link">
+                    <i class="bi bi-person"></i>
+                    <span>Profil Saya</span>
+                </a>
+            </nav>
+        </aside>
+
+        <main class="dashboard-main">
+            <div class="dashboard-header">
+                <h1 class="dashboard-title">Dashboard Peserta</h1>
+                <p class="dashboard-subtitle" id="dashboardGreeting">Selamat datang! Lanjutkan pembelajaranmu</p>
+            </div>
+
+            <div class="dashboard-stats">
+                <div class="stat-card">
+                    <div class="stat-card-icon blue">
+                        <i class="bi bi-journal-bookmark"></i>
+                    </div>
+                    <div class="stat-card-info">
+                        <div class="stat-card-value" id="statCourses">0</div>
+                        <div class="stat-card-label">Kursus Ditugaskan</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-card-icon green">
+                        <i class="bi bi-check-circle"></i>
+                    </div>
+                    <div class="stat-card-info">
+                        <div class="stat-card-value" id="statLessons">0</div>
+                        <div class="stat-card-label">Pelajaran Selesai</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-card-icon orange">
+                        <i class="bi bi-graph-up-arrow"></i>
+                    </div>
+                    <div class="stat-card-info">
+                        <div class="stat-card-value" id="statProgress">0%</div>
+                        <div class="stat-card-label">Rata-rata Progres</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-card-icon purple">
+                        <i class="bi bi-award"></i>
+                    </div>
+                    <div class="stat-card-info">
+                        <div class="stat-card-value" id="statCertificates">0</div>
+                        <div class="stat-card-label">Sertifikat Terbit</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="dashboard-section">
+                <div class="dashboard-section-header">
+                    <h2 class="dashboard-section-title">Kursus yang Ditugaskan</h2>
+                    <a href="../index.html#courses" class="btn btn-ghost">Jelajahi Kursus <i class="bi bi-arrow-right"></i></a>
+                </div>
+                <div class="dashboard-section-body" style="padding: 0; overflow-x: auto;">
+                    <table class="dashboard-table">
+                        <thead>
+                            <tr>
+                                <th>Kursus</th>
+                                <th>Progres</th>
+                                <th>Status</th>
+                                <th>Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody id="studentCoursesBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="../assets/js/main.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const student = ELIPS.getCurrentUser();
+            if (!student) {
+                window.location.href = '../login.html';
+                return;
+            }
+
+            document.getElementById('studentName').textContent = student.name;
+            document.getElementById('studentAvatar').textContent = (student.name || 'S').substring(0, 2).toUpperCase();
+            document.getElementById('dashboardGreeting').textContent = 'Selamat datang, ' + student.name + '! Lanjutkan pembelajaranmu.';
+
+            const enrollments = ELIPS.getEnrollmentsByStudent(student.id).filter(function (e) { return e.status === 'active'; });
+            const courses = ELIPS.getCourses();
+            const tbody = document.getElementById('studentCoursesBody');
+            let completedLessons = 0;
+            let progressSum = 0;
+            let counted = 0;
+
+            tbody.innerHTML = '';
+
+            if (enrollments.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--text-secondary);">Belum ada kursus yang ditugaskan. Hubungi Admin untuk mendapatkan penugasan.</td></tr>';
+            }
+
+            enrollments.forEach(function (enr) {
+                const course = courses.find(function (c) { return c.id === enr.courseId; });
+                if (!course) return;
+
+                const progress = ELIPS.getCourseProgress(student.id, course.id);
+                const modules = ELIPS.getModulesByCourse(course.id).length;
+                const isComplete = progress.total > 0 && progress.completed === progress.total;
+                const available = course.status === 'published';
+                completedLessons += progress.completed;
+                progressSum += progress.percentage;
+                counted++;
+
+                const tr = document.createElement('tr');
+                tr.innerHTML = [
+                    '<td>',
+                    '  <div class="table-course">',
+                    '    <div class="table-course-img"></div>',
+                    '    <div class="table-course-info">',
+                    '      <div class="table-course-title">' + ELIPS.escapeHtml(course.title) + '</div>',
+                    '      <div class="table-course-meta">' + modules + ' Modul &bull; ' + progress.total + ' Pelajaran</div>',
+                    '    </div>',
+                    '  </div>',
+                    '</td>',
+                    '<td>',
+                    '  <div class="progress-inline">',
+                    '    <div class="progress-inline-bar"><div class="progress-inline-fill" style="width: ' + progress.percentage + '%;"></div></div>',
+                    '    <span class="progress-inline-text">' + progress.percentage + '%</span>',
+                    '  </div>',
+                    '</td>',
+                    '<td><span class="badge ' + (isComplete ? 'badge-success' : 'badge-warning') + '">' + (isComplete ? 'Selesai Materi' : 'Sedang Belajar') + '</span>' + (!available ? ' <span class="badge badge-warning">Draft</span>' : '') + '</td>',
+                    '<td>',
+                    available
+                        ? '  <a href="../learning.html?id=' + course.id + '" class="btn btn-primary" style="padding: 0.5rem 0.875rem; font-size: 0.875rem;"><i class="bi bi-play-fill"></i> ' + (progress.percentage > 0 ? 'Lanjutkan' : 'Mulai') + '</a>'
+                        : '  <span class="badge badge-warning">Belum Dibuka</span>',
+                    '</td>'
+                ].join('');
+                tbody.appendChild(tr);
+            });
+
+            document.getElementById('statCourses').textContent = counted;
+            document.getElementById('statLessons').textContent = completedLessons;
+            document.getElementById('statProgress').textContent = counted > 0 ? Math.round(progressSum / counted) + '%' : '0%';
+            document.getElementById('statCertificates').textContent = ELIPS.getCertificates().filter(function (c) {
+                return c.studentId === student.id && c.status === 'publish';
+            }).length;
+        });
+    </script>
+</body>
+</html>

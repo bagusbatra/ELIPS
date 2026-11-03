@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kelola Pengguna - ELIPS LMS</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../assets/css/style.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+</head>
+<body>
+    <header class="navbar">
+        <div class="container nav-container">
+            <div class="nav-brand">
+                <i class="bi bi-mortarboard-fill brand-icon"></i>
+                <span class="brand-text">ELIPS LMS</span>
+            </div>
+            <nav class="nav-menu" id="navMenu">
+                <a href="../index.html" class="nav-link">Beranda</a>
+                <a href="../index.html#courses" class="nav-link">Kursus</a>
+                <a href="../verify-certificate.html" class="nav-link">Verifikasi Sertifikat</a>
+            </nav>
+            <div class="nav-actions">
+                <a href="dashboard.html" class="btn btn-ghost">Dashboard</a>
+                <a href="../index.html" class="btn btn-outline" data-logout>Keluar</a>
+            </div>
+            <button class="nav-toggle" id="navToggle">
+                <i class="bi bi-list"></i>
+            </button>
+        </div>
+    </header>
+
+    <div class="dashboard-layout">
+        <aside class="dashboard-sidebar">
+            <div class="dashboard-sidebar-header">
+                <div class="dashboard-user">
+                    <div class="dashboard-avatar">AD</div>
+                    <div class="dashboard-user-info">
+                        <div class="dashboard-user-name">Administrator</div>
+                        <div class="dashboard-user-role">Admin</div>
+                    </div>
+                </div>
+            </div>
+            <nav class="dashboard-nav">
+                <a href="dashboard.html" class="dashboard-nav-link">
+                    <i class="bi bi-speedometer2"></i>
+                    <span>Dashboard</span>
+                </a>
+                <a href="users.html" class="dashboard-nav-link active">
+                    <i class="bi bi-people"></i>
+                    <span>Kelola Pengguna</span>
+                </a>
+                <a href="courses.html" class="dashboard-nav-link">
+                    <i class="bi bi-journal-bookmark"></i>
+                    <span>Kelola Kursus</span>
+                </a>
+                <a href="enrollment.html" class="dashboard-nav-link">
+                    <i class="bi bi-person-check"></i>
+                    <span>Penugasan Siswa</span>
+                </a>
+                <a href="certificates.html" class="dashboard-nav-link">
+                    <i class="bi bi-award"></i>
+                    <span>Kelola Sertifikat</span>
+                </a>
+                <a href="reports.html" class="dashboard-nav-link">
+                    <i class="bi bi-file-earmark-bar-graph"></i>
+                    <span>Laporan</span>
+                </a>
+                <a href="settings.html" class="dashboard-nav-link">
+                    <i class="bi bi-gear"></i>
+                    <span>Pengaturan</span>
+                </a>
+            </nav>
+        </aside>
+
+        <main class="dashboard-main">
+            <div class="dashboard-header">
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;">
+                    <div>
+                        <h1 class="dashboard-title">Kelola Pengguna</h1>
+                        <p class="dashboard-subtitle">Tambah Admin, Instruktur, atau Peserta. Instruktur juga bisa langsung ditugaskan ke kursus.</p>
+                    </div>
+                    <button class="btn btn-primary" onclick="openUserModal()">
+                        <i class="bi bi-person-plus"></i>
+                        Tambah Pengguna
+                    </button>
+                </div>
+            </div>
+
+            <div class="dashboard-section">
+                <div class="dashboard-section-header" style="flex-wrap: wrap; gap: 1rem;">
+                    <h2 class="dashboard-section-title">Daftar Pengguna</h2>
+                    <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center;">
+                        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                            <button class="btn btn-primary" id="filterAll" onclick="filterUsers('all')">Semua</button>
+                            <button class="btn btn-ghost" id="filterAdmin" onclick="filterUsers('admin')">Admin</button>
+                            <button class="btn btn-ghost" id="filterInstruktur" onclick="filterUsers('instruktur')">Instruktur</button>
+                            <button class="btn btn-ghost" id="filterPeserta" onclick="filterUsers('peserta')">Peserta</button>
+                        </div>
+                        <input type="text" id="searchUser" class="form-input" style="max-width: 250px;" placeholder="Cari pengguna..." onkeyup="searchUsers()">
+                    </div>
+                </div>
+                <div class="dashboard-section-body" style="padding: 0; overflow-x: auto;">
+                    <table class="dashboard-table">
+                        <thead>
+                            <tr>
+                                <th>Pengguna</th>
+                                <th>Email</th>
+                                <th>Role</th>
+                                <th>Status</th>
+                                <th>Tanggal Daftar</th>
+                                <th>Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody id="usersTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modal User -->
+    <div id="userModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; padding: 1rem;">
+        <div style="background: white; border-radius: var(--radius-lg); max-width: 500px; width: 100%; max-height: 90vh; overflow-y: auto;">
+            <div style="padding: 1.5rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between;">
+                <h3 style="font-size: 1.25rem; font-weight: 600;" id="userModalTitle">Tambah Pengguna</h3>
+                <button onclick="closeUserModal()" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--text-secondary);">
+                    <i class="bi bi-x"></i>
+                </button>
+            </div>
+            <div style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem;">
+                <div class="form-group">
+                    <label class="form-label">Nama Lengkap *</label>
+                    <input type="text" id="userName" class="form-input" placeholder="Masukkan nama lengkap">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Email *</label>
+                    <input type="email" id="userEmail" class="form-input" placeholder="nama@example.com">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">No. Telepon</label>
+                    <input type="tel" id="userPhone" class="form-input" placeholder="08xxxxxxxxxx">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Role *</label>
+                    <select id="userRole" class="form-input">
+                        <option value="peserta">Peserta</option>
+                        <option value="instruktur">Instruktur</option>
+                        <option value="admin">Admin</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Status</label>
+                    <select id="userStatus" class="form-input">
+                        <option value="aktif" selected>Aktif</option>
+                        <option value="nonaktif">Nonaktif</option>
+                    </select>
+                </div>
+                <div class="form-group" id="passwordGroup">
+                    <label class="form-label">Password</label>
+                    <input type="password" id="userPassword" class="form-input" placeholder="Kosongkan jika tidak ingin mengubah">
+                    <small class="form-hint">Demo: password tidak divalidasi saat login.</small>
+                </div>
+            </div>
+            <div style="padding: 1.5rem; border-top: 1px solid var(--border); display: flex; gap: 0.75rem; justify-content: flex-end;">
+                <button class="btn btn-ghost" onclick="closeUserModal()">Batal</button>
+                <button class="btn btn-primary" onclick="saveUser()">Simpan</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Assign Instruktur ke Kursus -->
+    <div id="assignModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; padding: 1rem;">
+        <div style="background: white; border-radius: var(--radius-lg); max-width: 560px; width: 100%; max-height: 90vh; overflow-y: auto;">
+            <div style="padding: 1.5rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between;">
+                <h3 style="font-size: 1.25rem; font-weight: 600;">Tugaskan Instruktur ke Kursus</h3>
+                <button onclick="closeAssignModal()" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--text-secondary);">
+                    <i class="bi bi-x"></i>
+                </button>
+            </div>
+            <div style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem;">
+                <div><strong>Instruktur:</strong> <span id="assignInstructorName"></span></div>
+                <div class="form-group">
+                    <label class="form-label">Pilih Kursus yang Diampu</label>
+                    <div id="assignCourseList" style="display: flex; flex-direction: column; gap: 0.5rem; padding: 0.75rem; border: 1px solid var(--border); border-radius: var(--radius); max-height: 260px; overflow-y: auto;"></div>
+                    <small class="form-hint">1 kursus hanya boleh memiliki 1 instruktur. Memilih kursus di sini akan menggantikan instruktur sebelumnya bila ada.</small>
+                </div>
+            </div>
+            <div style="padding: 1.5rem; border-top: 1px solid var(--border); display: flex; gap: 0.75rem; justify-content: flex-end;">
+                <button class="btn btn-ghost" onclick="closeAssignModal()">Batal</button>
+                <button class="btn btn-primary" onclick="saveAssignment()">Simpan Penugasan</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="../assets/js/main.js"></script>
+    <script>
+        let editingUserId = null;
+        let assigningInstructorId = null;
+
+        function roleBadge(role) {
+            if (role === 'admin') return '<span class="badge" style="background: #fee2e2; color: #991b1b;">Admin</span>';
+            if (role === 'instruktur') return '<span class="badge badge-warning">Instruktur</span>';
+            return '<span class="badge badge-primary">Peserta</span>';
+        }
+
+        function renderUsers() {
+            const tbody = document.getElementById('usersTableBody');
+            const users = ELIPS.getUsers();
+            const courses = ELIPS.getCourses();
+            tbody.innerHTML = '';
+
+            users.forEach(function (user) {
+                const assignedCourses = courses.filter(function (c) { return c.instructorId === user.id; });
+                const tr = document.createElement('tr');
+                tr.setAttribute('data-role', user.role);
+                tr.innerHTML = [
+                    '<td>',
+                    '  <div class="table-course">',
+                    '    <div class="dashboard-avatar" style="width: 36px; height: 36px; font-size: 0.875rem;">' + ELIPS.escapeHtml((user.name || 'U').substring(0, 2).toUpperCase()) + '</div>',
+                    '    <div class="table-course-info">',
+                    '      <div class="table-course-title">' + ELIPS.escapeHtml(user.name) + '</div>',
+                    user.role === 'instruktur' ? '      <div class="table-course-meta">' + assignedCourses.length + ' kursus diampu</div>' : '',
+                    '    </div>',
+                    '  </div>',
+                    '</td>',
+                    '<td><span>' + ELIPS.escapeHtml(user.email) + '</span></td>',
+                    '<td>' + roleBadge(user.role) + '</td>',
+                    '<td>' + (user.status === 'aktif' ? '<span class="badge badge-success">Aktif</span>' : '<span class="badge badge-warning">Nonaktif</span>') + '</td>',
+                    '<td><span style="color: var(--text-secondary);">' + ELIPS.escapeHtml(user.createdAt || '-') + '</span></td>',
+                    '<td>',
+                    '  <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">',
+                    user.role === 'instruktur' ? '    <button class="btn btn-ghost" style="padding: 0.375rem 0.625rem; font-size: 0.8125rem;" title="Tugaskan ke kursus" onclick="openAssignModal(' + user.id + ')"><i class="bi bi-journal-check"></i></button>' : '',
+                    '    <button class="btn btn-ghost" style="padding: 0.375rem 0.625rem; font-size: 0.8125rem;" onclick="openUserModal(' + user.id + ')"><i class="bi bi-pencil"></i></button>',
+                    '    <button class="btn btn-ghost" style="padding: 0.375rem 0.625rem; font-size: 0.8125rem; color: var(--danger);" onclick="deleteUser(' + user.id + ')"><i class="bi bi-trash"></i></button>',
+                    '  </div>',
+                    '</td>'
+                ].join('');
+                tbody.appendChild(tr);
+            });
+        }
+
+        function openUserModal(userId) {
+            editingUserId = userId || null;
+            const title = document.getElementById('userModalTitle');
+            document.getElementById('userPassword').value = '';
+
+            if (editingUserId) {
+                const user = ELIPS.getUserById(editingUserId);
+                title.textContent = 'Edit Pengguna';
+                document.getElementById('userName').value = user.name || '';
+                document.getElementById('userEmail').value = user.email || '';
+                document.getElementById('userPhone').value = user.phone || '';
+                document.getElementById('userRole').value = user.role || 'peserta';
+                document.getElementById('userStatus').value = user.status || 'aktif';
+            } else {
+                title.textContent = 'Tambah Pengguna';
+                document.getElementById('userName').value = '';
+                document.getElementById('userEmail').value = '';
+                document.getElementById('userPhone').value = '';
+                document.getElementById('userRole').value = 'peserta';
+                document.getElementById('userStatus').value = 'aktif';
+            }
+            document.getElementById('userModal').style.display = 'flex';
+        }
+
+        function closeUserModal() {
+            document.getElementById('userModal').style.display = 'none';
+            editingUserId = null;
+        }
+
+        function saveUser() {
+            const name = document.getElementById('userName').value.trim();
+            const email = document.getElementById('userEmail').value.trim().toLowerCase();
+            const phone = document.getElementById('userPhone').value.trim();
+            const role = document.getElementById('userRole').value;
+            const status = document.getElementById('userStatus').value;
+            const password = document.getElementById('userPassword').value;
+
+            if (!name || !email) {
+                alert('Nama dan email wajib diisi.');
+                return;
+            }
+
+            const users = ELIPS.getUsers();
+            const duplicate = users.find(function (u) { return String(u.email).toLowerCase() === email && u.id !== editingUserId; });
+            if (duplicate) {
+                alert('Email sudah digunakan oleh pengguna lain.');
+                return;
+            }
+
+            if (editingUserId) {
+                const user = users.find(function (u) { return u.id === editingUserId; });
+                if (!user) return;
+                user.name = name;
+                user.email = email;
+                user.phone = phone;
+                user.role = role;
+                user.status = status;
+                if (password) user.password = password;
+
+                // Keep denormalized instructor name in courses up to date
+                const courses = ELIPS.getCourses();
+                courses.forEach(function (course) {
+                    if (course.instructorId === user.id) course.instructorName = user.name;
+                });
+                ELIPS.setCourses(courses);
+                ELIPS.toast('Pengguna berhasil diperbarui');
+            } else {
+                users.push({
+                    id: ELIPS.nextId(users),
+                    name: name,
+                    email: email,
+                    phone: phone,
+                    role: role,
+                    status: status,
+                    createdAt: new Date().toISOString().split('T')[0]
+                });
+                ELIPS.toast('Pengguna berhasil ditambahkan');
+            }
+
+            ELIPS.setUsers(users);
+            closeUserModal();
+            renderUsers();
+        }
+
+        function deleteUser(id) {
+            const user = ELIPS.getUserById(id);
+            if (!user) return;
+            if (user.id === 1) {
+                alert('Akun Administrator utama tidak dapat dihapus.');
+                return;
+            }
+            if (!confirm('Hapus pengguna "' + user.name + '"? Data penugasan terkait juga akan dihapus.')) return;
+
+            ELIPS.setUsers(ELIPS.getUsers().filter(function (u) { return u.id !== id; }));
+            ELIPS.setEnrollments(ELIPS.getEnrollments().filter(function (e) { return e.studentId !== id; }));
+            ELIPS.setCertificates(ELIPS.getCertificates().filter(function (c) { return c.studentId !== id; }));
+            ELIPS.setGrades(ELIPS.getGrades().filter(function (g) { return g.studentId !== id; }));
+
+            const courses = ELIPS.getCourses();
+            courses.forEach(function (course) {
+                if (course.instructorId === id) {
+                    course.instructorId = null;
+                    course.instructorName = '';
+                }
+            });
+            ELIPS.setCourses(courses);
+            ELIPS.toast('Pengguna dihapus');
+            renderUsers();
+        }
+
+        function openAssignModal(instructorId) {
+            assigningInstructorId = instructorId;
+            const instructor = ELIPS.getUserById(instructorId);
+            document.getElementById('assignInstructorName').textContent = instructor ? instructor.name : '-';
+            const courses = ELIPS.getCourses();
+            const container = document.getElementById('assignCourseList');
+
+            if (courses.length === 0) {
+                container.innerHTML = '<span style="color: var(--text-secondary);">Belum ada kursus.</span>';
+            } else {
+                container.innerHTML = courses.map(function (course) {
+                    const checked = course.instructorId === instructorId ? 'checked' : '';
+                    const owner = course.instructorId && course.instructorId !== instructorId
+                        ? '<small style="color: var(--warning);"> (saat ini: ' + ELIPS.escapeHtml(course.instructorName || '-') + ')</small>'
+                        : '';
+                    return '<label style="display: flex; align-items: flex-start; gap: 0.5rem;">' +
+                        '<input type="checkbox" value="' + course.id + '" ' + checked + ' style="margin-top: 0.25rem;">' +
+                        '<span>' + ELIPS.escapeHtml(course.title) + ' <span class="badge ' + (course.status === 'published' ? 'badge-success' : 'badge-warning') + '" style="font-size: 0.6875rem;">' + (course.status === 'published' ? 'Published' : 'Draft') + '</span>' + owner + '</span>' +
+                        '</label>';
+                }).join('');
+            }
+            document.getElementById('assignModal').style.display = 'flex';
+        }
+
+        function closeAssignModal() {
+            document.getElementById('assignModal').style.display = 'none';
+            assigningInstructorId = null;
+        }
+
+        function saveAssignment() {
+            if (!assigningInstructorId) return;
+            const instructor = ELIPS.getUserById(assigningInstructorId);
+            const selectedIds = Array.from(document.querySelectorAll('#assignCourseList input[type="checkbox"]:checked'))
+                .map(function (input) { return parseInt(input.value, 10); });
+            const courses = ELIPS.getCourses();
+            let changed = 0;
+
+            courses.forEach(function (course) {
+                if (selectedIds.indexOf(course.id) !== -1) {
+                    if (course.instructorId !== assigningInstructorId) changed++;
+                    course.instructorId = assigningInstructorId;
+                    course.instructorName = instructor ? instructor.name : '';
+                } else if (course.instructorId === assigningInstructorId) {
+                    course.instructorId = null;
+                    course.instructorName = '';
+                    changed++;
+                }
+            });
+
+            ELIPS.setCourses(courses);
+            ELIPS.toast(changed + ' penugasan kursus diperbarui');
+            closeAssignModal();
+            renderUsers();
+        }
+
+        function filterUsers(role) {
+            const rows = document.querySelectorAll('#usersTableBody tr');
+            const buttons = document.querySelectorAll('#filterAll, #filterAdmin, #filterInstruktur, #filterPeserta');
+            buttons.forEach(function (btn) {
+                btn.classList.remove('btn-primary');
+                btn.classList.add('btn-ghost');
+            });
+
+            const activeBtn = role === 'all' ? 'filterAll' : 'filter' + role.charAt(0).toUpperCase() + role.slice(1);
+            const el = document.getElementById(activeBtn);
+            if (el) {
+                el.classList.remove('btn-ghost');
+                el.classList.add('btn-primary');
+            }
+
+            rows.forEach(function (row) {
+                row.style.display = role === 'all' || row.getAttribute('data-role') === role ? '' : 'none';
+            });
+        }
+
+        function searchUsers() {
+            const input = document.getElementById('searchUser').value.toLowerCase();
+            document.querySelectorAll('#usersTableBody tr').forEach(function (row) {
+                const nameEl = row.querySelector('.table-course-title');
+                const name = nameEl ? nameEl.textContent.toLowerCase() : '';
+                const email = row.querySelector('td:nth-child(2)').textContent.toLowerCase();
+                row.style.display = (name.includes(input) || email.includes(input)) ? '' : 'none';
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', renderUsers);
+    </script>
+</body>
+</html>

@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Belajar - ELIPS LMS</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="assets/css/style.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+</head>
+<body class="learning-body">
+    <header class="learning-header">
+        <div class="learning-header-container">
+            <div class="learning-header-left">
+                <a href="student/dashboard.html" class="learning-back">
+                    <i class="bi bi-arrow-left"></i>
+                    <span>Kembali ke Dashboard</span>
+                </a>
+                <div class="learning-course-title" id="learningCourseTitle">Memuat kursus...</div>
+            </div>
+            <div class="learning-header-right">
+                <div class="learning-progress">
+                    <span class="learning-progress-text" id="learningProgressText">Progres: 0/0 Pelajaran (0%)</span>
+                    <div class="learning-progress-bar">
+                        <div class="learning-progress-fill" id="learningProgressFill" style="width: 0%"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <div class="learning-layout" id="learningLayout">
+        <aside class="learning-sidebar" id="learningSidebar">
+            <div class="learning-sidebar-header">
+                <h3 class="learning-sidebar-title">Daftar Materi</h3>
+            </div>
+            <div class="learning-modules" id="learningModules"></div>
+        </aside>
+
+        <main class="learning-main">
+            <button class="learning-sidebar-toggle" id="sidebarToggle">
+                <i class="bi bi-list"></i>
+            </button>
+            <div class="learning-content-container" id="learningContent"></div>
+        </main>
+    </div>
+
+    <script src="assets/js/main.js"></script>
+    <script>
+        let activeCourse = null;
+        let activeStudent = null;
+        let flatLessons = [];
+        let activeLessonId = null;
+        let canBypassLock = false;
+
+        document.addEventListener('DOMContentLoaded', initLearning);
+
+        function initLearning() {
+            const params = new URLSearchParams(window.location.search);
+            activeStudent = ELIPS.getCurrentUser();
+
+            if (!activeStudent) {
+                renderBlocked('Sesi tidak ditemukan', 'Silakan masuk terlebih dahulu untuk mengakses materi.');
+                return;
+            }
+
+            const requestedId = parseInt(params.get('id') || params.get('courseId'), 10);
+            let courseId = requestedId;
+
+            if (!courseId) {
+                const enrollments = ELIPS.getEnrollmentsByStudent(activeStudent.id).filter(function (e) { return e.status === 'active'; });
+                courseId = enrollments.length > 0 ? enrollments[0].courseId : null;
+            }
+
+            if (!courseId) {
+                renderBlocked('Belum Ada Kursus', 'Anda belum ditugaskan ke kursus mana pun. Hubungi Admin untuk mendapatkan penugasan.');
+                return;
+            }
+
+            activeCourse = ELIPS.getCourseById(courseId);
+            if (!activeCourse) {
+                renderBlocked('Kursus Tidak Ditemukan', 'Kursus yang Anda cari tidak tersedia.');
+                return;
+            }
+
+            document.getElementById('learningCourseTitle').textContent = activeCourse.title;
+
+            const enrollment = ELIPS.getEnrollment(activeStudent.id, courseId);
+            const isPrivileged = activeStudent.role === 'admin' ||
+                (activeStudent.role === 'instruktur' && activeCourse.instructorId === activeStudent.id);
+            canBypassLock = isPrivileged;
+
+            if (!isPrivileged) {
+                if (!enrollment || enrollment.status !== 'active') {
+                    renderBlocked('Akses Ditolak', 'Anda tidak terdaftar pada kursus ini. Siswa hanya dapat mengakses kursus yang ditugaskan oleh Admin.');
+                    return;
+                }
+                if (activeCourse.status !== 'published') {
+                    renderBlocked('Kursus Belum Dibuka', 'Kursus ini masih berstatus Draft. Silakan hubungi Admin untuk informasi lebih lanjut.');
+                    return;
+                }
+            }
+
+            flatLessons = [];
+            ELIPS.getCourseStructure(courseId).forEach(function (item) {
+                item.lessons.forEach(function (lesson) {
+                    flatLessons.push({ lesson: lesson, module: item.module });
+                });
+            });
+
+            if (flatLessons.length === 0) {
+                renderBlocked('Materi Belum Tersedia', 'Instruktur belum menambahkan modul atau materi untuk kursus ini.');
+                return;
+            }
+
+            const requestedLesson = parseInt(params.get('lesson'), 10);
+            const firstUnlocked = flatLessons.find(function (entry) {
+                return !ELIPS.isLessonCompleted(activeStudent.id, courseId, entry.lesson.id);
+            });
+            const fallbackLesson = firstUnlocked ? firstUnlocked.lesson.id : flatLessons[0].lesson.id;
+            const requestedValid = requestedLesson && flatLessons.some(function (e) { return e.lesson.id === requestedLesson; });
+
+            if (requestedValid && lessonUnlocked(requestedLesson)) {
+                activeLessonId = requestedLesson;
+            } else {
+                activeLessonId = fallbackLesson;
+                if (requestedValid) {
+                    ELIPS.toast('Materi tersebut masih terkunci. Selesaikan pelajaran sebelumnya terlebih dahulu.');
+                }
+            }
+
+            renderAll();
+        }
+
+        function lessonUnlocked(lessonId) {
+            return canBypassLock || ELIPS.isLessonUnlocked(activeStudent.id, activeCourse.id, lessonId);
+        }
+
+        function renderBlocked(title, message) {
+            document.getElementById('learningCourseTitle').textContent = 'Akses Materi';
+            document.getElementById('learningProgressText').textContent = 'Progres tidak tersedia';
+            document.getElementById('learningProgressFill').style.width = '0%';
+
+            const layout = document.getElementById('learningLayout');
+            layout.style.display = 'block';
+            layout.innerHTML = [
+                '<div style="max-width: 640px; margin: 4rem auto; padding: 0 1rem;">',
+                '  <div class="learning-article" style="padding: 2.5rem; text-align: center;">',
+                '    <i class="bi bi-lock-fill" style="font-size: 3rem; color: var(--warning);"></i>',
+                '    <h1 class="learning-article-title" style="margin-top: 1rem; font-size: 1.5rem;">' + ELIPS.escapeHtml(title) + '</h1>',
+                '    <p style="color: var(--text-secondary); margin: 1rem 0 1.5rem;">' + ELIPS.escapeHtml(message) + '</p>',
+                '    <a href="student/dashboard.html" class="btn btn-primary"><i class="bi bi-arrow-left"></i> Kembali ke Dashboard</a>',
+                '  </div>',
+                '</div>'
+            ].join('');
+        }
+
+        function renderAll() {
+            renderSidebar();
+            renderProgress();
+            renderLesson(activeLessonId);
+        }
+
+        function renderProgress() {
+            const progress = ELIPS.getCourseProgress(activeStudent.id, activeCourse.id);
+            document.getElementById('learningProgressText').textContent =
+                'Progres: ' + progress.completed + '/' + progress.total + ' Pelajaran (' + progress.percentage + '%)';
+            document.getElementById('learningProgressFill').style.width = progress.percentage + '%';
+        }
+
+        function renderSidebar() {
+            const container = document.getElementById('learningModules');
+            const structure = ELIPS.getCourseStructure(activeCourse.id);
+            container.innerHTML = '';
+
+            structure.forEach(function (item, moduleIndex) {
+                const moduleEl = document.createElement('div');
+                moduleEl.className = 'learning-module';
+
+                const moduleLessons = item.lessons.map(function (lesson) {
+                    const completed = ELIPS.isLessonCompleted(activeStudent.id, activeCourse.id, lesson.id);
+                    const unlocked = lessonUnlocked(lesson.id);
+                    const isActive = lesson.id === activeLessonId;
+                    const icon = completed ? 'bi-check-circle-fill lesson-completed' : (unlocked ? 'bi-circle' : 'bi-lock-fill');
+                    const typeLabel = lesson.type === 'video' ? 'Video' : lesson.type === 'link' ? 'Link' : lesson.type === 'file' ? 'File' : 'Teks';
+
+                    return '<a href="#" class="learning-lesson ' + (isActive ? 'active ' : '') + (unlocked ? '' : 'locked') + '" onclick="selectLesson(' + lesson.id + ', event)">' +
+                        '<div class="learning-lesson-left">' +
+                        '<i class="bi ' + icon + '"></i>' +
+                        '<span class="learning-lesson-title">' + ELIPS.escapeHtml(lesson.title) + '</span>' +
+                        '</div>' +
+                        '<span class="learning-lesson-type">' + typeLabel + '</span>' +
+                        '</a>';
+                }).join('');
+
+                moduleEl.innerHTML =
+                    '<div class="learning-module-header">' +
+                    '<span class="learning-module-name">' + ELIPS.escapeHtml(item.module.title) + '</span>' +
+                    '<i class="bi bi-chevron-down"></i>' +
+                    '</div>' +
+                    '<div class="learning-lesson-list" style="display: ' + (moduleIndex === 0 ? 'flex' : 'none') + ';">' + moduleLessons + '</div>';
+
+                const header = moduleEl.querySelector('.learning-module-header');
+                header.addEventListener('click', function () {
+                    const list = header.nextElementSibling;
+                    list.style.display = list.style.display === 'none' ? 'flex' : 'none';
+                });
+
+                container.appendChild(moduleEl);
+            });
+        }
+
+        function selectLesson(lessonId, event) {
+            if (event) event.preventDefault();
+            const entry = flatLessons.find(function (e) { return e.lesson.id === lessonId; });
+            if (!entry) return;
+
+            if (!lessonUnlocked(lessonId)) {
+                ELIPS.toast('Selesaikan pelajaran sebelumnya terlebih dahulu untuk membuka materi ini.');
+                return;
+            }
+
+            activeLessonId = lessonId;
+            renderAll();
+            const main = document.querySelector('.learning-main');
+            if (main) main.scrollTop = 0;
+        }
+
+        function renderLesson(lessonId) {
+            const container = document.getElementById('learningContent');
+            const entry = flatLessons.find(function (e) { return e.lesson.id === lessonId; });
+            if (!entry) {
+                container.innerHTML = '<p style="color: var(--text-secondary);">Materi tidak ditemukan.</p>';
+                return;
+            }
+
+            const lesson = entry.lesson;
+            const completed = ELIPS.isLessonCompleted(activeStudent.id, activeCourse.id, lesson.id);
+            const index = flatLessons.findIndex(function (e) { return e.lesson.id === lesson.id; });
+            const prev = index > 0 ? flatLessons[index - 1] : null;
+            const next = index < flatLessons.length - 1 ? flatLessons[index + 1] : null;
+            const nextUnlocked = next ? lessonUnlocked(next.lesson.id) : false;
+            const allProgress = ELIPS.getCourseProgress(activeStudent.id, activeCourse.id);
+            const allComplete = allProgress.total > 0 && allProgress.completed === allProgress.total;
+            const certificate = ELIPS.getCertificate(activeStudent.id, activeCourse.id);
+
+            let media = '';
+            if (lesson.type === 'video') {
+                const embed = toEmbedUrl(lesson.content);
+                media = embed
+                    ? '<div class="learning-video" style="padding: 0; overflow: hidden;"><iframe src="' + ELIPS.escapeHtml(embed) + '" style="width:100%; height:100%; border:0;" allowfullscreen></iframe></div>'
+                    : '<div class="learning-video"><i class="bi bi-play-circle" style="font-size: 3rem;"></i></div><p style="color: var(--text-secondary);">Video: ' + ELIPS.escapeHtml(lesson.content || 'Belum ada URL video') + '</p>';
+            } else if (lesson.type === 'link') {
+                media = '<p><a href="' + ELIPS.escapeHtml(lesson.content || '#') + '" target="_blank" rel="noopener" class="btn btn-outline"><i class="bi bi-box-arrow-up-right"></i> Buka Link Materi</a></p>';
+            } else if (lesson.type === 'file') {
+                media = '<p><a href="' + ELIPS.escapeHtml(lesson.content || '#') + '" target="_blank" rel="noopener" class="btn btn-outline"><i class="bi bi-file-earmark-arrow-down"></i> ' + ELIPS.escapeHtml(lesson.content || 'Unduh File') + '</a></p>';
+            }
+
+            let completionNotice = '';
+            if (allComplete) {
+                if (certificate && certificate.status === 'publish') {
+                    completionNotice = '<div style="padding: 1rem; background: #dcfce7; color: #166534; border-radius: var(--radius); margin-top: 1.5rem;"><i class="bi bi-patch-check-fill"></i> Selamat! Seluruh materi selesai dan e-sertifikat Anda sudah terbit. <a href="student/certificates.html">Lihat sertifikat</a>.</div>';
+                } else if (certificate && certificate.status === 'draft') {
+                    completionNotice = '<div style="padding: 1rem; background: #fef3c7; color: #92400e; border-radius: var(--radius); margin-top: 1.5rem;"><i class="bi bi-hourglass-split"></i> Seluruh materi selesai. E-sertifikat Anda sedang menunggu persetujuan Admin.</div>';
+                } else {
+                    completionNotice = '<div style="padding: 1rem; background: #eff6ff; color: #1e40af; border-radius: var(--radius); margin-top: 1.5rem;"><i class="bi bi-info-circle"></i> Seluruh materi selesai. Nilai dan e-sertifikat akan diberikan oleh instruktur.</div>';
+                }
+            }
+
+            container.innerHTML =
+                '<article class="learning-article">' +
+                '<header class="learning-article-header">' +
+                '<div class="learning-article-meta"><span class="learning-article-breadcrumb">' + ELIPS.escapeHtml(entry.module.title) + ' &bull; Pelajaran ' + (index + 1) + ' dari ' + flatLessons.length + '</span></div>' +
+                '<h1 class="learning-article-title">' + ELIPS.escapeHtml(lesson.title) + '</h1>' +
+                '</header>' +
+                '<div class="learning-article-body">' +
+                (lesson.content && lesson.type === 'text' ? lesson.content : '<p>Materi ini belum memiliki konten teks. Silakan gunakan media di bawah.</p>') +
+                media +
+                completionNotice +
+                '</div>' +
+                '<div class="learning-actions">' +
+                '<div class="learning-nav">' +
+                (prev ? '<button class="btn btn-ghost" onclick="selectLesson(' + prev.lesson.id + ', event)"><i class="bi bi-arrow-left"></i> Sebelumnya</button>' : '') +
+                (next ? '<button class="btn btn-ghost" ' + (nextUnlocked ? '' : 'disabled title="Selesaikan pelajaran ini terlebih dahulu"') + ' onclick="selectLesson(' + next.lesson.id + ', event)">Selanjutnya <i class="bi bi-arrow-right"></i></button>' : '') +
+                '</div>' +
+                '<button id="markCompleteBtn" class="btn btn-primary" ' + (completed ? 'disabled style="background: var(--success);"' : '') + ' onclick="markComplete()">' +
+                (completed ? '<i class="bi bi-check-circle-fill"></i> Selesai' : '<i class="bi bi-check-circle"></i> Tandai Selesai') +
+                '</button>' +
+                '</div>' +
+                '</article>';
+        }
+
+        function markComplete() {
+            if (!activeLessonId) return;
+            const enabled = lessonUnlocked(activeLessonId);
+            if (!enabled) {
+                ELIPS.toast('Materi ini masih terkunci.');
+                return;
+            }
+            ELIPS.markLessonCompleted(activeStudent.id, activeCourse.id, activeLessonId);
+            ELIPS.toast('Pelajaran ditandai selesai!');
+
+            const index = flatLessons.findIndex(function (e) { return e.lesson.id === activeLessonId; });
+            const next = index < flatLessons.length - 1 ? flatLessons[index + 1] : null;
+            if (next) {
+                activeLessonId = next.lesson.id;
+            }
+            renderAll();
+        }
+
+        function toEmbedUrl(url) {
+            if (!url) return '';
+            const value = String(url).trim();
+            const youtubeMatch = value.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([A-Za-z0-9_-]{6,})/);
+            if (youtubeMatch) return 'https://www.youtube.com/embed/' + youtubeMatch[1];
+            const vimeoMatch = value.match(/vimeo\.com\/(\d+)/);
+            if (vimeoMatch) return 'https://player.vimeo.com/video/' + vimeoMatch[1];
+            return '';
+        }
+    </script>
+</body>
+</html>

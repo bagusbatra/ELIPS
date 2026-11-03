@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Instruktur - ELIPS LMS</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../assets/css/style.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+</head>
+<body>
+    <header class="navbar">
+        <div class="container nav-container">
+            <div class="nav-brand">
+                <i class="bi bi-mortarboard-fill brand-icon"></i>
+                <span class="brand-text">ELIPS LMS</span>
+            </div>
+            <nav class="nav-menu" id="navMenu">
+                <a href="../index.html" class="nav-link">Beranda</a>
+                <a href="../index.html#courses" class="nav-link">Kursus</a>
+                <a href="../verify-certificate.html" class="nav-link">Verifikasi Sertifikat</a>
+            </nav>
+            <div class="nav-actions">
+                <a href="dashboard.html" class="btn btn-ghost">Dashboard</a>
+                <a href="../index.html" class="btn btn-outline" data-logout>Keluar</a>
+            </div>
+            <button class="nav-toggle" id="navToggle">
+                <i class="bi bi-list"></i>
+            </button>
+        </div>
+    </header>
+
+    <div class="dashboard-layout">
+        <aside class="dashboard-sidebar">
+            <div class="dashboard-sidebar-header">
+                <div class="dashboard-user">
+                    <div class="dashboard-avatar">AF</div>
+                    <div class="dashboard-user-info">
+                        <div class="dashboard-user-name">Ahmad Fauzi, M.M.</div>
+                        <div class="dashboard-user-role">Instruktur</div>
+                    </div>
+                </div>
+            </div>
+            <nav class="dashboard-nav">
+                <a href="dashboard.html" class="dashboard-nav-link active">
+                    <i class="bi bi-speedometer2"></i>
+                    <span>Dashboard</span>
+                </a>
+                <a href="manage-course.html" class="dashboard-nav-link">
+                    <i class="bi bi-journal-plus"></i>
+                    <span>Kelola Kursus</span>
+                </a>
+                <a href="students.html" class="dashboard-nav-link">
+                    <i class="bi bi-people"></i>
+                    <span>Daftar Peserta</span>
+                </a>
+                <a href="students.html" class="dashboard-nav-link">
+                    <i class="bi bi-graph-up"></i>
+                    <span>Progres Peserta</span>
+                </a>
+                <a href="#" class="dashboard-nav-link">
+                    <i class="bi bi-person"></i>
+                    <span>Profil Saya</span>
+                </a>
+            </nav>
+        </aside>
+
+        <main class="dashboard-main">
+            <div class="dashboard-header">
+                <h1 class="dashboard-title">Dashboard Instruktur</h1>
+                <p class="dashboard-subtitle">Kelola kursus dan pantau perkembangan peserta</p>
+            </div>
+
+            <div class="dashboard-stats">
+                <div class="stat-card">
+                    <div class="stat-card-icon blue">
+                        <i class="bi bi-journal-bookmark"></i>
+                    </div>
+                    <div class="stat-card-info">
+                        <div class="stat-card-value">1</div>
+                        <div class="stat-card-label">Kursus Aktif</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-card-icon green">
+                        <i class="bi bi-people"></i>
+                    </div>
+                    <div class="stat-card-info">
+                        <div class="stat-card-value">2</div>
+                        <div class="stat-card-label">Total Peserta</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-card-icon orange">
+                        <i class="bi bi-clock-history"></i>
+                    </div>
+                    <div class="stat-card-info">
+                        <div class="stat-card-value">24</div>
+                        <div class="stat-card-label">Total Pelajaran</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-card-icon purple">
+                        <i class="bi bi-award"></i>
+                    </div>
+                    <div class="stat-card-info">
+                        <div class="stat-card-value">0</div>
+                        <div class="stat-card-label">Sertifikat Terbit</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="dashboard-section">
+                <div class="dashboard-section-header">
+                    <h2 class="dashboard-section-title">Kursus yang Diampu</h2>
+                    <a href="manage-course.html" class="btn btn-primary">
+                        <i class="bi bi-plus-lg"></i>
+                        Kelola Kursus
+                    </a>
+                </div>
+                <div class="dashboard-section-body" style="padding: 0;">
+                    <table class="dashboard-table">
+                        <thead>
+                            <tr>
+                                <th>Kursus</th>
+                                <th>Jumlah Peserta</th>
+                                <th>Status</th>
+                                <th>Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>
+                                    <div class="table-course">
+                                        <div class="table-course-img"></div>
+                                        <div class="table-course-info">
+                                            <div class="table-course-title">Pelatihan Manajemen Dasar</div>
+                                            <div class="table-course-meta">8 Modul • 24 Pelajaran</div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span>2 Peserta</span>
+                                </td>
+                                <td>
+                                    <span class="badge badge-success">Dipublikasi</span>
+                                </td>
+                                <td>
+                                    <div style="display: flex; gap: 0.5rem;">
+                                        <a href="manage-course.html" class="btn btn-ghost" style="padding: 0.5rem 0.75rem; font-size: 0.875rem;">
+                                            <i class="bi bi-pencil"></i>
+                                            Kelola
+                                        </a>
+                                        <a href="students.html" class="btn btn-ghost" style="padding: 0.5rem 0.75rem; font-size: 0.875rem;">
+                                            <i class="bi bi-people"></i>
+                                            Peserta
+                                        </a>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="dashboard-section">
+                <div class="dashboard-section-header">
+                    <h2 class="dashboard-section-title">Progres Peserta Terbaru</h2>
+                </div>
+                <div class="dashboard-section-body" style="padding: 0;">
+                    <table class="dashboard-table">
+                        <thead>
+                            <tr>
+                                <th>Peserta</th>
+                                <th>Kursus</th>
+                                <th>Progres</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>
+                                    <div class="table-course">
+                                        <div class="dashboard-avatar" style="width: 36px; height: 36px; font-size: 0.875rem;">BS</div>
+                                        <div class="table-course-info">
+                                            <div class="table-course-title">Budi Santoso</div>
+                                            <div class="table-course-meta">budi@example.com</div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span>Pelatihan Manajemen Dasar</span>
+                                </td>
+                                <td>
+                                    <div class="progress-inline">
+                                        <div class="progress-inline-bar">
+                                            <div class="progress-inline-fill" style="width: 50%"></div>
+                                        </div>
+                                        <span class="progress-inline-text">50%</span>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="badge badge-warning">Sedang Belajar</span>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    <div class="table-course">
+                                        <div class="dashboard-avatar" style="width: 36px; height: 36px; font-size: 0.875rem;">AN</div>
+                                        <div class="table-course-info">
+                                            <div class="table-course-title">Ani Nurhayati</div>
+                                            <div class="table-course-meta">ani@example.com</div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span>Pelatihan Manajemen Dasar</span>
+                                </td>
+                                <td>
+                                    <div class="progress-inline">
+                                        <div class="progress-inline-bar">
+                                            <div class="progress-inline-fill" style="width: 33%"></div>
+                                        </div>
+                                        <span class="progress-inline-text">33%</span>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="badge badge-warning">Sedang Belajar</span>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="../assets/js/main.js"></script>
+</body>
+</html>
