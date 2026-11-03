@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Profil Saya - ELIPS LMS</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../assets/css/style.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+</head>
+<body>
+    <header class="navbar">
+        <div class="container nav-container">
+            <div class="nav-brand">
+                <i class="bi bi-mortarboard-fill brand-icon"></i>
+                <span class="brand-text">ELIPS LMS</span>
+            </div>
+            <nav class="nav-menu" id="navMenu">
+                <a href="../index.html" class="nav-link">Beranda</a>
+                <a href="../index.html#courses" class="nav-link">Kursus</a>
+                <a href="../verify-certificate.html" class="nav-link">Verifikasi Sertifikat</a>
+            </nav>
+            <div class="nav-actions">
+                <a href="dashboard.html" class="btn btn-ghost">Dashboard</a>
+                <a href="../index.html" class="btn btn-outline" data-logout>Keluar</a>
+            </div>
+            <button class="nav-toggle" id="navToggle" aria-label="Buka menu">
+                <i class="bi bi-list"></i>
+            </button>
+        </div>
+    </header>
+
+    <div class="dashboard-layout">
+        <aside class="dashboard-sidebar">
+            <div class="dashboard-sidebar-header">
+                <div class="dashboard-user">
+                    <div class="dashboard-avatar" id="instructorAvatar">AF</div>
+                    <div class="dashboard-user-info">
+                        <div class="dashboard-user-name" id="instructorName">Ahmad Fauzi, M.M.</div>
+                        <div class="dashboard-user-role">Instruktur</div>
+                    </div>
+                </div>
+            </div>
+            <nav class="dashboard-nav">
+                <a href="dashboard.html" class="dashboard-nav-link">
+                    <i class="bi bi-speedometer2"></i>
+                    <span>Dashboard</span>
+                </a>
+                <a href="manage-course.html" class="dashboard-nav-link">
+                    <i class="bi bi-journal-plus"></i>
+                    <span>Kelola Kursus</span>
+                </a>
+                <a href="students.html" class="dashboard-nav-link">
+                    <i class="bi bi-people"></i>
+                    <span>Peserta &amp; Penilaian</span>
+                </a>
+                <a href="certificates.html" class="dashboard-nav-link">
+                    <i class="bi bi-award"></i>
+                    <span>Sertifikat Peserta</span>
+                </a>
+                <a href="profile.html" class="dashboard-nav-link active">
+                    <i class="bi bi-person"></i>
+                    <span>Profil Saya</span>
+                </a>
+            </nav>
+        </aside>
+
+        <main class="dashboard-main">
+            <div class="dashboard-header">
+                <h1 class="dashboard-title">Profil Saya</h1>
+                <p class="dashboard-subtitle">Kelola informasi akun instruktur dan lihat ringkasan kursus yang Anda ampu.</p>
+            </div>
+
+            <div class="dashboard-stats">
+                <div class="stat-card">
+                    <div class="stat-card-icon blue">
+                        <i class="bi bi-journal-bookmark"></i>
+                    </div>
+                    <div class="stat-card-info">
+                        <div class="stat-card-value" id="statCourses">0</div>
+                        <div class="stat-card-label">Kursus Diampu</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-card-icon green">
+                        <i class="bi bi-people"></i>
+                    </div>
+                    <div class="stat-card-info">
+                        <div class="stat-card-value" id="statStudents">0</div>
+                        <div class="stat-card-label">Peserta Aktif</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-card-icon orange">
+                        <i class="bi bi-collection-play"></i>
+                    </div>
+                    <div class="stat-card-info">
+                        <div class="stat-card-value" id="statLessons">0</div>
+                        <div class="stat-card-label">Total Pelajaran</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-card-icon purple">
+                        <i class="bi bi-patch-check"></i>
+                    </div>
+                    <div class="stat-card-info">
+                        <div class="stat-card-value" id="statCertificates">0</div>
+                        <div class="stat-card-label">Sertifikat Terbit</div>
+                    </div>
+                </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; align-items: start;">
+                <div class="dashboard-section" style="margin-bottom: 0;">
+                    <div class="dashboard-section-header">
+                        <h2 class="dashboard-section-title">Informasi Akun</h2>
+                    </div>
+                    <div class="dashboard-section-body">
+                        <div style="display: flex; flex-direction: column; align-items: center; text-align: center; gap: 0.5rem; padding: 0.5rem 0 1.5rem; border-bottom: 1px solid var(--border); margin-bottom: 1.5rem;">
+                            <div class="dashboard-avatar" id="profileAvatar" style="width: 88px; height: 88px; font-size: 2rem;">AF</div>
+                            <div style="font-size: 1.125rem; font-weight: 600; color: var(--text-primary);" id="profileName">Ahmad Fauzi, M.M.</div>
+                            <div style="color: var(--text-secondary); font-size: 0.875rem;" id="profileEmail">ahmad@example.com</div>
+                            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; justify-content: center; margin-top: 0.25rem;">
+                                <span class="badge badge-primary"><i class="bi bi-person-badge"></i> Instruktur</span>
+                                <span class="badge badge-success" id="profileStatus"><i class="bi bi-check-circle"></i> Aktif</span>
+                            </div>
+                        </div>
+                        <div style="display: flex; flex-direction: column; gap: 0.75rem; font-size: 0.9375rem;">
+                            <div style="display: flex; justify-content: space-between; gap: 1rem;">
+                                <span style="color: var(--text-secondary);">ID Instruktur</span>
+                                <strong id="profileId">-</strong>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; gap: 1rem;">
+                                <span style="color: var(--text-secondary);">No. Telepon</span>
+                                <strong id="profilePhone">-</strong>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; gap: 1rem;">
+                                <span style="color: var(--text-secondary);">Terdaftar Sejak</span>
+                                <strong id="profileCreatedAt">-</strong>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="dashboard-section" style="margin-bottom: 0;">
+                    <div class="dashboard-section-header">
+                        <h2 class="dashboard-section-title">Ubah Data Profil</h2>
+                    </div>
+                    <div class="dashboard-section-body">
+                        <form id="profileForm" style="display: flex; flex-direction: column; gap: 1rem;">
+                            <div class="form-group">
+                                <label class="form-label" for="profileNameInput">Nama Lengkap *</label>
+                                <input type="text" id="profileNameInput" class="form-input" placeholder="Nama lengkap" required>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" for="profileEmailInput">Email</label>
+                                <input type="email" id="profileEmailInput" class="form-input" readonly style="background: var(--bg); cursor: not-allowed;">
+                                <small class="form-hint">Email digunakan untuk login dan tidak dapat diubah sendiri.</small>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" for="profilePhoneInput">No. Telepon</label>
+                                <input type="tel" id="profilePhoneInput" class="form-input" placeholder="08xxxxxxxxxx">
+                            </div>
+                            <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; padding-top: 0.25rem;">
+                                <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> Simpan Perubahan</button>
+                                <button type="button" class="btn btn-ghost" id="resetProfileBtn"><i class="bi bi-arrow-counterclockwise"></i> Reset</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <div class="dashboard-section" style="margin-top: 1.5rem;">
+                <div class="dashboard-section-header">
+                    <h2 class="dashboard-section-title">Ringkasan Kursus</h2>
+                    <a href="manage-course.html" class="btn btn-ghost">Kelola Kursus <i class="bi bi-arrow-right"></i></a>
+                </div>
+                <div class="dashboard-section-body" style="padding: 0; overflow-x: auto;">
+                    <table class="dashboard-table">
+                        <thead>
+                            <tr>
+                                <th>Kursus</th>
+                                <th>Peserta</th>
+                                <th>Modul / Pelajaran</th>
+                                <th>Status</th>
+                                <th>Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody id="profileCoursesBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="../assets/js/main.js"></script>
+    <script>
+        let currentInstructor = null;
+
+        document.addEventListener('DOMContentLoaded', function () {
+            currentInstructor = ELIPS.requireRole('instruktur');
+            if (!currentInstructor) return;
+
+            fillProfile(currentInstructor);
+            fillStats(currentInstructor);
+
+            document.getElementById('profileForm').addEventListener('submit', saveProfile);
+            document.getElementById('resetProfileBtn').addEventListener('click', function () {
+                fillProfile(currentInstructor);
+                ELIPS.toast('Perubahan dibatalkan');
+            });
+        });
+
+        function fillProfile(instructor) {
+            const name = instructor.name || 'Instruktur';
+            const initials = name.substring(0, 2).toUpperCase();
+            document.getElementById('instructorName').textContent = name;
+            document.getElementById('instructorAvatar').textContent = initials;
+            document.getElementById('profileAvatar').textContent = initials;
+            document.getElementById('profileName').textContent = name;
+            document.getElementById('profileEmail').textContent = instructor.email || '-';
+            document.getElementById('profileId').textContent = '#' + instructor.id;
+            document.getElementById('profilePhone').textContent = instructor.phone || '-';
+            document.getElementById('profileCreatedAt').textContent = ELIPS.formatDate(instructor.createdAt);
+            document.getElementById('profileStatus').innerHTML = instructor.status === 'aktif'
+                ? '<i class="bi bi-check-circle"></i> Aktif'
+                : '<i class="bi bi-slash-circle"></i> Nonaktif';
+
+            document.getElementById('profileNameInput').value = instructor.name || '';
+            document.getElementById('profileEmailInput').value = instructor.email || '';
+            document.getElementById('profilePhoneInput').value = instructor.phone || '';
+        }
+
+        function fillStats(instructor) {
+            const summary = ELIPS.getInstructorSummary(instructor.id);
+            document.getElementById('statCourses').textContent = summary.totalCourses;
+            document.getElementById('statStudents').textContent = summary.totalStudents;
+            document.getElementById('statLessons').textContent = summary.totalLessons;
+            document.getElementById('statCertificates').textContent = summary.publishedCertificates;
+
+            const tbody = document.getElementById('profileCoursesBody');
+            tbody.innerHTML = '';
+
+            if (summary.courses.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 2rem; color: var(--text-secondary);">Belum ada kursus yang ditugaskan kepada Anda.</td></tr>';
+                return;
+            }
+
+            summary.courses.forEach(function (course) {
+                const modules = ELIPS.getModulesByCourse(course.id).length;
+                const lessons = ELIPS.getLessonsByCourse(course.id).length;
+                const participants = ELIPS.getEnrollmentsByCourse(course.id).filter(function (enrollment) {
+                    return enrollment.status === 'active';
+                }).length;
+                const published = course.status === 'published';
+                const tr = document.createElement('tr');
+                tr.innerHTML = [
+                    '<td>',
+                    '  <div class="table-course">',
+                    '    <div class="table-course-img"></div>',
+                    '    <div class="table-course-info">',
+                    '      <div class="table-course-title">' + ELIPS.escapeHtml(course.title) + '</div>',
+                    '      <div class="table-course-meta">' + ELIPS.escapeHtml(course.category || 'Kursus') + '</div>',
+                    '    </div>',
+                    '  </div>',
+                    '</td>',
+                    '<td><span>' + participants + ' Peserta</span></td>',
+                    '<td><span>' + modules + ' Modul &bull; ' + lessons + ' Pelajaran</span></td>',
+                    '<td><span class="badge ' + (published ? 'badge-success' : 'badge-warning') + '">' + (published ? 'Dipublikasi' : 'Draft') + '</span></td>',
+                    '<td><a href="manage-course.html?course=' + course.id + '" class="btn btn-ghost" style="padding: 0.375rem 0.625rem; font-size: 0.8125rem;"><i class="bi bi-folder2-open"></i> Kelola</a></td>'
+                ].join('');
+                tbody.appendChild(tr);
+            });
+        }
+
+        function saveProfile(event) {
+            event.preventDefault();
+            if (!currentInstructor) return;
+
+            const name = document.getElementById('profileNameInput').value.trim();
+            const phone = document.getElementById('profilePhoneInput').value.trim();
+
+            if (name.length < 2) {
+                ELIPS.toast('Nama lengkap minimal 2 karakter');
+                return;
+            }
+
+            const users = ELIPS.getUsers();
+            const user = users.find(function (item) { return item.id === currentInstructor.id; });
+            if (!user) {
+                ELIPS.toast('Data pengguna tidak ditemukan');
+                return;
+            }
+
+            user.name = name;
+            user.phone = phone;
+            user.updatedAt = new Date().toISOString();
+            ELIPS.setUsers(users);
+
+            // Sinkronkan nama instruktur pada kursus yang diampu.
+            const courses = ELIPS.getCourses();
+            let coursesChanged = false;
+            courses.forEach(function (course) {
+                if (course.instructorId === user.id) {
+                    course.instructorName = user.name;
+                    coursesChanged = true;
+                }
+            });
+            if (coursesChanged) ELIPS.setCourses(courses);
+
+            currentInstructor = user;
+            fillProfile(currentInstructor);
+            fillStats(currentInstructor);
+            ELIPS.toast('Profil berhasil diperbarui');
+        }
+    </script>
+</body>
+</html>

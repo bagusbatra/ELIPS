@@ -70,6 +70,12 @@
             'Aplikasi Perkantoran',
             'Tata Kelola Administrasi',
             'Evaluasi & Praktik'
+        ],
+        4: [
+            'Pengenalan Microsoft Word',
+            'Microsoft Excel Dasar',
+            'Microsoft PowerPoint',
+            'Praktik Terpadu'
         ]
     };
 
@@ -120,10 +126,10 @@
             {
                 id: 4,
                 title: 'Microsoft Office',
-                category: 'reguler class',
-                description: 'kelas rombel microsoft word, microsoft excel, dan microsoft powerpoint',
-                instructorId: 5,
-                instructorName: 'Ridho Ahmad',
+                category: 'Reguler Class',
+                description: 'Kelas rombel Microsoft Word, Microsoft Excel, dan Microsoft PowerPoint untuk kebutuhan administrasi perkantoran.',
+                instructorId: 2,
+                instructorName: 'Ahmad Fauzi, M.M.',
                 status: 'draft',
                 createdAt: '2026-10-02'
             }
@@ -202,13 +208,19 @@
         }
 
         const currentCourses = read(KEYS.courses, []);
+        const fallbackInstructor = currentUsers.find(function (u) { return u.role === 'instruktur'; }) || null;
         currentCourses.forEach(function (course) {
             if (course.status !== 'draft' && course.status !== 'published') course.status = 'draft';
-            if (!course.instructorId) {
-                const fallback = currentUsers.find(function (u) { return u.role === 'instruktur'; });
-                course.instructorId = fallback ? fallback.id : null;
+
+            // Satu kursus harus diampu oleh akun ber-role instruktur.
+            // Data lama sempat menunjuk ke akun peserta, jadi migrasikan otomatis.
+            let instructor = currentUsers.find(function (u) {
+                return u.id === course.instructorId && u.role === 'instruktur';
+            });
+            if (!instructor) {
+                instructor = fallbackInstructor;
+                course.instructorId = instructor ? instructor.id : null;
             }
-            const instructor = currentUsers.find(function (u) { return u.id === course.instructorId; });
             if (instructor) course.instructorName = instructor.name;
         });
         write(KEYS.courses, currentCourses);
@@ -446,6 +458,100 @@
         });
     }
 
+    // ---------- Instructor overview ----------
+    function getInstructorCourses(instructorId) {
+        return getCourses().filter(function (course) {
+            return course.instructorId === Number(instructorId);
+        }).sort(function (a, b) {
+            // Kursus yang sudah dipublikasikan tampil lebih dulu.
+            const statusDiff = (b.status === 'published' ? 1 : 0) - (a.status === 'published' ? 1 : 0);
+            if (statusDiff !== 0) return statusDiff;
+            return Number(b.id) - Number(a.id);
+        });
+    }
+
+    function buildInstructorRows(courses) {
+        const users = getUsers();
+        const rows = [];
+
+        courses.forEach(function (course) {
+            getEnrollmentsByCourse(course.id)
+                .filter(function (enrollment) { return enrollment.status === 'active'; })
+                .forEach(function (enrollment) {
+                    const student = users.find(function (user) { return user.id === enrollment.studentId; }) || {};
+                    const progress = getCourseProgress(enrollment.studentId, course.id);
+                    rows.push({
+                        course: course,
+                        enrollment: enrollment,
+                        student: student,
+                        progress: progress,
+                        isComplete: progress.total > 0 && progress.completed === progress.total,
+                        grade: getGrade(enrollment.studentId, course.id),
+                        certificate: getCertificate(enrollment.studentId, course.id)
+                    });
+                });
+        });
+
+        return rows.sort(function (a, b) {
+            const dateA = new Date(a.enrollment.enrolledAt || 0).getTime();
+            const dateB = new Date(b.enrollment.enrolledAt || 0).getTime();
+            if (dateA !== dateB) return dateB - dateA;
+            return Number(b.enrollment.id) - Number(a.enrollment.id);
+        });
+    }
+
+    function getInstructorStudentRows(instructorId, courseId) {
+        const courses = getInstructorCourses(instructorId);
+        if (courseId) {
+            const course = courses.find(function (item) { return item.id === Number(courseId); });
+            return course ? buildInstructorRows([course]) : [];
+        }
+        return buildInstructorRows(courses);
+    }
+
+    function getInstructorSummary(instructorId) {
+        const courses = getInstructorCourses(instructorId);
+        const courseIds = courses.map(function (course) { return course.id; });
+        const enrollments = getEnrollments().filter(function (enrollment) {
+            return courseIds.indexOf(enrollment.courseId) !== -1 && enrollment.status === 'active';
+        });
+        const studentIds = {};
+        enrollments.forEach(function (enrollment) { studentIds[enrollment.studentId] = true; });
+
+        const modules = getModules().filter(function (module) { return courseIds.indexOf(module.courseId) !== -1; });
+        const lessons = getLessons().filter(function (lesson) { return courseIds.indexOf(lesson.courseId) !== -1; });
+        const certificates = getCertificates().filter(function (cert) { return courseIds.indexOf(cert.courseId) !== -1; });
+        const grades = getGrades().filter(function (grade) { return courseIds.indexOf(grade.courseId) !== -1; });
+
+        let completedStudents = 0;
+        let awaitingGrade = 0;
+        enrollments.forEach(function (enrollment) {
+            const progress = getCourseProgress(enrollment.studentId, enrollment.courseId);
+            if (progress.total > 0 && progress.completed === progress.total) {
+                completedStudents++;
+                if (!getGrade(enrollment.studentId, enrollment.courseId)) awaitingGrade++;
+            }
+        });
+
+        return {
+            courses: courses,
+            courseIds: courseIds,
+            totalCourses: courses.length,
+            publishedCourses: courses.filter(function (course) { return course.status === 'published'; }).length,
+            draftCourses: courses.filter(function (course) { return course.status !== 'published'; }).length,
+            totalStudents: Object.keys(studentIds).length,
+            activeEnrollments: enrollments.length,
+            totalModules: modules.length,
+            totalLessons: lessons.length,
+            totalCertificates: certificates.length,
+            publishedCertificates: certificates.filter(function (cert) { return cert.status === 'publish'; }).length,
+            draftCertificates: certificates.filter(function (cert) { return cert.status === 'draft'; }).length,
+            totalGrades: grades.length,
+            completedStudents: completedStudents,
+            awaitingGrade: awaitingGrade
+        };
+    }
+
     // ---------- Session ----------
     function defaultUserForPage() {
         const path = (window.location.pathname || '').toLowerCase().replace(/\\/g, '/');
@@ -479,6 +585,19 @@
         if (role === 'admin') return prefix + 'admin/dashboard.html';
         if (role === 'instruktur') return prefix + 'instructor/dashboard.html';
         return prefix + 'student/dashboard.html';
+    }
+
+    function requireRole(role) {
+        const user = getSessionUser() || getCurrentUser();
+        if (!user) {
+            window.location.href = basePathPrefix() + 'login.html';
+            return null;
+        }
+        if (user.role !== role) {
+            window.location.href = dashboardPathForRole(user.role);
+            return null;
+        }
+        return user;
     }
 
     function setCurrentUser(userId) {
@@ -592,9 +711,13 @@
         getCourseProgress: getCourseProgress,
         isLessonUnlocked: isLessonUnlocked,
         getStudentCourseOverview: getStudentCourseOverview,
+        getInstructorCourses: getInstructorCourses,
+        getInstructorStudentRows: getInstructorStudentRows,
+        getInstructorSummary: getInstructorSummary,
         getCurrentUser: getCurrentUser,
         getSessionUser: getSessionUser,
         dashboardPathForRole: dashboardPathForRole,
+        requireRole: requireRole,
         setCurrentUser: setCurrentUser,
         logout: logout,
         gradeLetter: gradeLetter,

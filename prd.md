@@ -1,7 +1,7 @@
 # PRD: Learning Management System (LMS) ELIPS
 
-**Versi:** 1.1  
-**Tanggal:** 2026-11-02  
+**Versi:** 1.2  
+**Tanggal:** 2026-11-03  
 **Status:** Implemented (Demo - Vanilla HTML/CSS/JS + localStorage)  
 **Nama Aplikasi:** ELIPS LMS
 
@@ -27,9 +27,15 @@ Membangun sistem Learning Management System (LMS) berbasis web untuk pelatihan d
 
 - **Frontend:** HTML5, CSS3 (custom dengan variabel CSS), Vanilla JavaScript
 - **Penyimpanan Data:** `localStorage` (demo)
-  - `elips_enrolled` - Data pendaftaran kursus peserta
+  - `elips_users` - Data pengguna (admin, instruktur, peserta)
+  - `elips_courses` - Data kursus beserta instruktur pengampu dan status
+  - `elips_enrollments` - Data penugasan peserta ke kursus
+  - `elips_modules` - Modul pada setiap kursus
+  - `elips_lessons` - Materi/pelajaran pada setiap modul
+  - `elips_grades` - Nilai peserta per kursus
+  - `elips_certificates` - Data e-sertifikat (Draft/Terbit)
   - `elips_completedLessons` - Tracking pelajaran yang diselesaikan
-  - `elips_certificates` - Data sertifikat yang diterbitkan
+  - `elips_session` - Sesi pengguna yang sedang masuk
 - **Styling:** Custom CSS (`assets/css/style.css`), Bootstrap Icons, Google Fonts (Inter)
 - **Struktur Folder:** Berbasis role (`admin/`, `instructor/`, `student/`)
 
@@ -46,7 +52,7 @@ Membangun sistem Learning Management System (LMS) berbasis web untuk pelatihan d
 | `register.html` | ✅ Selesai | Halaman registrasi |
 | `verify-certificate.html` | ✅ Selesai | Verifikasi keaslian sertifikat publik |
 | `certificate-view.html` | ✅ Selesai | Tampilan sertifikat dinamis dari URL params/localStorage |
-| `learning.html` | ✅ Selesai | Halaman belajar dengan tracking pelajaran selesai |
+| `learning.html` | ✅ Selesai | Halaman belajar dengan tracking pelajaran selesai; mendukung mode pratinjau untuk instruktur/admin tanpa mengubah progres peserta |
 
 ### Role Admin (`admin/`)
 | File | Status | Deskripsi |
@@ -62,9 +68,11 @@ Membangun sistem Learning Management System (LMS) berbasis web untuk pelatihan d
 ### Role Instruktur (`instructor/`)
 | File | Status | Deskripsi |
 |---|---|---|
-| `instructor/dashboard.html` | ✅ Selesai | Dashboard instruktur |
-| `instructor/manage-course.html` | ✅ Selesai | Kelola kursus, modul dan materi |
-| `instructor/students.html` | ✅ Selesai | Daftar peserta per kursus dan progres mereka |
+| `instructor/dashboard.html` | ✅ Selesai | Dashboard dinamis: statistik kursus/peserta/pelajaran/sertifikat, notifikasi draft & penilaian tertunda, daftar kursus, dan aktivitas peserta terbaru |
+| `instructor/manage-course.html` | ✅ Selesai | Kelola struktur kursus: tambah/ubah/hapus modul dan materi (teks, video, file, link) dengan validasi kepemilikan kursus |
+| `instructor/students.html` | ✅ Selesai | Daftar peserta per kursus dengan filter status/pencarian, progres, riwayat nilai, serta modal penilaian yang otomatis membuat e-sertifikat Draft |
+| `instructor/certificates.html` | ✅ Selesai | Monitoring e-sertifikat peserta (Draft/Terbit), filter kursus & status, pengajuan sertifikat untuk peserta yang sudah dinilai namun belum memiliki sertifikat |
+| `instructor/profile.html` | ✅ Selesai | Profil instruktur: ringkasan statistik, informasi akun, pembaruan nama/no. telepon, dan sinkronisasi nama pada kursus yang diampu |
 
 ### Role Peserta (`student/`)
 | File | Status | Deskripsi |
@@ -87,8 +95,9 @@ Membangun sistem Learning Management System (LMS) berbasis web untuk pelatihan d
 ### 5.1 Autentikasi & Role-Based Access
 | Fitur | Status | Keterangan |
 |---|---|---|
-| Login form | ✅ Selesai | Form login di `login.html` |
-| Role redirect berdasarkan email | ✅ Selesai | `admin` → `admin/dashboard.html`, mengandung `instruktur/ahmad/guru/trainer` → `instructor/dashboard.html`, lainnya → `student/dashboard.html` |
+| Login form | ✅ Selesai | Form login di `login.html`, divalidasi terhadap data `elips_users` |
+| Role redirect berdasarkan role akun | ✅ Selesai | `admin` → `admin/dashboard.html`, `instruktur` → `instructor/dashboard.html`, `peserta` → `student/dashboard.html` |
+| Role guard halaman | ✅ Selesai | Setiap halaman dashboard memanggil `ELIPS.requireRole()`; pengguna dengan role lain diarahkan ke dashboard sesuai role-nya |
 | Struktur folder per role | ✅ Selesai | Semua halaman role dipindahkan ke folder terpisah |
 
 ### 5.2 Manajemen Kursus
@@ -96,7 +105,8 @@ Membangun sistem Learning Management System (LMS) berbasis web untuk pelatihan d
 |---|---|---|
 | Daftar kursus (beranda) | ✅ Selesai | Ditampilkan di `index.html` |
 | Detail kursus | ✅ Selesai | `course-detail.html` |
-| Kelola kursus (Instruktur) | ✅ Selesai | `instructor/manage-course.html` |
+| Kelola kursus (Instruktur) | ✅ Selesai | `instructor/manage-course.html` - daftar kursus yang diampu, deep link `?course=id` |
+| CRUD modul & materi (Instruktur) | ✅ Selesai | Tambah/ubah/hapus modul dan pelajaran, tipe konten teks/video/file/link, validasi kepemilikan kursus, sinkronisasi jumlah modul/pelajaran pada data kursus |
 | Daftar kursus (Admin - view only) | ✅ Selesai | `admin/courses.html` dengan filter status & pencarian |
 
 ### 5.3 Enrolment & Progres Belajar
@@ -112,18 +122,21 @@ Membangun sistem Learning Management System (LMS) berbasis web untuk pelatihan d
 ### 5.4 Sertifikat
 | Fitur | Status | Keterangan |
 |---|---|---|
-| Penerbitan otomatis (simulasi) | ✅ Selesai | Sertifikat otomatis terbit saat semua pelajaran selesai (simulasi 24 pelajaran) |
+| Alur e-sertifikat | ✅ Selesai | Instruktur memberi nilai → e-sertifikat otomatis dibuat berstatus **Draft** → Admin menyetujui di `admin/certificates.html` → status menjadi **Terbit** |
 | Daftar sertifikat peserta | ✅ Selesai | `student/certificates.html` membaca dari `localStorage` |
+| Sertifikat peserta (Instruktur) | ✅ Selesai | `instructor/certificates.html` menampilkan Draft/Terbit, filter kursus & status, serta pengajuan Draft untuk peserta yang sudah dinilai |
 | Tampilan sertifikat | ✅ Selesai | `certificate-view.html` menampilkan sertifikat dari URL params/localStorage |
 | Verifikasi sertifikat publik | ✅ Selesai | `verify-certificate.html` |
-| Kelola sertifikat (Admin) | ✅ Selesai | `admin/certificates.html` |
+| Kelola sertifikat (Admin) | ✅ Selesai | `admin/certificates.html` - persetujuan Draft menjadi Terbit |
 
 ### 5.5 Dashboard & Pelaporan
 | Fitur | Status | Keterangan |
 |---|---|---|
 | Dashboard Admin | ✅ Selesai | Ringkasan pengguna, kursus, enrolment |
-| Dashboard Instruktur | ✅ Selesai | Kursus yang diampu, daftar peserta |
+| Dashboard Instruktur | ✅ Selesai | Statistik kursus/peserta/pelajaran/sertifikat, notifikasi draft & penilaian tertunda, tabel kursus yang diampu, aktivitas peserta terbaru |
 | Dashboard Peserta | ✅ Selesai | Kursus diikuti, progres, akses cepat ke sertifikat |
+| Peserta & Penilaian (Instruktur) | ✅ Selesai | Filter kursus/status/pencarian, modal penilaian dengan peringatan progres, catatan nilai, dan pembuatan e-sertifikat Draft |
+| Profil Instruktur | ✅ Selesai | Ringkasan kursus, pembaruan data akun, sinkronisasi nama instruktur ke kursus |
 | Laporan (Admin) | ✅ Selesai | `admin/reports.html` - progres per peserta, statistik per kursus |
 | Pengaturan (Admin) | ✅ Selesai | `admin/settings.html` - pengaturan umum, sertifikat, pembelajaran |
 
@@ -139,25 +152,34 @@ Membangun sistem Learning Management System (LMS) berbasis web untuk pelatihan d
 
 ### Login Redirect
 ```javascript
-// Berdasarkan email di login.html
-if (email.includes('admin')) -> admin/dashboard.html
-else if (email.includes('instruktur') || email.includes('ahmad') || email.includes('guru') || email.includes('trainer')) -> instructor/dashboard.html
-else -> student/dashboard.html
+// Login divalidasi terhadap data elips_users
+const user = users.find(u => u.email.toLowerCase() === email);
+if (user.role === 'admin')      -> admin/dashboard.html
+else if (user.role === 'instruktur') -> instructor/dashboard.html
+else                            -> student/dashboard.html
 ```
 
+### Role Guard
+- Halaman role memanggil `ELIPS.requireRole('admin' | 'instruktur' | 'peserta')`.
+- Bila belum ada sesi, pengguna diarahkan ke `login.html`.
+- Bila role tidak sesuai, pengguna diarahkan ke dashboard sesuai role akunnya.
+- Mode demo tetap mengizinkan halaman dibuka langsung tanpa login melalui fallback `getCurrentUser()`.
+
 ### Enrolment
-- Data disimpan di `localStorage` key `elips_enrolled` (array of objects)
-- Status enrolment dicek di `course-detail.html` untuk mengubah tampilan tombol
+- Data disimpan di `localStorage` key `elips_enrollments` (array of objects)
+- Status enrolment dicek di `course-detail.html` dan `learning.html` untuk menentukan akses
+- Penugasan peserta ke kursus dilakukan Admin melalui `admin/enrollment.html`
 
 ### Progres Belajar
 - Pelajaran selesai disimpan di `localStorage` key `elips_completedLessons`
 - Progres dihitung berdasarkan jumlah pelajaran selesai vs total pelajaran
-- Sertifikat otomatis terbit saat semua pelajaran selesai (simulasi)
+- Materi terkunci sampai pelajaran sebelumnya selesai (instruktur/admin dapat melewati saat pratinjau)
 
-### Sertifikat
-- Disimpan di `localStorage` key `elips_certificates`
-- Ditampilkan di `student/certificates.html` dan bisa dilihat di `certificate-view.html`
-- Dapat diverifikasi melalui `verify-certificate.html`
+### Penilaian & Sertifikat
+- Nilai disimpan di `localStorage` key `elips_grades` dan dihitung hurufnya otomatis (A–E)
+- Saat instruktur menyimpan nilai, e-sertifikat berstatus **Draft** dibuat/diperbarui otomatis
+- Draft disetujui Admin di `admin/certificates.html`; setelah disetujui status menjadi **Terbit** dan nomor sertifikat final
+- Sertifikat ditampilkan di `student/certificates.html`, dapat dilihat di `certificate-view.html`, dan diverifikasi di `verify-certificate.html`
 
 ---
 
@@ -173,6 +195,12 @@ else -> student/dashboard.html
 | Verifikasi sertifikat publik | ✅ Perlu diuji | Halaman verifikasi |
 | Filter & search di admin/users.html | ✅ Perlu diuji | Berbagai kombinasi filter |
 | Filter & search di admin/courses.html | ✅ Perlu diuji | Filter status dan pencarian |
+| Dashboard instruktur | ✅ Lulus uji | Statistik, notifikasi, tabel kursus, aktivitas peserta |
+| CRUD modul & materi instruktur | ✅ Lulus uji | Tambah/ubah/hapus modul dan materi tersimpan ke localStorage |
+| Penilaian peserta | ✅ Lulus uji | Nilai tersimpan, grade otomatis, e-sertifikat Draft dibuat |
+| Pengajuan sertifikat instruktur | ✅ Lulus uji | Peserta dinilai tanpa sertifikat dapat diajukan Draft |
+| Profil instruktur | ✅ Lulus uji | Nama/telepon tersimpan dan tersinkron ke kursus |
+| Mode pratinjau materi instruktur | ✅ Perlu diuji | Progres peserta tidak berubah |
 | Navigasi setelah folder restructuring | ✅ Perlu diuji | Semua relative path |
 
 ---
