@@ -8,6 +8,10 @@
 
     const { success, failure, todayString, isActiveInstructor } = ELIPS._;
 
+    function recordAudit(entry) {
+        if (typeof ELIPS.logAudit === 'function') ELIPS.logAudit(entry);
+    }
+
     function createCourse(data) {
         data = data || {};
         const title = String(data.title || '').trim();
@@ -38,6 +42,14 @@
 
         courses.push(course);
         ELIPS.setCourses(courses);
+        recordAudit({
+            action: 'create',
+            entity: 'course',
+            entityId: course.id,
+            entityLabel: course.title,
+            actorId: data.actorId,
+            detail: 'Membuat kursus "' + course.title + '" (Draft) dengan instruktur ' + instructor.name + '.'
+        });
         return success('Kursus baru berhasil ditambahkan dan berstatus Draft.', course);
     }
 
@@ -59,6 +71,13 @@
 
         const previousInstructorId = course.instructorId;
         const instructor = ELIPS.getUserById(nextInstructorId);
+
+        const changes = [];
+        if (course.title !== title) changes.push('judul');
+        if (course.category !== category) changes.push('kategori');
+        if (String(course.description || '') !== description) changes.push('deskripsi');
+        if (Number(course.instructorId) !== instructor.id) changes.push('instruktur');
+
         course.title = title;
         course.category = category;
         course.description = description;
@@ -69,6 +88,17 @@
         // Status kursus tidak diubah lewat edit. Publikasi memakai aksi khusus.
         ELIPS.setCourses(courses);
         if (instructor.id !== Number(previousInstructorId)) ELIPS._.syncAllContentOwners();
+
+        if (changes.length > 0) {
+            recordAudit({
+                action: 'update',
+                entity: 'course',
+                entityId: course.id,
+                entityLabel: course.title,
+                actorId: data.actorId,
+                detail: 'Memperbarui kursus "' + course.title + '" (' + changes.join(', ') + ').'
+            });
+        }
         return success('Kursus berhasil diperbarui.', course);
     }
 
@@ -87,6 +117,13 @@
             return progress.courseId !== course.id && lessonIds.indexOf(progress.lessonId) === -1;
         }));
 
+        recordAudit({
+            action: 'delete',
+            entity: 'course',
+            entityId: course.id,
+            entityLabel: course.title,
+            detail: 'Menghapus kursus "' + course.title + '" beserta modul, materi, penugasan, nilai, sertifikat, dan progres terkait.'
+        });
         return success('Kursus beserta seluruh datanya berhasil dihapus.');
     }
 
@@ -95,6 +132,7 @@
         const courses = ELIPS.getCourses();
         const course = courses.find(function (c) { return c.id === Number(id); });
         if (!course) return failure('Kursus tidak ditemukan.');
+        const previousStatus = course.status;
 
         if (status === 'published') {
             if (!isActiveInstructor(course.instructorId)) {
@@ -108,6 +146,18 @@
         course.status = status;
         course.updatedAt = new Date().toISOString();
         ELIPS.setCourses(courses);
+
+        if (previousStatus !== status) {
+            recordAudit({
+                action: status === 'published' ? 'publish' : 'unpublish',
+                entity: 'course',
+                entityId: course.id,
+                entityLabel: course.title,
+                detail: status === 'published'
+                    ? 'Mempublikasikan kursus "' + course.title + '".'
+                    : 'Mengembalikan kursus "' + course.title + '" ke Draft.'
+            });
+        }
         return success(status === 'published' ? 'Kursus berhasil dipublikasikan.' : 'Kursus dikembalikan ke Draft.', course);
     }
 

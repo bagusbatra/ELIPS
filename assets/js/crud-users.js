@@ -8,6 +8,10 @@
 
     const { success, failure, todayString, isValidEmail, isValidRole, isValidUserStatus } = ELIPS._;
 
+    function recordAudit(entry) {
+        if (typeof ELIPS.logAudit === 'function') ELIPS.logAudit(entry);
+    }
+
     function createUser(data) {
         data = data || {};
         const name = String(data.name || '').trim();
@@ -39,6 +43,14 @@
 
         users.push(user);
         ELIPS.setUsers(users);
+        recordAudit({
+            action: 'create',
+            entity: 'user',
+            entityId: user.id,
+            entityLabel: user.name,
+            actorId: data.actorId,
+            detail: 'Menambahkan pengguna "' + user.name + '" dengan role ' + user.role + '.'
+        });
         return success('Pengguna berhasil ditambahkan.', user);
     }
 
@@ -61,7 +73,13 @@
             return failure('Email sudah digunakan oleh pengguna lain.');
         }
 
-        const previousRole = user.role;
+        const previous = {
+            name: user.name,
+            email: user.email,
+            role: user.role,
+            status: user.status
+        };
+        const previousRole = previous.role;
         user.name = nextName;
         user.email = nextEmail;
         if (data.phone !== undefined) user.phone = String(data.phone).trim();
@@ -78,6 +96,25 @@
         if (user.role === 'instruktur') {
             ELIPS._.syncInstructorNameOnCourses(user);
             if (user.status !== 'aktif') ELIPS._.releaseInstructorCourses(user.id, true);
+        }
+
+        const changes = [];
+        if (previous.name !== user.name) changes.push('nama');
+        if (previous.email !== user.email) changes.push('email');
+        if (previous.role !== user.role) changes.push('role');
+        if (previous.status !== user.status) changes.push('status');
+        if (data.phone !== undefined) changes.push('telepon');
+        if (data.password) changes.push('password');
+
+        if (changes.length > 0) {
+            recordAudit({
+                action: 'update',
+                entity: 'user',
+                entityId: user.id,
+                entityLabel: user.name,
+                actorId: data.actorId,
+                detail: 'Memperbarui pengguna "' + user.name + '" (' + changes.join(', ') + ').'
+            });
         }
 
         return success('Pengguna berhasil diperbarui.', user);
@@ -103,6 +140,14 @@
         if (user.role === 'instruktur') {
             ELIPS._.releaseInstructorCourses(user.id, false);
         }
+
+        recordAudit({
+            action: 'delete',
+            entity: 'user',
+            entityId: user.id,
+            entityLabel: user.name,
+            detail: 'Menghapus pengguna "' + user.name + '" dengan role ' + user.role + '.'
+        });
 
         return success('Pengguna dihapus.');
     }
@@ -137,6 +182,12 @@
         if (changed > 0) {
             ELIPS.setCourses(courses);
             ELIPS._.syncAllContentOwners();
+            recordAudit({
+                action: 'assign',
+                entity: 'course',
+                entityLabel: instructor.name,
+                detail: 'Memperbarui ' + changed + ' penugasan kursus untuk instruktur "' + instructor.name + '".'
+            });
         }
         return success(changed + ' penugasan kursus diperbarui.', { changed: changed });
     }

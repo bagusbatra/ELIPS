@@ -242,6 +242,20 @@
         if (!Array.isArray(read(KEYS.grades, null))) write(KEYS.grades, []);
         if (!Array.isArray(read(KEYS.completedLessons, null))) write(KEYS.completedLessons, []);
 
+        // Audit trail: selalu berupa array dan setiap entri memiliki field minimum.
+        if (!Array.isArray(read(KEYS.auditLogs, null))) {
+            write(KEYS.auditLogs, []);
+        } else {
+            const auditLogs = read(KEYS.auditLogs, []);
+            auditLogs.forEach(function (log) {
+                if (!log.createdAt) log.createdAt = new Date().toISOString();
+                if (!log.actorName) log.actorName = 'Sistem';
+                if (!log.actorRole) log.actorRole = 'sistem';
+                if (!log.detail) log.detail = '';
+            });
+            write(KEYS.auditLogs, auditLogs);
+        }
+
         // Normalize certificates (migrate legacy ones)
         const certificates = ELIPS.getCertificates();
         const changed = certificates.map(function (cert) {

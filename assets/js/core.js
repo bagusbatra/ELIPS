@@ -18,6 +18,7 @@
         grades: 'elips_grades',
         certificates: 'elips_certificates',
         completedLessons: 'elips_completedLessons',
+        auditLogs: 'elips_auditLogs',
         session: 'elips_session'
     };
 

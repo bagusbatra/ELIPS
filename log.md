@@ -1,6 +1,6 @@
 # Log Pengembangan ELIPS LMS
 
-**Versi dokumen:** 1.0  
+**Versi dokumen:** 1.1  
 **Terakhir diperbarui:** 2026-11-03  
 **Status proyek:** Demo — Vanilla HTML/CSS/JavaScript + `localStorage`  
 **Dokumen terkait:** `prd.md`
@@ -55,6 +55,7 @@ ELIPS/
 │   ├── enrollment.html
 │   ├── certificates.html
 │   ├── reports.html
+│   ├── audit.html
 │   └── settings.html
 ├── instructor/
 │   ├── dashboard.html
@@ -77,6 +78,7 @@ ELIPS/
         ├── sync.js
         ├── progress.js
         ├── auth.js
+        ├── audit.js
         ├── crud-users.js
         ├── crud-courses.js
         ├── crud-enrollments.js
@@ -90,7 +92,7 @@ ELIPS/
 Semua halaman memuat modul dengan urutan berikut:
 
 ```text
-core → utils → data → seed → sync → progress → auth
+core → utils → data → seed → sync → progress → auth → audit
 → crud-users → crud-courses → crud-enrollments
 → crud-content → crud-grades → ui
 ```
@@ -104,6 +106,7 @@ core → utils → data → seed → sync → progress → auth
 | `sync.js` | Sinkronisasi data turunan: nama instruktur, kepemilikan konten, counter modul/materi, pelepasan kursus | `syncCourseCounters` dan helper internal `syncAllContentOwners`, `releaseInstructorCourses` |
 | `progress.js` | Struktur kursus, progres belajar, overview siswa dan instruktur | `getCourseStructure`, `getCourseProgress`, `isLessonUnlocked`, `getStudentCourseOverview`, `getInstructorCourses`, `getInstructorSummary` |
 | `auth.js` | Session, user aktif, path dashboard per role, guard halaman | `getSessionUser`, `getCurrentUser`, `requireRole`, `setCurrentUser`, `logout` |
+| `audit.js` | Audit trail: pencatatan aktor/aksi/entitas, filter log, daftar aktor, pembersihan log | `logAudit`, `getAuditLogs`, `getAuditActors`, `clearAuditLogs`, `auditActionLabel`, `auditEntityLabel` |
 | `crud-users.js` | CRUD pengguna dan penugasan instruktur ke kursus | `createUser`, `updateUser`, `deleteUser`, `assignInstructorToCourses` |
 | `crud-courses.js` | CRUD kursus dan aturan Draft/Publish | `createCourse`, `updateCourse`, `deleteCourse`, `setCourseStatus`, `toggleCourseStatus` |
 | `crud-enrollments.js` | CRUD penugasan peserta ke kursus | `assignStudentToCourses`, `setEnrollmentStatus`, `deleteEnrollment` |
@@ -121,6 +124,42 @@ Prinsip yang dipakai:
 ---
 
 ## 3. Riwayat Perubahan
+
+### v1.6 — 2026-11-03 — P1 audit trail
+
+**Tujuan:** mencatat siapa mengubah kursus, nilai, dan status sertifikat, serta menyediakan halaman admin untuk menelusuri jejak tersebut.
+
+Perubahan:
+
+- Ditambahkan key `elips_auditLogs` pada `core.js` dan normalisasi data pada `seed.js`.
+- Ditambahkan modul `assets/js/audit.js`:
+  - `logAudit(entry)` mencatat aktor, aksi, entitas, objek, detail, dan waktu;
+  - `getAuditLogs(filters)` mendukung filter aktor, aksi, entitas, rentang tanggal, pencarian, dan limit;
+  - `getAuditActors()` menyediakan daftar aktor untuk dropdown;
+  - `clearAuditLogs()` membersihkan seluruh log;
+  - batas 1000 entri terbaru agar `localStorage` tetap terkendali.
+- Resolusi aktor: `actorId` eksplisit → user sesi (`elips_session`) → "Sistem". Fallback `getCurrentUser()` tidak dipakai agar tidak salah atribusi saat tidak ada sesi.
+- Audit logging ditambahkan ke seluruh CRUD:
+  - kursus: create, update, delete, publish, unpublish;
+  - nilai: setiap `saveGrade`;
+  - sertifikat: pengajuan Draft (`submit`) dan persetujuan (`approve`);
+  - pengguna: create, update, delete, penugasan instruktur;
+  - penugasan peserta: create, ubah status, delete;
+  - modul dan materi: create, update, delete.
+- Ditambahkan halaman `admin/audit.html`:
+  - statistik total aktivitas, aktivitas hari ini, dan jumlah aktor;
+  - filter pencarian, aksi, entitas, aktor, rentang tanggal, dan limit;
+  - tabel riwayat, ekspor CSV, dan tombol bersihkan log.
+- Seluruh 24 halaman HTML memuat `audit.js` setelah `auth.js`; seluruh 7 halaman admin mendapat tautan sidebar "Audit Trail".
+- PRD diperbarui ke v1.6 dan roadmap P1 ditandai selesai untuk versi demo.
+
+Dampak:
+
+- Operasi yang gagal tidak menambah log.
+- Tidak ada perubahan perilaku CRUD utama; seluruh regresi lama tetap lulus.
+- Jejak perubahan dapat diaudit tanpa membuka data mentah di `localStorage`.
+
+---
 
 ### v1.5 — 2026-11-03 — Modularisasi JavaScript & log pengembangan
 

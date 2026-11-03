@@ -8,6 +8,10 @@
 
     const { success, failure } = ELIPS._;
 
+    function recordAudit(entry) {
+        if (typeof ELIPS.logAudit === 'function') ELIPS.logAudit(entry);
+    }
+
     function canManageCourse(courseId, actorId) {
         if (actorId === undefined || actorId === null) return true;
         const course = ELIPS.getCourseById(courseId);
@@ -42,6 +46,14 @@
         modules.push(module);
         ELIPS.setModules(modules);
         ELIPS.syncCourseCounters(course.id);
+        recordAudit({
+            action: 'create',
+            entity: 'module',
+            entityId: module.id,
+            entityLabel: module.title,
+            actorId: actorId,
+            detail: 'Menambahkan modul "' + module.title + '" pada kursus "' + course.title + '".'
+        });
         return success('Modul berhasil ditambahkan.', module);
     }
 
@@ -59,6 +71,16 @@
         if (data.description !== undefined) module.description = String(data.description).trim();
         module.updatedAt = new Date().toISOString();
         ELIPS.setModules(modules);
+        const course = ELIPS.getCourseById(module.courseId);
+        recordAudit({
+            action: 'update',
+            entity: 'module',
+            entityId: module.id,
+            entityLabel: module.title,
+            actorId: actorId,
+            detail: 'Memperbarui modul "' + module.title + '" pada kursus "' +
+                (course ? course.title : 'Kursus #' + module.courseId) + '".'
+        });
         return success('Modul berhasil diperbarui.', module);
     }
 
@@ -68,12 +90,22 @@
         if (!canManageCourse(module.courseId, actorId)) return failure('Anda tidak berhak menghapus modul ini.');
 
         const lessonIds = ELIPS.getLessonsByModule(module.id).map(function (lesson) { return lesson.id; });
+        const course = ELIPS.getCourseById(module.courseId);
         ELIPS.setModules(ELIPS.getModules().filter(function (item) { return item.id !== module.id; }));
         ELIPS.setLessons(ELIPS.getLessons().filter(function (lesson) { return lesson.moduleId !== module.id; }));
         ELIPS.setCompletedLessons(ELIPS.getCompletedLessons().filter(function (progress) {
             return lessonIds.indexOf(progress.lessonId) === -1;
         }));
         ELIPS.syncCourseCounters(module.courseId);
+        recordAudit({
+            action: 'delete',
+            entity: 'module',
+            entityId: module.id,
+            entityLabel: module.title,
+            actorId: actorId,
+            detail: 'Menghapus modul "' + module.title + '" dari kursus "' +
+                (course ? course.title : 'Kursus #' + module.courseId) + '" beserta ' + lessonIds.length + ' materi.'
+        });
         return success('Modul dihapus.', { removedLessons: lessonIds.length });
     }
 
@@ -110,6 +142,16 @@
         lessons.push(lesson);
         ELIPS.setLessons(lessons);
         ELIPS.syncCourseCounters(module.courseId);
+        const course = ELIPS.getCourseById(module.courseId);
+        recordAudit({
+            action: 'create',
+            entity: 'lesson',
+            entityId: lesson.id,
+            entityLabel: lesson.title,
+            actorId: actorId,
+            detail: 'Menambahkan materi "' + lesson.title + '" pada modul "' + module.title + '" kursus "' +
+                (course ? course.title : 'Kursus #' + module.courseId) + '".'
+        });
         return success('Materi berhasil ditambahkan.', lesson);
     }
 
@@ -145,6 +187,16 @@
         lesson.content = content;
         lesson.updatedAt = new Date().toISOString();
         ELIPS.setLessons(lessons);
+        const course = ELIPS.getCourseById(lesson.courseId);
+        recordAudit({
+            action: 'update',
+            entity: 'lesson',
+            entityId: lesson.id,
+            entityLabel: lesson.title,
+            actorId: actorId,
+            detail: 'Memperbarui materi "' + lesson.title + '" pada modul "' + targetModule.title + '" kursus "' +
+                (course ? course.title : 'Kursus #' + lesson.courseId) + '".'
+        });
         return success('Materi berhasil diperbarui.', lesson);
     }
 
@@ -152,12 +204,22 @@
         const lesson = ELIPS.getLessons().find(function (item) { return item.id === Number(id); });
         if (!lesson) return failure('Materi tidak ditemukan.');
         if (!canManageCourse(lesson.courseId, actorId)) return failure('Anda tidak berhak menghapus materi ini.');
+        const course = ELIPS.getCourseById(lesson.courseId);
 
         ELIPS.setLessons(ELIPS.getLessons().filter(function (item) { return item.id !== lesson.id; }));
         ELIPS.setCompletedLessons(ELIPS.getCompletedLessons().filter(function (progress) {
             return progress.lessonId !== lesson.id;
         }));
         ELIPS.syncCourseCounters(lesson.courseId);
+        recordAudit({
+            action: 'delete',
+            entity: 'lesson',
+            entityId: lesson.id,
+            entityLabel: lesson.title,
+            actorId: actorId,
+            detail: 'Menghapus materi "' + lesson.title + '" dari kursus "' +
+                (course ? course.title : 'Kursus #' + lesson.courseId) + '".'
+        });
         return success('Materi dihapus.', lesson);
     }
 

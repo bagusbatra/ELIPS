@@ -8,6 +8,17 @@
 
     const { success, failure, todayString } = ELIPS._;
 
+    function recordAudit(entry) {
+        if (typeof ELIPS.logAudit === 'function') ELIPS.logAudit(entry);
+    }
+
+    function enrollmentLabel(enrollment) {
+        const student = ELIPS.getUserById(enrollment.studentId);
+        const course = ELIPS.getCourseById(enrollment.courseId);
+        return (student ? student.name : 'Peserta #' + enrollment.studentId) + ' — ' +
+            (course ? course.title : 'Kursus #' + enrollment.courseId);
+    }
+
     function assignStudentToCourses(studentId, courseIds, enrolledAt) {
         const student = ELIPS.getUserById(studentId);
         if (!student || student.role !== 'peserta') return failure('Pilih akun peserta yang valid.');
@@ -24,23 +35,39 @@
 
         const enrollments = ELIPS.getEnrollments();
         let added = 0;
+        const created = [];
         requested.forEach(function (courseId) {
             const exists = enrollments.some(function (e) {
                 return e.studentId === student.id && e.courseId === courseId;
             });
             if (exists) return;
-            enrollments.push({
+            const enrollment = {
                 id: ELIPS.nextId(enrollments),
                 studentId: student.id,
                 courseId: courseId,
                 enrolledBy: 'admin',
                 enrolledAt: enrolledAt || todayString(),
                 status: 'active'
+            };
+            enrollments.push(enrollment);
+            created.push({
+                enrollment: enrollment,
+                course: courses.find(function (course) { return course.id === courseId; })
             });
             added++;
         });
 
         ELIPS.setEnrollments(enrollments);
+        created.forEach(function (item) {
+            recordAudit({
+                action: 'create',
+                entity: 'enrollment',
+                entityId: item.enrollment.id,
+                entityLabel: enrollmentLabel(item.enrollment),
+                detail: 'Menugaskan "' + student.name + '" ke kursus "' +
+                    (item.course ? item.course.title : 'Kursus #' + item.enrollment.courseId) + '".'
+            });
+        });
         return success(
             added > 0 ? added + ' penugasan berhasil dibuat.' : 'Semua kursus yang dipilih sudah ditugaskan.',
             { added: added }
@@ -55,12 +82,21 @@
         enrollment.status = status;
         enrollment.updatedAt = new Date().toISOString();
         ELIPS.setEnrollments(enrollments);
+        recordAudit({
+            action: 'status',
+            entity: 'enrollment',
+            entityId: enrollment.id,
+            entityLabel: enrollmentLabel(enrollment),
+            detail: (status === 'active' ? 'Mengaktifkan' : 'Menghentikan') + ' penugasan "' +
+                enrollmentLabel(enrollment) + '".'
+        });
         return success(status === 'active' ? 'Penugasan diaktifkan.' : 'Penugasan dihentikan.', enrollment);
     }
 
     function deleteEnrollment(id) {
         const enrollment = ELIPS.getEnrollments().find(function (e) { return e.id === Number(id); });
         if (!enrollment) return failure('Penugasan tidak ditemukan.');
+        const label = enrollmentLabel(enrollment);
 
         ELIPS.setEnrollments(ELIPS.getEnrollments().filter(function (e) { return e.id !== enrollment.id; }));
         ELIPS.setGrades(ELIPS.getGrades().filter(function (g) {
@@ -73,6 +109,13 @@
             return !(progress.studentId === enrollment.studentId && progress.courseId === enrollment.courseId);
         }));
 
+        recordAudit({
+            action: 'delete',
+            entity: 'enrollment',
+            entityId: enrollment.id,
+            entityLabel: label,
+            detail: 'Menghapus penugasan "' + label + '" beserta nilai, sertifikat, dan progres terkait.'
+        });
         return success('Penugasan dan data terkait berhasil dihapus.');
     }
 

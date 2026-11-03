@@ -8,6 +8,10 @@
 
     const { success, failure } = ELIPS._;
 
+    function recordAudit(entry) {
+        if (typeof ELIPS.logAudit === 'function') ELIPS.logAudit(entry);
+    }
+
     function generateDraftCertificateNumber() {
         let number;
         do {
@@ -50,6 +54,7 @@
             return item.enrollmentId === enrollment.id ||
                 (item.studentId === studentId && item.courseId === courseId);
         });
+        const isNewGrade = !grade;
 
         if (grade) {
             grade.enrollmentId = enrollment.id;
@@ -83,6 +88,7 @@
             return cert.enrollmentId === enrollment.id ||
                 (cert.studentId === studentId && cert.courseId === courseId);
         });
+        const certificateExisted = !!certificate;
 
         if (certificate) {
             certificate.enrollmentId = enrollment.id;
@@ -110,6 +116,31 @@
             certificates.push(certificate);
         }
         ELIPS.setCertificates(certificates);
+
+        const student = ELIPS.getUserById(studentId);
+        const studentName = student ? student.name : 'Peserta #' + studentId;
+        recordAudit({
+            action: 'grade',
+            entity: 'grade',
+            entityId: grade.id,
+            entityLabel: studentName + ' — ' + course.title,
+            actorId: payload.instructorId,
+            detail: (isNewGrade ? 'Memberi' : 'Memperbarui') + ' nilai ' + score + ' (' + letter + ')' +
+                (note ? ' — catatan: ' + note : '') + ' untuk ' +
+                studentName + ' pada kursus "' + course.title + '".'
+        });
+
+        if (!certificateExisted) {
+            recordAudit({
+                action: 'submit',
+                entity: 'certificate',
+                entityId: certificate.id,
+                entityLabel: certificate.certificateNumber,
+                actorId: payload.instructorId,
+                detail: 'Membuat e-sertifikat Draft ' + certificate.certificateNumber + ' untuk ' +
+                    studentName + ' pada kursus "' + course.title + '".'
+            });
+        }
 
         return success('Nilai disimpan. E-sertifikat Draft menunggu persetujuan Admin.', {
             grade: grade,
@@ -150,6 +181,17 @@
         };
         certificates.push(certificate);
         ELIPS.setCertificates(certificates);
+
+        const student = ELIPS.getUserById(enrollment.studentId);
+        recordAudit({
+            action: 'submit',
+            entity: 'certificate',
+            entityId: certificate.id,
+            entityLabel: certificate.certificateNumber,
+            actorId: instructorId,
+            detail: 'Mengajukan e-sertifikat Draft ' + certificate.certificateNumber + ' untuk ' +
+                (student ? student.name : 'Peserta #' + enrollment.studentId) + ' pada kursus "' + course.title + '".'
+        });
         return success('E-sertifikat Draft berhasil diajukan ke Admin.', certificate);
     }
 
@@ -159,6 +201,10 @@
         if (!certificate) return failure('Sertifikat tidak ditemukan.');
         if (certificate.status !== 'draft') return failure('Sertifikat ini sudah berstatus Publish.');
 
+        const previousNumber = certificate.certificateNumber;
+        const student = ELIPS.getUserById(certificate.studentId);
+        const course = ELIPS.getCourseById(certificate.courseId);
+
         certificate.status = 'publish';
         certificate.approvedByAdminId = adminId !== undefined && adminId !== null ? Number(adminId) : 1;
         certificate.approvedAt = new Date().toISOString();
@@ -166,6 +212,17 @@
             certificate.certificateNumber = ELIPS.generateCertificateNumber();
         }
         ELIPS.setCertificates(certificates);
+
+        recordAudit({
+            action: 'approve',
+            entity: 'certificate',
+            entityId: certificate.id,
+            entityLabel: certificate.certificateNumber,
+            actorId: adminId,
+            detail: 'Menyetujui e-sertifikat Draft ' + previousNumber + ' menjadi Publish (' +
+                certificate.certificateNumber + ') untuk ' + (student ? student.name : 'Peserta #' + certificate.studentId) +
+                ' pada kursus "' + (course ? course.title : 'Kursus #' + certificate.courseId) + '".'
+        });
         return success('Sertifikat berhasil disetujui dan diterbitkan.', certificate);
     }
 

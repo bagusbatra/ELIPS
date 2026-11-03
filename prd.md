@@ -1,8 +1,8 @@
 # PRD: Learning Management System (LMS) ELIPS
 
-**Versi:** 1.5  
+**Versi:** 1.6  
 **Tanggal:** 2026-11-03  
-**Status:** Implemented (Demo - Vanilla HTML/CSS/JS + localStorage); seluruh aturan alur kursus telah diterapkan dan JavaScript telah dimodularisasi  
+**Status:** Implemented (Demo - Vanilla HTML/CSS/JS + localStorage); seluruh aturan alur kursus telah diterapkan, JavaScript telah dimodularisasi, dan audit trail P1 aktif  
 **Log pengembangan:** `log.md`
 **Nama Aplikasi:** ELIPS LMS
 
@@ -150,6 +150,7 @@ Admin ── approve ───────────────────�
 | Publikasi kursus tervalidasi | ✅ Selesai | `ELIPS.setCourseStatus` menolak publikasi tanpa instruktur aktif atau tanpa modul/materi |
 | Penghapusan instruktur mengembalikan kursus ke Draft | ✅ Selesai | `ELIPS.deleteUser`/`updateUser` melepas kursus dan memaksa status Draft |
 | CRUD terpusat di JavaScript | ✅ Selesai | Seluruh CRUD pengguna, kursus, enrollment, modul, materi, nilai, dan sertifikat memakai modul CRUD di `assets/js/` (lihat §4) |
+| Audit trail perubahan kursus, nilai, dan sertifikat | ✅ Selesai | `assets/js/audit.js` mencatat aktor, aksi, entitas, waktu, dan detail; halaman `admin/audit.html` menyediakan filter, ekspor CSV, dan pembersihan log |
 
 ---
 
@@ -163,12 +164,13 @@ Admin ── approve ───────────────────�
   - `sync.js` - sinkronisasi nama instruktur, kepemilikan konten, dan counter kursus;
   - `progress.js` - struktur kursus, progres, dan ringkasan siswa/instruktur;
   - `auth.js` - session dan role guard;
+  - `audit.js` - pencatatan audit trail, filter log, dan daftar aktor;
   - `crud-users.js`, `crud-courses.js`, `crud-enrollments.js`, `crud-content.js`, `crud-grades.js` - CRUD dan aturan bisnis per domain;
   - `utils.js` - helper format, escape HTML, dan toast;
   - `ui.js` - perilaku UI bersama (navigasi, sidebar, katalog, login, logout).
   - Halaman hanya menangani rendering dan interaksi UI, tidak menulis langsung ke `localStorage`.
   - Setiap fungsi CRUD mengembalikan `{ ok, message, data }` agar pesan sukses/gagal konsisten.
-  - Modul dimuat berurutan: `core → utils → data → seed → sync → progress → auth → crud-* → ui`.
+  - Modul dimuat berurutan: `core → utils → data → seed → sync → progress → auth → audit → crud-* → ui`.
 - **Penyimpanan Data:** `localStorage` (demo)
   - `elips_users` - Data pengguna (admin, instruktur, peserta)
   - `elips_courses` - Data kursus beserta instruktur pengampu dan status
@@ -178,6 +180,7 @@ Admin ── approve ───────────────────�
   - `elips_grades` - Nilai peserta per kursus
   - `elips_certificates` - Data e-sertifikat (Draft/Terbit)
   - `elips_completedLessons` - Tracking pelajaran yang diselesaikan
+  - `elips_auditLogs` - Jejak audit perubahan kursus, nilai, sertifikat, pengguna, penugasan, dan konten
   - `elips_session` - Sesi pengguna yang sedang masuk
 - **Styling:** Custom CSS (`assets/css/style.css`), Bootstrap Icons, Google Fonts (Inter)
 - **Struktur Folder:** Berbasis role (`admin/`, `instructor/`, `student/`)
@@ -205,6 +208,7 @@ Admin ── approve ───────────────────�
 | `admin/courses.html` | ✅ Selesai | Tambah/edit kursus, tugaskan 1 instruktur per kursus, publikasi/Draft, filter status & pencarian |
 | `admin/enrollment.html` | ✅ Selesai | Penugasan siswa ke satu atau beberapa kursus, filter kursus/status, aktif/nonaktifkan penugasan |
 | `admin/certificates.html` | ✅ Selesai | Persetujuan e-sertifikat: Draft → Publish, filter status, dan tampilan nomor/tanggal persetujuan |
+| `admin/audit.html` | ✅ Selesai | Audit trail: statistik aktivitas, filter aktor/aksi/entitas/tanggal/pencarian, ekspor CSV, dan pembersihan log |
 | `admin/reports.html` | ✅ Selesai | Laporan progres peserta per kursus, statistik per kursus, export PDF/Excel (UI) |
 | `admin/settings.html` | ✅ Selesai | Pengaturan umum, pengaturan sertifikat, pengaturan pembelajaran |
 
@@ -236,6 +240,7 @@ Admin ── approve ───────────────────�
 | `assets/js/sync.js` | ✅ Selesai | Sinkronisasi nama instruktur, kepemilikan konten, counter kursus |
 | `assets/js/progress.js` | ✅ Selesai | Struktur kursus, progres belajar, overview siswa/instruktur |
 | `assets/js/auth.js` | ✅ Selesai | Session, user aktif, redirect, dan role guard |
+| `assets/js/audit.js` | ✅ Selesai | Pencatatan audit trail, filter log, daftar aktor, dan pembersihan log |
 | `assets/js/crud-users.js` | ✅ Selesai | CRUD pengguna dan penugasan instruktur |
 | `assets/js/crud-courses.js` | ✅ Selesai | CRUD kursus dan aturan Draft/Publish |
 | `assets/js/crud-enrollments.js` | ✅ Selesai | CRUD penugasan peserta ke kursus |
@@ -308,6 +313,17 @@ Admin ── approve ───────────────────�
 | Filter role & pencarian | ✅ Selesai | Filter Semua/Admin/Instruktur/Peserta + search |
 | Registrasi mandiri peserta | ✅ Selesai | `register.html` membuat akun role Peserta, lalu diarahkan ke dashboard siswa |
 
+### 6.7 Audit Trail
+| Fitur | Status | Keterangan |
+|---|---|---|
+| Pencatatan perubahan kursus | ✅ Selesai | Create, update, delete, publish, dan unpublish kursus tercatat di `elips_auditLogs` |
+| Pencatatan nilai | ✅ Selesai | Setiap penyimpanan nilai mencatat aktor, skor, grade, catatan, peserta, dan kursus |
+| Pencatatan status sertifikat | ✅ Selesai | Pengajuan Draft dan persetujuan Draft → Publish tercatat |
+| Pencatatan domain lain | ✅ Selesai | Pengguna, penugasan peserta, modul, dan materi juga tercatat |
+| Resolusi aktor | ✅ Selesai | Prioritas: `actorId` eksplisit → user sesi → "Sistem"; tidak memakai fallback berbasis path halaman |
+| Filter & ekspor | ✅ Selesai | `admin/audit.html` memfilter berdasarkan aktor, aksi, entitas, tanggal, pencarian, dan limit; dapat diekspor ke CSV |
+| Batas penyimpanan | ✅ Selesai | Maksimal 1000 entri terbaru disimpan agar `localStorage` tidak tumbuh tanpa kendali |
+
 ---
 
 ## 7. Logika Bisnis Penting
@@ -356,6 +372,16 @@ else                            -> student/dashboard.html
   - dapat dilihat di `certificate-view.html`;
   - dapat diverifikasi publik di `verify-certificate.html`.
 
+### Audit Trail
+- Setiap operasi bisnis yang berhasil memanggil `ELIPS.logAudit()` dan menulis satu entri ke `localStorage` key `elips_auditLogs`.
+- Entri audit menyimpan `action`, `entity`, `entityId`, `entityLabel`, `actorId`, `actorName`, `actorRole`, `detail`, dan `createdAt`.
+- Resolusi aktor: `actorId` eksplisit dari pemanggil → user sesi (`elips_session`) → "Sistem". Fallback `getCurrentUser()` tidak dipakai agar tidak salah atribusi saat tidak ada sesi.
+- Operasi yang gagal (validasi ditolak) tidak dicatat.
+- Aksi yang dicatat: `create`, `update`, `delete`, `publish`, `unpublish`, `grade`, `submit`, `approve`, `assign`, dan `status`.
+- Entitas yang dicatat: `course`, `grade`, `certificate`, `user`, `enrollment`, `module`, dan `lesson`.
+- Log diurutkan terbaru lebih dulu, dibatasi 1000 entri, dan dapat difilter berdasarkan aktor, aksi, entitas, rentang tanggal, pencarian, serta limit.
+- Admin dapat mengekspor hasil filter ke CSV dan membersihkan seluruh log dari `admin/audit.html`.
+
 ---
 
 ## 8. Testing Checklist
@@ -383,6 +409,9 @@ else                            -> student/dashboard.html
 | Profil instruktur | ✅ Lulus uji | Nama/telepon tersimpan dan tersinkron ke kursus |
 | Mode pratinjau materi instruktur | ✅ Lulus uji | Progres peserta tidak berubah |
 | Navigasi setelah folder restructuring | ✅ Lulus uji | Semua relative path |
+| Audit trail perubahan kursus/nilai/sertifikat | ✅ Lulus uji | `test-audit` memverifikasi aktor, aksi, detail, filter, fallback "Sistem", dan halaman `admin/audit.html` |
+| Operasi gagal tidak dicatat | ✅ Lulus uji | Publikasi kursus kosong ditolak tanpa menambah entri audit |
+| Ekspor & pembersihan log | ✅ Lulus uji | Tombol CSV dan bersihkan log tersedia di `admin/audit.html` |
 
 ---
 
@@ -400,13 +429,15 @@ else                            -> student/dashboard.html
 
 Jika ingin dikembangkan menjadi aplikasi production:
 
+Audit trail (P1) sudah diimplementasikan pada versi demo. Untuk production, pencatatan perlu dipindahkan ke server agar immutable dan tidak dapat dihapus dari browser.
+
 | Fitur | Prioritas | Keterangan |
 |---|---|---|
 | Backend (Laravel/Node.js) | P0 | Ganti localStorage dengan database |
 | Autentikasi sesungguhnya | P0 | Login dengan validasi server-side |
 | Upload file materi | P0 | Upload PDF, video, gambar |
 | Backend validasi status & kepemilikan | P0 | Validasi 1 kursus = 1 instruktur, enrollment, approval, dan CRUD di server |
-| Audit trail | P1 | Catat siapa mengubah kursus, nilai, dan status sertifikat |
+| Audit trail server-side | P1 | Versi demo sudah mencatat audit di localStorage; produksi perlu log immutable di server dengan retensi dan akses terbatas |
 | Notifikasi email | P2 | Kirim pemberitahuan saat kursus dipublikasikan atau sertifikat terbit |
 | Generate PDF sertifikat | P0 | Generate PDF yang sebenarnya |
 | Role middleware | P0 | Proteksi halaman berdasarkan role |
