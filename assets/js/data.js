@@ -74,13 +74,26 @@
     // ---------- Certificates ----------
     function getCertificates() { return read(KEYS.certificates, []); }
     function setCertificates(list) { return write(KEYS.certificates, list); }
+    function normalizeCertificateStatus(cert) {
+        const status = String((cert && cert.status) || '').trim().toLowerCase();
+        if (status === 'publish' || status === 'published' || status === 'terbit' || status === 'approved') {
+            return 'publish';
+        }
+        if (status === 'draft' || status === 'menunggu' || status === 'pending') {
+            return 'draft';
+        }
+        // Data lama tanpa status dianggap sudah terbit agar tetap tampil.
+        return 'publish';
+    }
+    function isPublishedCertificate(cert) {
+        return normalizeCertificateStatus(cert) === 'publish';
+    }
     function getCertificatesByStudent(studentId) {
-        return getCertificates().filter(function (c) { return c.studentId === Number(studentId); });
+        const id = Number(studentId);
+        return getCertificates().filter(function (c) { return Number(c.studentId) === id; });
     }
     function getPublishedCertificatesByStudent(studentId) {
-        return getCertificatesByStudent(studentId).filter(function (cert) {
-            return cert.status === 'publish';
-        });
+        return getCertificatesByStudent(studentId).filter(isPublishedCertificate);
     }
     function getCertificateByNumber(number) {
         const target = String(number || '').trim().toUpperCase();
@@ -89,8 +102,10 @@
         }) || null;
     }
     function getCertificate(studentId, courseId) {
+        const sid = Number(studentId);
+        const cid = Number(courseId);
         return getCertificates().find(function (c) {
-            return c.studentId === Number(studentId) && c.courseId === Number(courseId);
+            return Number(c.studentId) === sid && Number(c.courseId) === cid;
         }) || null;
     }
 
@@ -145,6 +160,8 @@
         setCertificates: setCertificates,
         getCertificatesByStudent: getCertificatesByStudent,
         getPublishedCertificatesByStudent: getPublishedCertificatesByStudent,
+        normalizeCertificateStatus: normalizeCertificateStatus,
+        isPublishedCertificate: isPublishedCertificate,
         getCertificateByNumber: getCertificateByNumber,
         getCertificate: getCertificate,
         getCompletedLessons: getCompletedLessons,

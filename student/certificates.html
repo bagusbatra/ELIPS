@@ -109,10 +109,18 @@
                     <i class="bi bi-award" style="font-size: 3rem; margin-bottom: 1rem; display: block; opacity: 0.5;"></i>
                     <p style="margin-bottom: 0.5rem; font-weight: 600; color: var(--text-primary);">Belum ada sertifikat</p>
                     <p style="font-size: 0.875rem;">Sertifikat akan muncul setelah instruktur memberi nilai dan Admin menyetujui penerbitannya.</p>
-                    <a href="courses.html" class="btn btn-primary" style="margin-top: 1rem;">
-                        <i class="bi bi-journal-bookmark"></i>
-                        Lihat Kursus Saya
-                    </a>
+                    <p id="studentAccountInfo" style="font-size: 0.8125rem; color: var(--text-secondary); margin-top: 0.75rem;"></p>
+                    <p style="font-size: 0.8125rem; color: var(--text-secondary);">Jika Admin baru saja menyetujui sertifikat, muat ulang halaman ini.</p>
+                    <div style="display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap; margin-top: 1rem;">
+                        <button type="button" class="btn btn-outline" onclick="window.location.reload()">
+                            <i class="bi bi-arrow-clockwise"></i>
+                            Muat Ulang
+                        </button>
+                        <a href="courses.html" class="btn btn-primary">
+                            <i class="bi bi-journal-bookmark"></i>
+                            Lihat Kursus Saya
+                        </a>
+                    </div>
                 </div>
             </div>
         </main>
@@ -150,21 +158,10 @@
             document.getElementById('studentName').textContent = student.name;
             document.getElementById('studentAvatar').textContent = (student.name || 'S').substring(0, 2).toUpperCase();
 
-            // Hanya sertifikat Publish yang boleh tampil di halaman siswa.
-            const certificates = ELIPS.getPublishedCertificatesByStudent(student.id);
-
-            document.getElementById('statPublished').textContent = certificates.length;
-            document.getElementById('statTotal').textContent = certificates.length;
-
             const publishedSection = document.getElementById('publishedSection');
+            const publishedList = document.getElementById('publishedList');
             const emptySection = document.getElementById('certificatesEmpty');
-
-            if (certificates.length === 0) {
-                emptySection.style.display = 'block';
-                return;
-            }
-
-            const courses = ELIPS.getCourses();
+            const accountInfo = document.getElementById('studentAccountInfo');
 
             function sortByDate(list) {
                 return list.slice().sort(function (a, b) {
@@ -173,8 +170,8 @@
                 });
             }
 
-            function buildCard(cert) {
-                const course = courses.find(function (c) { return c.id === cert.courseId; }) || {};
+            function buildCard(cert, courses) {
+                const course = courses.find(function (c) { return Number(c.id) === Number(cert.courseId); }) || {};
                 const grade = ELIPS.getGrade(cert.studentId, cert.courseId);
                 const issuedDate = cert.approvedAt || cert.issuedByInstructorAt || cert.issuedAt;
                 const scoreText = cert.score !== undefined && cert.score !== null ? ' (' + ELIPS.escapeHtml(cert.score) + ')' : '';
@@ -204,10 +201,47 @@
                 return card;
             }
 
-            publishedSection.style.display = 'block';
-            const publishedList = document.getElementById('publishedList');
-            sortByDate(certificates).forEach(function (cert) {
-                publishedList.appendChild(buildCard(cert));
+            // Hanya sertifikat Publish yang boleh tampil di halaman siswa.
+            function renderCertificates() {
+                const certificates = ELIPS.getPublishedCertificatesByStudent(student.id);
+                const courses = ELIPS.getCourses();
+
+                document.getElementById('statPublished').textContent = certificates.length;
+                document.getElementById('statTotal').textContent = certificates.length;
+
+                publishedSection.style.display = 'none';
+                emptySection.style.display = 'none';
+                publishedList.innerHTML = '';
+
+                if (certificates.length === 0) {
+                    accountInfo.textContent = 'Masuk sebagai: ' + (student.name || '-') +
+                        (student.email ? ' (' + student.email + ')' : '') + '.';
+                    emptySection.style.display = 'block';
+                    return;
+                }
+
+                publishedSection.style.display = 'block';
+                sortByDate(certificates).forEach(function (cert) {
+                    publishedList.appendChild(buildCard(cert, courses));
+                });
+            }
+
+            renderCertificates();
+
+            // Segarkan otomatis ketika Admin menyetujui sertifikat dari tab lain
+            // atau ketika halaman dipulihkan dari cache (tombol Back).
+            window.addEventListener('storage', function (event) {
+                if (!event.key || event.key === ELIPS.KEYS.session) {
+                    window.location.reload();
+                    return;
+                }
+                if (event.key.indexOf('elips_') === 0) renderCertificates();
+            });
+            window.addEventListener('pageshow', function (event) {
+                if (event.persisted) renderCertificates();
+            });
+            document.addEventListener('visibilitychange', function () {
+                if (!document.hidden) renderCertificates();
             });
         });
     </script>

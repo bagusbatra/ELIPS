@@ -1,6 +1,6 @@
 # PRD: Learning Management System (LMS) ELIPS
 
-**Versi:** 1.8  
+**Versi:** 1.9  
 **Tanggal:** 2026-11-03  
 **Status:** Implemented (Demo - Vanilla HTML/CSS/JS + localStorage); seluruh aturan alur kursus telah diterapkan, JavaScript telah dimodularisasi, audit trail P1 aktif, dan notifikasi email P2 disimulasikan melalui outbox  
 **Log pengembangan:** `log.md`
@@ -145,7 +145,7 @@ Sistem ── kursus Publish / sertifikat terbit ▶ Notifikasi email (simulasi)
 | Siswa hanya mengakses kursus yang ditugaskan | ✅ Selesai | `learning.html` memvalidasi enrollment, status kursus, dan urutan materi |
 | Instruktur memberi nilai di akhir kursus | ✅ Selesai | `instructor/students.html` |
 | Nilai terintegrasi ke e-sertifikat Draft | ✅ Selesai | Nilai disimpan di `elips_grades`; Draft dibuat di `elips_certificates` |
-| Sertifikat Draft tidak tampil di halaman siswa | ✅ Selesai | `student/certificates.html` hanya membaca `ELIPS.getPublishedCertificatesByStudent`; section Draft dihapus; dashboard siswa tidak lagi memberi notifikasi Draft |
+| Sertifikat Draft tidak tampil di halaman siswa | ✅ Selesai | `student/certificates.html` hanya membaca `ELIPS.getPublishedCertificatesByStudent`; section Draft dihapus; dashboard siswa tidak lagi memberi notifikasi Draft; status/ID data lama dinormalkan dan tampilan disegarkan otomatis saat data berubah dari tab lain |
 | Admin menyetujui Draft menjadi Publish | ✅ Selesai | `admin/certificates.html` memanggil `ELIPS.approveCertificate`; nomor final dan tanggal approval disimpan |
 | Sertifikat Publish tampil di halaman siswa | ✅ Selesai | `student/certificates.html` - hanya section Sertifikat Terbit |
 | Publikasi kursus tervalidasi | ✅ Selesai | `ELIPS.setCourseStatus` menolak publikasi tanpa instruktur aktif atau tanpa modul/materi |
@@ -428,6 +428,7 @@ else                            -> student/dashboard.html
 | Instruktur membuat modul & materi | ✅ Lulus uji | Tambah/ubah/hapus modul dan materi tersimpan di localStorage |
 | Instruktur memberi nilai | ✅ Lulus uji | Nilai tersimpan, grade otomatis, e-sertifikat Draft dibuat |
 | Sertifikat Draft tidak tampil di halaman siswa | ✅ Lulus uji | Hanya sertifikat Publish yang dirender; sertifikat Draft tidak bocor ke halaman siswa |
+| Sertifikat tampil setelah persetujuan Admin | ✅ Lulus uji | Sertifikat Publish tampil di halaman peserta, termasuk data lama dengan ID string/status kapital, dan tampilan menyegarkan otomatis saat berubah dari tab lain |
 | Validasi publikasi kursus | ✅ Lulus uji | Publikasi ditolak bila tanpa instruktur aktif atau tanpa modul/materi |
 | CRUD terpusat di modul `assets/js/` | ✅ Lulus uji | create/update/delete pengguna, kursus, enrollment, modul, materi, nilai, dan sertifikat |
 | Admin menyetujui sertifikat | ✅ Lulus uji | Draft → Publish, `approvedAt` dan approver tersimpan |

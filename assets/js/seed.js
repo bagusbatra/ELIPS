@@ -276,17 +276,22 @@
         }
 
         // Normalize certificates (migrate legacy ones)
+        // Normalisasi ID dan status agar data lama (string ID / status kapital)
+        // tetap terbaca oleh halaman peserta dan filter status.
         const certificates = ELIPS.getCertificates();
         const changed = certificates.map(function (cert) {
+            cert.studentId = Number(cert.studentId);
             if (!cert.studentId) cert.studentId = 5;
+            cert.courseId = Number(cert.courseId);
             if (!cert.courseId) cert.courseId = 1;
-            if (!cert.status) cert.status = 'publish';
+            cert.status = ELIPS.normalizeCertificateStatus(cert);
             if (!cert.grade && cert.score) cert.grade = cert.score;
-            if (cert.courseName && !cert.courseId) cert.courseId = 1;
             if (!cert.certificateNumber) cert.certificateNumber = 'CERT-' + new Date().getFullYear() + '-' + Math.random().toString(36).slice(2, 8).toUpperCase();
-            if (!cert.enrollmentId) {
+            if (cert.enrollmentId !== undefined && cert.enrollmentId !== null && cert.enrollmentId !== '') {
+                cert.enrollmentId = Number(cert.enrollmentId);
+            } else {
                 const enr = ELIPS.getEnrollments().find(function (e) {
-                    return e.studentId === cert.studentId && e.courseId === cert.courseId;
+                    return Number(e.studentId) === cert.studentId && Number(e.courseId) === cert.courseId;
                 });
                 cert.enrollmentId = enr ? enr.id : null;
             }

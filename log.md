@@ -1,6 +1,6 @@
 # Log Pengembangan ELIPS LMS
 
-**Versi dokumen:** 1.3  
+**Versi dokumen:** 1.4  
 **Terakhir diperbarui:** 2026-11-03  
 **Status proyek:** Demo — Vanilla HTML/CSS/JavaScript + `localStorage`  
 **Dokumen terkait:** `prd.md`
@@ -130,7 +130,28 @@ Prinsip yang dipakai:
 
 ## 3. Riwayat Perubahan
 
-### v1.8 — 2026-11-03 — Modal pilih role tambah pengguna
+### v1.9 - 2026-11-03 - Perbaikan visibilitas sertifikat peserta
+
+**Tujuan:** memastikan sertifikat yang sudah disetujui Admin langsung terbaca di halaman peserta, termasuk saat data berasal dari versi lama atau diubah dari tab lain.
+
+Perubahan:
+
+- `assets/js/data.js` menambahkan normalisasi status sertifikat (`publish`, `published`, `Publish`, `terbit`, `approved` dianggap Publish; `draft`, `menunggu`, `pending` dianggap Draft) dan perbandingan ID numerik agar data lama tetap terbaca.
+- `assets/js/seed.js` menormalkan `studentId`, `courseId`, `enrollmentId`, dan status sertifikat saat migrasi data.
+- `student/certificates.html` memisahkan proses render ke fungsi `renderCertificates()` dan menyegarkan tampilan otomatis saat ada perubahan `localStorage` dari tab lain, saat halaman dipulihkan dari cache, atau saat tab kembali aktif.
+- Empty state halaman peserta sekarang menampilkan akun yang sedang masuk beserta tombol **Muat Ulang** untuk membantu memastikan akun peserta yang benar.
+- `student/dashboard.html` memuat ulang data saat nilai/sertifikat/enrollment berubah dari tab lain atau halaman dipulihkan dari cache.
+- PRD diperbarui ke v1.9.
+
+Dampak:
+
+- Sertifikat Publish langsung terlihat tanpa perlu menutup browser.
+- Data sertifikat lama dengan ID string atau status berhuruf kapital tetap tampil.
+- Sertifikat Draft tetap tidak dirender dan tidak bocor ke halaman peserta.
+
+---
+
+### v1.8 - 2026-11-03 - Modal pilih role tambah pengguna
 
 **Tujuan:** memudahkan Admin memilih jenis akun yang akan dibuat sebelum mengisi form pengguna.
 
@@ -359,7 +380,7 @@ Akun demo utama:
 
 ## 6. Hasil Pengujian Terakhir
 
-Pengujian dijalankan setelah implementasi modal pilih role tambah pengguna (v1.8):
+Pengujian dijalankan setelah perbaikan visibilitas sertifikat peserta (v1.9):
 
 | Pemeriksaan | Hasil |
 |---|---|
@@ -372,6 +393,7 @@ Pengujian dijalankan setelah implementasi modal pilih role tambah pengguna (v1.8
 | Alur belajar (`test-learning`) | ✅ Lulus |
 | Halaman admin (`test-admin-pages`) | ✅ Lulus |
 | Modal pilih role tambah pengguna | ✅ Lulus |
+| Visibilitas sertifikat peserta & data lama | ✅ Lulus |
 | Semua 25 halaman dimuat tanpa error (`test-all-pages`) | ✅ Lulus |
 | Semua tautan lokal (`check-links`) | ✅ Lulus |
 | Data layer (`test-data`) | ✅ Lulus |
