@@ -20,6 +20,13 @@
     }
 
     function assignStudentToCourses(studentId, courseIds, enrolledAt) {
+        if (ELIPS.api && ELIPS.api.enabled) {
+            return ELIPS.api.call('enrollment.assign', {
+                studentId: studentId,
+                courseIds: courseIds || [],
+                enrolledAt: enrolledAt
+            });
+        }
         const student = ELIPS.getUserById(studentId);
         if (!student || student.role !== 'peserta') return failure('Pilih akun peserta yang valid.');
         if (student.status !== 'aktif') return failure('Peserta harus berstatus aktif.');
@@ -75,6 +82,7 @@
     }
 
     function setEnrollmentStatus(id, status) {
+        if (ELIPS.api && ELIPS.api.enabled) return ELIPS.api.call('enrollment.status', { id: id, status: status });
         if (status !== 'active' && status !== 'dihentikan') return failure('Status penugasan tidak valid.');
         const enrollments = ELIPS.getEnrollments();
         const enrollment = enrollments.find(function (e) { return e.id === Number(id); });
@@ -94,6 +102,7 @@
     }
 
     function deleteEnrollment(id) {
+        if (ELIPS.api && ELIPS.api.enabled) return ELIPS.api.call('enrollment.delete', { id: id });
         const enrollment = ELIPS.getEnrollments().find(function (e) { return e.id === Number(id); });
         if (!enrollment) return failure('Penugasan tidak ditemukan.');
         const label = enrollmentLabel(enrollment);

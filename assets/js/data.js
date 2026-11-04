@@ -120,6 +120,14 @@
         });
     }
     function markLessonCompleted(studentId, courseId, lessonId) {
+        if (ELIPS.api && ELIPS.api.enabled) {
+            ELIPS.api.call('progress.complete', {
+                studentId: Number(studentId),
+                courseId: Number(courseId),
+                lessonId: Number(lessonId)
+            });
+            return getCompletedLessons();
+        }
         const list = getCompletedLessons();
         if (isLessonCompleted(studentId, courseId, lessonId)) return list;
         list.push({

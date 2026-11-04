@@ -21,6 +21,7 @@
 
     // ---------- Modules ----------
     function createModule(courseId, data, actorId) {
+        if (ELIPS.api && ELIPS.api.enabled) return ELIPS.api.call('module.create', { courseId: courseId, data: data || {} });
         data = data || {};
         const course = ELIPS.getCourseById(courseId);
         if (!course) return failure('Kursus tidak ditemukan.');
@@ -58,6 +59,7 @@
     }
 
     function updateModule(id, data, actorId) {
+        if (ELIPS.api && ELIPS.api.enabled) return ELIPS.api.call('module.update', { id: id, data: data || {} });
         data = data || {};
         const modules = ELIPS.getModules();
         const module = modules.find(function (item) { return item.id === Number(id); });
@@ -85,6 +87,7 @@
     }
 
     function deleteModule(id, actorId) {
+        if (ELIPS.api && ELIPS.api.enabled) return ELIPS.api.call('module.delete', { id: id });
         const module = ELIPS.getModules().find(function (item) { return item.id === Number(id); });
         if (!module) return failure('Modul tidak ditemukan.');
         if (!canManageCourse(module.courseId, actorId)) return failure('Anda tidak berhak menghapus modul ini.');
@@ -111,6 +114,7 @@
 
     // ---------- Lessons ----------
     function createLesson(moduleId, data, actorId) {
+        if (ELIPS.api && ELIPS.api.enabled) return ELIPS.api.call('lesson.create', { moduleId: moduleId, data: data || {} });
         data = data || {};
         const module = ELIPS.getModules().find(function (item) { return item.id === Number(moduleId); });
         if (!module) return failure('Modul tidak ditemukan.');
@@ -157,6 +161,7 @@
     }
 
     function updateLesson(id, data, actorId) {
+        if (ELIPS.api && ELIPS.api.enabled) return ELIPS.api.call('lesson.update', { id: id, data: data || {} });
         data = data || {};
         const lessons = ELIPS.getLessons();
         const lesson = lessons.find(function (item) { return item.id === Number(id); });
@@ -203,6 +208,7 @@
     }
 
     function deleteLesson(id, actorId) {
+        if (ELIPS.api && ELIPS.api.enabled) return ELIPS.api.call('lesson.delete', { id: id });
         const lesson = ELIPS.getLessons().find(function (item) { return item.id === Number(id); });
         if (!lesson) return failure('Materi tidak ditemukan.');
         if (!canManageCourse(lesson.courseId, actorId)) return failure('Anda tidak berhak menghapus materi ini.');

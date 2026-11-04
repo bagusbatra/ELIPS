@@ -68,6 +68,9 @@
     }
 
     function logAudit(entry) {
+        // Pada mode server, audit dicatat oleh backend agar tidak ada
+        // duplikasi dan aktor selalu berasal dari sesi server.
+        if (ELIPS.api && ELIPS.api.enabled) return null;
         try {
             entry = entry || {};
             if (!entry.action || !entry.entity) return null;
@@ -180,6 +183,7 @@
     }
 
     function clearAuditLogs() {
+        if (ELIPS.api && ELIPS.api.enabled) return ELIPS.api.call('audit.clear', {});
         saveLogs([]);
         return ELIPS._.success('Seluruh audit trail berhasil dibersihkan.');
     }

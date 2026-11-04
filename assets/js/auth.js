@@ -55,6 +55,10 @@
     }
 
     function logout() {
+        if (ELIPS.api && ELIPS.api.enabled) {
+            ELIPS.api.call('auth.logout', {});
+            return;
+        }
         localStorage.removeItem(KEYS.session);
     }
 

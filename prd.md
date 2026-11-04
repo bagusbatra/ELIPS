@@ -1,16 +1,17 @@
 # PRD: Learning Management System (LMS) ELIPS
 
-**Versi:** 2.0  
+**Versi:** 3.0  
 **Tanggal:** 2026-11-04  
-**Status:** Implemented (Demo - Vanilla HTML/CSS/JS + localStorage); seluruh aturan alur kursus telah diterapkan, JavaScript telah dimodularisasi, audit trail P1 aktif, notifikasi email P2 disimulasikan melalui outbox, dan hardening P0 demo (guard sesi, verifikasi password, sanitasi materi) aktif  
+**Status:** Implemented (Dual-mode - PHP 8/MySQL 8 + fallback `localStorage`); seluruh aturan alur kursus diterapkan di client dan server, JavaScript dimodularisasi, audit trail P1 aktif, notifikasi email P2 disimulasikan melalui outbox database, dan hardening P0 (guard sesi, hash password, sanitasi materi) aktif  
 **Log pengembangan:** `log.md`
+**ERD:** `erd.md`
 **Nama Aplikasi:** ELIPS LMS
 
 ---
 
 ## 1. Tujuan Proyek
 
-Membangun sistem Learning Management System (LMS) berbasis web untuk pelatihan dan kursus. Pada fase demo ini, sistem dibangun menggunakan vanilla HTML, CSS, dan JavaScript dengan penyimpanan data menggunakan `localStorage` untuk mensimulasikan alur pendaftaran, progres belajar, dan penerbitan sertifikat.
+Membangun sistem Learning Management System (LMS) berbasis web untuk pelatihan dan kursus. Aplikasi memakai vanilla HTML, CSS, dan JavaScript di sisi client, dengan backend PHP 8 + MySQL 8 sebagai penyimpanan utama dan `localStorage` sebagai fallback demo saat API tidak tersedia.
 
 ---
 
@@ -153,39 +154,52 @@ Sistem ── kursus Publish / sertifikat terbit ▶ Notifikasi email (simulasi)
 | CRUD terpusat di JavaScript | ✅ Selesai | Seluruh CRUD pengguna, kursus, enrollment, modul, materi, nilai, dan sertifikat memakai modul CRUD di `assets/js/` (lihat §4) |
 | Audit trail perubahan kursus, nilai, dan sertifikat | ✅ Selesai | `assets/js/audit.js` mencatat aktor, aksi, entitas, waktu, dan detail; halaman `admin/audit.html` menyediakan filter, ekspor CSV, dan pembersihan log |
 | Notifikasi email simulasi | ✅ Selesai | `assets/js/notifications.js` mencatat outbox saat kursus dipublikasikan atau sertifikat terbit; `admin/notifications.html` menyediakan filter, ekspor CSV, dan pembersihan outbox |
+| Backend PHP + MySQL | ✅ Selesai | `api/` menyediakan autentikasi sesi, CRUD, snapshot, audit, notifikasi, dan seeding data demo |
+| Dual-mode client | ✅ Selesai | `assets/js/api.js` memakai API saat tersedia dan otomatis fallback ke `localStorage` |
 
 ---
 
-## 4. Arsitektur Saat Ini (Demo)
+## 4. Arsitektur (Dual-Mode: Server PHP/MySQL + Demo `localStorage`)
+
+Aplikasi berjalan dalam dua mode yang memakai UI dan aturan bisnis yang sama:
+
+- **Mode server (utama):** halaman disajikan melalui HTTP/HTTPS dan `assets/js/config.js` menyediakan `window.ELIPS_CONFIG.apiBase`. `assets/js/api.js` mengambil snapshot awal dari API, menyimpan cache sinkron di memori, lalu setiap operasi tulis memanggil aksi API. Backend PHP memvalidasi sesi, role, kepemilikan kursus, status, dan aturan bisnis sebelum menulis ke MySQL.
+- **Mode lokal (fallback):** jika halaman dibuka lewat `file://` atau backend tidak tersedia, aplikasi otomatis memakai `localStorage` seperti demo lama. Mode ini dipertahankan agar demo tetap dapat dijalankan tanpa server dan seluruh regression test lama tetap valid.
+
+### 4.1 Frontend
 
 - **Frontend:** HTML5, CSS3 (custom dengan variabel CSS), Vanilla JavaScript
-- **Business Logic & CRUD Layer:** JavaScript modular di `assets/js/` menjadi satu-satunya lapisan data dan aturan bisnis:
+- **Business Logic & CRUD Layer:** JavaScript modular di `assets/js/`:
   - `core.js` - namespace, storage helper, result object, validasi dasar;
-  - `data.js` - getter/setter seluruh koleksi data;
-  - `seed.js` - data demo awal dan migrasi data lama;
+  - `config.js` - menentukan `apiBase` relatif terhadap halaman;
+  - `api.js` - jembatan dual-mode, cache snapshot, `ELIPS.api.call`, dan `ELIPS.api.refresh`;
+  - `data.js` - getter/setter seluruh koleksi data (dari cache pada mode server);
+  - `seed.js` - data demo awal dan migrasi data lama (dilewati pada mode server);
   - `sync.js` - sinkronisasi nama instruktur, kepemilikan konten, dan counter kursus;
   - `progress.js` - struktur kursus, progres, dan ringkasan siswa/instruktur;
-  - `auth.js` - session dan role guard;
-  - `audit.js` - pencatatan audit trail, filter log, dan daftar aktor;
-  - `notifications.js` - outbox notifikasi email simulasi, filter, daftar penerima, dan pembersihan outbox;
-  - `crud-users.js`, `crud-courses.js`, `crud-enrollments.js`, `crud-content.js`, `crud-grades.js` - CRUD dan aturan bisnis per domain;
+  - `auth.js` - session, role guard, dan logout (memanggil `auth.logout` pada mode server);
+  - `audit.js` - audit trail; pada mode server pencatatan dilakukan backend;
+  - `notifications.js` - outbox notifikasi; pada mode server notifikasi dibuat backend;
+  - `crud-users.js`, `crud-courses.js`, `crud-enrollments.js`, `crud-content.js`, `crud-grades.js` - CRUD dan aturan bisnis per domain; pada mode server fungsi ini meneruskan aksi ke API;
   - `utils.js` - helper format, escape HTML, dan toast;
   - `ui.js` - perilaku UI bersama (navigasi, sidebar, katalog, login, logout).
-  - Halaman hanya menangani rendering dan interaksi UI, tidak menulis langsung ke `localStorage`.
+  - Halaman hanya menangani rendering dan interaksi UI.
   - Setiap fungsi CRUD mengembalikan `{ ok, message, data }` agar pesan sukses/gagal konsisten.
-  - Modul dimuat berurutan: `core → utils → data → seed → sync → progress → auth → audit → notifications → crud-* → ui`.
-- **Penyimpanan Data:** `localStorage` (demo)
-  - `elips_users` - Data pengguna (admin, instruktur, peserta)
-  - `elips_courses` - Data kursus beserta instruktur pengampu dan status
-  - `elips_enrollments` - Data penugasan peserta ke kursus
-  - `elips_modules` - Modul pada setiap kursus
-  - `elips_lessons` - Materi/pelajaran pada setiap modul
-  - `elips_grades` - Nilai peserta per kursus
-  - `elips_certificates` - Data e-sertifikat (Draft/Terbit)
-  - `elips_completedLessons` - Tracking pelajaran yang diselesaikan
-  - `elips_auditLogs` - Jejak audit perubahan kursus, nilai, sertifikat, pengguna, penugasan, dan konten
-  - `elips_notifications` - Outbox notifikasi email simulasi (publikasi kursus dan penerbitan sertifikat)
-  - `elips_session` - Sesi pengguna yang sedang masuk
+  - Modul dimuat berurutan: `config → core → api → utils → data → seed → sync → progress → auth → audit → notifications → crud-* → ui`.
+
+### 4.2 Backend PHP/MySQL
+
+Backend berada di folder `api/` dan terdiri dari front controller, konfigurasi, koneksi, helper, snapshot, aksi bisnis, skema, dan installer. Daftar file lengkap ada di §5 bagian **Backend (`api/`)**; detail tabel database ada di `erd.md` §16.
+
+- **Autentikasi:** sesi PHP native (`$_SESSION`) dengan cookie `HttpOnly`, `SameSite=Lax`; password disimpan dengan `password_hash()` dan diverifikasi dengan `password_verify()`.
+- **Otorisasi:** setiap aksi memeriksa role dan kepemilikan di server. Contoh: instruktur hanya boleh mengelola kursus yang diampu; peserta hanya boleh menandai progres miliknya; hanya Admin yang boleh publish kursus, menyetujui sertifikat, atau membersihkan audit/notifikasi.
+- **Snapshot:** respons tulis menyertakan snapshot terbaru dan data sesi, sehingga cache client selalu identik dengan database tanpa reload halaman.
+- **Sanitasi:** konten materi tipe teks disanitasi di server dengan allowlist tag/atribut sebelum disimpan.
+
+### 4.3 Penyimpanan Data
+
+- **MySQL (mode server):** tabel `users`, `courses`, `modules`, `lessons`, `enrollments`, `grades`, `certificates`, `completed_lessons`, `audit_logs`, `notifications` (lihat `erd.md`).
+- **`localStorage` (mode lokal/fallback):** key `elips_users`, `elips_courses`, `elips_enrollments`, `elips_modules`, `elips_lessons`, `elips_grades`, `elips_certificates`, `elips_completedLessons`, `elips_auditLogs`, `elips_notifications`, dan `elips_session`.
 - **Styling:** Custom CSS (`assets/css/style.css`), Bootstrap Icons, Google Fonts (Inter)
 - **Struktur Folder:** Berbasis role (`admin/`, `instructor/`, `student/`)
 
@@ -198,10 +212,10 @@ Sistem ── kursus Publish / sertifikat terbit ▶ Notifikasi email (simulasi)
 |---|---|---|
 | `index.html` | ✅ Selesai | Beranda dengan daftar kursus |
 | `course-detail.html` | ✅ Selesai | Detail kursus, tombol enrolment dinamis (berubah menjadi "Sudah Terdaftar - Lanjutkan Belajar") |
-| `login.html` | ✅ Selesai | Halaman login dengan validasi email + password terhadap `elips_users` dan redirect berbasis role |
+| `login.html` | ✅ Selesai | Halaman login dengan validasi email + password; mode server diverifikasi PHP (`password_verify`), mode lokal terhadap `elips_users`, lalu redirect berbasis role |
 | `register.html` | ✅ Selesai | Halaman registrasi |
 | `verify-certificate.html` | ✅ Selesai | Verifikasi keaslian sertifikat publik |
-| `certificate-view.html` | ✅ Selesai | Tampilan sertifikat dinamis dari URL params/localStorage |
+| `certificate-view.html` | ✅ Selesai | Tampilan sertifikat dinamis dari URL params dan snapshot/cache data |
 | `learning.html` | ✅ Selesai | Halaman belajar dengan tracking pelajaran selesai; mendukung mode pratinjau untuk instruktur/admin tanpa mengubah progres peserta |
 
 ### Role Admin (`admin/`)
@@ -238,6 +252,8 @@ Sistem ── kursus Publish / sertifikat terbit ▶ Notifikasi email (simulasi)
 | File | Status | Deskripsi |
 |---|---|---|
 | `assets/css/style.css` | ✅ Selesai | Styling utama untuk seluruh aplikasi |
+| `assets/js/config.js` | ✅ Selesai | Menentukan `apiBase` relatif terhadap halaman (dilewati pada bundle uji JSDOM) |
+| `assets/js/api.js` | ✅ Selesai | Jembatan dual-mode: bootstrap snapshot, cache sinkron, panggilan aksi API, dan fallback lokal |
 | `assets/js/core.js` | ✅ Selesai | Namespace, storage helper, result object, dan validasi dasar |
 | `assets/js/utils.js` | ✅ Selesai | Helper grade, nomor sertifikat, escape HTML, format tanggal, toast |
 | `assets/js/data.js` | ✅ Selesai | Getter/setter seluruh koleksi data |
@@ -254,6 +270,18 @@ Sistem ── kursus Publish / sertifikat terbit ▶ Notifikasi email (simulasi)
 | `assets/js/crud-grades.js` | ✅ Selesai | Input nilai dan alur sertifikat Draft → Publish |
 | `assets/js/ui.js` | ✅ Selesai | Perilaku UI bersama: navigasi, sidebar, katalog, login, logout |
 
+### Backend (`api/`)
+| File | Status | Deskripsi |
+|---|---|---|
+| `api/index.php` | ✅ Selesai | Front controller API dan pengaturan sesi PHP |
+| `api/config.php` | ✅ Selesai | Konfigurasi database (override via environment variable) |
+| `api/db.php` | ✅ Selesai | Koneksi PDO MySQL dan timezone UTC |
+| `api/helpers.php` | ✅ Selesai | Sesi, otorisasi, serializer, sanitasi HTML, audit, dan notifikasi |
+| `api/snapshot.php` | ✅ Selesai | Snapshot koleksi untuk cache client |
+| `api/actions.php` | ✅ Selesai | Aksi bisnis dan validasi role/kepemilikan di server |
+| `api/schema.sql` | ✅ Selesai | Skema MySQL 8 dan foreign key |
+| `api/install.php` | ✅ Selesai | Installer/seeder data demo (`--fresh` untuk reset) |
+
 ---
 
 ## 6. Fitur yang Telah Diimplementasikan
@@ -261,11 +289,11 @@ Sistem ── kursus Publish / sertifikat terbit ▶ Notifikasi email (simulasi)
 ### 6.1 Autentikasi & Role-Based Access
 | Fitur | Status | Keterangan |
 |---|---|---|
-| Login form | ✅ Selesai | Form login di `login.html`, email + password diverifikasi melalui `ELIPS.authenticateUser()`; akun demo memakai password `elips123` |
+| Login form | ✅ Selesai | Form login di `login.html`, email + password diverifikasi melalui `ELIPS.authenticateUser()`; pada mode server verifikasi dilakukan PHP (`password_verify`) dan sesi disimpan di `$_SESSION`. Akun demo memakai password `elips123` |
 | Role redirect berdasarkan role akun | ✅ Selesai | `admin` → `admin/dashboard.html`, `instruktur` → `instructor/dashboard.html`, `peserta` → `student/dashboard.html` |
-| Role guard halaman | ✅ Selesai | Halaman admin memanggil `ELIPS.requireRole('admin')`; halaman instruktur memanggil `ELIPS.requireRole('instruktur')`; halaman peserta memeriksa sesi/role. `getCurrentUser()` hanya membaca sesi, tanpa fallback path |
-| Password akun | ✅ Selesai | Password wajib minimal 8 karakter saat Admin membuat pengguna/registrasi; akun demo dan akun lama dimigrasikan ke password demo `elips123` |
-| Sanitasi materi teks | ✅ Selesai | `ELIPS.sanitizeHtml()` memakai allowlist tag/atribut, diterapkan saat menyimpan dan merender konten materi untuk mencegah stored XSS |
+| Role guard halaman | ✅ Selesai | Halaman admin memanggil `ELIPS.requireRole('admin')`; halaman instruktur memanggil `ELIPS.requireRole('instruktur')`; halaman peserta memeriksa sesi/role. `getCurrentUser()` hanya membaca sesi, tanpa fallback path. API juga menolak aksi yang tidak sesuai role |
+| Password akun | ✅ Selesai | Password wajib minimal 8 karakter saat Admin membuat pengguna/registrasi; pada mode server disimpan sebagai hash `password_hash()` dan tidak pernah dikirim ke client |
+| Sanitasi materi teks | ✅ Selesai | `ELIPS.sanitizeHtml()` pada client dan `elips_sanitize_html()` pada server memakai allowlist tag/atribut untuk mencegah stored XSS |
 | Struktur folder per role | ✅ Selesai | Semua halaman role dipindahkan ke folder terpisah |
 
 ### 6.2 Manajemen Kursus
@@ -286,7 +314,7 @@ Sistem ── kursus Publish / sertifikat terbit ▶ Notifikasi email (simulasi)
 | Akses kursus oleh siswa | ✅ Selesai | Siswa hanya dapat membuka kursus yang ditugaskan dan berstatus Published |
 | Status enrolment dinamis | ✅ Selesai | Tombol di `course-detail.html` berubah menjadi "Lanjutkan Belajar" bila sudah ditugaskan |
 | Halaman belajar | ✅ Selesai | `learning.html` dengan sidebar modul/lesson dan penguncian materi berurutan |
-| Tandai pelajaran selesai | ✅ Selesai | Menyimpan ke `localStorage` (`elips_completedLessons`) |
+| Tandai pelajaran selesai | ✅ Selesai | Mode server: tabel `completed_lessons`; mode lokal: `localStorage` (`elips_completedLessons`) |
 | Tracking progres | ✅ Selesai | Progres dihitung berdasarkan pelajaran selesai |
 | Kelola enrolment (Admin) | ✅ Selesai | `admin/enrollment.html` - tambah penugasan, filter, aktif/nonaktifkan, hapus |
 
@@ -294,10 +322,10 @@ Sistem ── kursus Publish / sertifikat terbit ▶ Notifikasi email (simulasi)
 | Fitur | Status | Keterangan |
 |---|---|---|
 | Alur e-sertifikat | ✅ Selesai | Instruktur memberi nilai → e-sertifikat otomatis dibuat berstatus **Draft** → Admin menyetujui di `admin/certificates.html` → status menjadi **Publish** |
-| Integrasi nilai → sertifikat | ✅ Selesai | Nilai/grade dari `elips_grades` disalin ke e-sertifikat saat penilaian disimpan |
+| Integrasi nilai → sertifikat | ✅ Selesai | Nilai/grade dari tabel `grades` (atau `elips_grades` pada mode lokal) disalin ke e-sertifikat saat penilaian disimpan |
 | Sertifikat Draft tidak tampil ke siswa | ✅ Selesai | `student/certificates.html` memakai `getPublishedCertificatesByStudent`; Draft tidak dirender dan notifikasinya dihapus dari dashboard |
 | Sertifikat peserta (Instruktur) | ✅ Selesai | `instructor/certificates.html` menampilkan Draft/Publish, filter kursus & status, serta pengajuan Draft untuk peserta yang sudah dinilai |
-| Tampilan sertifikat | ✅ Selesai | `certificate-view.html` menampilkan sertifikat dari URL params/localStorage |
+| Tampilan sertifikat | ✅ Selesai | `certificate-view.html` menampilkan sertifikat dari URL params dan data snapshot/cache |
 | Verifikasi sertifikat publik | ✅ Selesai | `verify-certificate.html` - hanya sertifikat Publish yang dapat diverifikasi |
 | Kelola sertifikat (Admin) | ✅ Selesai | `admin/certificates.html` - persetujuan Draft menjadi Publish |
 
@@ -331,7 +359,7 @@ Sistem ── kursus Publish / sertifikat terbit ▶ Notifikasi email (simulasi)
 | Pencatatan domain lain | ✅ Selesai | Pengguna, penugasan peserta, modul, dan materi juga tercatat |
 | Resolusi aktor | ✅ Selesai | Prioritas: `actorId` eksplisit → user sesi → "Sistem"; tidak memakai fallback berbasis path halaman |
 | Filter & ekspor | ✅ Selesai | `admin/audit.html` memfilter berdasarkan aktor, aksi, entitas, tanggal, pencarian, dan limit; dapat diekspor ke CSV |
-| Batas penyimpanan | ✅ Selesai | Maksimal 1000 entri terbaru disimpan agar `localStorage` tidak tumbuh tanpa kendali |
+| Batas penyimpanan | ✅ Selesai | Maksimal 1000 entri terbaru disimpan; backend memangkas tabel `audit_logs`, mode lokal membatasi `localStorage` |
 
 ### 6.8 Notifikasi Email (Simulasi)
 | Fitur | Status | Keterangan |
@@ -341,7 +369,7 @@ Sistem ── kursus Publish / sertifikat terbit ▶ Notifikasi email (simulasi)
 | Outbox notifikasi (Admin) | ✅ Selesai | `admin/notifications.html` menampilkan waktu, penerima, jenis, subjek, isi, dan status simulasi |
 | Filter & ekspor | ✅ Selesai | Filter jenis, penerima, rentang tanggal, pencarian, dan limit; hasil dapat diekspor ke CSV |
 | Batas penyimpanan | ✅ Selesai | Maksimal 1000 notifikasi terbaru disimpan di `elips_notifications` |
-| Pengiriman email sungguhan | ⏳ Belum | Demo tanpa backend hanya mencatat email ke outbox; pengiriman nyata memerlukan SMTP/email service di produksi |
+| Pengiriman email sungguhan | ⏳ Belum | Mode server menyimpan outbox di tabel `notifications`; pengiriman nyata memerlukan SMTP/email service di produksi |
 
 ---
 
@@ -371,7 +399,7 @@ else                            -> student/dashboard.html
 - Sanitasi dilakukan saat menyimpan materi (create/update), saat migrasi data lama, dan saat render di `learning.html` (defense in depth).
 
 ### Enrolment
-- Data disimpan di `localStorage` key `elips_enrollments` (array of objects).
+- Data disimpan di tabel `enrollments` (mode server) atau `localStorage` key `elips_enrollments` (mode lokal), berupa array of objects.
 - Penugasan siswa ke kursus hanya dilakukan oleh Admin melalui `admin/enrollment.html`.
 - Satu siswa dapat memiliki banyak enrollment (satu baris per kursus); satu kursus dapat memiliki banyak siswa.
 - Akses siswa divalidasi di `course-detail.html` dan `learning.html`:
@@ -381,12 +409,12 @@ else                            -> student/dashboard.html
 - Enrollment berstatus `dihentikan` mencabut akses siswa tanpa menghapus riwayat progres dan nilai.
 
 ### Progres Belajar
-- Pelajaran selesai disimpan di `localStorage` key `elips_completedLessons`
+- Pelajaran selesai disimpan di tabel `completed_lessons` (mode server) atau `localStorage` key `elips_completedLessons` (mode lokal)
 - Progres dihitung berdasarkan jumlah pelajaran selesai vs total pelajaran
 - Materi terkunci sampai pelajaran sebelumnya selesai (instruktur/admin dapat melewati saat pratinjau)
 
 ### Penilaian & Sertifikat
-- Nilai disimpan di `localStorage` key `elips_grades` dan dihitung hurufnya otomatis (A–E).
+- Nilai disimpan di tabel `grades` (mode server) atau `localStorage` key `elips_grades` (mode lokal), dan hurufnya dihitung otomatis (A–E).
 - Instruktur hanya dapat menilai peserta pada kursus yang diampu.
 - Saat instruktur menyimpan nilai, sistem membuat/memperbarui e-sertifikat dengan status **Draft** dan menyalin nilai/grade ke sertifikat.
 - Sertifikat **Draft**:
@@ -400,7 +428,7 @@ else                            -> student/dashboard.html
   - dapat diverifikasi publik di `verify-certificate.html`.
 
 ### Audit Trail
-- Setiap operasi bisnis yang berhasil memanggil `ELIPS.logAudit()` dan menulis satu entri ke `localStorage` key `elips_auditLogs`.
+- Pada mode server, setiap operasi bisnis yang berhasil dicatat backend ke tabel `audit_logs`; pada mode lokal ditulis ke `localStorage` key `elips_auditLogs` (client tidak menulis duplikat di mode server).
 - Entri audit menyimpan `action`, `entity`, `entityId`, `entityLabel`, `actorId`, `actorName`, `actorRole`, `detail`, dan `createdAt`.
 - Resolusi aktor: `actorId` eksplisit dari pemanggil → user sesi (`elips_session`) → "Sistem". Fallback `getCurrentUser()` tidak dipakai agar tidak salah atribusi saat tidak ada sesi.
 - Operasi yang gagal (validasi ditolak) tidak dicatat.
@@ -410,7 +438,7 @@ else                            -> student/dashboard.html
 - Admin dapat mengekspor hasil filter ke CSV dan membersihkan seluruh log dari `admin/audit.html`.
 
 ### Notifikasi Email (Simulasi)
-- Demo berjalan tanpa backend, sehingga email **tidak benar-benar dikirim**. Setiap notifikasi disimpan sebagai entri outbox di `localStorage` key `elips_notifications` dengan `channel: 'email'`, `status: 'sent'`, dan `simulated: true`.
+- Pada mode server, notifikasi disimpan backend di tabel `notifications`; pada mode fallback disimpan di `localStorage` key `elips_notifications`. Pada kedua mode email **tidak benar-benar dikirim** (`channel: 'email'`, `status: 'sent'`, `simulated: true`).
 - Notifikasi publikasi kursus dibuat setelah `setCourseStatus` berhasil mengubah status menjadi `published`:
   - penerima: peserta dengan enrollment `active` pada kursus tersebut dan akun berstatus `aktif`;
   - ditambah instruktur pengampu yang berstatus `aktif`;
@@ -437,8 +465,8 @@ else                            -> student/dashboard.html
 | Admin menambah siswa | ✅ Lulus uji | Akun peserta aktif dapat ditugaskan ke kursus |
 | Admin mengaitkan siswa ke beberapa kursus | ✅ Lulus uji | Multi-checkbox pada `admin/enrollment.html` |
 | Siswa hanya mengakses kursus yang ditugaskan | ✅ Lulus uji | `learning.html` menolak kursus tanpa enrollment aktif |
-| Belajar & tandai selesai | ✅ Lulus uji | Progres ter-update di localStorage dan materi berurutan |
-| Instruktur membuat modul & materi | ✅ Lulus uji | Tambah/ubah/hapus modul dan materi tersimpan di localStorage |
+| Belajar & tandai selesai | ✅ Lulus uji | Progres ter-update di tabel `completed_lessons`/localStorage dan materi berurutan |
+| Instruktur membuat modul & materi | ✅ Lulus uji | Tambah/ubah/hapus modul dan materi tersimpan di database/localStorage |
 | Instruktur memberi nilai | ✅ Lulus uji | Nilai tersimpan, grade otomatis, e-sertifikat Draft dibuat |
 | Sertifikat Draft tidak tampil di halaman siswa | ✅ Lulus uji | Hanya sertifikat Publish yang dirender; sertifikat Draft tidak bocor ke halaman siswa |
 | Sertifikat tampil setelah persetujuan Admin | ✅ Lulus uji | Sertifikat Publish tampil di halaman peserta, termasuk data lama dengan ID string/status kapital, dan tampilan menyegarkan otomatis saat berubah dari tab lain |
@@ -464,29 +492,26 @@ else                            -> student/dashboard.html
 
 ## 9. Catatan Pengembangan
 
-- **Mode Demo:** Menggunakan vanilla HTML/CSS/JS tanpa backend. Cocok untuk prototyping dan demo.
-- **Data Persisten:** Menggunakan localStorage browser - data akan hilang jika localStorage dibersihkan.
-- **Struktur Rapi:** File terorganisir berdasarkan role untuk kemudahan navigasi.
+- **Dual-mode:** Mode server memakai PHP 8 + MySQL 8; mode lokal `localStorage` tetap tersedia sebagai fallback dan untuk regression test JSDOM.
+- **Menjalankan backend:** jalankan MySQL, lalu `php api/install.php --fresh`, lalu sajikan folder proyek lewat web server (mis. `php -S 127.0.0.1:8099 -t .`). Halaman akan otomatis memakai API karena `config.js` aktif pada HTTP/HTTPS.
+- **Data Persisten:** Mode server menyimpan data di MySQL; mode lokal menyimpan di `localStorage` browser.
+- **Struktur Rapi:** File terorganisir berdasarkan role untuk kemudahan navigasi, dengan lapisan backend terpisah di `api/`.
 - **Responsive:** Menggunakan CSS custom yang responsif.
 - **UI Konsisten:** Menggunakan komponen seragam (navbar, sidebar, cards, tables, badges).
-- **Keamanan Demo:** Password diverifikasi di client dan tersimpan apa adanya di `localStorage`; guard role juga client-side. Keduanya bukan pengganti autentikasi/middleware server-side untuk produksi.
+- **Keamanan:** Pada mode server password di-hash, sesi memakai cookie `HttpOnly`/`SameSite=Lax`, dan otorisasi role/kepemilikan ditegakkan di server. Mode lokal tetap bersifat demo dan tidak boleh dianggap aman untuk produksi.
 
 ---
 
 ## 10. Rencana Pengembangan Lanjutan (Opsional)
 
-Jika ingin dikembangkan menjadi aplikasi production:
-
-Audit trail (P1) dan notifikasi email (P2) sudah diimplementasikan dalam bentuk simulasi pada versi demo. Untuk production, audit perlu dipindahkan ke server agar immutable, sedangkan notifikasi perlu dihubungkan ke layanan email sungguhan.
+Backend PHP/MySQL, autentikasi sesi, validasi role/kepemilikan, audit server-side, dan outbox notifikasi simulasi sudah diimplementasikan. Untuk production, pengembangan berikut masih diperlukan:
 
 | Fitur | Prioritas | Keterangan |
 |---|---|---|
-| Backend (Laravel/Node.js) | P0 | Ganti localStorage dengan database |
-| Autentikasi sesungguhnya | P0 | Demo sudah memverifikasi password di client; produksi perlu validasi server-side dan hash password |
-| Upload file materi | P0 | Upload PDF, video, gambar |
-| Backend validasi status & kepemilikan | P0 | Validasi 1 kursus = 1 instruktur, enrollment, approval, dan CRUD di server |
-| Audit trail server-side | P1 | Versi demo sudah mencatat audit di localStorage; produksi perlu log immutable di server dengan retensi dan akses terbatas |
-| Notifikasi email | P2 | Versi demo mencatat email simulasi di outbox `localStorage`; produksi perlu integrasi SMTP/email service saat kursus dipublikasikan atau sertifikat terbit |
+| Hardening API | P0 | Rate limiting login, CSRF token, HTTPS wajib, dan rotasi session ID |
+| Pembatasan baca snapshot | P0 | Snapshot publik saat ini memuat seluruh koleksi demo; produksi perlu proyeksi terbatas per role dan endpoint khusus verifikasi sertifikat |
+| Upload file materi | P0 | Upload PDF, video, gambar ke object storage |
 | Generate PDF sertifikat | P0 | Generate PDF yang sebenarnya |
-| Role middleware | P0 | Guard client-side demo sudah aktif; produksi perlu middleware server-side |
-| Database relasional | P0 | Users, Courses, Modules, Lessons, Enrollments, Progress, Certificates |
+| Notifikasi email | P2 | Integrasi SMTP/email service saat kursus dipublikasikan atau sertifikat terbit |
+| Migrasi database | P1 | Gunakan migration tool dan backup otomatis |
+| Observability | P2 | Structured logging, monitoring, dan retensi audit |

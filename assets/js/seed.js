@@ -7,6 +7,10 @@
 (function (ELIPS) {
     'use strict';
 
+    // Mode server: data demo dan migrasi sudah ditangani database, jadi
+    // seed tidak boleh menimpa snapshot yang dimuat dari backend.
+    if (ELIPS.api && ELIPS.api.enabled) return;
+
     const KEYS = ELIPS.KEYS;
     const write = ELIPS.write;
     const read = ELIPS.read;

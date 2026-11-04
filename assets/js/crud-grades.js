@@ -24,6 +24,7 @@
     }
 
     function saveGrade(payload) {
+        if (ELIPS.api && ELIPS.api.enabled) return ELIPS.api.call('grade.save', payload || {});
         payload = payload || {};
         const studentId = Number(payload.studentId);
         const courseId = Number(payload.courseId);
@@ -149,6 +150,9 @@
     }
 
     function createDraftCertificateForEnrollment(enrollmentId, instructorId) {
+        if (ELIPS.api && ELIPS.api.enabled) {
+            return ELIPS.api.call('certificate.draft', { enrollmentId: enrollmentId });
+        }
         const enrollment = ELIPS.getEnrollments().find(function (e) { return e.id === Number(enrollmentId); });
         if (!enrollment) return failure('Penugasan peserta tidak ditemukan.');
 
@@ -196,6 +200,7 @@
     }
 
     function approveCertificate(id, adminId) {
+        if (ELIPS.api && ELIPS.api.enabled) return ELIPS.api.call('certificate.approve', { id: id });
         const certificates = ELIPS.getCertificates();
         const certificate = certificates.find(function (cert) { return cert.id === Number(id); });
         if (!certificate) return failure('Sertifikat tidak ditemukan.');

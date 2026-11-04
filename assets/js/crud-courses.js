@@ -13,6 +13,7 @@
     }
 
     function createCourse(data) {
+        if (ELIPS.api && ELIPS.api.enabled) return ELIPS.api.call('course.create', data || {});
         data = data || {};
         const title = String(data.title || '').trim();
         const category = String(data.category || '').trim();
@@ -54,6 +55,7 @@
     }
 
     function updateCourse(id, data) {
+        if (ELIPS.api && ELIPS.api.enabled) return ELIPS.api.call('course.update', { id: id, data: data || {} });
         data = data || {};
         const courses = ELIPS.getCourses();
         const course = courses.find(function (c) { return c.id === Number(id); });
@@ -103,6 +105,7 @@
     }
 
     function deleteCourse(id) {
+        if (ELIPS.api && ELIPS.api.enabled) return ELIPS.api.call('course.delete', { id: id });
         const course = ELIPS.getCourseById(id);
         if (!course) return failure('Kursus tidak ditemukan.');
 
@@ -128,6 +131,7 @@
     }
 
     function setCourseStatus(id, status) {
+        if (ELIPS.api && ELIPS.api.enabled) return ELIPS.api.call('course.status', { id: id, status: status });
         if (status !== 'draft' && status !== 'published') return failure('Status kursus tidak valid.');
         const courses = ELIPS.getCourses();
         const course = courses.find(function (c) { return c.id === Number(id); });

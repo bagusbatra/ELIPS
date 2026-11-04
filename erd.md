@@ -1,15 +1,15 @@
 # ERD — ELIPS LMS
 
-**Versi dokumen:** 1.0  
-**Tanggal:** 2026-11-03  
-**Status:** Demo — Vanilla HTML/CSS/JavaScript + `localStorage`  
-**Dokumen terkait:** `prd.md`, `log.md`
+**Versi dokumen:** 2.0  
+**Tanggal:** 2026-11-04  
+**Status:** Dual-mode — skema fisik MySQL 8 + fallback koleksi `localStorage`  
+**Dokumen terkait:** `prd.md`, `log.md`, `api/schema.sql`
 
 ---
 
 ## 1. Ringkasan
 
-ELIPS LMS adalah aplikasi Learning Management System dengan tiga role: **Admin**, **Instruktur**, dan **Peserta**. Data disimpan sebagai koleksi JSON di `localStorage`, sehingga ERD ini bersifat **logis (logical ERD)**, bukan skema basis data relasional yang sudah memiliki constraint fisik.
+ELIPS LMS adalah aplikasi Learning Management System dengan tiga role: **Admin**, **Instruktur**, dan **Peserta**. Pada mode server, data disimpan di **MySQL 8** dengan 10 tabel domain dan foreign key fisik (lihat §13 dan §16). Pada mode fallback, data disimpan sebagai koleksi JSON di `localStorage` dengan model logis yang sama. Sesi login pada mode server disimpan di sesi PHP native, bukan tabel database.
 
 Relasi utama:
 
@@ -26,10 +26,10 @@ Publikasi kursus / penerbitan sertifikat ── menghasilkan ──► Notificat
 
 | Termasuk ERD | Tidak termasuk |
 |---|---|
-| 10 koleksi data utama di `localStorage` | Halaman statis dan tampilan UI |
-| Objek sesi tunggal `elips_session` | Data pengaturan halaman Admin (belum dipersistensi) |
-| Relasi, kardinalitas, dan aturan hapus | Data laporan/statistik turunan (dihitung saat runtime) |
-| Enum status dan lifecycle | Integrasi email nyata (masih simulasi) |
+| 10 tabel domain MySQL dan koleksi `localStorage` yang setara | Halaman statis dan tampilan UI |
+| Relasi, kardinalitas, foreign key, dan aturan hapus | Data pengaturan halaman Admin (belum dipersistensi) |
+| Enum status dan lifecycle | Data laporan/statistik turunan (dihitung saat runtime) |
+| Sesi PHP native (bukan tabel) | Integrasi email nyata (masih simulasi/outbox) |
 
 ---
 
@@ -217,7 +217,9 @@ erDiagram
 
 ---
 
-## 4. Entitas dan Storage Key
+## 4. Entitas dan Storage Key (Mode Fallback `localStorage`)
+
+Pada mode server, entitas yang sama disimpan di tabel MySQL bernama snake_case (mis. `USERS` → `users`). Pemetaan lengkap tabel, kolom, dan relasi fisik ada di §16; tabel berikut adalah key yang dipakai pada mode fallback.
 
 | No | Entitas | Storage Key | Bentuk | Jumlah Relasi Utama |
 |---|---|---|---|---|
@@ -228,10 +230,10 @@ erDiagram
 | 5 | `LESSONS` | `elips_lessons` | Array of object | Milik modul dan kursus |
 | 6 | `GRADES` | `elips_grades` | Array of object | Milik enrollment/peserta/kursus |
 | 7 | `CERTIFICATES` | `elips_certificates` | Array of object | Milik peserta/kursus/enrollment |
-| 8 | `COMPLETED_LESSONS` | `elips_completedLessons` | Array of object tanpa `id` | Progres peserta per materi |
+| 8 | `COMPLETED_LESSONS` | `elips_completedLessons` | Array of object (tanpa `id` di mode lokal) | Progres peserta per materi |
 | 9 | `AUDIT_LOGS` | `elips_auditLogs` | Array of object | Aktor dan entitas polimorfik |
 | 10 | `NOTIFICATIONS` | `elips_notifications` | Array of object | Penerima dan entitas polimorfik |
-| 11 | `SESSION` | `elips_session` | Object tunggal | Sesi user yang sedang login |
+| 11 | `SESSION` | `elips_session` | Object tunggal | Sesi user yang sedang login (mode server: sesi PHP) |
 
 Key lama yang dimigrasikan: `elips_enrolled` (self-enrollment) dipindahkan ke `elips_enrollments` oleh `seed.js`, lalu dihapus.
 
@@ -251,7 +253,7 @@ Menyimpan seluruh akun: Admin, Instruktur, dan Peserta.
 | `phone` | string | — | Tidak | `''` | Nomor telepon |
 | `role` | enum | — | Ya | `peserta` | `admin`, `instruktur`, `peserta` |
 | `status` | enum | — | Ya | `aktif` | `aktif`, `nonaktif` |
-| `password` | string | — | Ya | `elips123` untuk seed/akun lama | Demo: disimpan apa adanya, minimal 8 karakter saat dibuat/diubah, dan diverifikasi oleh `authenticateUser()` saat login. Produksi wajib hash (bcrypt/argon2) |
+| `password` | string | — | Ya | `elips123` untuk seed/akun lama | Mode lokal: disimpan apa adanya, minimal 8 karakter saat dibuat/diubah, diverifikasi `authenticateUser()`. Mode server: kolom `password_hash` di MySQL (bcrypt/argon2 via `password_hash()`), diverifikasi `password_verify()` di PHP, dan tidak pernah dikirim ke client |
 | `createdAt` | date | — | Ya | hari ini | `YYYY-MM-DD` |
 | `updatedAt` | datetime | — | Tidak | — | ISO 8601 saat diubah |
 
@@ -648,15 +650,17 @@ Bukan koleksi, melainkan **satu objek** yang merepresentasikan sesi login aktif 
 | Approve hanya untuk sertifikat Draft | `crud-grades.js` |
 | Sertifikat Publish yang terlihat peserta | `data.js` + filter halaman peserta |
 
-### 7.2 Integritas yang Tidak Ditegakkan Database
+### 7.2 Integritas pada Mode Fallback
 
-Karena tidak ada database relasional, hal berikut hanya dijaga oleh kode dan dapat rusak jika `localStorage` diedit manual:
+Pada mode fallback `localStorage` tidak ada database relasional, sehingga hal berikut hanya dijaga oleh kode dan dapat rusak jika penyimpanan diedit manual:
 
 - Referensi `instructorId`, `courseId`, `moduleId`, `lessonId`, `studentId`, `enrollmentId` tidak memiliki constraint FK.
 - Tidak ada `ON DELETE CASCADE` otomatis; cascade dilakukan manual di fungsi CRUD.
 - Tidak ada transaksi; operasi multi-koleksi dapat berhenti di tengah jika terjadi error.
 - ID dapat dipakai ulang setelah record ber-ID terbesar dihapus.
 - Tipe data tidak dipaksa saat data dibaca dari `localStorage`.
+
+Pada mode server, integritas referensial ditegakkan MySQL melalui foreign key dan `ON DELETE` (lihat §16.4), sedangkan operasi multi-tabel memakai transaksi eksplisit di `api/actions.php`.
 
 ### 7.3 Aturan Akses Peserta
 
@@ -925,65 +929,63 @@ Keterangan:
 | Audit | `AUDIT_LOGS` | Urut `createdAt` desc, filter aksi/entitas/aktor/tanggal |
 | Notifikasi | `NOTIFICATIONS` | Urut `createdAt` desc, filter tipe/penerima/tanggal |
 
-### 12.1 Index yang Disarankan untuk Versi Backend
+### 12.1 Index yang Dipakai di MySQL
 
 - `users(email)` unik
-- `courses(instructorId, status)`
-- `enrollments(studentId, courseId)` unik
-- `modules(courseId, order)`
-- `lessons(moduleId, order)`
-- `lessons(courseId)`
-- `grades(studentId, courseId)` unik
-- `grades(enrollmentId)` unik
-- `certificates(studentId, courseId)` unik
-- `certificates(certificateNumber)` unik
-- `certificates(status)`
-- `completed_lessons(studentId, courseId, lessonId)` unik
-- `audit_logs(createdAt desc, action, entity, actorId)`
-- `notifications(createdAt desc, type, recipientId)`
+- `courses(instructor_id)`, `courses(status)`
+- `enrollments(student_id, course_id)` unik, `enrollments(course_id)`
+- `modules(course_id, sort_order)`, `modules(instructor_id)`
+- `lessons(module_id, sort_order)`, `lessons(course_id)`, `lessons(instructor_id)`
+- `grades(student_id, course_id)` unik, `grades(enrollment_id)`, `grades(instructor_id)`
+- `certificates(student_id, course_id)` unik, `certificates(certificate_number)` unik, `certificates(status)`
+- `completed_lessons(student_id, lesson_id)` unik, `completed_lessons(course_id)`
+- `audit_logs(created_at)`, `audit_logs(actor_id)`, `audit_logs(entity)`
+- `notifications(created_at)`, `notifications(type)`, `notifications(recipient_id)`
 
 ---
 
-## 13. Padanan Skema Relasional (Saran Produksi)
+## 13. Skema Fisik MySQL (Terimplementasi)
 
-Jika aplikasi dimigrasikan ke database relasional, gunakan pemetaan berikut:
+Skema fisik ada di `api/schema.sql` dan dibuat oleh `api/install.php`. Pemetaan entitas logis ke tabel:
 
 | Entitas Logis | Tabel | Primary Key | Foreign Key / Unique |
 |---|---|---|---|
 | `USERS` | `users` | `id` | `email` UNIQUE |
-| `COURSES` | `courses` | `id` | `instructor_id` → `users.id` |
-| `ENROLLMENTS` | `enrollments` | `id` | `student_id` → `users.id`; `course_id` → `courses.id`; UNIQUE(`student_id`, `course_id`) |
-| `MODULES` | `modules` | `id` | `course_id` → `courses.id` ON DELETE CASCADE |
-| `LESSONS` | `lessons` | `id` | `module_id` → `modules.id` ON DELETE CASCADE; `course_id` → `courses.id` |
-| `GRADES` | `grades` | `id` | `enrollment_id` → `enrollments.id` ON DELETE CASCADE; UNIQUE(`student_id`, `course_id`) |
-| `CERTIFICATES` | `certificates` | `id` | `enrollment_id` → `enrollments.id` ON DELETE CASCADE; `student_id`, `course_id`, `approved_by_admin_id` → `users.id`/`courses.id`; UNIQUE(`student_id`, `course_id`), `certificate_number` UNIQUE |
-| `COMPLETED_LESSONS` | `completed_lessons` | (`student_id`, `course_id`, `lesson_id`) | FK ke `users`, `courses`, `lessons` ON DELETE CASCADE |
-| `AUDIT_LOGS` | `audit_logs` | `id` | `actor_id` → `users.id` ON DELETE SET NULL |
-| `NOTIFICATIONS` | `notifications` | `id` | `recipient_id` → `users.id` ON DELETE SET NULL |
-| `SESSION` | `sessions` | `user_id` atau `id` | `user_id` → `users.id` ON DELETE CASCADE |
-| Denormalisasi | — | — | `courses.instructor_name`, counter, dan snapshot dapat dihapus atau dijadikan kolom cache |
+| `COURSES` | `courses` | `id` | `instructor_id` → `users.id` ON DELETE SET NULL |
+| `ENROLLMENTS` | `enrollments` | `id` | `student_id` → `users.id` CASCADE; `course_id` → `courses.id` CASCADE; UNIQUE(`student_id`, `course_id`) |
+| `MODULES` | `modules` | `id` | `course_id` → `courses.id` ON DELETE CASCADE; `instructor_id` → `users.id` SET NULL |
+| `LESSONS` | `lessons` | `id` | `module_id` → `modules.id` CASCADE; `course_id` → `courses.id` CASCADE; `instructor_id` → `users.id` SET NULL |
+| `GRADES` | `grades` | `id` | `enrollment_id` → `enrollments.id` CASCADE; `student_id`/`course_id` → CASCADE; `instructor_id` SET NULL; UNIQUE(`student_id`, `course_id`) |
+| `CERTIFICATES` | `certificates` | `id` | `enrollment_id` → `enrollments.id` CASCADE; `student_id`/`course_id` CASCADE; `approved_by_admin_id` SET NULL; UNIQUE(`student_id`, `course_id`), `certificate_number` UNIQUE |
+| `COMPLETED_LESSONS` | `completed_lessons` | `id` | UNIQUE(`student_id`, `lesson_id`); FK ke `users`, `courses`, `lessons` CASCADE |
+| `AUDIT_LOGS` | `audit_logs` | `id` | `actor_id` → `users.id` SET NULL (polimorfik `entity` + `entity_id`) |
+| `NOTIFICATIONS` | `notifications` | `id` | `recipient_id` → `users.id` SET NULL |
+| `SESSION` | Sesi PHP native | — | Tidak ada tabel `sessions`; cookie sesi hanya menyimpan ID sesi |
 
-**Catatan migrasi:**
+**Catatan implementasi:**
 
-- `entity` + `entityId` pada audit/notifikasi sebaiknya tetap polimorfik atau dipecah menjadi kolom nullable per entitas.
-- `password` wajib diganti hash (bcrypt/argon2) dan login divalidasi di server.
-- Tambahkan transaksi untuk operasi cascade multi-tabel.
-- Tambahkan `created_at`/`updated_at` dengan tipe `timestamp` dan timezone yang konsisten.
+- `entity` + `entity_id` pada audit/notifikasi tetap polimorfik.
+- Password disimpan sebagai `password_hash` (bcrypt/argon2 via `password_hash()`); login divalidasi di server.
+- Operasi cascade multi-tabel memakai foreign key dan transaksi eksplisit (mis. hapus enrollment).
+- `created_at`/`updated_at` memakai `DATE`/`DATETIME` UTC; snapshot mengirim ISO 8601.
+- Nama instruktur dan counter modul/materi tidak didenormalisasi di tabel; nilainya dihitung lewat JOIN/subquery saat snapshot dibangun.
 
 ---
 
-## 14. Catatan Implementasi `localStorage`
+## 14. Catatan Implementasi Mode Fallback `localStorage`
 
-| Aspek | Perilaku Saat Ini |
+| Aspek | Perilaku Mode Fallback |
 |---|---|
 | Pembacaan | `ELIPS.read(key, fallback)` melakukan `JSON.parse`; error dikembalikan sebagai fallback |
 | Penulisan | `ELIPS.write(key, value)` melakukan `JSON.stringify` |
 | ID | `ELIPS.nextId(list)` = `max(id)+1` per koleksi |
-| Normalisasi | `seed.js` menjalankan migrasi saat modul dimuat, termasuk normalisasi sertifikat |
+| Normalisasi | `seed.js` menjalankan migrasi saat modul dimuat, termasuk normalisasi sertifikat; dilewati pada mode server |
 | Batas log | Audit dan notifikasi maksimal 1000 entri, terbaru di depan |
 | Isolasi | Data per browser/perangkat; tidak sinkron antar perangkat |
-| Keamanan | Tidak ada enkripsi; password demo diverifikasi di client tetapi tersimpan apa adanya di `localStorage`. Guard role juga client-side. Bukan untuk produksi |
+| Keamanan | Tidak ada enkripsi; password demo diverifikasi di client tetapi tersimpan apa adanya di `localStorage`. Guard role juga client-side. Mode ini bukan untuk produksi |
 | Sinkronisasi tab | Halaman peserta menyegarkan tampilan saat event `storage` atau saat tab aktif kembali |
+
+Pada mode server, `api.js` mengganti `ELIPS.read`/`ELIPS.write` dengan cache snapshot dari MySQL, sehingga modul data dan UI tetap sinkron tanpa perubahan besar.
 
 ---
 
@@ -1009,3 +1011,246 @@ Dengan demikian, inti model data ELIPS LMS adalah:
 - **Nilai** dan **Sertifikat** sebagai hasil akhir pembelajaran per pasangan peserta–kursus.
 - **CompletedLessons** sebagai bukti progres per materi.
 - **AuditLogs** dan **Notifications** sebagai catatan operasional yang bersifat historis.
+
+---
+
+## 16. Skema Fisik MySQL 8 (Terimplementasi)
+
+Bagian ini mendokumentasikan skema yang benar-benar dieksekusi oleh `api/schema.sql` (database `elips_lms`, `ENGINE=InnoDB`, `utf8mb4_unicode_ci`, timezone koneksi UTC). Installer `api/install.php` membuat database, menjalankan skema, lalu mengisi data demo.
+
+### 16.1 Ringkasan Tabel
+
+| # | Tabel | Fungsi | Kolom kunci | Relasi utama |
+|---|---|---|---|---|
+| 1 | `users` | Akun Admin, Instruktur, Peserta | `id`, `email`, `password_hash`, `role`, `status` | — |
+| 2 | `courses` | Kursus dan instruktur pengampu | `id`, `title`, `instructor_id`, `status` | `instructor_id` → `users.id` |
+| 3 | `modules` | Modul di dalam kursus | `id`, `course_id`, `instructor_id`, `sort_order` | `course_id` → `courses.id` |
+| 4 | `lessons` | Materi di dalam modul | `id`, `module_id`, `course_id`, `type`, `content`, `sort_order` | `module_id` → `modules.id`; `course_id` → `courses.id` |
+| 5 | `enrollments` | Penugasan peserta ke kursus | `id`, `student_id`, `course_id`, `enrolled_at`, `status` | `student_id` → `users.id`; `course_id` → `courses.id` |
+| 6 | `grades` | Nilai akhir per peserta–kursus | `id`, `enrollment_id`, `student_id`, `course_id`, `score`, `grade` | `enrollment_id` → `enrollments.id` |
+| 7 | `certificates` | E-sertifikat Draft/Publish | `id`, `enrollment_id`, `student_id`, `course_id`, `certificate_number`, `status` | `enrollment_id` → `enrollments.id`; `approved_by_admin_id` → `users.id` |
+| 8 | `completed_lessons` | Progres materi per peserta | `id`, `student_id`, `course_id`, `lesson_id`, `completed_at` | `student_id` → `users.id`; `lesson_id` → `lessons.id` |
+| 9 | `audit_logs` | Jejak audit operasional | `id`, `action`, `entity`, `entity_id`, `actor_id`, `created_at` | `actor_id` → `users.id` |
+| 10 | `notifications` | Outbox notifikasi email simulasi | `id`, `type`, `recipient_id`, `recipient_email`, `subject`, `created_at` | `recipient_id` → `users.id` |
+
+Sesi login **tidak** memakai tabel: autentikasi memakai sesi PHP native (`$_SESSION`) dengan cookie `HttpOnly` dan `SameSite=Lax`.
+
+### 16.2 Definisi Kolom
+
+**`users`**
+
+| Kolom | Tipe | Null | Default | Keterangan |
+|---|---|---|---|---|
+| `id` | `INT UNSIGNED` | tidak | AUTO_INCREMENT | Primary key |
+| `name` | `VARCHAR(150)` | tidak | — | Nama lengkap |
+| `email` | `VARCHAR(190)` | tidak | — | Unik, dipakai login |
+| `phone` | `VARCHAR(40)` | tidak | `''` | Nomor telepon |
+| `password_hash` | `VARCHAR(255)` | tidak | — | `password_hash()`; tidak pernah masuk snapshot |
+| `role` | `ENUM('admin','instruktur','peserta')` | tidak | `'peserta'` | Role akun |
+| `status` | `ENUM('aktif','nonaktif')` | tidak | `'aktif'` | Status akun |
+| `created_at` | `DATE` | tidak | `CURRENT_DATE` | Tanggal dibuat |
+| `updated_at` | `DATETIME` | ya | `NULL` | Waktu perubahan terakhir (UTC) |
+
+**`courses`**
+
+| Kolom | Tipe | Null | Default | Keterangan |
+|---|---|---|---|---|
+| `id` | `INT UNSIGNED` | tidak | AUTO_INCREMENT | Primary key |
+| `title` | `VARCHAR(200)` | tidak | — | Judul kursus |
+| `category` | `VARCHAR(100)` | tidak | — | Kategori |
+| `description` | `TEXT` | tidak | — | Deskripsi |
+| `instructor_id` | `INT UNSIGNED` | ya | `NULL` | Satu instruktur pengampu |
+| `status` | `ENUM('draft','published')` | tidak | `'draft'` | Lifecycle kursus |
+| `created_at` | `DATE` | tidak | `CURRENT_DATE` | Tanggal dibuat |
+| `updated_at` | `DATETIME` | ya | `NULL` | Waktu perubahan terakhir |
+
+**`modules`**
+
+| Kolom | Tipe | Null | Default | Keterangan |
+|---|---|---|---|---|
+| `id` | `INT UNSIGNED` | tidak | AUTO_INCREMENT | Primary key |
+| `course_id` | `INT UNSIGNED` | tidak | — | Kursus induk |
+| `instructor_id` | `INT UNSIGNED` | ya | `NULL` | Instruktur pemilik konten |
+| `title` | `VARCHAR(200)` | tidak | — | Judul modul |
+| `description` | `TEXT` | tidak | — | Deskripsi |
+| `sort_order` | `INT UNSIGNED` | tidak | `1` | Urutan dalam kursus |
+| `created_at` | `DATETIME` | tidak | `CURRENT_TIMESTAMP` | Waktu dibuat |
+| `updated_at` | `DATETIME` | ya | `NULL` | Waktu perubahan terakhir |
+
+**`lessons`**
+
+| Kolom | Tipe | Null | Default | Keterangan |
+|---|---|---|---|---|
+| `id` | `INT UNSIGNED` | tidak | AUTO_INCREMENT | Primary key |
+| `module_id` | `INT UNSIGNED` | tidak | — | Modul induk |
+| `course_id` | `INT UNSIGNED` | tidak | — | Kursus induk (denormalisasi untuk query cepat) |
+| `instructor_id` | `INT UNSIGNED` | ya | `NULL` | Instruktur pemilik konten |
+| `title` | `VARCHAR(200)` | tidak | — | Judul materi |
+| `type` | `ENUM('text','video','file','link')` | tidak | `'text'` | Jenis materi |
+| `content` | `LONGTEXT` | tidak | — | HTML/URL; HTML teks disanitasi server |
+| `sort_order` | `INT UNSIGNED` | tidak | `1` | Urutan dalam modul |
+| `created_at` | `DATETIME` | tidak | `CURRENT_TIMESTAMP` | Waktu dibuat |
+| `updated_at` | `DATETIME` | ya | `NULL` | Waktu perubahan terakhir |
+
+**`enrollments`**
+
+| Kolom | Tipe | Null | Default | Keterangan |
+|---|---|---|---|---|
+| `id` | `INT UNSIGNED` | tidak | AUTO_INCREMENT | Primary key |
+| `student_id` | `INT UNSIGNED` | tidak | — | Peserta |
+| `course_id` | `INT UNSIGNED` | tidak | — | Kursus |
+| `enrolled_by` | `VARCHAR(50)` | tidak | `'admin'` | Sumber penugasan |
+| `enrolled_at` | `DATE` | tidak | `CURRENT_DATE` | Tanggal penugasan |
+| `status` | `ENUM('active','dihentikan')` | tidak | `'active'` | Status penugasan |
+| `created_at` | `DATETIME` | tidak | `CURRENT_TIMESTAMP` | Waktu dibuat |
+| `updated_at` | `DATETIME` | ya | `NULL` | Waktu perubahan terakhir |
+
+**`grades`**
+
+| Kolom | Tipe | Null | Default | Keterangan |
+|---|---|---|---|---|
+| `id` | `INT UNSIGNED` | tidak | AUTO_INCREMENT | Primary key |
+| `enrollment_id` | `INT UNSIGNED` | ya | `NULL` | Enrollment terkait |
+| `course_id` | `INT UNSIGNED` | tidak | — | Kursus |
+| `student_id` | `INT UNSIGNED` | tidak | — | Peserta |
+| `instructor_id` | `INT UNSIGNED` | ya | `NULL` | Instruktur penilai |
+| `score` | `TINYINT UNSIGNED` | tidak | — | Nilai 0–100 |
+| `grade` | `CHAR(2)` | tidak | — | Huruf mutu (A, A-, B+, …) |
+| `note` | `TEXT` | tidak | — | Catatan penilaian |
+| `created_at` | `DATETIME` | tidak | `CURRENT_TIMESTAMP` | Waktu dibuat |
+| `updated_at` | `DATETIME` | ya | `NULL` | Waktu perubahan terakhir |
+
+**`certificates`**
+
+| Kolom | Tipe | Null | Default | Keterangan |
+|---|---|---|---|---|
+| `id` | `INT UNSIGNED` | tidak | AUTO_INCREMENT | Primary key |
+| `student_id` | `INT UNSIGNED` | tidak | — | Peserta |
+| `course_id` | `INT UNSIGNED` | tidak | — | Kursus |
+| `enrollment_id` | `INT UNSIGNED` | ya | `NULL` | Enrollment terkait |
+| `certificate_number` | `VARCHAR(80)` | tidak | — | Nomor unik (`CERT-DRAFT-*` → `CERT-YYYY-*`) |
+| `status` | `ENUM('draft','publish')` | tidak | `'draft'` | Hanya `publish` tampil ke peserta |
+| `grade` | `CHAR(2)` | ya | `NULL` | Huruf mutu saat terbit |
+| `score` | `TINYINT UNSIGNED` | ya | `NULL` | Nilai saat terbit |
+| `issued_by_instructor_at` | `DATETIME` | ya | `NULL` | Waktu draft dibuat instruktur |
+| `approved_by_admin_id` | `INT UNSIGNED` | ya | `NULL` | Admin penyetuju |
+| `approved_at` | `DATETIME` | ya | `NULL` | Waktu approval |
+| `created_at` | `DATETIME` | tidak | `CURRENT_TIMESTAMP` | Waktu dibuat |
+| `updated_at` | `DATETIME` | ya | `NULL` | Waktu perubahan terakhir |
+
+**`completed_lessons`**
+
+| Kolom | Tipe | Null | Default | Keterangan |
+|---|---|---|---|---|
+| `id` | `INT UNSIGNED` | tidak | AUTO_INCREMENT | Primary key |
+| `student_id` | `INT UNSIGNED` | tidak | — | Peserta |
+| `course_id` | `INT UNSIGNED` | tidak | — | Kursus |
+| `lesson_id` | `INT UNSIGNED` | tidak | — | Materi yang diselesaikan |
+| `completed_at` | `DATETIME` | tidak | `CURRENT_TIMESTAMP` | Waktu selesai |
+
+**`audit_logs`**
+
+| Kolom | Tipe | Null | Default | Keterangan |
+|---|---|---|---|---|
+| `id` | `INT UNSIGNED` | tidak | AUTO_INCREMENT | Primary key |
+| `action` | `VARCHAR(30)` | tidak | — | Aksi (`create`, `update`, `publish`, …) |
+| `entity` | `VARCHAR(30)` | tidak | — | Jenis entitas (polimorfik) |
+| `entity_id` | `INT UNSIGNED` | ya | `NULL` | ID entitas (polimorfik) |
+| `entity_label` | `VARCHAR(255)` | tidak | `''` | Label entitas untuk tampilan |
+| `actor_id` | `INT UNSIGNED` | ya | `NULL` | Aktor; `NULL` = Sistem |
+| `actor_name` | `VARCHAR(150)` | tidak | `'Sistem'` | Snapshot nama aktor |
+| `actor_role` | `VARCHAR(30)` | tidak | `'sistem'` | Snapshot role aktor |
+| `detail` | `TEXT` | tidak | — | Keterangan perubahan |
+| `created_at` | `DATETIME` | tidak | `CURRENT_TIMESTAMP` | Waktu kejadian |
+
+**`notifications`**
+
+| Kolom | Tipe | Null | Default | Keterangan |
+|---|---|---|---|---|
+| `id` | `INT UNSIGNED` | tidak | AUTO_INCREMENT | Primary key |
+| `type` | `VARCHAR(40)` | tidak | — | `course_published`, `certificate_published` |
+| `channel` | `VARCHAR(20)` | tidak | `'email'` | Kanal |
+| `simulated` | `TINYINT(1)` | tidak | `1` | Penanda email simulasi |
+| `status` | `VARCHAR(20)` | tidak | `'sent'` | Status kirim |
+| `recipient_id` | `INT UNSIGNED` | ya | `NULL` | Penerima |
+| `recipient_name` | `VARCHAR(150)` | tidak | `''` | Snapshot nama penerima |
+| `recipient_email` | `VARCHAR(190)` | tidak | `''` | Snapshot email penerima |
+| `recipient_role` | `VARCHAR(30)` | tidak | `'peserta'` | Snapshot role penerima |
+| `subject` | `VARCHAR(255)` | tidak | `''` | Subjek email |
+| `body` | `TEXT` | tidak | — | Isi email |
+| `entity` | `VARCHAR(30)` | tidak | `''` | Entitas terkait (polimorfik) |
+| `entity_id` | `INT UNSIGNED` | ya | `NULL` | ID entitas terkait |
+| `entity_label` | `VARCHAR(255)` | tidak | `''` | Label entitas |
+| `created_at` | `DATETIME` | tidak | `CURRENT_TIMESTAMP` | Waktu dibuat |
+
+### 16.3 Index dan Constraint
+
+| Tabel | Index / Constraint | Tipe |
+|---|---|---|
+| `users` | `uq_users_email (email)` | UNIQUE |
+| `users` | `idx_users_role (role)` | INDEX |
+| `courses` | `idx_courses_instructor (instructor_id)`, `idx_courses_status (status)` | INDEX |
+| `modules` | `idx_modules_course (course_id, sort_order)`, `idx_modules_instructor (instructor_id)` | INDEX |
+| `lessons` | `idx_lessons_module (module_id, sort_order)`, `idx_lessons_course (course_id)`, `idx_lessons_instructor (instructor_id)` | INDEX |
+| `enrollments` | `uq_enrollments_student_course (student_id, course_id)` | UNIQUE |
+| `enrollments` | `idx_enrollments_course (course_id)` | INDEX |
+| `grades` | `uq_grades_student_course (student_id, course_id)` | UNIQUE |
+| `grades` | `idx_grades_enrollment (enrollment_id)`, `idx_grades_instructor (instructor_id)` | INDEX |
+| `certificates` | `uq_certificates_number (certificate_number)`, `uq_certificates_student_course (student_id, course_id)` | UNIQUE |
+| `certificates` | `idx_certificates_course (course_id)`, `idx_certificates_status (status)` | INDEX |
+| `completed_lessons` | `uq_completed_student_lesson (student_id, lesson_id)` | UNIQUE |
+| `completed_lessons` | `idx_completed_course (course_id)` | INDEX |
+| `audit_logs` | `idx_audit_created (created_at)`, `idx_audit_actor (actor_id)`, `idx_audit_entity (entity)` | INDEX |
+| `notifications` | `idx_notifications_created (created_at)`, `idx_notifications_type (type)`, `idx_notifications_recipient (recipient_id)` | INDEX |
+
+### 16.4 Foreign Key dan Aturan Hapus
+
+| Constraint | Kolom | Referensi | ON DELETE |
+|---|---|---|---|
+| `fk_courses_instructor` | `courses.instructor_id` | `users.id` | `SET NULL` |
+| `fk_modules_course` | `modules.course_id` | `courses.id` | `CASCADE` |
+| `fk_modules_instructor` | `modules.instructor_id` | `users.id` | `SET NULL` |
+| `fk_lessons_module` | `lessons.module_id` | `modules.id` | `CASCADE` |
+| `fk_lessons_course` | `lessons.course_id` | `courses.id` | `CASCADE` |
+| `fk_lessons_instructor` | `lessons.instructor_id` | `users.id` | `SET NULL` |
+| `fk_enrollments_student` | `enrollments.student_id` | `users.id` | `CASCADE` |
+| `fk_enrollments_course` | `enrollments.course_id` | `courses.id` | `CASCADE` |
+| `fk_grades_enrollment` | `grades.enrollment_id` | `enrollments.id` | `CASCADE` |
+| `fk_grades_student` | `grades.student_id` | `users.id` | `CASCADE` |
+| `fk_grades_course` | `grades.course_id` | `courses.id` | `CASCADE` |
+| `fk_grades_instructor` | `grades.instructor_id` | `users.id` | `SET NULL` |
+| `fk_certificates_enrollment` | `certificates.enrollment_id` | `enrollments.id` | `CASCADE` |
+| `fk_certificates_student` | `certificates.student_id` | `users.id` | `CASCADE` |
+| `fk_certificates_course` | `certificates.course_id` | `courses.id` | `CASCADE` |
+| `fk_certificates_admin` | `certificates.approved_by_admin_id` | `users.id` | `SET NULL` |
+| `fk_completed_student` | `completed_lessons.student_id` | `users.id` | `CASCADE` |
+| `fk_completed_course` | `completed_lessons.course_id` | `courses.id` | `CASCADE` |
+| `fk_completed_lesson` | `completed_lessons.lesson_id` | `lessons.id` | `CASCADE` |
+
+Catatan: `audit_logs` dan `notifications` sengaja tidak memiliki foreign key fisik ke `users`. Keduanya menyimpan snapshot nama/role/email agar riwayat tetap terbaca meski akun asal dihapus, dan penghapusan pengguna tidak terblokir oleh riwayat.
+
+### 16.5 Pemetaan Tabel ke Koleksi Client
+
+Snapshot API memakai nama koleksi yang sama dengan model `localStorage`, sehingga modul client tidak perlu diubah:
+
+| Tabel MySQL | Koleksi snapshot / key `localStorage` | Catatan transformasi |
+|---|---|---|
+| `users` | `users` | `password_hash` tidak pernah diserialisasi; `created_at` → `createdAt` (ISO) |
+| `courses` | `courses` | `instructor_name` dihitung dari JOIN; `moduleCount`/`lessonCount` dari subquery |
+| `modules` | `modules` | `course_id` → `courseId`; `sort_order` → `order` |
+| `lessons` | `lessons` | `course_id` → `courseId`; `module_id` → `moduleId`; `sort_order` → `order` |
+| `enrollments` | `enrollments` | `student_id`/`course_id` → camelCase; tanggal → `YYYY-MM-DD` |
+| `grades` | `grades` | `enrollment_id` → `enrollmentId`; `student_id`/`course_id` → camelCase |
+| `certificates` | `certificates` | `approved_by_admin_id` → `approvedByAdminId`; `approved_at` → ISO |
+| `completed_lessons` | `completedLessons` | `student_id`/`course_id`/`lesson_id` → camelCase |
+| `audit_logs` | `auditLogs` | `actor_id`/`actor_name`/`actor_role` → camelCase; `created_at` → ISO |
+| `notifications` | `notifications` | `recipient_id`/`recipient_email` → camelCase; `created_at` → ISO |
+| Sesi PHP | `session` (cache di `api.js`) | `{ userId }` dari `$_SESSION`, bukan tabel |
+
+### 16.6 Catatan Operasional
+
+- **Instalasi:** `php api/install.php --fresh` menghapus database lama, membuat ulang skema, dan mengisi data demo (7 pengguna, 4 kursus, 25 modul, 75 materi, 3 enrollment). Password demo `elips123` di-hash saat seeding.
+- **Timezone:** koneksi PDO disetel UTC; kolom `DATE` untuk tanggal kalender dan `DATETIME` untuk timestamp.
+- **Transaksi:** operasi multi-tabel dijalankan dalam transaksi eksplisit: hapus enrollment (nilai + sertifikat + progres terkait) dan simpan nilai (nilai + sertifikat Draft).
+- **Retensi:** backend memangkas `audit_logs` dan `notifications` ke 1000 baris terbaru setelah penulisan.
+- **Ekstensi:** seluruh tabel memakai `InnoDB` dan `utf8mb4`; `AUTO_INCREMENT` dipakai untuk ID numerik yang juga dipakai client.

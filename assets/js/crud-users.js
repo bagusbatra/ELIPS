@@ -13,6 +13,7 @@
     }
 
     function createUser(data) {
+        if (ELIPS.api && ELIPS.api.enabled) return ELIPS.api.call('user.create', data || {});
         data = data || {};
         const name = String(data.name || '').trim();
         const email = String(data.email || '').trim().toLowerCase();
@@ -58,6 +59,7 @@
     }
 
     function updateUser(id, data) {
+        if (ELIPS.api && ELIPS.api.enabled) return ELIPS.api.call('user.update', { id: id, data: data || {} });
         data = data || {};
         const users = ELIPS.getUsers();
         const user = users.find(function (u) { return u.id === Number(id); });
@@ -127,6 +129,7 @@
     }
 
     function deleteUser(id) {
+        if (ELIPS.api && ELIPS.api.enabled) return ELIPS.api.call('user.delete', { id: id });
         const user = ELIPS.getUserById(id);
         if (!user) return failure('Pengguna tidak ditemukan.');
         if (user.id === 1) return failure('Akun Administrator utama tidak dapat dihapus.');
@@ -159,6 +162,9 @@
     }
 
     function authenticateUser(email, password) {
+        if (ELIPS.api && ELIPS.api.enabled) {
+            return ELIPS.api.call('auth.login', { email: email, password: password });
+        }
         const normalizedEmail = String(email || '').trim().toLowerCase();
         const submittedPassword = String(password || '');
 
@@ -179,6 +185,9 @@
     }
 
     function assignInstructorToCourses(instructorId, courseIds) {
+        if (ELIPS.api && ELIPS.api.enabled) {
+            return ELIPS.api.call('user.assignCourses', { instructorId: instructorId, courseIds: courseIds || [] });
+        }
         const instructor = ELIPS.getUserById(instructorId);
         if (!instructor || instructor.role !== 'instruktur') return failure('Pilih akun instruktur yang valid.');
         if (instructor.status !== 'aktif') return failure('Instruktur harus berstatus aktif.');

@@ -59,6 +59,9 @@
     }
 
     function createNotification(entry) {
+        // Notifikasi pada mode server dibuat oleh backend saat aksi terkait
+        // dijalankan (publikasi kursus / persetujuan sertifikat).
+        if (ELIPS.api && ELIPS.api.enabled) return null;
         try {
             entry = entry || {};
             if (!entry.type || !entry.recipientEmail) return null;
@@ -78,6 +81,7 @@
     }
 
     function notifyCoursePublished(courseRef) {
+        if (ELIPS.api && ELIPS.api.enabled) return [];
         try {
             const course = courseRef && typeof courseRef === 'object'
                 ? courseRef
@@ -132,6 +136,7 @@
     }
 
     function notifyCertificatePublished(certificateRef) {
+        if (ELIPS.api && ELIPS.api.enabled) return [];
         try {
             const certificate = certificateRef && typeof certificateRef === 'object'
                 ? certificateRef
@@ -253,6 +258,7 @@
     }
 
     function clearNotifications() {
+        if (ELIPS.api && ELIPS.api.enabled) return ELIPS.api.call('notification.clear', {});
         saveNotifications([]);
         return ELIPS._.success('Seluruh outbox notifikasi berhasil dibersihkan.');
     }

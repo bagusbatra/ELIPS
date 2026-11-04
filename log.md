@@ -1,15 +1,15 @@
 # Log Pengembangan ELIPS LMS
 
-**Versi dokumen:** 2.0  
+**Versi dokumen:** 3.0  
 **Terakhir diperbarui:** 2026-11-04  
-**Status proyek:** Demo — Vanilla HTML/CSS/JavaScript + `localStorage`  
-**Dokumen terkait:** `prd.md`
+**Status proyek:** Dual-mode — PHP 8/MySQL 8 + fallback `localStorage`  
+**Dokumen terkait:** `prd.md`, `erd.md`
 
 ---
 
 ## 1. Ringkasan Sistem
 
-ELIPS LMS adalah aplikasi Learning Management System berbasis web untuk mengelola kursus, instruktur, peserta, materi, penilaian, dan e-sertifikat. Fase saat ini adalah demo tanpa backend; seluruh data disimpan di `localStorage` browser.
+ELIPS LMS adalah aplikasi Learning Management System berbasis web untuk mengelola kursus, instruktur, peserta, materi, penilaian, dan e-sertifikat. Aplikasi berjalan dual-mode: mode utama memakai backend PHP 8 + MySQL 8, sedangkan mode fallback memakai `localStorage` saat API tidak tersedia (mis. `file://` atau regression test JSDOM).
 
 Tiga role utama:
 
@@ -50,6 +50,16 @@ ELIPS/
 ├── verify-certificate.html
 ├── prd.md
 ├── log.md
+├── erd.md
+├── api/
+│   ├── index.php
+│   ├── config.php
+│   ├── db.php
+│   ├── helpers.php
+│   ├── snapshot.php
+│   ├── actions.php
+│   ├── schema.sql
+│   └── install.php
 ├── admin/
 │   ├── dashboard.html
 │   ├── courses.html
@@ -74,7 +84,9 @@ ELIPS/
 └── assets/
     ├── css/style.css
     └── js/
+        ├── config.js
         ├── core.js
+        ├── api.js
         ├── utils.js
         ├── data.js
         ├── seed.js
@@ -96,17 +108,19 @@ ELIPS/
 Semua halaman memuat modul dengan urutan berikut:
 
 ```text
-core → utils → data → seed → sync → progress → auth → audit → notifications
+config → core → api → utils → data → seed → sync → progress → auth → audit → notifications
 → crud-users → crud-courses → crud-enrollments
 → crud-content → crud-grades → ui
 ```
 
 | Modul | Tanggung jawab | API utama |
 |---|---|---|
+| `config.js` | Menentukan `window.ELIPS_CONFIG.apiBase` relatif terhadap halaman | `ELIPS_CONFIG.apiBase` |
 | `core.js` | Namespace `window.ELIPS`, daftar key storage, helper baca/tulis, `nextId`, objek hasil `{ ok, message, data }`, validasi dasar, password demo | `ELIPS.read`, `ELIPS.write`, `ELIPS.nextId`, `ELIPS.DEFAULT_PASSWORD`, `ELIPS._` |
+| `api.js` | Jembatan dual-mode: bootstrap snapshot, cache sinkron, panggilan aksi tulis, fallback lokal | `ELIPS.api.enabled`, `ELIPS.api.call`, `ELIPS.api.refresh` |
 | `utils.js` | Konversi nilai ke huruf, nomor sertifikat, escape HTML, sanitasi HTML materi, format tanggal, toast | `gradeLetter`, `generateCertificateNumber`, `escapeHtml`, `sanitizeHtml`, `formatDate`, `toast` |
 | `data.js` | Getter/setter seluruh koleksi data; tidak berisi aturan bisnis | `getUsers`, `getCourses`, `getEnrollments`, `getModules`, `getLessons`, `getGrades`, `getCertificates`, `getCompletedLessons`, `getPublishedCertificatesByStudent` |
-| `seed.js` | Data demo awal dan migrasi/normalisasi data lama | dijalankan otomatis saat modul dimuat |
+| `seed.js` | Data demo awal dan migrasi/normalisasi data lama; dilewati pada mode server | dijalankan otomatis saat modul dimuat (kecuali mode server) |
 | `sync.js` | Sinkronisasi data turunan: nama instruktur, kepemilikan konten, counter modul/materi, pelepasan kursus | `syncCourseCounters` dan helper internal `syncAllContentOwners`, `releaseInstructorCourses` |
 | `progress.js` | Struktur kursus, progres belajar, overview siswa dan instruktur | `getCourseStructure`, `getCourseProgress`, `isLessonUnlocked`, `getStudentCourseOverview`, `getInstructorCourses`, `getInstructorSummary` |
 | `auth.js` | Session, user aktif (tanpa fallback path), path dashboard per role, guard halaman | `getSessionUser`, `getCurrentUser`, `requireRole`, `setCurrentUser`, `logout` |
@@ -124,11 +138,45 @@ Prinsip yang dipakai:
 - Halaman hanya melakukan **rendering dan interaksi UI**.
 - Seluruh aturan bisnis dan penulisan data melewati fungsi `ELIPS.*`.
 - Fungsi CRUD mengembalikan `{ ok, message, data }` agar halaman dapat menampilkan pesan yang konsisten.
+- Pada mode server, CRUD meneruskan aksi ke API dan mengganti cache dari snapshot terbaru; backend menegakkan role/kepemilikan.
 - Helper lintas modul yang tidak perlu diekspos ke halaman disimpan di `ELIPS._`.
 
 ---
 
 ## 3. Riwayat Perubahan
+
+### v3.0 - 2026-11-04 - Backend PHP + MySQL dan client dual-mode
+
+**Tujuan:** mengganti ketergantungan tunggal pada `localStorage` dengan backend PHP/MySQL yang menegakkan autentikasi, role, kepemilikan, dan aturan bisnis di server, tanpa mengubah UI atau alur role yang sudah ada.
+
+Perubahan:
+
+- Menambahkan folder `api/`:
+  - `index.php` sebagai front controller (`GET ?action=bootstrap/ping`, `POST { action, payload }`);
+  - `config.php` dan `db.php` untuk konfigurasi serta koneksi PDO MySQL (timezone UTC);
+  - `helpers.php` untuk sesi PHP, otorisasi, serializer, sanitasi HTML server-side, audit, notifikasi, dan sinkronisasi data turunan;
+  - `snapshot.php` untuk membangun snapshot koleksi yang kompatibel dengan model data client;
+  - `actions.php` untuk seluruh aksi bisnis dan validasi role/kepemilikan;
+  - `schema.sql` dan `install.php` untuk skema MySQL 8 dan seeding data demo.
+- Menambahkan `assets/js/config.js` dan `assets/js/api.js`:
+  - `config.js` menentukan `apiBase` relatif terhadap halaman;
+  - `api.js` mengambil snapshot awal, menyimpan cache sinkron, memanggil aksi tulis, dan otomatis fallback ke `localStorage` bila API tidak tersedia.
+- Seluruh 25 halaman HTML memuat `config.js` sebelum `core.js` dan `api.js` setelah `core.js`.
+- Modul CRUD dan data menambahkan short-circuit ke API pada mode server: `user.*`, `auth.login`, `course.*`, `enrollment.*`, `module.*`, `lesson.*`, `grade.save`, `certificate.draft`, `certificate.approve`, `progress.complete`, `audit.clear`, dan `notification.clear`.
+- `auth.js` logout memanggil `auth.logout` dan membersihkan cache sesi pada mode server.
+- `audit.js` dan `notifications.js` tidak lagi menulis duplikat di client pada mode server; pencatatan dilakukan backend.
+- `seed.js` dilewati pada mode server agar tidak menimpa snapshot database.
+- Password disimpan dengan `password_hash()` dan diverifikasi dengan `password_verify()`; hash tidak pernah dikirim ke client.
+- Sanitasi konten materi tipe teks dilakukan di client dan server dengan allowlist yang sama.
+- Regression test lama tetap berjalan dalam mode lokal; ditambahkan pengujian integrasi API dan smoke test server-mode JSDOM.
+
+Dampak:
+
+- Data domain tersimpan di MySQL dan dapat diakses lintas perangkat melalui API.
+- Aturan bisnis utama tidak lagi hanya bergantung pada JavaScript client.
+- Demo tanpa server tetap berfungsi melalui fallback `localStorage`.
+
+---
 
 ### v2.0 - 2026-11-04 - Hardening P0: guard sesi, password, sanitasi materi
 
@@ -375,10 +423,20 @@ Perubahan sentralisasi:
 | Penerima notifikasi sertifikat | Peserta pemilik sertifikat yang akunnya aktif dan memiliki email valid |
 | Notifikasi gagal tidak menggagalkan bisnis | Pembuatan notifikasi dibungkus try/catch dan tidak mengubah hasil CRUD |
 | Outbox notifikasi dibatasi | Maksimal 1000 notifikasi terbaru disimpan di `elips_notifications` |
+| Otorisasi server-side | Aksi API memeriksa sesi, role, dan kepemilikan kursus sebelum menulis; contoh: `elips_require_admin`, `elips_can_manage_course` |
+| Password aman di server | Password disimpan dengan `password_hash()` dan diverifikasi dengan `password_verify()`; hash tidak pernah masuk snapshot |
+| Snapshot konsisten | Respons tulis menyertakan snapshot terbaru dan sesi; `api.js` mengganti seluruh cache dari respons tersebut |
+| Sanitasi server-side | `elips_sanitize_html()` membuang tag/atribut berbahaya sebelum materi teks disimpan |
 
 ---
 
-## 5. Skema Data `localStorage`
+## 5. Skema Data
+
+### 5.1 MySQL (mode server)
+
+Tabel: `users`, `courses`, `modules`, `lessons`, `enrollments`, `grades`, `certificates`, `completed_lessons`, `audit_logs`, dan `notifications`. Detail kolom, relasi, dan foreign key ada di `erd.md` §16. Sesi login disimpan di sesi PHP native, bukan tabel database.
+
+### 5.2 `localStorage` (mode fallback)
 
 | Key | Isi |
 |---|---|
@@ -406,17 +464,17 @@ Akun demo utama:
 | 6 | Ani Nurhayati | peserta | `ani@example.com` | `elips123` |
 | 7 | Rina Setiawati | peserta | `rina@example.com` | `elips123` |
 
-Akun lama tanpa password otomatis dimigrasikan ke password demo `elips123` saat `seed.js` dimuat. Password diverifikasi di client dan tersimpan apa adanya di `localStorage`; ini hanya untuk demo.
+Akun lama tanpa password otomatis dimigrasikan ke password demo `elips123` saat `seed.js` dimuat pada mode lokal. Pada mode server, password disimpan sebagai hash dan diverifikasi di PHP; password demo hanya dipakai installer untuk mengisi data awal.
 
 ---
 
 ## 6. Hasil Pengujian Terakhir
 
-Pengujian dijalankan setelah hardening P0 (v2.0):
+Pengujian dijalankan setelah backend PHP/MySQL dan client dual-mode (v3.0):
 
 | Pemeriksaan | Hasil |
 |---|---|
-| Syntax 25 HTML + 15 JS | ✅ Lulus |
+| Syntax 25 HTML + 17 JS + 8 PHP | ✅ Lulus |
 | Guard sesi, password, sanitasi (`test-p0`) | ✅ Lulus |
 | Notifikasi email (`test-notifications`) | ✅ Lulus |
 | Audit trail (`test-audit`) | ✅ Lulus |
@@ -430,6 +488,8 @@ Pengujian dijalankan setelah hardening P0 (v2.0):
 | Semua 25 halaman dimuat tanpa error (`test-all-pages`) | ✅ Lulus |
 | Semua tautan lokal (`check-links`) | ✅ Lulus |
 | Data layer (`test-data`) | ✅ Lulus |
+| Integrasi API PHP/MySQL (55 pemeriksaan) | ✅ Lulus |
+| Smoke test server-mode JSDOM (18 pemeriksaan) | ✅ Lulus |
 
 Catatan penting yang diuji:
 
@@ -451,6 +511,12 @@ Catatan penting yang diuji:
 - Publikasi/approval yang ditolak atau diulang tidak menambah outbox.
 - Filter notifikasi (jenis, penerima, tanggal, pencarian) bekerja dan hasilnya dapat diekspor.
 - Halaman `admin/notifications.html` dapat membersihkan outbox dan menampilkan empty state.
+- API menolak login salah, aksi lintas role, instruktur non-pengampu, dan peserta yang menandai progres milik orang lain.
+- API menolak publikasi kursus tanpa modul/materi dan approval sertifikat dua kali.
+- API menyanitasi HTML materi teks sebelum menyimpan.
+- Snapshot server tidak pernah memuat hash password.
+- Mode server memuat katalog dari MySQL tanpa menjalankan seed `localStorage`.
+- Logout API menghapus sesi dan aksi tulis berikutnya ditolak.
 
 ---
 
@@ -458,20 +524,23 @@ Catatan penting yang diuji:
 
 Keterbatasan saat ini:
 
-- Data hanya tersimpan di `localStorage`, sehingga hilang jika penyimpanan browser dibersihkan.
-- Belum ada backend, autentikasi server-side, atau validasi lintas perangkat.
-- Password demo diverifikasi di client dan tersimpan apa adanya di `localStorage`; guard role juga client-side sehingga belum aman untuk produksi.
+- Mode server membutuhkan PHP 8 + MySQL 8 yang berjalan dan database yang sudah diinstal.
+- Mode fallback `localStorage` tetap tidak aman untuk produksi (password demo diverifikasi di client).
+- Snapshot publik masih memuat seluruh koleksi demo; produksi perlu proyeksi terbatas per role dan endpoint verifikasi sertifikat khusus.
+- Belum ada rate limiting login, CSRF token, atau kewajiban HTTPS.
 - Belum ada upload file materi sungguhan.
-- Audit trail tersimpan di `localStorage`, sehingga dapat diubah/dihapus dari browser dan belum immutable seperti log server.
-- Notifikasi email masih berupa simulasi/outbox di `localStorage`; email belum benar-benar dikirim karena belum ada backend.
+- Notifikasi email masih berupa simulasi/outbox di database; email belum benar-benar dikirim.
+- Belum ada migration tool, backup otomatis, atau monitoring produksi.
 
 Rencana lanjutan (opsional, sesuai `prd.md`):
 
 | Prioritas | Item |
 |---|---|
-| P0 | Backend + database, autentikasi server, upload file, validasi status/kepemilikan di server |
-| P1 | Audit trail server-side yang immutable dengan retensi dan akses terbatas (versi demo sudah mencatat audit di `localStorage`) |
-| P2 | Notifikasi email nyata saat kursus dipublikasikan atau sertifikat terbit (demo sudah mencatat outbox simulasi) |
+| P0 | Hardening API: rate limiting login, CSRF token, HTTPS, rotasi session ID |
+| P0 | Pembatasan snapshot per role dan endpoint verifikasi sertifikat publik yang minim data |
+| P0 | Upload file materi dan generate PDF sertifikat |
+| P1 | Migration tool, backup otomatis, dan audit immutable dengan retensi |
+| P2 | Notifikasi email nyata saat kursus dipublikasikan atau sertifikat terbit |
 
 ---
 
