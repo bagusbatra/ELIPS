@@ -9,6 +9,10 @@
 
     const ELIPS = window.ELIPS = window.ELIPS || {};
 
+    // Password demo untuk akun seed dan migrasi akun lama yang belum
+    // memiliki password. Bukan pengganti autentikasi server-side.
+    const DEFAULT_PASSWORD = 'elips123';
+
     const KEYS = {
         users: 'elips_users',
         courses: 'elips_courses',
@@ -79,6 +83,7 @@
     }
 
     ELIPS.KEYS = KEYS;
+    ELIPS.DEFAULT_PASSWORD = DEFAULT_PASSWORD;
     ELIPS.read = read;
     ELIPS.write = write;
     ELIPS.nextId = nextId;

@@ -251,13 +251,15 @@ Menyimpan seluruh akun: Admin, Instruktur, dan Peserta.
 | `phone` | string | — | Tidak | `''` | Nomor telepon |
 | `role` | enum | — | Ya | `peserta` | `admin`, `instruktur`, `peserta` |
 | `status` | enum | — | Ya | `aktif` | `aktif`, `nonaktif` |
-| `password` | string | — | Tidak | — | Demo: disimpan apa adanya dan tidak divalidasi saat login |
+| `password` | string | — | Ya | `elips123` untuk seed/akun lama | Demo: disimpan apa adanya, minimal 8 karakter saat dibuat/diubah, dan diverifikasi oleh `authenticateUser()` saat login. Produksi wajib hash (bcrypt/argon2) |
 | `createdAt` | date | — | Ya | hari ini | `YYYY-MM-DD` |
 | `updatedAt` | datetime | — | Tidak | — | ISO 8601 saat diubah |
 
 **Aturan:**
 
 - `email` unik; `createUser` dan `updateUser` menolak duplikat.
+- `password` wajib diisi saat `createUser` dan minimal 8 karakter; `seed.js` mengisi password demo untuk akun lama yang belum memilikinya.
+- `authenticateUser(email, password)` menolak email tidak terdaftar, password kosong/salah, dan akun `nonaktif`.
 - `id = 1` (Administrator utama) tidak dapat dihapus.
 - Minimal satu akun `admin` harus tersisa.
 - Menghapus peserta menghapus enrollment, nilai, sertifikat, dan progresnya.
@@ -364,7 +366,7 @@ Materi/pelajaran di dalam modul.
 | `instructorId` | number | FK → `users.id` | Tidak | dari modul | Denormalisasi pemilik konten |
 | `title` | string | — | Ya | — | Judul materi |
 | `type` | enum | — | Ya | `text` | `text`, `video`, `file`, `link` |
-| `content` | text | — | Bersyarat | — | HTML untuk `text` (boleh kosong); URL/nama file **wajib** untuk `video`, `file`, dan `link` |
+| `content` | text | — | Bersyarat | — | HTML untuk `text` (boleh kosong, disanitasi dengan `sanitizeHtml`); URL/nama file **wajib** untuk `video`, `file`, dan `link` |
 | `order` | number | — | Ya | `max(order)+1` | Urutan materi di dalam modul |
 | `createdAt` | datetime | — | Ya | sekarang | ISO 8601 |
 | `updatedAt` | datetime | — | Tidak | — | ISO 8601 |
@@ -584,7 +586,8 @@ Bukan koleksi, melainkan **satu objek** yang merepresentasikan sesi login aktif 
 - `getSessionUser()` juga menerima sesi lama yang hanya berisi angka (`userId`) langsung.
 - Dihapus oleh `logout()`.
 - `getSessionUser()` mengembalikan `null` jika `userId` tidak lagi ditemukan.
-- `getCurrentUser()` memiliki fallback demo berdasarkan path halaman (admin → user 1, instruktur → instruktur pertama, peserta → user 5) ketika tidak ada sesi.
+- `getCurrentUser()` adalah alias `getSessionUser()`; **tidak ada** fallback berdasarkan path halaman. Tanpa sesi, hasilnya `null`.
+- `requireRole(role)` hanya memakai `getSessionUser()`; tanpa sesi diarahkan ke `login.html`, role tidak sesuai diarahkan ke dashboard role-nya.
 - Sesi tidak otomatis dihapus ketika user dihapus; ini dapat menghasilkan sesi yang menunjuk user tidak valid.
 
 ---
@@ -630,6 +633,10 @@ Bukan koleksi, melainkan **satu objek** yang merepresentasikan sesi login aktif 
 | Email pengguna unik | `crud-users.js` |
 | Role hanya `admin`/`instruktur`/`peserta` | `core.isValidRole` + `crud-users.js` |
 | Status user hanya `aktif`/`nonaktif` | `core.isValidUserStatus` |
+| Password wajib minimal 8 karakter saat create; opsional saat update | `crud-users.js` |
+| Login hanya untuk email/password valid dan akun aktif | `crud-users.js` (`authenticateUser`) |
+| Halaman role hanya dapat dibuka dengan sesi dan role yang sesuai | `auth.js` (`requireRole`) |
+| Konten materi teks disanitasi sebelum disimpan/dirender | `utils.js` (`sanitizeHtml`), `crud-content.js`, `learning.html` |
 | Kursus wajib punya instruktur aktif saat dibuat/diubah | `crud-courses.js` + `core.isActiveInstructor` |
 | Publikasi kursus wajib punya instruktur aktif, modul, dan materi | `crud-courses.js` |
 | Enrollment hanya untuk peserta aktif | `crud-enrollments.js` |
@@ -975,7 +982,7 @@ Jika aplikasi dimigrasikan ke database relasional, gunakan pemetaan berikut:
 | Normalisasi | `seed.js` menjalankan migrasi saat modul dimuat, termasuk normalisasi sertifikat |
 | Batas log | Audit dan notifikasi maksimal 1000 entri, terbaru di depan |
 | Isolasi | Data per browser/perangkat; tidak sinkron antar perangkat |
-| Keamanan | Tidak ada enkripsi; password demo tersimpan di `localStorage` |
+| Keamanan | Tidak ada enkripsi; password demo diverifikasi di client tetapi tersimpan apa adanya di `localStorage`. Guard role juga client-side. Bukan untuk produksi |
 | Sinkronisasi tab | Halaman peserta menyegarkan tampilan saat event `storage` atau saat tab aktif kembali |
 
 ---

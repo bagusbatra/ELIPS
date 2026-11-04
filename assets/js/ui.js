@@ -139,26 +139,23 @@
             });
         }
 
-        // Login handler (validated against elips_users)
+        // Login handler: email + password diverifikasi melalui API CRUD.
         const loginForm = document.getElementById('loginForm');
         if (loginForm) {
             loginForm.addEventListener('submit', function (e) {
                 e.preventDefault();
                 const emailInput = document.getElementById('email');
+                const passwordInput = document.getElementById('password');
                 const email = (emailInput ? emailInput.value : '').trim().toLowerCase();
-                const user = ELIPS.getUsers().find(function (u) {
-                    return String(u.email).toLowerCase() === email;
-                });
+                const password = passwordInput ? passwordInput.value : '';
 
-                if (!user) {
-                    ELIPS.toast('Email tidak terdaftar. Gunakan akun demo yang tersedia.');
-                    return;
-                }
-                if (user.status === 'nonaktif') {
-                    ELIPS.toast('Akun Anda nonaktif. Hubungi administrator.');
+                const result = ELIPS.authenticateUser(email, password);
+                if (!result.ok) {
+                    ELIPS.toast(result.message);
                     return;
                 }
 
+                const user = result.data;
                 ELIPS.setCurrentUser(user.id);
                 ELIPS.toast('Berhasil masuk sebagai ' + user.name);
                 if (user.role === 'admin') {

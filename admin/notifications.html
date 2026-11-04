@@ -398,6 +398,7 @@
         }
 
         document.addEventListener('DOMContentLoaded', function () {
+            if (!ELIPS.requireRole('admin')) return;
             populateSelects();
             renderNotifications();
 

@@ -215,8 +215,8 @@
                 </div>
                 <div class="form-group" id="passwordGroup">
                     <label class="form-label">Password</label>
-                    <input type="password" id="userPassword" class="form-input" placeholder="Kosongkan jika tidak ingin mengubah">
-                    <small class="form-hint">Demo: password tidak divalidasi saat login.</small>
+                    <input type="password" id="userPassword" class="form-input" placeholder="Minimal 8 karakter">
+                    <small class="form-hint">Wajib untuk pengguna baru; kosongkan saat edit jika tidak ingin mengubah.</small>
                 </div>
             </div>
             <div style="padding: 1.5rem; border-top: 1px solid var(--border); display: flex; gap: 0.75rem; justify-content: flex-end;">
@@ -369,6 +369,15 @@
             const status = document.getElementById('userStatus').value;
             const password = document.getElementById('userPassword').value;
 
+            if (!editingUserId && !password) {
+                ELIPS.toast('Password wajib diisi untuk pengguna baru.');
+                return;
+            }
+            if (password && password.length < 8) {
+                ELIPS.toast('Password minimal 8 karakter.');
+                return;
+            }
+
             const payload = {
                 name: name,
                 email: email,
@@ -481,7 +490,10 @@
             });
         }
 
-        document.addEventListener('DOMContentLoaded', renderUsers);
+        document.addEventListener('DOMContentLoaded', function () {
+            if (!ELIPS.requireRole('admin')) return;
+            renderUsers();
+        });
     </script>
 </body>
 </html>

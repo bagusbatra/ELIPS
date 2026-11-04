@@ -248,7 +248,10 @@
             });
         }
 
-        document.addEventListener('DOMContentLoaded', renderAdminCerts);
+        document.addEventListener('DOMContentLoaded', function () {
+            if (!ELIPS.requireRole('admin')) return;
+            renderAdminCerts();
+        });
     </script>
 </body>
 </html>

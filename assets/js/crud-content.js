@@ -118,10 +118,11 @@
 
         const title = String(data.title || '').trim();
         const type = data.type || 'text';
-        const content = String(data.content || '').trim();
+        let content = String(data.content || '').trim();
         if (!title) return failure('Judul materi wajib diisi.');
         if (['text', 'video', 'file', 'link'].indexOf(type) === -1) return failure('Tipe konten tidak valid.');
         if (type !== 'text' && !content) return failure('Isi URL atau nama file untuk tipe konten ini.');
+        if (type === 'text') content = ELIPS.sanitizeHtml(content);
 
         const lessons = ELIPS.getLessons();
         const maxOrder = lessons
@@ -170,10 +171,11 @@
 
         const title = data.title !== undefined ? String(data.title).trim() : lesson.title;
         const type = data.type !== undefined ? data.type : lesson.type;
-        const content = data.content !== undefined ? String(data.content).trim() : lesson.content;
+        let content = data.content !== undefined ? String(data.content).trim() : lesson.content;
         if (!title) return failure('Judul materi wajib diisi.');
         if (['text', 'video', 'file', 'link'].indexOf(type) === -1) return failure('Tipe konten tidak valid.');
         if (type !== 'text' && !content) return failure('Isi URL atau nama file untuk tipe konten ini.');
+        if (type === 'text') content = ELIPS.sanitizeHtml(content);
 
         if (lesson.moduleId !== targetModule.id) {
             const maxOrder = ELIPS.getLessonsByModule(targetModule.id)

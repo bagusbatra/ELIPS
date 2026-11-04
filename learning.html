@@ -321,7 +321,7 @@
                 '<h1 class="learning-article-title">' + ELIPS.escapeHtml(lesson.title) + '</h1>' +
                 '</header>' +
                 '<div class="learning-article-body">' +
-                (lesson.content && lesson.type === 'text' ? lesson.content : '<p>Materi ini belum memiliki konten teks. Silakan gunakan media di bawah.</p>') +
+                (lesson.content && lesson.type === 'text' ? ELIPS.sanitizeHtml(lesson.content) : '<p>Materi ini belum memiliki konten teks. Silakan gunakan media di bawah.</p>') +
                 media +
                 completionNotice +
                 '</div>' +

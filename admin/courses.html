@@ -331,7 +331,10 @@
             });
         }
 
-        document.addEventListener('DOMContentLoaded', renderCourses);
+        document.addEventListener('DOMContentLoaded', function () {
+            if (!ELIPS.requireRole('admin')) return;
+            renderCourses();
+        });
     </script>
 </body>
 </html>

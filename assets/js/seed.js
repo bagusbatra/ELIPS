@@ -51,13 +51,13 @@
 
     function seedUsers() {
         return [
-            { id: 1, name: 'Administrator', email: 'admin@example.com', role: 'admin', phone: '081234567890', status: 'aktif', createdAt: '2026-01-01' },
-            { id: 2, name: 'Ahmad Fauzi, M.M.', email: 'ahmad@example.com', role: 'instruktur', phone: '081234567891', status: 'aktif', createdAt: '2026-09-15' },
-            { id: 3, name: 'Siti Nurhaliza, S.Psi.', email: 'siti@example.com', role: 'instruktur', phone: '081234567892', status: 'aktif', createdAt: '2026-09-16' },
-            { id: 4, name: 'Budi Santoso, A.Md.', email: 'budi@example.com', role: 'instruktur', phone: '081234567893', status: 'aktif', createdAt: '2026-09-17' },
-            { id: 5, name: 'Budi Santoso', email: 'budi.student@example.com', role: 'peserta', phone: '081234567894', status: 'aktif', createdAt: '2026-10-01' },
-            { id: 6, name: 'Ani Nurhayati', email: 'ani@example.com', role: 'peserta', phone: '081234567895', status: 'aktif', createdAt: '2026-10-02' },
-            { id: 7, name: 'Rina Setiawati', email: 'rina@example.com', role: 'peserta', phone: '081234567896', status: 'aktif', createdAt: '2026-10-03' }
+            { id: 1, name: 'Administrator', email: 'admin@example.com', password: ELIPS.DEFAULT_PASSWORD, role: 'admin', phone: '081234567890', status: 'aktif', createdAt: '2026-01-01' },
+            { id: 2, name: 'Ahmad Fauzi, M.M.', email: 'ahmad@example.com', password: ELIPS.DEFAULT_PASSWORD, role: 'instruktur', phone: '081234567891', status: 'aktif', createdAt: '2026-09-15' },
+            { id: 3, name: 'Siti Nurhaliza, S.Psi.', email: 'siti@example.com', password: ELIPS.DEFAULT_PASSWORD, role: 'instruktur', phone: '081234567892', status: 'aktif', createdAt: '2026-09-16' },
+            { id: 4, name: 'Budi Santoso, A.Md.', email: 'budi@example.com', password: ELIPS.DEFAULT_PASSWORD, role: 'instruktur', phone: '081234567893', status: 'aktif', createdAt: '2026-09-17' },
+            { id: 5, name: 'Budi Santoso', email: 'budi.student@example.com', password: ELIPS.DEFAULT_PASSWORD, role: 'peserta', phone: '081234567894', status: 'aktif', createdAt: '2026-10-01' },
+            { id: 6, name: 'Ani Nurhayati', email: 'ani@example.com', password: ELIPS.DEFAULT_PASSWORD, role: 'peserta', phone: '081234567895', status: 'aktif', createdAt: '2026-10-02' },
+            { id: 7, name: 'Rina Setiawati', email: 'rina@example.com', password: ELIPS.DEFAULT_PASSWORD, role: 'peserta', phone: '081234567896', status: 'aktif', createdAt: '2026-10-03' }
         ];
     }
 
@@ -172,6 +172,17 @@
         }
 
         const currentUsers = read(KEYS.users, []);
+        // Migrasi akun lama: semua akun wajib punya password agar login
+        // dapat diverifikasi. Akun tanpa password memakai password demo.
+        let usersChanged = false;
+        currentUsers.forEach(function (user) {
+            if (!user.password) {
+                user.password = ELIPS.DEFAULT_PASSWORD;
+                usersChanged = true;
+            }
+        });
+        if (usersChanged) write(KEYS.users, currentUsers);
+
         const courses = read(KEYS.courses, null);
         if (!Array.isArray(courses) || courses.length === 0) {
             write(KEYS.courses, seedCourses());
@@ -238,6 +249,19 @@
             write(KEYS.lessons, structure.lessons);
             write(KEYS.courses, currentCourses);
         }
+
+        // Sanitasi konten materi teks lama agar HTML berbahaya tidak tersimpan.
+        const lessons = ELIPS.getLessons();
+        let lessonsChanged = false;
+        lessons.forEach(function (lesson) {
+            if (lesson.type !== 'text') return;
+            const safeContent = ELIPS.sanitizeHtml(lesson.content || '');
+            if (safeContent !== lesson.content) {
+                lesson.content = safeContent;
+                lessonsChanged = true;
+            }
+        });
+        if (lessonsChanged) write(KEYS.lessons, lessons);
 
         if (!Array.isArray(read(KEYS.grades, null))) write(KEYS.grades, []);
         if (!Array.isArray(read(KEYS.completedLessons, null))) write(KEYS.completedLessons, []);

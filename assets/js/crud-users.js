@@ -17,11 +17,14 @@
         const name = String(data.name || '').trim();
         const email = String(data.email || '').trim().toLowerCase();
         const phone = String(data.phone || '').trim();
+        const password = String(data.password || '');
         const role = data.role || 'peserta';
         const status = data.status || 'aktif';
 
         if (!name) return failure('Nama wajib diisi.');
         if (!isValidEmail(email)) return failure('Email tidak valid.');
+        if (!password) return failure('Password wajib diisi.');
+        if (password.length < 8) return failure('Password minimal 8 karakter.');
         if (!isValidRole(role)) return failure('Role pengguna tidak valid.');
         if (!isValidUserStatus(status)) return failure('Status pengguna tidak valid.');
 
@@ -35,11 +38,11 @@
             name: name,
             email: email,
             phone: phone,
+            password: password,
             role: role,
             status: status,
             createdAt: todayString()
         };
-        if (data.password) user.password = data.password;
 
         users.push(user);
         ELIPS.setUsers(users);
@@ -69,6 +72,9 @@
         if (!isValidEmail(nextEmail)) return failure('Email tidak valid.');
         if (!isValidRole(nextRole)) return failure('Role pengguna tidak valid.');
         if (!isValidUserStatus(nextStatus)) return failure('Status pengguna tidak valid.');
+        if (data.password && String(data.password).length < 8) {
+            return failure('Password minimal 8 karakter.');
+        }
         if (users.some(function (u) { return u.id !== user.id && String(u.email).toLowerCase() === nextEmail; })) {
             return failure('Email sudah digunakan oleh pengguna lain.');
         }
@@ -152,6 +158,26 @@
         return success('Pengguna dihapus.');
     }
 
+    function authenticateUser(email, password) {
+        const normalizedEmail = String(email || '').trim().toLowerCase();
+        const submittedPassword = String(password || '');
+
+        if (!normalizedEmail) return failure('Email wajib diisi.');
+        if (!submittedPassword) return failure('Password wajib diisi.');
+
+        const user = ELIPS.getUsers().find(function (u) {
+            return String(u.email).toLowerCase() === normalizedEmail;
+        });
+        if (!user) return failure('Email tidak terdaftar. Gunakan akun demo yang tersedia.');
+        if (user.status === 'nonaktif') return failure('Akun Anda nonaktif. Hubungi administrator.');
+
+        // Akun lama tanpa password dimigrasikan ke password demo oleh seed.js.
+        const expectedPassword = user.password || ELIPS.DEFAULT_PASSWORD;
+        if (submittedPassword !== expectedPassword) return failure('Password salah.');
+
+        return success('Login berhasil.', user);
+    }
+
     function assignInstructorToCourses(instructorId, courseIds) {
         const instructor = ELIPS.getUserById(instructorId);
         if (!instructor || instructor.role !== 'instruktur') return failure('Pilih akun instruktur yang valid.');
@@ -196,6 +222,7 @@
         createUser: createUser,
         updateUser: updateUser,
         deleteUser: deleteUser,
+        authenticateUser: authenticateUser,
         assignInstructorToCourses: assignInstructorToCourses
     });
 })(window.ELIPS);

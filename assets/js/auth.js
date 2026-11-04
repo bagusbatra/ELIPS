@@ -10,18 +10,10 @@
     const read = ELIPS.read;
     const write = ELIPS.write;
 
-    function defaultUserForPage() {
-        const path = (window.location.pathname || '').toLowerCase().replace(/\\/g, '/');
-        if (path.indexOf('/admin/') !== -1) return ELIPS.getUserById(1) || ELIPS.getUsersByRole('admin')[0] || null;
-        if (path.indexOf('/instructor/') !== -1) {
-            const instructors = ELIPS.getUsersByRole('instruktur');
-            return instructors[0] || null;
-        }
-        return ELIPS.getUserById(5) || ELIPS.getUsersByRole('peserta')[0] || null;
-    }
-
+    // User aktif HANYA berasal dari sesi. Tidak ada fallback berdasarkan path
+    // halaman, sehingga halaman role tidak bisa dibuka tanpa login.
     function getCurrentUser() {
-        return getSessionUser() || defaultUserForPage();
+        return getSessionUser();
     }
 
     function getSessionUser() {
@@ -45,7 +37,7 @@
     }
 
     function requireRole(role) {
-        const user = getSessionUser() || getCurrentUser();
+        const user = getSessionUser();
         if (!user) {
             window.location.href = basePathPrefix() + 'login.html';
             return null;

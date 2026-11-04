@@ -1,7 +1,7 @@
 # Log Pengembangan ELIPS LMS
 
-**Versi dokumen:** 1.4  
-**Terakhir diperbarui:** 2026-11-03  
+**Versi dokumen:** 2.0  
+**Terakhir diperbarui:** 2026-11-04  
 **Status proyek:** Demo — Vanilla HTML/CSS/JavaScript + `localStorage`  
 **Dokumen terkait:** `prd.md`
 
@@ -103,21 +103,21 @@ core → utils → data → seed → sync → progress → auth → audit → no
 
 | Modul | Tanggung jawab | API utama |
 |---|---|---|
-| `core.js` | Namespace `window.ELIPS`, daftar key storage, helper baca/tulis, `nextId`, objek hasil `{ ok, message, data }`, validasi dasar | `ELIPS.read`, `ELIPS.write`, `ELIPS.nextId`, `ELIPS._` |
-| `utils.js` | Konversi nilai ke huruf, nomor sertifikat, escape HTML, format tanggal, toast | `gradeLetter`, `generateCertificateNumber`, `escapeHtml`, `formatDate`, `toast` |
+| `core.js` | Namespace `window.ELIPS`, daftar key storage, helper baca/tulis, `nextId`, objek hasil `{ ok, message, data }`, validasi dasar, password demo | `ELIPS.read`, `ELIPS.write`, `ELIPS.nextId`, `ELIPS.DEFAULT_PASSWORD`, `ELIPS._` |
+| `utils.js` | Konversi nilai ke huruf, nomor sertifikat, escape HTML, sanitasi HTML materi, format tanggal, toast | `gradeLetter`, `generateCertificateNumber`, `escapeHtml`, `sanitizeHtml`, `formatDate`, `toast` |
 | `data.js` | Getter/setter seluruh koleksi data; tidak berisi aturan bisnis | `getUsers`, `getCourses`, `getEnrollments`, `getModules`, `getLessons`, `getGrades`, `getCertificates`, `getCompletedLessons`, `getPublishedCertificatesByStudent` |
 | `seed.js` | Data demo awal dan migrasi/normalisasi data lama | dijalankan otomatis saat modul dimuat |
 | `sync.js` | Sinkronisasi data turunan: nama instruktur, kepemilikan konten, counter modul/materi, pelepasan kursus | `syncCourseCounters` dan helper internal `syncAllContentOwners`, `releaseInstructorCourses` |
 | `progress.js` | Struktur kursus, progres belajar, overview siswa dan instruktur | `getCourseStructure`, `getCourseProgress`, `isLessonUnlocked`, `getStudentCourseOverview`, `getInstructorCourses`, `getInstructorSummary` |
-| `auth.js` | Session, user aktif, path dashboard per role, guard halaman | `getSessionUser`, `getCurrentUser`, `requireRole`, `setCurrentUser`, `logout` |
+| `auth.js` | Session, user aktif (tanpa fallback path), path dashboard per role, guard halaman | `getSessionUser`, `getCurrentUser`, `requireRole`, `setCurrentUser`, `logout` |
 | `audit.js` | Audit trail: pencatatan aktor/aksi/entitas, filter log, daftar aktor, pembersihan log | `logAudit`, `getAuditLogs`, `getAuditActors`, `clearAuditLogs`, `auditActionLabel`, `auditEntityLabel` |
 | `notifications.js` | Outbox notifikasi email simulasi: pembuatan saat kursus Published/sertifikat terbit, filter, penerima, pembersihan | `createNotification`, `notifyCoursePublished`, `notifyCertificatePublished`, `getNotifications`, `getNotificationRecipients`, `clearNotifications`, `notificationTypeLabel` |
-| `crud-users.js` | CRUD pengguna dan penugasan instruktur ke kursus | `createUser`, `updateUser`, `deleteUser`, `assignInstructorToCourses` |
+| `crud-users.js` | CRUD pengguna, autentikasi email/password, dan penugasan instruktur ke kursus | `createUser`, `updateUser`, `deleteUser`, `authenticateUser`, `assignInstructorToCourses` |
 | `crud-courses.js` | CRUD kursus dan aturan Draft/Publish | `createCourse`, `updateCourse`, `deleteCourse`, `setCourseStatus`, `toggleCourseStatus` |
 | `crud-enrollments.js` | CRUD penugasan peserta ke kursus | `assignStudentToCourses`, `setEnrollmentStatus`, `deleteEnrollment` |
 | `crud-content.js` | CRUD modul dan materi dengan validasi kepemilikan | `createModule`, `updateModule`, `deleteModule`, `createLesson`, `updateLesson`, `deleteLesson` |
 | `crud-grades.js` | Input nilai dan alur sertifikat Draft → Publish | `saveGrade`, `createDraftCertificateForEnrollment`, `approveCertificate` |
-| `ui.js` | Perilaku UI bersama: navigasi mobile, sidebar dashboard, katalog beranda, login, logout, style toast | dijalankan pada `DOMContentLoaded` |
+| `ui.js` | Perilaku UI bersama: navigasi mobile, sidebar dashboard, katalog beranda, login (email + password), logout, style toast | dijalankan pada `DOMContentLoaded` |
 
 Prinsip yang dipakai:
 
@@ -129,6 +129,36 @@ Prinsip yang dipakai:
 ---
 
 ## 3. Riwayat Perubahan
+
+### v2.0 - 2026-11-04 - Hardening P0: guard sesi, password, sanitasi materi
+
+**Tujuan:** menutup celah akses halaman role tanpa login, memverifikasi password saat login, dan mencegah stored XSS dari konten materi.
+
+Perubahan:
+
+- `assets/js/core.js` menambahkan konstanta `ELIPS.DEFAULT_PASSWORD = 'elips123'` untuk akun demo dan migrasi akun lama.
+- `assets/js/auth.js`:
+  - `getCurrentUser()` sekarang hanya membaca `elips_session`; fallback user berdasarkan path halaman dihapus.
+  - `requireRole(role)` hanya memakai `getSessionUser()`; tanpa sesi diarahkan ke `login.html`, role tidak sesuai diarahkan ke dashboard role-nya.
+- Seluruh halaman `admin/*.html` sekarang memanggil `ELIPS.requireRole('admin')` sebelum render; halaman instruktur tetap memakai `requireRole('instruktur')`, dan halaman peserta memeriksa sesi/role.
+- `assets/js/crud-users.js`:
+  - `authenticateUser(email, password)` memverifikasi email, password, dan status akun.
+  - `createUser()` mewajibkan password minimal 8 karakter; `updateUser()` memvalidasi password baru bila diisi.
+- `assets/js/seed.js` menambahkan password demo ke akun seed dan memigrasikan akun lama tanpa password ke `elips123`, serta menyanitasi konten materi teks lama.
+- `assets/js/utils.js` menambahkan `sanitizeHtml()` berbasis allowlist tag/atribut; `script`, `iframe`, event handler, dan URL `javascript:`/`data:`/`vbscript:` dibuang.
+- `assets/js/crud-content.js` menyanitasi `lesson.content` bertipe `text` saat create/update; `learning.html` juga menyanitasi saat render sebagai defense in depth.
+- `assets/js/ui.js` login sekarang memakai `ELIPS.authenticateUser()` dan menampilkan pesan gagal yang sesuai.
+- `login.html` menampilkan password demo `elips123`; form pengguna Admin mewajibkan password untuk akun baru.
+- PRD diperbarui ke v2.0 dan ERD diselaraskan dengan aturan password, guard sesi, dan sanitasi konten.
+
+Dampak:
+
+- Halaman admin/instruktur/peserta tidak dapat dibuka tanpa sesi yang valid, termasuk melalui URL langsung.
+- Login dengan password salah atau kosong ditolak; akun nonaktif tetap tidak dapat masuk.
+- Konten materi berbahaya tidak lagi tersimpan atau dirender.
+- Guard dan verifikasi password masih berjalan di client dan bukan pengganti autentikasi server-side.
+
+---
 
 ### v1.9 - 2026-11-03 - Perbaikan visibilitas sertifikat peserta
 
@@ -366,25 +396,28 @@ Perubahan sentralisasi:
 
 Akun demo utama:
 
-| ID | Nama | Role | Email |
-|---|---|---|---|
-| 1 | Administrator | admin | `admin@example.com` |
-| 2 | Ahmad Fauzi, M.M. | instruktur | `ahmad@example.com` |
-| 3 | Siti Nurhaliza, S.Psi. | instruktur | `siti@example.com` |
-| 4 | Budi Santoso, A.Md. | instruktur | `budi@example.com` |
-| 5 | Budi Santoso | peserta | `budi.student@example.com` |
-| 6 | Ani Nurhayati | peserta | `ani@example.com` |
-| 7 | Rina Setiawati | peserta | `rina@example.com` |
+| ID | Nama | Role | Email | Password |
+|---|---|---|---|---|
+| 1 | Administrator | admin | `admin@example.com` | `elips123` |
+| 2 | Ahmad Fauzi, M.M. | instruktur | `ahmad@example.com` | `elips123` |
+| 3 | Siti Nurhaliza, S.Psi. | instruktur | `siti@example.com` | `elips123` |
+| 4 | Budi Santoso, A.Md. | instruktur | `budi@example.com` | `elips123` |
+| 5 | Budi Santoso | peserta | `budi.student@example.com` | `elips123` |
+| 6 | Ani Nurhayati | peserta | `ani@example.com` | `elips123` |
+| 7 | Rina Setiawati | peserta | `rina@example.com` | `elips123` |
+
+Akun lama tanpa password otomatis dimigrasikan ke password demo `elips123` saat `seed.js` dimuat. Password diverifikasi di client dan tersimpan apa adanya di `localStorage`; ini hanya untuk demo.
 
 ---
 
 ## 6. Hasil Pengujian Terakhir
 
-Pengujian dijalankan setelah perbaikan visibilitas sertifikat peserta (v1.9):
+Pengujian dijalankan setelah hardening P0 (v2.0):
 
 | Pemeriksaan | Hasil |
 |---|---|
 | Syntax 25 HTML + 15 JS | ✅ Lulus |
+| Guard sesi, password, sanitasi (`test-p0`) | ✅ Lulus |
 | Notifikasi email (`test-notifications`) | ✅ Lulus |
 | Audit trail (`test-audit`) | ✅ Lulus |
 | CRUD & aturan bisnis (`test-crud`) | ✅ Lulus |
@@ -400,6 +433,10 @@ Pengujian dijalankan setelah perbaikan visibilitas sertifikat peserta (v1.9):
 
 Catatan penting yang diuji:
 
+- Halaman admin/instruktur/peserta tanpa sesi dialihkan ke login; akses role yang salah diarahkan ke dashboard role-nya.
+- Login dengan password salah/kosong ditolak; akun demo `elips123` dapat masuk.
+- `createUser` menolak password kosong/kurang dari 8 karakter.
+- `sanitizeHtml` membuang `script`, event handler, dan URL `javascript:` tetapi mempertahankan markup aman.
 - Sertifikat Draft tidak muncul di halaman peserta.
 - Sertifikat baru terlihat setelah Admin menyetujui.
 - Kursus kosong tidak dapat dipublikasikan.
@@ -423,6 +460,7 @@ Keterbatasan saat ini:
 
 - Data hanya tersimpan di `localStorage`, sehingga hilang jika penyimpanan browser dibersihkan.
 - Belum ada backend, autentikasi server-side, atau validasi lintas perangkat.
+- Password demo diverifikasi di client dan tersimpan apa adanya di `localStorage`; guard role juga client-side sehingga belum aman untuk produksi.
 - Belum ada upload file materi sungguhan.
 - Audit trail tersimpan di `localStorage`, sehingga dapat diubah/dihapus dari browser dan belum immutable seperti log server.
 - Notifikasi email masih berupa simulasi/outbox di `localStorage`; email belum benar-benar dikirim karena belum ada backend.

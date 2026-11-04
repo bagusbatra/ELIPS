@@ -1,8 +1,8 @@
 # PRD: Learning Management System (LMS) ELIPS
 
-**Versi:** 1.9  
-**Tanggal:** 2026-11-03  
-**Status:** Implemented (Demo - Vanilla HTML/CSS/JS + localStorage); seluruh aturan alur kursus telah diterapkan, JavaScript telah dimodularisasi, audit trail P1 aktif, dan notifikasi email P2 disimulasikan melalui outbox  
+**Versi:** 2.0  
+**Tanggal:** 2026-11-04  
+**Status:** Implemented (Demo - Vanilla HTML/CSS/JS + localStorage); seluruh aturan alur kursus telah diterapkan, JavaScript telah dimodularisasi, audit trail P1 aktif, notifikasi email P2 disimulasikan melalui outbox, dan hardening P0 demo (guard sesi, verifikasi password, sanitasi materi) aktif  
 **Log pengembangan:** `log.md`
 **Nama Aplikasi:** ELIPS LMS
 
@@ -198,7 +198,7 @@ Sistem ── kursus Publish / sertifikat terbit ▶ Notifikasi email (simulasi)
 |---|---|---|
 | `index.html` | ✅ Selesai | Beranda dengan daftar kursus |
 | `course-detail.html` | ✅ Selesai | Detail kursus, tombol enrolment dinamis (berubah menjadi "Sudah Terdaftar - Lanjutkan Belajar") |
-| `login.html` | ✅ Selesai | Halaman login dengan validasi akun `elips_users` dan redirect berbasis role |
+| `login.html` | ✅ Selesai | Halaman login dengan validasi email + password terhadap `elips_users` dan redirect berbasis role |
 | `register.html` | ✅ Selesai | Halaman registrasi |
 | `verify-certificate.html` | ✅ Selesai | Verifikasi keaslian sertifikat publik |
 | `certificate-view.html` | ✅ Selesai | Tampilan sertifikat dinamis dari URL params/localStorage |
@@ -261,9 +261,11 @@ Sistem ── kursus Publish / sertifikat terbit ▶ Notifikasi email (simulasi)
 ### 6.1 Autentikasi & Role-Based Access
 | Fitur | Status | Keterangan |
 |---|---|---|
-| Login form | ✅ Selesai | Form login di `login.html`, divalidasi terhadap data `elips_users` |
+| Login form | ✅ Selesai | Form login di `login.html`, email + password diverifikasi melalui `ELIPS.authenticateUser()`; akun demo memakai password `elips123` |
 | Role redirect berdasarkan role akun | ✅ Selesai | `admin` → `admin/dashboard.html`, `instruktur` → `instructor/dashboard.html`, `peserta` → `student/dashboard.html` |
-| Role guard halaman | ✅ Selesai | Setiap halaman dashboard memanggil `ELIPS.requireRole()`; pengguna dengan role lain diarahkan ke dashboard sesuai role-nya |
+| Role guard halaman | ✅ Selesai | Halaman admin memanggil `ELIPS.requireRole('admin')`; halaman instruktur memanggil `ELIPS.requireRole('instruktur')`; halaman peserta memeriksa sesi/role. `getCurrentUser()` hanya membaca sesi, tanpa fallback path |
+| Password akun | ✅ Selesai | Password wajib minimal 8 karakter saat Admin membuat pengguna/registrasi; akun demo dan akun lama dimigrasikan ke password demo `elips123` |
+| Sanitasi materi teks | ✅ Selesai | `ELIPS.sanitizeHtml()` memakai allowlist tag/atribut, diterapkan saat menyimpan dan merender konten materi untuk mencegah stored XSS |
 | Struktur folder per role | ✅ Selesai | Semua halaman role dipindahkan ke folder terpisah |
 
 ### 6.2 Manajemen Kursus
@@ -274,7 +276,7 @@ Sistem ── kursus Publish / sertifikat terbit ▶ Notifikasi email (simulasi)
 | Tambah/edit kursus (Admin) | ✅ Selesai | `admin/courses.html` - kursus baru berstatus Draft, publikasi dilakukan Admin |
 | Penugasan instruktur (Admin) | ✅ Selesai | Satu kursus hanya memiliki satu instruktur; dapat diubah melalui form kursus atau menu pengguna |
 | Kelola kursus (Instruktur) | ✅ Selesai | `instructor/manage-course.html` - daftar kursus yang diampu, deep link `?course=id` |
-| CRUD modul & materi (Instruktur) | ✅ Selesai | Tambah/ubah/hapus modul dan pelajaran, tipe konten teks/video/file/link, validasi kepemilikan kursus, sinkronisasi jumlah modul/pelajaran pada data kursus |
+| CRUD modul & materi (Instruktur) | ✅ Selesai | Tambah/ubah/hapus modul dan pelajaran, tipe konten teks/video/file/link, validasi kepemilikan kursus, sinkronisasi jumlah modul/pelajaran pada data kursus, serta sanitasi HTML konten teks |
 
 ### 6.3 Enrolment & Progres Belajar
 | Fitur | Status | Keterangan |
@@ -347,18 +349,26 @@ Sistem ── kursus Publish / sertifikat terbit ▶ Notifikasi email (simulasi)
 
 ### Login Redirect
 ```javascript
-// Login divalidasi terhadap data elips_users
-const user = users.find(u => u.email.toLowerCase() === email);
+// Login diverifikasi melalui API terpusat (email + password)
+const result = ELIPS.authenticateUser(email, password);
+if (!result.ok) tampilkan pesan;
+const user = result.data;
+ELIPS.setCurrentUser(user.id);
 if (user.role === 'admin')      -> admin/dashboard.html
 else if (user.role === 'instruktur') -> instructor/dashboard.html
 else                            -> student/dashboard.html
 ```
 
 ### Role Guard
-- Halaman role memanggil `ELIPS.requireRole('admin' | 'instruktur' | 'peserta')`.
+- Halaman admin memanggil `ELIPS.requireRole('admin')`; halaman instruktur memanggil `ELIPS.requireRole('instruktur')`; halaman peserta memeriksa sesi dan role sebelum render.
 - Bila belum ada sesi, pengguna diarahkan ke `login.html`.
 - Bila role tidak sesuai, pengguna diarahkan ke dashboard sesuai role akunnya.
-- Mode demo tetap mengizinkan halaman dibuka langsung tanpa login melalui fallback `getCurrentUser()`.
+- `getCurrentUser()` hanya mengembalikan user dari `elips_session`; tidak ada lagi fallback demo berdasarkan path halaman.
+
+### Keamanan Konten Materi
+- Konten `lesson.content` bertipe `text` dianggap tidak tepercaya.
+- `ELIPS.sanitizeHtml()` menghapus `script`, `iframe`, event handler (`on*`), dan URL berbahaya (`javascript:`, `data:`, `vbscript:`), serta hanya mengizinkan tag/atribut aman.
+- Sanitasi dilakukan saat menyimpan materi (create/update), saat migrasi data lama, dan saat render di `learning.html` (defense in depth).
 
 ### Enrolment
 - Data disimpan di `localStorage` key `elips_enrollments` (array of objects).
@@ -416,7 +426,10 @@ else                            -> student/dashboard.html
 
 | Skenario | Status | Catatan |
 |---|---|---|
-| Login redirect berdasarkan role akun | ✅ Lulus uji | Validasi email terhadap `elips_users`, redirect admin/instruktur/peserta |
+| Login redirect berdasarkan role akun | ✅ Lulus uji | Validasi email + password terhadap `elips_users`, redirect admin/instruktur/peserta |
+| Password salah / kosong ditolak | ✅ Lulus uji | `authenticateUser()` menolak kredensial tidak valid dan akun nonaktif |
+| Halaman role tanpa sesi dialihkan ke login | ✅ Lulus uji | `getCurrentUser()` null tanpa sesi; halaman admin memakai `requireRole('admin')` |
+| Sanitasi HTML materi | ✅ Lulus uji | `script`, event handler, dan URL `javascript:` dibuang; markup aman dipertahankan |
 | Admin menambah kursus baru | ✅ Lulus uji | Kursus baru tersimpan dan berstatus Draft |
 | Admin menambah instruktur | ✅ Lulus uji | Akun instruktur aktif dapat dipilih pada form kursus |
 | Modal pilih role tambah pengguna | ✅ Lulus uji | Modal pertama menampilkan 3 tombol role dan mempreset role pada form pengguna |
@@ -456,6 +469,7 @@ else                            -> student/dashboard.html
 - **Struktur Rapi:** File terorganisir berdasarkan role untuk kemudahan navigasi.
 - **Responsive:** Menggunakan CSS custom yang responsif.
 - **UI Konsisten:** Menggunakan komponen seragam (navbar, sidebar, cards, tables, badges).
+- **Keamanan Demo:** Password diverifikasi di client dan tersimpan apa adanya di `localStorage`; guard role juga client-side. Keduanya bukan pengganti autentikasi/middleware server-side untuk produksi.
 
 ---
 
@@ -468,11 +482,11 @@ Audit trail (P1) dan notifikasi email (P2) sudah diimplementasikan dalam bentuk 
 | Fitur | Prioritas | Keterangan |
 |---|---|---|
 | Backend (Laravel/Node.js) | P0 | Ganti localStorage dengan database |
-| Autentikasi sesungguhnya | P0 | Login dengan validasi server-side |
+| Autentikasi sesungguhnya | P0 | Demo sudah memverifikasi password di client; produksi perlu validasi server-side dan hash password |
 | Upload file materi | P0 | Upload PDF, video, gambar |
 | Backend validasi status & kepemilikan | P0 | Validasi 1 kursus = 1 instruktur, enrollment, approval, dan CRUD di server |
 | Audit trail server-side | P1 | Versi demo sudah mencatat audit di localStorage; produksi perlu log immutable di server dengan retensi dan akses terbatas |
 | Notifikasi email | P2 | Versi demo mencatat email simulasi di outbox `localStorage`; produksi perlu integrasi SMTP/email service saat kursus dipublikasikan atau sertifikat terbit |
 | Generate PDF sertifikat | P0 | Generate PDF yang sebenarnya |
-| Role middleware | P0 | Proteksi halaman berdasarkan role |
+| Role middleware | P0 | Guard client-side demo sudah aktif; produksi perlu middleware server-side |
 | Database relasional | P0 | Users, Courses, Modules, Lessons, Enrollments, Progress, Certificates |

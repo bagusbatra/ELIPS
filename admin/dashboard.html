@@ -318,5 +318,10 @@
     <script src="../assets/js/crud-content.js"></script>
     <script src="../assets/js/crud-grades.js"></script>
     <script src="../assets/js/ui.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            ELIPS.requireRole('admin');
+        });
+    </script>
 </body>
 </html>

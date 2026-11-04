@@ -380,7 +380,10 @@
             });
         }
 
-        document.addEventListener('DOMContentLoaded', renderEnrollments);
+        document.addEventListener('DOMContentLoaded', function () {
+            if (!ELIPS.requireRole('admin')) return;
+            renderEnrollments();
+        });
     </script>
 </body>
 </html>
