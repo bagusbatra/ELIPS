@@ -22,6 +22,47 @@
     function setCourses(list) { return write(KEYS.courses, list); }
     function getCourseById(id) { return getCourses().find(function (c) { return c.id === Number(id); }) || null; }
 
+    // ---------- Categories ----------
+    function getCategories() { return read(KEYS.categories, []); }
+    function setCategories(list) { return write(KEYS.categories, list); }
+
+    // ---------- Curriculum versions ----------
+    function getCurriculumVersions() { return read(KEYS.curriculumVersions, []); }
+    function setCurriculumVersions(list) { return write(KEYS.curriculumVersions, list); }
+    function getCurriculumVersionById(id) {
+        return getCurriculumVersions().find(function (v) { return v.id === Number(id); }) || null;
+    }
+    function getCurriculumVersionsByCourse(courseId) {
+        return getCurriculumVersions()
+            .filter(function (v) { return v.courseId === Number(courseId); })
+            .sort(function (a, b) { return Number(a.id) - Number(b.id); });
+    }
+    function getCurrentCurriculumVersion(courseId) {
+        const versions = getCurriculumVersionsByCourse(courseId)
+            .filter(function (v) { return v.status !== 'retired'; });
+        const list = versions.length ? versions : getCurriculumVersionsByCourse(courseId);
+        return list.length ? list[list.length - 1] : null;
+    }
+
+    // ---------- Classes / cohorts ----------
+    function getClasses() { return read(KEYS.classes, []); }
+    function setClasses(list) { return write(KEYS.classes, list); }
+    function getClassById(id) { return getClasses().find(function (c) { return c.id === Number(id); }) || null; }
+    function getClassesByCourse(courseId) {
+        return getClasses().filter(function (c) { return c.courseId === Number(courseId); });
+    }
+    function getClassesByInstructor(instructorId) {
+        return getClasses().filter(function (c) { return c.instructorId === Number(instructorId); });
+    }
+    function getClassInstructorHistories() { return read(KEYS.classInstructorHistories, []); }
+    function setClassInstructorHistories(list) { return write(KEYS.classInstructorHistories, list); }
+    function getClassInstructorHistoriesByClass(classId) {
+        return getClassInstructorHistories().filter(function (h) { return h.classId === Number(classId); });
+    }
+    function getClassEnrollments(classId) {
+        return getEnrollments().filter(function (e) { return e.classId === Number(classId); });
+    }
+
     // ---------- Enrollments ----------
     function getEnrollments() { return read(KEYS.enrollments, []); }
     function setEnrollments(list) { return write(KEYS.enrollments, list); }
@@ -147,6 +188,22 @@
         getCourses: getCourses,
         setCourses: setCourses,
         getCourseById: getCourseById,
+        getCategories: getCategories,
+        setCategories: setCategories,
+        getCurriculumVersions: getCurriculumVersions,
+        setCurriculumVersions: setCurriculumVersions,
+        getCurriculumVersionById: getCurriculumVersionById,
+        getCurriculumVersionsByCourse: getCurriculumVersionsByCourse,
+        getCurrentCurriculumVersion: getCurrentCurriculumVersion,
+        getClasses: getClasses,
+        setClasses: setClasses,
+        getClassById: getClassById,
+        getClassesByCourse: getClassesByCourse,
+        getClassesByInstructor: getClassesByInstructor,
+        getClassInstructorHistories: getClassInstructorHistories,
+        setClassInstructorHistories: setClassInstructorHistories,
+        getClassInstructorHistoriesByClass: getClassInstructorHistoriesByClass,
+        getClassEnrollments: getClassEnrollments,
         getEnrollments: getEnrollments,
         setEnrollments: setEnrollments,
         getEnrollmentsByStudent: getEnrollmentsByStudent,

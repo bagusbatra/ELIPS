@@ -27,13 +27,21 @@
 
         const instructor = ELIPS.getUserById(instructorId);
         const courses = ELIPS.getCourses();
+        const categories = ELIPS.getCategories();
+        const categoryRow = categories.find(function (c) { return c.name === category; });
         const course = {
             id: ELIPS.nextId(courses),
             title: title,
             category: category,
+            categoryId: categoryRow ? categoryRow.id : null,
             description: description,
             instructorId: instructor.id,
             instructorName: instructor.name,
+            curriculumVersionId: null,
+            curriculumVersionCode: null,
+            curriculumVersionStatus: null,
+            classes: 0,
+            enrollments: 0,
             modules: 0,
             lessons: 0,
             totalLessons: 0,
@@ -42,6 +50,32 @@
         };
 
         courses.push(course);
+        ELIPS.setCourses(courses);
+
+        // Setiap kursus baru dimulai dengan versi kurikulum 1.0 (draft).
+        const versions = ELIPS.getCurriculumVersions();
+        const version = {
+            id: ELIPS.nextId(versions),
+            courseId: course.id,
+            code: '1.0',
+            name: 'Kurikulum 1.0 — ' + course.title,
+            description: '',
+            status: 'draft',
+            effectiveDate: null,
+            notes: 'Versi awal saat kursus dibuat.',
+            createdBy: data.actorId || null,
+            updatedBy: data.actorId || null,
+            modules: 0,
+            lessons: 0,
+            classes: 0,
+            createdAt: new Date().toISOString()
+        };
+        versions.push(version);
+        ELIPS.setCurriculumVersions(versions);
+
+        course.curriculumVersionId = version.id;
+        course.curriculumVersionCode = version.code;
+        course.curriculumVersionStatus = version.status;
         ELIPS.setCourses(courses);
         recordAudit({
             action: 'create',
@@ -82,6 +116,12 @@
 
         course.title = title;
         course.category = category;
+        if (data.categoryId !== undefined) {
+            course.categoryId = data.categoryId === null ? null : Number(data.categoryId);
+        } else {
+            const match = ELIPS.getCategories().find(function (c) { return c.name === category; });
+            course.categoryId = match ? match.id : null;
+        }
         course.description = description;
         course.instructorId = instructor.id;
         course.instructorName = instructor.name;
@@ -110,7 +150,13 @@
         if (!course) return failure('Kursus tidak ditemukan.');
 
         const lessonIds = ELIPS.getLessonsByCourse(course.id).map(function (lesson) { return lesson.id; });
+        const classIds = ELIPS.getClassesByCourse(course.id).map(function (item) { return item.id; });
         ELIPS.setCourses(ELIPS.getCourses().filter(function (c) { return c.id !== course.id; }));
+        ELIPS.setCurriculumVersions(ELIPS.getCurriculumVersions().filter(function (v) { return v.courseId !== course.id; }));
+        ELIPS.setClasses(ELIPS.getClasses().filter(function (item) { return item.courseId !== course.id; }));
+        ELIPS.setClassInstructorHistories(ELIPS.getClassInstructorHistories().filter(function (history) {
+            return classIds.indexOf(history.classId) === -1;
+        }));
         ELIPS.setModules(ELIPS.getModules().filter(function (m) { return m.courseId !== course.id; }));
         ELIPS.setLessons(ELIPS.getLessons().filter(function (l) { return l.courseId !== course.id; }));
         ELIPS.setEnrollments(ELIPS.getEnrollments().filter(function (e) { return e.courseId !== course.id; }));
@@ -149,6 +195,23 @@
 
         course.status = status;
         course.updatedAt = new Date().toISOString();
+
+        if (status === 'published') {
+            const version = ELIPS.getCurrentCurriculumVersion(course.id);
+            if (version && version.status === 'draft') {
+                const versions = ELIPS.getCurriculumVersions();
+                const target = versions.find(function (v) { return v.id === version.id; });
+                if (target) {
+                    target.status = 'published';
+                    target.updatedAt = new Date().toISOString();
+                    ELIPS.setCurriculumVersions(versions);
+                }
+                course.curriculumVersionId = version.id;
+                course.curriculumVersionCode = version.code;
+                course.curriculumVersionStatus = 'published';
+            }
+        }
+
         ELIPS.setCourses(courses);
 
         if (previousStatus !== status) {

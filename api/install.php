@@ -53,6 +53,20 @@ try {
 
     $db->beginTransaction();
 
+    // ---------- Categories ----------
+    $categories = [
+        [1, 'Pelatihan', 'pelatihan'],
+        [2, 'Soft Skill', 'soft-skill'],
+        [3, 'Administrasi', 'administrasi'],
+        [4, 'Reguler Class', 'reguler-class'],
+    ];
+    $categoryStmt = $db->prepare(
+        'INSERT INTO categories (id, name, slug, status) VALUES (?, ?, ?, \'active\')'
+    );
+    foreach ($categories as $category) {
+        $categoryStmt->execute($category);
+    }
+
     // ---------- Users ----------
     $users = [
         [1, 'Administrator', 'admin@example.com', '081234567890', 'admin', 'aktif', '2026-01-01'],
@@ -73,17 +87,35 @@ try {
 
     // ---------- Courses ----------
     $courses = [
-        [1, 'Pelatihan Manajemen Dasar', 'Pelatihan', 'Pelatihan ini membahas konsep dasar manajemen, perencanaan, organisasi, kepemimpinan, dan pengendalian untuk meningkatkan efektivitas kerja.', 2, 'published', '2026-09-20'],
-        [2, 'Komunikasi Efektif di Tempat Kerja', 'Soft Skill', 'Meningkatkan kemampuan komunikasi verbal, non-verbal, mendengarkan aktif, dan membangun hubungan yang harmonis di lingkungan kerja.', 3, 'draft', '2026-09-25'],
-        [3, 'Administrasi Perkantoran Modern', 'Administrasi', 'Pengelolaan arsip, surat menyurat, pengarsipan digital, penggunaan aplikasi perkantoran, dan tata kelola administrasi yang efisien.', 4, 'draft', '2026-09-28'],
-        [4, 'Microsoft Office', 'Reguler Class', 'Kelas rombel Microsoft Word, Microsoft Excel, dan Microsoft PowerPoint untuk kebutuhan administrasi perkantoran.', 2, 'draft', '2026-10-02'],
+        [1, 'Pelatihan Manajemen Dasar', 'Pelatihan', 1, 'Pelatihan ini membahas konsep dasar manajemen, perencanaan, organisasi, kepemimpinan, dan pengendalian untuk meningkatkan efektivitas kerja.', 2, 'published', '2026-09-20'],
+        [2, 'Komunikasi Efektif di Tempat Kerja', 'Soft Skill', 2, 'Meningkatkan kemampuan komunikasi verbal, non-verbal, mendengarkan aktif, dan membangun hubungan yang harmonis di lingkungan kerja.', 3, 'draft', '2026-09-25'],
+        [3, 'Administrasi Perkantoran Modern', 'Administrasi', 3, 'Pengelolaan arsip, surat menyurat, pengarsipan digital, penggunaan aplikasi perkantoran, dan tata kelola administrasi yang efisien.', 4, 'draft', '2026-09-28'],
+        [4, 'Microsoft Office', 'Reguler Class', 4, 'Kelas rombel Microsoft Word, Microsoft Excel, dan Microsoft PowerPoint untuk kebutuhan administrasi perkantoran.', 2, 'draft', '2026-10-02'],
     ];
     $courseStmt = $db->prepare(
-        'INSERT INTO courses (id, title, category, description, instructor_id, status, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)'
+        'INSERT INTO courses (id, title, category, category_id, description, instructor_id, status, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
     );
     foreach ($courses as $course) {
         $courseStmt->execute($course);
+    }
+
+    // ---------- Curriculum versions ----------
+    // Setiap kursus lama mendapat versi kurikulum awal 1.0. Versi kursus 1
+    // berstatus locked karena sudah dipakai oleh kelas migrasi.
+    $versions = [
+        [1, 1, '1.0', 'Kurikulum 1.0 — Pelatihan Manajemen Dasar', 'Versi awal kurikulum Pelatihan Manajemen Dasar.', 'locked', '2026-09-20', 'Migrasi struktur modul dan materi v3.0.'],
+        [2, 2, '1.0', 'Kurikulum 1.0 — Komunikasi Efektif', 'Versi awal kurikulum Komunikasi Efektif di Tempat Kerja.', 'draft', '2026-09-25', 'Migrasi struktur modul dan materi v3.0.'],
+        [3, 3, '1.0', 'Kurikulum 1.0 — Administrasi Perkantoran Modern', 'Versi awal kurikulum Administrasi Perkantoran Modern.', 'draft', '2026-09-28', 'Migrasi struktur modul dan materi v3.0.'],
+        [4, 4, '1.0', 'Kurikulum 1.0 — Microsoft Office', 'Versi awal kurikulum Microsoft Office.', 'published', '2026-10-02', 'Migrasi struktur modul dan materi v3.0.'],
+    ];
+    $versionStmt = $db->prepare(
+        "INSERT INTO curriculum_versions
+         (id, course_id, code, name, description, status, effective_date, notes, created_by, updated_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 1)"
+    );
+    foreach ($versions as $version) {
+        $versionStmt->execute($version);
     }
 
     $templates = [
@@ -123,21 +155,22 @@ try {
     ];
 
     $moduleStmt = $db->prepare(
-        'INSERT INTO modules (id, course_id, instructor_id, title, description, sort_order, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)'
+        'INSERT INTO modules (id, course_id, curriculum_version_id, instructor_id, title, description, sort_order, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
     );
     $lessonStmt = $db->prepare(
-        'INSERT INTO lessons (id, module_id, course_id, instructor_id, title, type, content, sort_order, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        'INSERT INTO lessons (id, module_id, course_id, curriculum_version_id, instructor_id, title, type, content, sort_order, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     );
 
     $moduleId = 1;
     $lessonId = 1;
     foreach ($courses as $course) {
         $courseId = (int) $course[0];
-        $instructorId = (int) $course[4];
+        $instructorId = (int) $course[5];
         $courseTitle = (string) $course[1];
-        $createdAt = (string) $course[6] . ' 00:00:00';
+        $createdAt = (string) $course[7] . ' 00:00:00';
+        $versionId = $courseId;
         $titles = $templates[$courseId] ?? ['Modul 1'];
 
         foreach ($titles as $index => $title) {
@@ -145,6 +178,7 @@ try {
             $moduleStmt->execute([
                 $currentModuleId,
                 $courseId,
+                $versionId,
                 $instructorId,
                 'Modul ' . ($index + 1) . ': ' . $title,
                 'Materi ' . strtolower($title) . ' pada kursus ' . $courseTitle . '.',
@@ -162,6 +196,7 @@ try {
                     $lessonId++,
                     $currentModuleId,
                     $courseId,
+                    $versionId,
                     $instructorId,
                     ($index + 1) . '.' . $lessonIndex . ' ' . $title . $suffix,
                     $isVideo ? 'video' : 'text',
@@ -173,14 +208,44 @@ try {
         }
     }
 
-    // ---------- Enrollments ----------
-    $enrollmentStmt = $db->prepare(
-        "INSERT INTO enrollments (id, student_id, course_id, enrolled_by, enrolled_at, status)
-         VALUES (?, ?, ?, 'admin', ?, 'active')"
+    // ---------- Classes / cohorts ----------
+    // Hanya kelas migrasi yang di-seed. Kelas contoh lain sengaja tidak dibuat
+    // agar setiap kelas pasti merujuk versi yang sudah Published dan terkunci.
+    $classes = [
+        [1, 'ANG-2026-MNJ-01', 'Angkatan 2026 — Pelatihan Manajemen Dasar', 1, 1, 2, '2026-10-01', '2026-12-31', 30, 'Kampus Pusat', 'R-101', 'Senin & Rabu, 09.00-11.00', 32, 'ongoing', 1, 'Kelas migrasi dari enrollment kursus v3.0.'],
+    ];
+    $classStmt = $db->prepare(
+        "INSERT INTO classes
+         (id, code, name, course_id, curriculum_version_id, instructor_id, period_start, period_end, quota,
+          location, room, schedule_note, planned_jp, status, legacy_import, notes, created_by, updated_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1)"
     );
-    $enrollmentStmt->execute([1, 5, 1, '2026-10-01']);
-    $enrollmentStmt->execute([2, 6, 1, '2026-10-05']);
-    $enrollmentStmt->execute([3, 7, 1, '2026-10-10']);
+    foreach ($classes as $class) {
+        $classStmt->execute($class);
+    }
+
+    $historyStmt = $db->prepare(
+        'INSERT INTO class_instructor_histories (class_id, instructor_id, started_at, ended_at, reason, actor_id)
+         VALUES (?, ?, ?, NULL, ?, 1)'
+    );
+    foreach ($classes as $class) {
+        $historyStmt->execute([
+            (int) $class[0],
+            (int) $class[5],
+            (string) $class[6],
+            'Penetapan tentor awal saat kelas dibuat.',
+        ]);
+    }
+
+    // ---------- Enrollments ----------
+    // Enrollment lama dimigrasikan ke kelas migrasi kursus 1.
+    $enrollmentStmt = $db->prepare(
+        "INSERT INTO enrollments (id, student_id, course_id, class_id, enrolled_by, enrolled_at, status)
+         VALUES (?, ?, ?, ?, 'admin', ?, 'active')"
+    );
+    $enrollmentStmt->execute([1, 5, 1, 1, '2026-10-01']);
+    $enrollmentStmt->execute([2, 6, 1, 1, '2026-10-05']);
+    $enrollmentStmt->execute([3, 7, 1, 1, '2026-10-10']);
 
     $db->commit();
 

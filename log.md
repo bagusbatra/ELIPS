@@ -1,9 +1,9 @@
 # Log Pengembangan ELIPS LMS
 
-**Versi dokumen:** 3.0  
-**Terakhir diperbarui:** 2026-11-04  
-**Status proyek:** Dual-mode — PHP 8/MySQL 8 + fallback `localStorage`  
-**Dokumen terkait:** `prd.md`, `erd.md`
+**Versi dokumen:** 4.0  
+**Terakhir diperbarui:** 2026-11-05  
+**Status proyek:** Dual-mode — PHP 8/MySQL 8 + fallback `localStorage`; v4.0 Phase 1–2 (kurikulum, kelas/angkatan, enrollment berbasis kelas)  
+**Dokumen terkait:** `prd.md`, `erd.md`, `ELIPS-LMS-PRD-v4.0.md`
 
 ---
 
@@ -15,23 +15,24 @@ Tiga role utama:
 
 | Role | Tanggung jawab |
 |---|---|
-| **Admin** | Membuat kursus Draft, menugaskan 1 instruktur per kursus, mengelola pengguna, menugaskan peserta ke kursus, menyetujui sertifikat Draft → Publish, menelusuri audit trail, dan memantau outbox notifikasi |
-| **Instruktur** | Mengelola modul/materi pada kursus yang diampu, memantau progres peserta, memberi nilai akhir |
-| **Peserta** | Belajar materi kursus yang ditugaskan, menandai pelajaran selesai, melihat sertifikat yang sudah Publish |
+| **Admin** | Membuat kursus Draft, mengelola versi kurikulum, membuat angkatan/kelas, menugaskan 1 tentor per kelas, mengelola pengguna, mendaftarkan peserta ke kelas, menyetujui sertifikat Draft → Publish, menelusuri audit trail, dan memantau outbox notifikasi |
+| **Instruktur** | Mengelola modul/materi pada versi kurikulum yang belum terkunci, memantau progres peserta, memberi nilai akhir per enrollment |
+| **Peserta** | Belajar materi dari kelas yang diikuti, menandai pelajaran selesai, melihat sertifikat yang sudah Publish |
 
 Alur utama:
 
 ```text
 Admin buat kursus (Draft)
-  → Admin tugaskan 1 instruktur
-  → Admin tugaskan peserta ke 1..N kursus
-  → Instruktur buat modul & materi
-  → Peserta belajar (kursus harus Published)
-  → Instruktur beri nilai
+  → Admin susun versi kurikulum (Draft → Published)
+  → Admin buat angkatan/kelas (versi dikunci, 1 tentor)
+  → Admin daftarkan peserta ke kelas (kuota & status)
+  → Instruktur buat modul & materi pada versi yang dapat diubah
+  → Peserta belajar (kelas diikuti & kursus Published)
+  → Instruktur beri nilai per enrollment
   → Sistem buat e-sertifikat Draft (tidak tampil ke peserta)
   → Admin setujui
   → E-sertifikat Publish (tampil & dapat diverifikasi)
-  → Setiap perubahan kursus, nilai, dan sertifikat tercatat di audit trail
+  → Setiap perubahan kursus, kurikulum, kelas, nilai, dan sertifikat tercatat di audit trail
   → Notifikasi email simulasi tercatat saat kursus Publish / sertifikat terbit
 ```
 
@@ -63,6 +64,7 @@ ELIPS/
 ├── admin/
 │   ├── dashboard.html
 │   ├── courses.html
+│   ├── academic.html
 │   ├── users.html
 │   ├── enrollment.html
 │   ├── certificates.html
@@ -99,6 +101,7 @@ ELIPS/
         ├── crud-courses.js
         ├── crud-enrollments.js
         ├── crud-content.js
+        ├── crud-academic.js
         ├── crud-grades.js
         └── ui.js
 ```
@@ -110,7 +113,7 @@ Semua halaman memuat modul dengan urutan berikut:
 ```text
 config → core → api → utils → data → seed → sync → progress → auth → audit → notifications
 → crud-users → crud-courses → crud-enrollments
-→ crud-content → crud-grades → ui
+→ crud-content → crud-academic → crud-grades → ui
 ```
 
 | Modul | Tanggung jawab | API utama |
@@ -119,7 +122,7 @@ config → core → api → utils → data → seed → sync → progress → au
 | `core.js` | Namespace `window.ELIPS`, daftar key storage, helper baca/tulis, `nextId`, objek hasil `{ ok, message, data }`, validasi dasar, password demo | `ELIPS.read`, `ELIPS.write`, `ELIPS.nextId`, `ELIPS.DEFAULT_PASSWORD`, `ELIPS._` |
 | `api.js` | Jembatan dual-mode: bootstrap snapshot, cache sinkron, panggilan aksi tulis, fallback lokal | `ELIPS.api.enabled`, `ELIPS.api.call`, `ELIPS.api.refresh` |
 | `utils.js` | Konversi nilai ke huruf, nomor sertifikat, escape HTML, sanitasi HTML materi, format tanggal, toast | `gradeLetter`, `generateCertificateNumber`, `escapeHtml`, `sanitizeHtml`, `formatDate`, `toast` |
-| `data.js` | Getter/setter seluruh koleksi data; tidak berisi aturan bisnis | `getUsers`, `getCourses`, `getEnrollments`, `getModules`, `getLessons`, `getGrades`, `getCertificates`, `getCompletedLessons`, `getPublishedCertificatesByStudent` |
+| `data.js` | Getter/setter seluruh koleksi data; tidak berisi aturan bisnis | `getUsers`, `getCourses`, `getCurriculumVersions`, `getClasses`, `getClassInstructorHistories`, `getEnrollments`, `getModules`, `getLessons`, `getGrades`, `getCertificates`, `getCompletedLessons`, `getPublishedCertificatesByStudent` |
 | `seed.js` | Data demo awal dan migrasi/normalisasi data lama; dilewati pada mode server | dijalankan otomatis saat modul dimuat (kecuali mode server) |
 | `sync.js` | Sinkronisasi data turunan: nama instruktur, kepemilikan konten, counter modul/materi, pelepasan kursus | `syncCourseCounters` dan helper internal `syncAllContentOwners`, `releaseInstructorCourses` |
 | `progress.js` | Struktur kursus, progres belajar, overview siswa dan instruktur | `getCourseStructure`, `getCourseProgress`, `isLessonUnlocked`, `getStudentCourseOverview`, `getInstructorCourses`, `getInstructorSummary` |
@@ -128,8 +131,9 @@ config → core → api → utils → data → seed → sync → progress → au
 | `notifications.js` | Outbox notifikasi email simulasi: pembuatan saat kursus Published/sertifikat terbit, filter, penerima, pembersihan | `createNotification`, `notifyCoursePublished`, `notifyCertificatePublished`, `getNotifications`, `getNotificationRecipients`, `clearNotifications`, `notificationTypeLabel` |
 | `crud-users.js` | CRUD pengguna, autentikasi email/password, dan penugasan instruktur ke kursus | `createUser`, `updateUser`, `deleteUser`, `authenticateUser`, `assignInstructorToCourses` |
 | `crud-courses.js` | CRUD kursus dan aturan Draft/Publish | `createCourse`, `updateCourse`, `deleteCourse`, `setCourseStatus`, `toggleCourseStatus` |
-| `crud-enrollments.js` | CRUD penugasan peserta ke kursus | `assignStudentToCourses`, `setEnrollmentStatus`, `deleteEnrollment` |
-| `crud-content.js` | CRUD modul dan materi dengan validasi kepemilikan | `createModule`, `updateModule`, `deleteModule`, `createLesson`, `updateLesson`, `deleteLesson` |
+| `crud-enrollments.js` | CRUD pendaftaran peserta ke kelas | `assignStudentToCourses`, `assignStudentsToClass`, `setEnrollmentClassStatus`, `setEnrollmentStatus`, `deleteEnrollment` |
+| `crud-content.js` | CRUD modul dan materi dengan validasi kepemilikan dan versi kurikulum | `createModule`, `updateModule`, `deleteModule`, `createLesson`, `updateLesson`, `deleteLesson` |
+| `crud-academic.js` | CRUD versi kurikulum, kelas/angkatan, histori tentor, roster, dan validasi kuota | `createCurriculumVersion`, `updateCurriculumVersion`, `publishCurriculumVersion`, `cloneCurriculumVersion`, `retireCurriculumVersion`, `deleteCurriculumVersion`, `getCurriculumDetail`, `createClass`, `updateClass`, `setClassStatus`, `assignClassInstructor`, `deleteClass`, `assignStudentsToClass`, `setEnrollmentClassStatus` |
 | `crud-grades.js` | Input nilai dan alur sertifikat Draft → Publish | `saveGrade`, `createDraftCertificateForEnrollment`, `approveCertificate` |
 | `ui.js` | Perilaku UI bersama: navigasi mobile, sidebar dashboard, katalog beranda, login (email + password), logout, style toast | dijalankan pada `DOMContentLoaded` |
 
@@ -144,6 +148,71 @@ Prinsip yang dipakai:
 ---
 
 ## 3. Riwayat Perubahan
+
+### v4.0 - 2026-11-05 - Phase 1–2: versi kurikulum, kelas/angkatan, enrollment berbasis kelas
+
+**Tujuan:** memisahkan kursus dari penyelenggaraannya sehingga satu kursus dapat memiliki beberapa versi kurikulum dan beberapa angkatan/kelas, tanpa menghapus riwayat akademik dan tanpa merusak alur v3.0.
+
+Perubahan backend:
+
+- `api/schema.sql`:
+  - tabel baru `categories`, `curriculum_versions`, `classes`, `class_instructor_histories`;
+  - `modules` dan `lessons` mendapat `curriculum_version_id` (FK ke versi);
+  - `enrollments` mendapat `class_id` serta status diperluas (`active`, `completed`, `withdrawn`, `cancelled`);
+  - `grades` dan `certificates` memakai unique per `enrollment_id` agar angkatan berbeda terpisah;
+  - foreign key, index, dan constraint MySQL 8 untuk menjaga integritas.
+- `api/helpers.php`:
+  - helper kurikulum (baris versi, kode versi berikutnya, cek dapat diedit, kunci transaksional);
+  - helper kelas (baris kelas, kode kelas, hitung enrollment, cek tentor aktif, histori tentor);
+  - serializer v4 untuk kategori, versi kurikulum, kelas, histori tentor, dan enrollment;
+  - sanitasi, audit, dan notifikasi tetap kompatibel v3.
+- `api/actions.php` menambahkan aksi:
+  - `curriculum.create`, `curriculum.update`, `curriculum.publish`, `curriculum.clone`, `curriculum.retire`, `curriculum.delete`, `curriculum.detail`;
+  - `class.create`, `class.update`, `class.status`, `class.assignInstructor`, `class.delete`;
+  - `enrollment.assignClass`, `enrollment.classStatus`;
+  - `module.create`/`lesson.create` menerima `curriculumVersionId` dan menolak versi terkunci;
+  - guard role Admin untuk aksi akademik, guard kepemilikan untuk instruktur.
+- `api/snapshot.php`:
+  - memuat koleksi `categories`, `curriculumVersions`, `classes`, `classInstructorHistories`;
+  - hanya mengekspos modul/materi dari versi kurikulum aktif (non-retired) tiap kursus;
+  - struktur versi lengkap tersedia via `curriculum.detail`.
+- `api/install.php`:
+  - seed kategori, versi kurikulum `1.0` untuk setiap kursus, dan kelas migrasi `ANG-2026-MNJ-01`;
+  - enrollment v3 dipetakan ke kelas migrasi (`legacy_import`);
+  - seed dijaga konsisten agar setiap kelas merujuk versi yang terkunci.
+
+Perubahan client:
+
+- `assets/js/core.js`, `data.js`, `seed.js`: key dan accessor baru (`elips_categories`, `elips_curriculumVersions`, `elips_classes`, `elips_classInstructorHistories`), seed v4, dan migrasi data v3.
+- `assets/js/crud-content.js`: modul/materi terhubung ke versi kurikulum; auto-create versi Draft bila kursus belum punya versi; menolak perubahan pada versi Locked/Retired.
+- `assets/js/crud-courses.js`: publikasi kursus mempertimbangkan kurikulum.
+- `assets/js/crud-enrollments.js`: pendaftaran berbasis kelas dan status enrollment.
+- `assets/js/crud-academic.js` (baru): implementasi lokal untuk seluruh aturan kurikulum/kelas, termasuk penguncian versi, clone, retire, histori tentor, kuota, dan roster.
+- `admin/academic.html` (baru): UI versi kurikulum, kelas/angkatan, penugasan tentor, roster, dan modal detail struktur.
+- Navigasi `academic.html` ditambahkan ke seluruh halaman admin.
+- `instructor/dashboard.html`: tabel “Kelas yang Diampu”.
+
+Perubahan data demo:
+
+- 7 pengguna, 4 kategori, 4 kursus, 4 versi kurikulum, 25 modul, 75 pelajaran, 1 kelas migrasi, 1 histori tentor, dan 3 enrollment.
+- Hanya kelas migrasi yang di-seed sehingga setiap kelas pasti memakai versi kurikulum Published yang sudah dikunci.
+
+Pengujian:
+
+- `php api/install.php --fresh` berhasil; seed konsisten.
+- `php -l` lulus untuk seluruh `api/*.php`.
+- `test-server-mode.js` 18/18, `api-integration.js` 55/55.
+- Suite v4 baru: `api-v4.js` 39/39 dan `local-v4.js` 36/36.
+- Seluruh 17 suite lokal `test-*.js` lulus, termasuk `test-academic-page.js`.
+- Dua pengujian v3 disesuaikan dengan semantik v4: `test-instructor.js` memverifikasi kurikulum kursus 1 terkunci lalu mengelola kursus 4; `test-p0.js` membuat kursus/modul Draft baru untuk menguji sanitasi materi.
+
+Batasan increment ini:
+
+- Baru mencakup Phase 1–2; jadwal/presensi offline, materi per kelas, tugas/ujian, pembayaran, dan sertifikat PDF mengikuti phase berikutnya.
+- Enrollment lama dipetakan ke satu kelas migrasi per kursus; pemetaan kelas historis yang lebih rinci memerlukan data sumber tambahan.
+- Snapshot masih memuat koleksi demo secara luas; pembatasan per role direncanakan pada hardening produksi.
+
+---
 
 ### v3.0 - 2026-11-04 - Backend PHP + MySQL dan client dual-mode
 

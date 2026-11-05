@@ -1,0 +1,934 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kurikulum &amp; Kelas - ELIPS LMS</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../assets/css/style.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+</head>
+<body>
+    <header class="navbar">
+        <div class="container nav-container">
+            <div class="nav-brand">
+                <i class="bi bi-mortarboard-fill brand-icon"></i>
+                <span class="brand-text">ELIPS LMS</span>
+            </div>
+            <nav class="nav-menu" id="navMenu">
+                <a href="../index.html" class="nav-link">Beranda</a>
+                <a href="../index.html#courses" class="nav-link">Kursus</a>
+                <a href="../verify-certificate.html" class="nav-link">Verifikasi Sertifikat</a>
+            </nav>
+            <div class="nav-actions">
+                <a href="dashboard.html" class="btn btn-ghost">Dashboard</a>
+                <a href="../index.html" class="btn btn-outline" data-logout>Keluar</a>
+            </div>
+            <button class="nav-toggle" id="navToggle">
+                <i class="bi bi-list"></i>
+            </button>
+        </div>
+    </header>
+
+    <div class="dashboard-layout">
+        <aside class="dashboard-sidebar">
+            <div class="dashboard-sidebar-header">
+                <div class="dashboard-user">
+                    <div class="dashboard-avatar">AD</div>
+                    <div class="dashboard-user-info">
+                        <div class="dashboard-user-name">Administrator</div>
+                        <div class="dashboard-user-role">Admin</div>
+                    </div>
+                </div>
+            </div>
+            <nav class="dashboard-nav">
+                <a href="dashboard.html" class="dashboard-nav-link">
+                    <i class="bi bi-speedometer2"></i>
+                    <span>Dashboard</span>
+                </a>
+                <a href="users.html" class="dashboard-nav-link">
+                    <i class="bi bi-people"></i>
+                    <span>Kelola Pengguna</span>
+                </a>
+                <a href="courses.html" class="dashboard-nav-link">
+                    <i class="bi bi-journal-bookmark"></i>
+                    <span>Kelola Kursus</span>
+                </a>
+                <a href="academic.html" class="dashboard-nav-link active">
+                    <i class="bi bi-diagram-3"></i>
+                    <span>Kurikulum &amp; Kelas</span>
+                </a>
+                <a href="enrollment.html" class="dashboard-nav-link">
+                    <i class="bi bi-person-check"></i>
+                    <span>Penugasan Siswa</span>
+                </a>
+                <a href="certificates.html" class="dashboard-nav-link">
+                    <i class="bi bi-award"></i>
+                    <span>Kelola Sertifikat</span>
+                </a>
+                <a href="reports.html" class="dashboard-nav-link">
+                    <i class="bi bi-file-earmark-bar-graph"></i>
+                    <span>Laporan</span>
+                </a>
+                <a href="notifications.html" class="dashboard-nav-link">
+                    <i class="bi bi-envelope"></i>
+                    <span>Notifikasi</span>
+                </a>
+                <a href="audit.html" class="dashboard-nav-link">
+                    <i class="bi bi-clock-history"></i>
+                    <span>Audit Trail</span>
+                </a>
+                <a href="settings.html" class="dashboard-nav-link">
+                    <i class="bi bi-gear"></i>
+                    <span>Pengaturan</span>
+                </a>
+            </nav>
+        </aside>
+
+        <main class="dashboard-main">
+            <div class="dashboard-header">
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;">
+                    <div>
+                        <h1 class="dashboard-title">Kurikulum &amp; Kelas</h1>
+                        <p class="dashboard-subtitle">Kelola versi kurikulum per kursus, buat angkatan/kelas, tetapkan satu tentor, dan daftarkan peserta. Versi kurikulum dikunci otomatis saat kelas dibuat.</p>
+                    </div>
+                    <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
+                        <button class="btn btn-outline" onclick="openVersionModal()">
+                            <i class="bi bi-layers"></i>
+                            Buat Versi Kurikulum
+                        </button>
+                        <button class="btn btn-primary" onclick="openClassModal()">
+                            <i class="bi bi-people"></i>
+                            Buat Kelas
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="dashboard-stats">
+                <div class="stat-card">
+                    <div class="stat-card-icon blue">
+                        <i class="bi bi-journal-bookmark"></i>
+                    </div>
+                    <div class="stat-card-info">
+                        <div class="stat-card-value" id="statCourses">0</div>
+                        <div class="stat-card-label">Kursus</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-card-icon purple">
+                        <i class="bi bi-layers"></i>
+                    </div>
+                    <div class="stat-card-info">
+                        <div class="stat-card-value" id="statVersions">0</div>
+                        <div class="stat-card-label">Versi Kurikulum</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-card-icon green">
+                        <i class="bi bi-people"></i>
+                    </div>
+                    <div class="stat-card-info">
+                        <div class="stat-card-value" id="statClasses">0</div>
+                        <div class="stat-card-label">Kelas / Angkatan</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-card-icon orange">
+                        <i class="bi bi-person-check"></i>
+                    </div>
+                    <div class="stat-card-info">
+                        <div class="stat-card-value" id="statEnrollments">0</div>
+                        <div class="stat-card-label">Peserta Terdaftar</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="dashboard-section">
+                <div class="dashboard-section-header" style="flex-wrap: wrap; gap: 1rem;">
+                    <h2 class="dashboard-section-title">Versi Kurikulum</h2>
+                    <select class="form-input" id="versionCourseFilter" style="max-width: 280px;" onchange="renderVersions()">
+                        <option value="all">Semua Kursus</option>
+                    </select>
+                </div>
+                <div class="dashboard-section-body" style="padding: 0; overflow-x: auto;">
+                    <table class="dashboard-table">
+                        <thead>
+                            <tr>
+                                <th>Kursus</th>
+                                <th>Versi</th>
+                                <th>Nama</th>
+                                <th>Modul/Materi</th>
+                                <th>Kelas</th>
+                                <th>Status</th>
+                                <th>Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody id="versionTable"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="dashboard-section">
+                <div class="dashboard-section-header" style="flex-wrap: wrap; gap: 1rem;">
+                    <h2 class="dashboard-section-title">Kelas / Angkatan</h2>
+                    <select class="form-input" id="classCourseFilter" style="max-width: 280px;" onchange="renderClasses()">
+                        <option value="all">Semua Kursus</option>
+                    </select>
+                </div>
+                <div class="dashboard-section-body" style="padding: 0; overflow-x: auto;">
+                    <table class="dashboard-table">
+                        <thead>
+                            <tr>
+                                <th>Kelas</th>
+                                <th>Kursus</th>
+                                <th>Kurikulum</th>
+                                <th>Tentor</th>
+                                <th>Periode</th>
+                                <th>Kuota</th>
+                                <th>Status</th>
+                                <th>Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody id="classTable"></tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modal Versi Kurikulum -->
+    <div id="versionModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; padding: 1rem;">
+        <div style="background: white; border-radius: var(--radius-lg); max-width: 560px; width: 100%; max-height: 90vh; overflow-y: auto;">
+            <div style="padding: 1.5rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between;">
+                <h3 style="font-size: 1.25rem; font-weight: 600;" id="versionModalTitle">Buat Versi Kurikulum</h3>
+                <button onclick="closeVersionModal()" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--text-secondary);">
+                    <i class="bi bi-x"></i>
+                </button>
+            </div>
+            <div style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem;">
+                <input type="hidden" id="versionId">
+                <div class="form-group">
+                    <label class="form-label">Kursus *</label>
+                    <select id="versionCourse" class="form-input"></select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Kode Versi</label>
+                    <input type="text" id="versionCode" class="form-input" placeholder="1.0 (otomatis bila kosong)">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Nama Versi *</label>
+                    <input type="text" id="versionName" class="form-input" placeholder="Kurikulum 1.0 — Nama Kursus">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Deskripsi</label>
+                    <textarea id="versionDescription" class="form-input" rows="2"></textarea>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Tanggal Efektif</label>
+                    <input type="date" id="versionEffectiveDate" class="form-input">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Catatan</label>
+                    <textarea id="versionNotes" class="form-input" rows="2"></textarea>
+                </div>
+            </div>
+            <div style="padding: 1.5rem; border-top: 1px solid var(--border); display: flex; gap: 0.75rem; justify-content: flex-end;">
+                <button class="btn btn-ghost" onclick="closeVersionModal()">Batal</button>
+                <button class="btn btn-primary" onclick="saveVersion()">Simpan</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Kelas -->
+    <div id="classModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; padding: 1rem;">
+        <div style="background: white; border-radius: var(--radius-lg); max-width: 640px; width: 100%; max-height: 90vh; overflow-y: auto;">
+            <div style="padding: 1.5rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between;">
+                <h3 style="font-size: 1.25rem; font-weight: 600;" id="classModalTitle">Buat Kelas</h3>
+                <button onclick="closeClassModal()" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--text-secondary);">
+                    <i class="bi bi-x"></i>
+                </button>
+            </div>
+            <div style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem;">
+                <input type="hidden" id="classId">
+                <div class="form-group">
+                    <label class="form-label">Kursus *</label>
+                    <select id="classCourse" class="form-input" onchange="refreshClassVersions()"></select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Versi Kurikulum *</label>
+                    <select id="classVersion" class="form-input"></select>
+                    <small class="form-hint">Hanya versi Published yang dapat dipakai. Versi akan dikunci setelah kelas dibuat.</small>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Nama Kelas / Angkatan *</label>
+                    <input type="text" id="className" class="form-input" placeholder="Angkatan 2026 — Nama Kursus">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Kode Kelas</label>
+                    <input type="text" id="classCode" class="form-input" placeholder="Otomatis bila kosong">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Tentor Penanggung Jawab</label>
+                    <select id="classInstructor" class="form-input"></select>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <div class="form-group">
+                        <label class="form-label">Tanggal Mulai</label>
+                        <input type="date" id="classStart" class="form-input">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Tanggal Selesai</label>
+                        <input type="date" id="classEnd" class="form-input">
+                    </div>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <div class="form-group">
+                        <label class="form-label">Kuota Peserta</label>
+                        <input type="number" id="classQuota" class="form-input" min="0" value="0">
+                        <small class="form-hint">0 = tanpa batas.</small>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Rencana JP</label>
+                        <input type="number" id="classPlannedJp" class="form-input" min="0" step="0.5" value="0">
+                    </div>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <div class="form-group">
+                        <label class="form-label">Lokasi</label>
+                        <input type="text" id="classLocation" class="form-input" placeholder="Kampus Pusat">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Ruangan</label>
+                        <input type="text" id="classRoom" class="form-input" placeholder="R-101">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Jadwal</label>
+                    <input type="text" id="classSchedule" class="form-input" placeholder="Senin &amp; Rabu, 09.00-11.00">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Status</label>
+                    <select id="classStatus" class="form-input">
+                        <option value="draft">Draft</option>
+                        <option value="open">Open</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Catatan</label>
+                    <textarea id="classNotes" class="form-input" rows="2"></textarea>
+                </div>
+            </div>
+            <div style="padding: 1.5rem; border-top: 1px solid var(--border); display: flex; gap: 0.75rem; justify-content: flex-end;">
+                <button class="btn btn-ghost" onclick="closeClassModal()">Batal</button>
+                <button class="btn btn-primary" onclick="saveClass()">Simpan Kelas</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Tentor -->
+    <div id="instructorModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; padding: 1rem;">
+        <div style="background: white; border-radius: var(--radius-lg); max-width: 480px; width: 100%;">
+            <div style="padding: 1.5rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between;">
+                <h3 style="font-size: 1.25rem; font-weight: 600;">Tetapkan Tentor</h3>
+                <button onclick="closeInstructorModal()" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--text-secondary);">
+                    <i class="bi bi-x"></i>
+                </button>
+            </div>
+            <div style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem;">
+                <input type="hidden" id="instructorClassId">
+                <div class="form-group">
+                    <label class="form-label">Tentor Aktif *</label>
+                    <select id="instructorSelect" class="form-input"></select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Alasan Pergantian</label>
+                    <textarea id="instructorReason" class="form-input" rows="2" placeholder="Opsional"></textarea>
+                </div>
+                <div id="instructorHistory" style="font-size: 0.875rem; color: var(--text-secondary);"></div>
+            </div>
+            <div style="padding: 1.5rem; border-top: 1px solid var(--border); display: flex; gap: 0.75rem; justify-content: flex-end;">
+                <button class="btn btn-ghost" onclick="closeInstructorModal()">Batal</button>
+                <button class="btn btn-primary" onclick="saveInstructor()">Tetapkan</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Roster Kelas -->
+    <div id="rosterModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; padding: 1rem;">
+        <div style="background: white; border-radius: var(--radius-lg); max-width: 720px; width: 100%; max-height: 90vh; overflow-y: auto;">
+            <div style="padding: 1.5rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between;">
+                <div>
+                    <h3 style="font-size: 1.25rem; font-weight: 600;" id="rosterTitle">Peserta Kelas</h3>
+                    <p style="font-size: 0.875rem; color: var(--text-secondary);" id="rosterMeta"></p>
+                </div>
+                <button onclick="closeRosterModal()" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--text-secondary);">
+                    <i class="bi bi-x"></i>
+                </button>
+            </div>
+            <div style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1.25rem;">
+                <div>
+                    <label class="form-label">Tambah Peserta</label>
+                    <div id="rosterCandidates" style="display: flex; flex-direction: column; gap: 0.5rem; padding: 0.75rem; border: 1px solid var(--border); border-radius: var(--radius); max-height: 180px; overflow-y: auto;"></div>
+                    <button class="btn btn-outline" style="margin-top: 0.75rem;" onclick="addRosterStudents()">
+                        <i class="bi bi-person-plus"></i>
+                        Daftarkan Peserta Terpilih
+                    </button>
+                </div>
+                <div style="overflow-x: auto;">
+                    <table class="dashboard-table">
+                        <thead>
+                            <tr>
+                                <th>Peserta</th>
+                                <th>Tanggal</th>
+                                <th>Status</th>
+                                <th>Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody id="rosterTable"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Detail Kurikulum -->
+    <div id="detailModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; padding: 1rem;">
+        <div style="background: white; border-radius: var(--radius-lg); max-width: 720px; width: 100%; max-height: 90vh; overflow-y: auto;">
+            <div style="padding: 1.5rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between;">
+                <h3 style="font-size: 1.25rem; font-weight: 600;" id="detailTitle">Detail Kurikulum</h3>
+                <button onclick="closeDetailModal()" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--text-secondary);">
+                    <i class="bi bi-x"></i>
+                </button>
+            </div>
+            <div style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem;" id="detailBody"></div>
+        </div>
+    </div>
+
+    <script src="../assets/js/config.js"></script>
+    <script src="../assets/js/core.js"></script>
+    <script src="../assets/js/api.js"></script>
+    <script src="../assets/js/utils.js"></script>
+    <script src="../assets/js/data.js"></script>
+    <script src="../assets/js/seed.js"></script>
+    <script src="../assets/js/sync.js"></script>
+    <script src="../assets/js/progress.js"></script>
+    <script src="../assets/js/auth.js"></script>
+    <script src="../assets/js/audit.js"></script>
+    <script src="../assets/js/notifications.js"></script>
+    <script src="../assets/js/crud-users.js"></script>
+    <script src="../assets/js/crud-courses.js"></script>
+    <script src="../assets/js/crud-enrollments.js"></script>
+    <script src="../assets/js/crud-content.js"></script>
+    <script src="../assets/js/crud-grades.js"></script>
+    <script src="../assets/js/crud-academic.js"></script>
+    <script src="../assets/js/ui.js"></script>
+    <script>
+        let editingVersionId = null;
+        let editingClassId = null;
+        let activeRosterClassId = null;
+
+        function currentActorId() {
+            const user = ELIPS.getCurrentUser();
+            return user ? user.id : null;
+        }
+
+        function versionBadge(status) {
+            if (status === 'published') return '<span class="badge badge-success">Published</span>';
+            if (status === 'locked') return '<span class="badge badge-primary">Locked</span>';
+            if (status === 'retired') return '<span class="badge" style="background:#e5e7eb;color:#374151;">Retired</span>';
+            return '<span class="badge badge-warning">Draft</span>';
+        }
+
+        function classBadge(status) {
+            if (status === 'ongoing' || status === 'ready') return '<span class="badge badge-success">' + ELIPS.escapeHtml(status) + '</span>';
+            if (status === 'open') return '<span class="badge badge-primary">Open</span>';
+            if (status === 'draft') return '<span class="badge badge-warning">Draft</span>';
+            return '<span class="badge" style="background:#e5e7eb;color:#374151;">' + ELIPS.escapeHtml(status) + '</span>';
+        }
+
+        function renderStats() {
+            document.getElementById('statCourses').textContent = ELIPS.getCourses().length;
+            document.getElementById('statVersions').textContent = ELIPS.getCurriculumVersions().length;
+            document.getElementById('statClasses').textContent = ELIPS.getClasses().length;
+            document.getElementById('statEnrollments').textContent = ELIPS.getEnrollments().filter(function (e) {
+                return e.status === 'active' || e.status === 'pending';
+            }).length;
+        }
+
+        function renderFilters() {
+            const courses = ELIPS.getCourses();
+            ['versionCourseFilter', 'classCourseFilter'].forEach(function (id) {
+                const select = document.getElementById(id);
+                const current = select.value;
+                select.innerHTML = '<option value="all">Semua Kursus</option>' + courses.map(function (course) {
+                    return '<option value="' + course.id + '">' + ELIPS.escapeHtml(course.title) + '</option>';
+                }).join('');
+                select.value = current || 'all';
+            });
+        }
+
+        function renderVersions() {
+            const filter = document.getElementById('versionCourseFilter').value;
+            const tbody = document.getElementById('versionTable');
+            const versions = ELIPS.getCurriculumVersions().slice().sort(function (a, b) {
+                if (a.courseId !== b.courseId) return Number(a.courseId) - Number(b.courseId);
+                return Number(a.id) - Number(b.id);
+            }).filter(function (version) {
+                return filter === 'all' || Number(version.courseId) === Number(filter);
+            });
+
+            if (versions.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--text-secondary);">Belum ada versi kurikulum.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = versions.map(function (version) {
+                const course = ELIPS.getCourseById(version.courseId);
+                const actions = [];
+                if (version.status === 'draft') {
+                    actions.push('<button class="btn btn-ghost" style="padding: 0.375rem 0.625rem; font-size: 0.8125rem;" title="Edit" onclick="openVersionModal(' + version.id + ')"><i class="bi bi-pencil"></i></button>');
+                    actions.push('<button class="btn btn-ghost" style="padding: 0.375rem 0.625rem; font-size: 0.8125rem; color: var(--success);" title="Publikasikan" onclick="publishVersion(' + version.id + ')"><i class="bi bi-send-check"></i></button>');
+                }
+                actions.push('<button class="btn btn-ghost" style="padding: 0.375rem 0.625rem; font-size: 0.8125rem;" title="Lihat isi" onclick="viewVersion(' + version.id + ')"><i class="bi bi-eye"></i></button>');
+                if (version.status !== 'retired') {
+                    actions.push('<button class="btn btn-ghost" style="padding: 0.375rem 0.625rem; font-size: 0.8125rem;" title="Salin versi" onclick="cloneVersion(' + version.id + ')"><i class="bi bi-files"></i></button>');
+                }
+                if (version.status === 'published' || version.status === 'locked') {
+                    actions.push('<button class="btn btn-ghost" style="padding: 0.375rem 0.625rem; font-size: 0.8125rem; color: var(--warning);" title="Pensiunkan" onclick="retireVersion(' + version.id + ')"><i class="bi bi-archive"></i></button>');
+                }
+                if (version.status === 'draft') {
+                    actions.push('<button class="btn btn-ghost" style="padding: 0.375rem 0.625rem; font-size: 0.8125rem; color: var(--danger);" title="Hapus" onclick="removeVersion(' + version.id + ')"><i class="bi bi-trash"></i></button>');
+                }
+
+                return '<tr>' +
+                    '<td><span>' + ELIPS.escapeHtml(course ? course.title : 'Kursus #' + version.courseId) + '</span></td>' +
+                    '<td><span class="badge badge-primary">' + ELIPS.escapeHtml(version.code) + '</span></td>' +
+                    '<td><span>' + ELIPS.escapeHtml(version.name) + '</span></td>' +
+                    '<td><span>' + (version.modules || 0) + ' / ' + (version.lessons || 0) + '</span></td>' +
+                    '<td><span>' + (version.classes || 0) + '</span></td>' +
+                    '<td>' + versionBadge(version.status) + '</td>' +
+                    '<td><div style="display: flex; gap: 0.25rem; flex-wrap: wrap;">' + actions.join('') + '</div></td>' +
+                    '</tr>';
+            }).join('');
+        }
+
+        function renderClasses() {
+            const filter = document.getElementById('classCourseFilter').value;
+            const tbody = document.getElementById('classTable');
+            const classes = ELIPS.getClasses().slice().sort(function (a, b) {
+                return Number(b.id) - Number(a.id);
+            }).filter(function (item) {
+                return filter === 'all' || Number(item.courseId) === Number(filter);
+            });
+
+            if (classes.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: var(--text-secondary);">Belum ada kelas/angkatan.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = classes.map(function (item) {
+                const course = ELIPS.getCourseById(item.courseId);
+                const version = ELIPS.getCurriculumVersionById(item.curriculumVersionId);
+                const activeCount = ELIPS.activeClassEnrollmentCount(item.id);
+                const quotaLabel = (Number(item.quota) || 0) === 0 ? 'Tanpa batas' : (activeCount + ' / ' + item.quota);
+                const statusOptions = ['draft', 'open', 'ready', 'ongoing', 'completed', 'cancelled', 'archived']
+                    .map(function (status) {
+                        return '<option value="' + status + '" ' + (status === item.status ? 'selected' : '') + '>' + status + '</option>';
+                    }).join('');
+
+                return '<tr>' +
+                    '<td><div class="table-course-title">' + ELIPS.escapeHtml(item.name) + '</div><div class="table-course-meta">' + ELIPS.escapeHtml(item.code) + '</div></td>' +
+                    '<td><span>' + ELIPS.escapeHtml(course ? course.title : 'Kursus #' + item.courseId) + '</span></td>' +
+                    '<td><span class="badge badge-primary">' + ELIPS.escapeHtml(version ? version.code : item.curriculumVersionCode || '-') + '</span></td>' +
+                    '<td><span>' + ELIPS.escapeHtml(item.instructorName || 'Belum ditetapkan') + '</span></td>' +
+                    '<td><span style="color: var(--text-secondary);">' + ELIPS.escapeHtml(item.periodStart || '-') + ' s.d. ' + ELIPS.escapeHtml(item.periodEnd || '-') + '</span></td>' +
+                    '<td><span>' + quotaLabel + '</span></td>' +
+                    '<td>' +
+                    '  <div style="display: flex; flex-direction: column; gap: 0.25rem;">' +
+                    '    ' + classBadge(item.status) +
+                    '    <select class="form-input" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" onchange="changeClassStatus(' + item.id + ', this.value)">' + statusOptions + '</select>' +
+                    '  </div>' +
+                    '</td>' +
+                    '<td><div style="display: flex; gap: 0.25rem; flex-wrap: wrap;">' +
+                    '  <button class="btn btn-ghost" style="padding: 0.375rem 0.625rem; font-size: 0.8125rem;" title="Edit kelas" onclick="openClassModal(' + item.id + ')"><i class="bi bi-pencil"></i></button>' +
+                    '  <button class="btn btn-ghost" style="padding: 0.375rem 0.625rem; font-size: 0.8125rem;" title="Peserta" onclick="openRosterModal(' + item.id + ')"><i class="bi bi-people"></i></button>' +
+                    '  <button class="btn btn-ghost" style="padding: 0.375rem 0.625rem; font-size: 0.8125rem;" title="Tentor" onclick="openInstructorModal(' + item.id + ')"><i class="bi bi-person-badge"></i></button>' +
+                    ((item.status === 'draft' || item.status === 'cancelled')
+                        ? '  <button class="btn btn-ghost" style="padding: 0.375rem 0.625rem; font-size: 0.8125rem; color: var(--danger);" title="Hapus" onclick="removeClass(' + item.id + ')"><i class="bi bi-trash"></i></button>'
+                        : '') +
+                    '</div></td>' +
+                    '</tr>';
+            }).join('');
+        }
+
+        function renderAll() {
+            renderStats();
+            renderFilters();
+            renderVersions();
+            renderClasses();
+        }
+
+        // ---------- Version modal ----------
+        function fillCourseSelect(select, selectedId) {
+            const courses = ELIPS.getCourses();
+            select.innerHTML = '<option value="">-- Pilih Kursus --</option>' + courses.map(function (course) {
+                return '<option value="' + course.id + '">' + ELIPS.escapeHtml(course.title) + '</option>';
+            }).join('');
+            if (selectedId) select.value = String(selectedId);
+        }
+
+        function openVersionModal(id) {
+            editingVersionId = id ? Number(id) : null;
+            const version = id ? ELIPS.getCurriculumVersionById(id) : null;
+            document.getElementById('versionModalTitle').textContent = version ? 'Edit Versi Kurikulum' : 'Buat Versi Kurikulum';
+            fillCourseSelect(document.getElementById('versionCourse'), version ? version.courseId : null);
+            document.getElementById('versionCourse').disabled = !!version;
+            document.getElementById('versionId').value = version ? version.id : '';
+            document.getElementById('versionCode').value = version ? version.code : '';
+            document.getElementById('versionName').value = version ? version.name : '';
+            document.getElementById('versionDescription').value = version ? (version.description || '') : '';
+            document.getElementById('versionEffectiveDate').value = version ? (version.effectiveDate || '') : '';
+            document.getElementById('versionNotes').value = version ? (version.notes || '') : '';
+            document.getElementById('versionModal').style.display = 'flex';
+        }
+
+        function closeVersionModal() {
+            document.getElementById('versionModal').style.display = 'none';
+        }
+
+        function saveVersion() {
+            const courseId = Number(document.getElementById('versionCourse').value);
+            const data = {
+                code: document.getElementById('versionCode').value.trim(),
+                name: document.getElementById('versionName').value.trim(),
+                description: document.getElementById('versionDescription').value.trim(),
+                effectiveDate: document.getElementById('versionEffectiveDate').value || null,
+                notes: document.getElementById('versionNotes').value.trim(),
+                actorId: currentActorId()
+            };
+            if (!courseId) {
+                alert('Pilih kursus terlebih dahulu.');
+                return;
+            }
+            const result = editingVersionId
+                ? ELIPS.updateCurriculumVersion(editingVersionId, data)
+                : ELIPS.createCurriculumVersion(courseId, data);
+            if (!result.ok) {
+                alert(result.message);
+                return;
+            }
+            ELIPS.toast(result.message);
+            closeVersionModal();
+            renderAll();
+        }
+
+        function publishVersion(id) {
+            const result = ELIPS.publishCurriculumVersion(id);
+            ELIPS.toast(result.message);
+            renderAll();
+        }
+
+        function cloneVersion(id) {
+            if (!confirm('Salin versi kurikulum ini menjadi Draft baru?')) return;
+            const result = ELIPS.cloneCurriculumVersion(id, { actorId: currentActorId() });
+            if (!result.ok) {
+                alert(result.message);
+                return;
+            }
+            ELIPS.toast(result.message);
+            renderAll();
+        }
+
+        function retireVersion(id) {
+            if (!confirm('Pensiunkan versi ini? Kelas lama tetap memakai versi ini.')) return;
+            const result = ELIPS.retireCurriculumVersion(id);
+            ELIPS.toast(result.message);
+            renderAll();
+        }
+
+        function removeVersion(id) {
+            if (!confirm('Hapus versi kurikulum Draft ini beserta modul dan materinya?')) return;
+            const result = ELIPS.deleteCurriculumVersion(id);
+            ELIPS.toast(result.message);
+            renderAll();
+        }
+
+        function viewVersion(id) {
+            const result = ELIPS.getCurriculumDetail(id);
+            if (!result.ok) {
+                alert(result.message);
+                return;
+            }
+            const version = result.data;
+            document.getElementById('detailTitle').textContent = version.name + ' (' + version.code + ')';
+            const modules = version.modules || [];
+            document.getElementById('detailBody').innerHTML = modules.length === 0
+                ? '<p style="color: var(--text-secondary);">Belum ada modul pada versi ini.</p>'
+                : modules.map(function (module, index) {
+                    const lessons = module.lessons || [];
+                    return '<div style="border: 1px solid var(--border); border-radius: var(--radius); padding: 0.75rem;">' +
+                        '<div style="font-weight: 600;">' + (index + 1) + '. ' + ELIPS.escapeHtml(module.title) + '</div>' +
+                        (lessons.length === 0
+                            ? '<div style="font-size: 0.875rem; color: var(--text-secondary);">Belum ada materi.</div>'
+                            : '<ul style="margin: 0.5rem 0 0 1.25rem; font-size: 0.875rem;">' +
+                                lessons.map(function (lesson) {
+                                    return '<li>' + ELIPS.escapeHtml(lesson.title) + ' <span style="color: var(--text-secondary);">(' + ELIPS.escapeHtml(lesson.type) + ')</span></li>';
+                                }).join('') + '</ul>') +
+                        '</div>';
+                }).join('');
+            document.getElementById('detailModal').style.display = 'flex';
+        }
+
+        function closeDetailModal() {
+            document.getElementById('detailModal').style.display = 'none';
+        }
+
+        // ---------- Class modal ----------
+        function fillInstructorSelect(select, selectedId) {
+            const instructors = ELIPS.getUsersByRole('instruktur').filter(function (user) {
+                return user.status === 'aktif';
+            });
+            select.innerHTML = '<option value="">-- Belum ditetapkan --</option>' + instructors.map(function (user) {
+                return '<option value="' + user.id + '">' + ELIPS.escapeHtml(user.name) + '</option>';
+            }).join('');
+            if (selectedId) select.value = String(selectedId);
+        }
+
+        function refreshClassVersions(selectedVersionId) {
+            const courseId = Number(document.getElementById('classCourse').value);
+            const select = document.getElementById('classVersion');
+            const versions = ELIPS.getCurriculumVersionsByCourse(courseId).filter(function (version) {
+                return version.status === 'published' || version.status === 'locked';
+            });
+            select.innerHTML = '<option value="">-- Pilih Versi --</option>' + versions.map(function (version) {
+                return '<option value="' + version.id + '">' + ELIPS.escapeHtml(version.code + ' — ' + version.name) + ' (' + version.status + ')</option>';
+            }).join('');
+            if (selectedVersionId) select.value = String(selectedVersionId);
+        }
+
+        function openClassModal(id) {
+            editingClassId = id ? Number(id) : null;
+            const item = id ? ELIPS.getClassById(id) : null;
+            document.getElementById('classModalTitle').textContent = item ? 'Edit Kelas' : 'Buat Kelas';
+            fillCourseSelect(document.getElementById('classCourse'), item ? item.courseId : null);
+            document.getElementById('classCourse').disabled = !!item;
+            document.getElementById('classId').value = item ? item.id : '';
+            refreshClassVersions(item ? item.curriculumVersionId : null);
+            document.getElementById('classVersion').disabled = !!item;
+            document.getElementById('className').value = item ? item.name : '';
+            document.getElementById('classCode').value = item ? item.code : '';
+            document.getElementById('classCode').disabled = !!item;
+            fillInstructorSelect(document.getElementById('classInstructor'), item ? item.instructorId : null);
+            document.getElementById('classStart').value = item ? (item.periodStart || '') : '';
+            document.getElementById('classEnd').value = item ? (item.periodEnd || '') : '';
+            document.getElementById('classQuota').value = item ? item.quota : 0;
+            document.getElementById('classPlannedJp').value = item ? item.plannedJp : 0;
+            document.getElementById('classLocation').value = item ? (item.location || '') : '';
+            document.getElementById('classRoom').value = item ? (item.room || '') : '';
+            document.getElementById('classSchedule').value = item ? (item.scheduleNote || '') : '';
+            document.getElementById('classStatus').value = item && (item.status === 'open' || item.status === 'draft') ? item.status : 'draft';
+            document.getElementById('classStatus').disabled = !!item;
+            document.getElementById('classNotes').value = item ? (item.notes || '') : '';
+            document.getElementById('classModal').style.display = 'flex';
+        }
+
+        function closeClassModal() {
+            document.getElementById('classModal').style.display = 'none';
+        }
+
+        function saveClass() {
+            const courseId = Number(document.getElementById('classCourse').value);
+            const versionId = Number(document.getElementById('classVersion').value);
+            if (!courseId || !versionId) {
+                alert('Pilih kursus dan versi kurikulum.');
+                return;
+            }
+            const data = {
+                courseId: courseId,
+                curriculumVersionId: versionId,
+                name: document.getElementById('className').value.trim(),
+                code: document.getElementById('classCode').value.trim(),
+                instructorId: document.getElementById('classInstructor').value || null,
+                periodStart: document.getElementById('classStart').value || null,
+                periodEnd: document.getElementById('classEnd').value || null,
+                quota: document.getElementById('classQuota').value,
+                plannedJp: document.getElementById('classPlannedJp').value,
+                location: document.getElementById('classLocation').value.trim(),
+                room: document.getElementById('classRoom').value.trim(),
+                scheduleNote: document.getElementById('classSchedule').value.trim(),
+                status: document.getElementById('classStatus').value,
+                notes: document.getElementById('classNotes').value.trim(),
+                actorId: currentActorId()
+            };
+            const result = editingClassId
+                ? ELIPS.updateClass(editingClassId, data)
+                : ELIPS.createClass(data);
+            if (!result.ok) {
+                alert(result.message);
+                return;
+            }
+            ELIPS.toast(result.message);
+            closeClassModal();
+            renderAll();
+        }
+
+        function changeClassStatus(id, status) {
+            const result = ELIPS.setClassStatus(id, status);
+            if (!result.ok) {
+                alert(result.message);
+                renderClasses();
+                return;
+            }
+            ELIPS.toast(result.message);
+            renderAll();
+        }
+
+        function removeClass(id) {
+            if (!confirm('Hapus kelas ini? Kelas yang sudah memiliki peserta tidak dapat dihapus.')) return;
+            const result = ELIPS.deleteClass(id);
+            ELIPS.toast(result.message);
+            renderAll();
+        }
+
+        // ---------- Instructor modal ----------
+        function openInstructorModal(classId) {
+            const item = ELIPS.getClassById(classId);
+            if (!item) return;
+            document.getElementById('instructorClassId').value = item.id;
+            fillInstructorSelect(document.getElementById('instructorSelect'), item.instructorId);
+            document.getElementById('instructorReason').value = '';
+            const histories = ELIPS.getClassInstructorHistoriesByClass(item.id);
+            document.getElementById('instructorHistory').innerHTML = histories.length === 0
+                ? 'Belum ada histori tentor.'
+                : '<strong>Histori tentor:</strong><ul style="margin: 0.5rem 0 0 1.25rem;">' + histories.map(function (history) {
+                    const instructor = ELIPS.getUserById(history.instructorId);
+                    return '<li>' + ELIPS.escapeHtml(instructor ? instructor.name : 'Tentor #' + history.instructorId) +
+                        ' (' + ELIPS.escapeHtml(history.startedAt || '-') + ' s.d. ' + ELIPS.escapeHtml(history.endedAt || 'sekarang') + ')</li>';
+                }).join('') + '</ul>';
+            document.getElementById('instructorModal').style.display = 'flex';
+        }
+
+        function closeInstructorModal() {
+            document.getElementById('instructorModal').style.display = 'none';
+        }
+
+        function saveInstructor() {
+            const classId = Number(document.getElementById('instructorClassId').value);
+            const instructorId = Number(document.getElementById('instructorSelect').value);
+            if (!instructorId) {
+                alert('Pilih tentor aktif.');
+                return;
+            }
+            const result = ELIPS.assignClassInstructor(classId, instructorId,
+                document.getElementById('instructorReason').value.trim(), currentActorId());
+            if (!result.ok) {
+                alert(result.message);
+                return;
+            }
+            ELIPS.toast(result.message);
+            closeInstructorModal();
+            renderAll();
+        }
+
+        // ---------- Roster modal ----------
+        function openRosterModal(classId) {
+            activeRosterClassId = Number(classId);
+            renderRoster();
+            document.getElementById('rosterModal').style.display = 'flex';
+        }
+
+        function closeRosterModal() {
+            activeRosterClassId = null;
+            document.getElementById('rosterModal').style.display = 'none';
+        }
+
+        function renderRoster() {
+            const item = ELIPS.getClassById(activeRosterClassId);
+            if (!item) return;
+            const enrollments = ELIPS.getClassEnrollments(item.id);
+            document.getElementById('rosterTitle').textContent = 'Peserta — ' + item.name;
+            const quota = Number(item.quota) || 0;
+            const activeCount = ELIPS.activeClassEnrollmentCount(item.id);
+            document.getElementById('rosterMeta').textContent = item.code + ' • ' +
+                (quota === 0 ? 'Tanpa batas kuota' : activeCount + ' / ' + quota + ' peserta aktif');
+
+            const enrolledIds = enrollments.map(function (e) { return Number(e.studentId); });
+            const candidates = ELIPS.getUsersByRole('peserta').filter(function (user) {
+                return user.status === 'aktif' && enrolledIds.indexOf(user.id) === -1;
+            });
+            document.getElementById('rosterCandidates').innerHTML = candidates.length === 0
+                ? '<span style="color: var(--text-secondary); font-size: 0.875rem;">Semua peserta aktif sudah terdaftar atau belum ada peserta baru.</span>'
+                : candidates.map(function (user) {
+                    return '<label style="display: flex; align-items: center; gap: 0.5rem;">' +
+                        '<input type="checkbox" value="' + user.id + '">' +
+                        '<span>' + ELIPS.escapeHtml(user.name) + ' <small style="color: var(--text-secondary);">' + ELIPS.escapeHtml(user.email) + '</small></span>' +
+                        '</label>';
+                }).join('');
+
+            const statuses = ['pending', 'active', 'completed', 'withdrawn', 'suspended', 'cancelled'];
+            const tbody = document.getElementById('rosterTable');
+            if (enrollments.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--text-secondary);">Belum ada peserta di kelas ini.</td></tr>';
+                return;
+            }
+            tbody.innerHTML = enrollments.map(function (enrollment) {
+                const student = ELIPS.getUserById(enrollment.studentId);
+                const options = statuses.map(function (status) {
+                    return '<option value="' + status + '" ' + (status === enrollment.status ? 'selected' : '') + '>' + status + '</option>';
+                }).join('');
+                return '<tr>' +
+                    '<td><div class="table-course-title">' + ELIPS.escapeHtml(student ? student.name : 'Peserta #' + enrollment.studentId) + '</div>' +
+                    '<div class="table-course-meta">' + ELIPS.escapeHtml(student ? student.email : '') + '</div></td>' +
+                    '<td><span style="color: var(--text-secondary);">' + ELIPS.escapeHtml(enrollment.enrolledAt || '-') + '</span></td>' +
+                    '<td><select class="form-input" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" onchange="changeEnrollmentStatus(' + enrollment.id + ', this.value)">' + options + '</select></td>' +
+                    '<td><button class="btn btn-ghost" style="padding: 0.375rem 0.625rem; font-size: 0.8125rem; color: var(--danger);" onclick="removeRosterEnrollment(' + enrollment.id + ')"><i class="bi bi-trash"></i></button></td>' +
+                    '</tr>';
+            }).join('');
+        }
+
+        function addRosterStudents() {
+            const checked = Array.from(document.querySelectorAll('#rosterCandidates input[type="checkbox"]:checked'))
+                .map(function (input) { return Number(input.value); });
+            if (checked.length === 0) {
+                alert('Pilih minimal satu peserta.');
+                return;
+            }
+            const result = ELIPS.assignStudentsToClass(activeRosterClassId, checked, null);
+            if (!result.ok) {
+                alert(result.message);
+                return;
+            }
+            ELIPS.toast(result.message);
+            renderRoster();
+            renderAll();
+        }
+
+        function changeEnrollmentStatus(id, status) {
+            const result = ELIPS.setEnrollmentClassStatus(id, status);
+            if (!result.ok) {
+                alert(result.message);
+            } else {
+                ELIPS.toast(result.message);
+            }
+            renderRoster();
+            renderAll();
+        }
+
+        function removeRosterEnrollment(id) {
+            if (!confirm('Hapus enrollment peserta ini dari kelas?')) return;
+            const result = ELIPS.deleteEnrollment(id);
+            ELIPS.toast(result.message);
+            renderRoster();
+            renderAll();
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            if (!ELIPS.requireRole('admin')) return;
+            renderAll();
+        });
+    </script>
+</body>
+</html>

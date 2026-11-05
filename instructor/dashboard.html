@@ -148,6 +148,28 @@
 
             <div class="dashboard-section">
                 <div class="dashboard-section-header">
+                    <h2 class="dashboard-section-title">Kelas yang Diampu</h2>
+                    <a href="manage-course.html" class="btn btn-ghost">Kelola Materi <i class="bi bi-arrow-right"></i></a>
+                </div>
+                <div class="dashboard-section-body" style="padding: 0; overflow-x: auto;">
+                    <table class="dashboard-table">
+                        <thead>
+                            <tr>
+                                <th>Kelas</th>
+                                <th>Kursus</th>
+                                <th>Kurikulum</th>
+                                <th>Periode</th>
+                                <th>Peserta</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="instructorClassesBody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="dashboard-section">
+                <div class="dashboard-section-header">
                     <h2 class="dashboard-section-title">Aktivitas Peserta Terbaru</h2>
                     <a href="students.html" class="btn btn-ghost">Semua Peserta <i class="bi bi-arrow-right"></i></a>
                 </div>
@@ -205,9 +227,43 @@
             document.getElementById('statCertificates').textContent = summary.publishedCertificates;
 
             renderCourses(summary);
+            renderInstructorClasses(instructor.id);
             renderRecentStudents(rows);
             renderNotice(summary);
         });
+
+        function renderInstructorClasses(instructorId) {
+            const tbody = document.getElementById('instructorClassesBody');
+            const classes = ELIPS.getClassesByInstructor(instructorId).slice().sort(function (a, b) {
+                return Number(b.id) - Number(a.id);
+            });
+
+            if (classes.length === 0) {
+                tbody.innerHTML = [
+                    '<tr><td colspan="6" style="text-align: center; padding: 2rem; color: var(--text-secondary);">',
+                    '  <i class="bi bi-people" style="display: block; font-size: 2rem; opacity: .45; margin-bottom: .5rem;"></i>',
+                    '  Belum ada kelas yang ditugaskan kepada Anda.',
+                    '</td></tr>'
+                ].join('');
+                return;
+            }
+
+            tbody.innerHTML = classes.map(function (item) {
+                const activeCount = ELIPS.getClassEnrollments(item.id).filter(function (enrollment) {
+                    return enrollment.status === 'active' || enrollment.status === 'pending';
+                }).length;
+                const quota = Number(item.quota) || 0;
+                return '<tr>' +
+                    '<td><div class="table-course-title">' + ELIPS.escapeHtml(item.name) + '</div>' +
+                    '<div class="table-course-meta">' + ELIPS.escapeHtml(item.code) + '</div></td>' +
+                    '<td><span>' + ELIPS.escapeHtml(item.courseTitle || '-') + '</span></td>' +
+                    '<td><span class="badge badge-primary">' + ELIPS.escapeHtml(item.curriculumVersionCode || '-') + '</span></td>' +
+                    '<td><span style="color: var(--text-secondary);">' + ELIPS.escapeHtml(item.periodStart || '-') + ' s.d. ' + ELIPS.escapeHtml(item.periodEnd || '-') + '</span></td>' +
+                    '<td><span>' + (quota === 0 ? activeCount + ' peserta' : activeCount + ' / ' + quota) + '</span></td>' +
+                    '<td><span class="badge ' + (item.status === 'ongoing' || item.status === 'ready' ? 'badge-success' : 'badge-warning') + '">' + ELIPS.escapeHtml(item.status) + '</span></td>' +
+                    '</tr>';
+            }).join('');
+        }
 
         function participantState(row) {
             if (row.certificate && row.certificate.status === 'publish') {

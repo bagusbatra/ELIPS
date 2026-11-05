@@ -1,8 +1,9 @@
 # PRD: Learning Management System (LMS) ELIPS
 
-**Versi:** 3.0  
-**Tanggal:** 2026-11-04  
-**Status:** Implemented (Dual-mode - PHP 8/MySQL 8 + fallback `localStorage`); seluruh aturan alur kursus diterapkan di client dan server, JavaScript dimodularisasi, audit trail P1 aktif, notifikasi email P2 disimulasikan melalui outbox database, dan hardening P0 (guard sesi, hash password, sanitasi materi) aktif  
+**Versi:** 4.0  
+**Tanggal:** 2026-11-05  
+**Status:** Implemented Phase 1–2 (Dual-mode - PHP 8/MySQL 8 + fallback `localStorage`). v3.0 tetap menjadi baseline alur kursus; v4.0 menambahkan versi kurikulum, angkatan/kelas, penguncian kurikulum per kelas, histori tentor, dan enrollment berbasis kelas.  
+**Baseline v4.0 lengkap:** `ELIPS-LMS-PRD-v4.0.md`  
 **Log pengembangan:** `log.md`
 **ERD:** `erd.md`
 **Nama Aplikasi:** ELIPS LMS
@@ -13,15 +14,38 @@
 
 Membangun sistem Learning Management System (LMS) berbasis web untuk pelatihan dan kursus. Aplikasi memakai vanilla HTML, CSS, dan JavaScript di sisi client, dengan backend PHP 8 + MySQL 8 sebagai penyimpanan utama dan `localStorage` sebagai fallback demo saat API tidak tersedia.
 
+### 1.1 Cakupan v4.0 Phase 1–2
+
+Model akademik v4.0 memisahkan **Kursus** dari penyelenggaraannya:
+
+```text
+Kursus
+  └── Versi Kurikulum (draft → published → locked → retired)
+        └── Modul → Materi
+  └── Kelas/Angkatan (satu versi kurikulum terkunci, satu tentor)
+        └── Enrollment peserta
+              └── Nilai → Sertifikat
+```
+
+Aturan inti yang sudah diterapkan:
+
+- Versi kurikulum baru berstatus **Draft**; hanya versi **Published** yang dapat dipakai membuat kelas.
+- Saat kelas dibuat, versi kurikulum langsung berubah menjadi **Locked** dalam transaksi yang sama.
+- Versi **Locked/Retired** tidak boleh diubah atau dihapus; revisi dilakukan dengan **clone** menjadi Draft baru.
+- Satu kelas hanya memiliki satu tentor aktif, tetapi satu tentor boleh mengampu banyak kelas. Pergantian tentor dicatat di histori.
+- Enrollment terhubung ke kelas, memiliki status pendaftaran, dan tunduk pada kuota kelas.
+- Nilai dan sertifikat unik per enrollment, sehingga peserta dapat mengikuti kursus yang sama pada angkatan berbeda.
+- Data akademik tidak dihapus permanen; kelas dengan enrollment tidak dapat dihapus dan versi terpakai harus dipensiunkan, bukan dihapus.
+
 ---
 
 ## 2. Target Pengguna
 
 | Role | Deskripsi | Kebutuhan Utama |
 |---|---|---|
-| **Admin** | Pengelola sistem | Menambah kursus (Draft), menugaskan 1 instruktur per kursus, menambah pengguna, menugaskan siswa ke satu/beberapa kursus, menyetujui sertifikat Draft → Publish |
-| **Instruktur/Trainer** | Pengajar kursus | Login, mengelola modul/materi pada kursus yang diampu, memantau progres, memberi nilai akhir |
-| **Peserta/Student** | Peserta pelatihan | Mengakses materi dari kursus yang ditugaskan, menandai pelajaran selesai, melihat sertifikat yang sudah Publish |
+| **Admin** | Pengelola sistem | Menambah kursus (Draft), mengelola versi kurikulum, membuat angkatan/kelas, menugaskan 1 tentor per kelas, menambah pengguna, mendaftarkan siswa ke kelas, menyetujui sertifikat Draft → Publish |
+| **Instruktur/Trainer** | Pengajar kursus/kelas | Login, melihat kelas yang diampu, mengelola modul/materi pada versi kurikulum yang masih dapat diubah, memantau progres, memberi nilai akhir |
+| **Peserta/Student** | Peserta pelatihan | Mengakses materi dari kelas yang diikuti, menandai pelajaran selesai, melihat sertifikat yang sudah Publish |
 
 ---
 
@@ -35,11 +59,13 @@ Alur berikut menjadi acuan utama untuk pengelolaan kursus, penugasan instruktur 
 Admin ── tambah kursus ──────────────▶ Kursus [Draft]
 Admin ── tambah instruktur ──────────▶ Instruktur
 Admin ── kaitkan instruktur ─────────▶ Kursus [Draft]   (1 kursus = 1 instruktur)
+Admin ── susun versi kurikulum ──────▶ Versi [Draft] → [Published]
+Admin ── buat angkatan/kelas ────────▶ Kelas (versi Published dikunci, 1 tentor)
 Admin ── tambah siswa ───────────────▶ Siswa
-Admin ── kaitkan siswa ──────────────▶ 1..N Kursus      (1 siswa boleh banyak kursus)
-Instruktur ── login ─────────────────▶ Buat modul & materi pada kursus yang diampu
-Siswa ── belajar ────────────────────▶ Hanya modul pada kursus yang ditugaskan
-Instruktur ── beri nilai akhir ──────▶ Nilai
+Admin ── daftarkan siswa ────────────▶ Kelas (kuota & status enrollment)
+Instruktur ── login ─────────────────▶ Buat modul & materi pada versi yang belum terkunci
+Siswa ── belajar ────────────────────▶ Hanya materi dari kelas yang diikuti
+Instruktur ── beri nilai akhir ──────▶ Nilai per enrollment
 Nilai ── terintegrasi ───────────────▶ E-Sertifikat [Draft]
 E-Sertifikat [Draft] ── tidak tampil ▶ Halaman siswa
 Admin ── approve ────────────────────▶ E-Sertifikat [Publish] ── tampil ▶ Halaman siswa
@@ -51,86 +77,120 @@ Sistem ── kursus Publish / sertifikat terbit ▶ Notifikasi email (simulasi)
 1. **Admin menambah kursus baru** melalui `admin/courses.html`.
    - Kursus baru dibuat dengan status **Draft**.
    - Kursus Draft belum dapat diakses oleh siswa.
-   - Kursus baru wajib memiliki satu instruktur penanggung jawab.
+   - Kursus menjadi wadah jangka panjang; penyelenggaraan dilakukan melalui versi kurikulum dan kelas.
 
 2. **Admin menambah akun instruktur baru** melalui `admin/users.html`.
    - Role pengguna diatur sebagai **Instruktur**.
-   - Akun instruktur harus berstatus **Aktif** agar dapat masuk dan mengelola kursus.
+   - Akun instruktur harus berstatus **Aktif** agar dapat masuk dan mengampu kelas.
 
-3. **Admin mengaitkan instruktur ke kursus Draft**.
-   - Relasi bersifat **1 kursus = 1 instruktur** (`course.instructorId`).
-   - Satu instruktur boleh mengampu lebih dari satu kursus.
-   - Jika kursus sudah memiliki instruktur, penugasan baru akan menggantikan instruktur sebelumnya.
+3. **Admin menyusun versi kurikulum** melalui `admin/academic.html`.
+   - Versi baru selalu berstatus **Draft** dan memiliki kode unik per kursus (mis. `2.0`).
+   - Modul dan materi dibuat pada versi Draft melalui `instructor/manage-course.html` atau aksi API terkait.
+   - Versi dapat **dipublikasikan** (`Published`) bila strukturnya siap dipakai.
+   - Versi dapat **di-clone** menjadi Draft baru untuk revisi tanpa mengubah versi yang sudah dipakai.
+   - Versi yang sudah dipakai kelas tidak dapat diubah atau dihapus; versi tersebut berstatus **Locked** dan hanya dapat **dipensiunkan** (`Retired`).
 
-4. **Admin menambah akun siswa baru** melalui `admin/users.html` atau halaman `register.html`.
+4. **Admin membuat angkatan/kelas** melalui `admin/academic.html`.
+   - Kelas wajib memilih satu versi kurikulum berstatus **Published** (atau **Locked** yang masih aktif).
+   - Saat kelas dibuat, versi kurikulum langsung berubah menjadi **Locked** dalam transaksi yang sama.
+   - Satu kelas memiliki **satu tentor aktif** (`instructorId`); satu tentor boleh mengampu banyak kelas.
+   - Kelas menyimpan kode unik, periode, kuota, lokasi/ruang, catatan jadwal, dan JP rencana.
+   - Pergantian tentor dicatat di `class_instructor_histories` (tentor lama ditutup, tentor baru dibuka).
+
+5. **Admin menambah akun siswa baru** melalui `admin/users.html` atau halaman `register.html`.
    - Role pengguna adalah **Peserta**.
    - Akun siswa harus berstatus **Aktif** agar dapat mengakses materi.
 
-5. **Admin mengaitkan siswa ke kursus** melalui `admin/enrollment.html`.
-   - Satu siswa boleh dikaitkan ke **beberapa kursus** dalam satu waktu, sesuai kursus yang diikuti.
-   - Satu kursus boleh memiliki banyak siswa.
-   - Relasi disimpan sebagai enrollment dengan status **Aktif**.
-   - Siswa hanya dapat membuka modul dan materi dari kursus yang ditugaskan kepadanya **dan** sudah berstatus **Published**.
+6. **Admin mendaftarkan siswa ke kelas** melalui `admin/enrollment.html` atau modal roster di `admin/academic.html`.
+   - Satu siswa boleh terdaftar pada **beberapa kelas/kursus**.
+   - Satu kelas boleh memiliki banyak peserta, dibatasi **kuota** kelas.
+   - Enrollment menyimpan `class_id`, `course_id`, dan status pendaftaran (`active`, `completed`, `withdrawn`, `cancelled`).
+   - Pendaftaran duplikat pada kelas yang sama dilewati (idempoten), dan kuota tidak boleh diturunkan di bawah jumlah peserta aktif.
+   - Siswa hanya dapat membuka materi dari kelas yang diikuti, pada kursus yang sudah **Published**.
 
-6. **Instruktur masuk ke sistem**.
-   - Instruktur hanya melihat kursus yang ditugaskan kepadanya.
-   - Instruktur tidak dapat mengubah kursus milik instruktur lain.
+7. **Instruktur masuk ke sistem**.
+   - Instruktur hanya melihat kelas/kursus yang ditugaskan kepadanya.
+   - Instruktur tidak dapat mengubah kelas atau kursus milik instruktur lain.
 
-7. **Instruktur membuat modul dan materi** melalui `instructor/manage-course.html`.
-   - Modul dan materi hanya dapat dibuat pada kursus yang diampu.
+8. **Instruktur mengelola modul dan materi** melalui `instructor/manage-course.html`.
+   - Modul dan materi hanya dapat dibuat pada kursus yang diampu **dan** versi kurikulum yang masih **Draft/Published**.
+   - Versi Locked/Retired menolak perubahan; instruktur harus meminta Admin membuat versi baru.
    - Materi mendukung tipe teks, video, file, dan link eksternal.
 
-8. **Siswa mempelajari materi** melalui `learning.html`.
-   - Hanya kursus yang ditugaskan dan sudah Published yang dapat diakses.
+9. **Siswa mempelajari materi** melalui `learning.html`.
+   - Hanya kelas yang diikuti dan kursus berstatus Published yang dapat diakses.
+   - Materi yang ditampilkan berasal dari versi kurikulum yang terkunci pada kelas tersebut.
    - Materi dibuka secara berurutan; pelajaran berikutnya terkunci sampai pelajaran sebelumnya selesai.
    - Progres belajar dicatat per pelajaran.
 
-9. **Di akhir kursus, instruktur memberi nilai** melalui `instructor/students.html`.
-   - Nilai berupa angka 0–100 dan otomatis dikonversi menjadi grade huruf (A–E).
-   - Instruktur dapat menambahkan catatan nilai.
+10. **Di akhir kursus, instruktur memberi nilai** melalui `instructor/students.html`.
+    - Nilai berupa angka 0–100 dan otomatis dikonversi menjadi grade huruf (A–E).
+    - Nilai terhubung ke **enrollment**, bukan hanya pasangan siswa–kursus, sehingga angkatan berbeda memiliki nilai terpisah.
+    - Instruktur dapat menambahkan catatan nilai.
 
-10. **Nilai terintegrasi dengan sertifikat**.
-    - Saat nilai disimpan, sistem membuat atau memperbarui e-sertifikat peserta untuk kursus tersebut.
+11. **Nilai terintegrasi dengan sertifikat**.
+    - Saat nilai disimpan, sistem membuat atau memperbarui e-sertifikat untuk enrollment tersebut.
     - E-sertifikat baru selalu berstatus **Draft**.
 
-11. **Sertifikat Draft tidak ditampilkan ke siswa**.
+12. **Sertifikat Draft tidak ditampilkan ke siswa**.
     - Halaman siswa hanya menampilkan e-sertifikat berstatus **Publish**.
     - Sertifikat Draft tidak boleh muncul di daftar, tidak dapat dilihat, dan tidak dapat diverifikasi oleh siswa.
 
-12. **Admin menyetujui sertifikat** melalui `admin/certificates.html`.
+13. **Admin menyetujui sertifikat** melalui `admin/certificates.html`.
     - Admin menekan **Setujui & Terbitkan** pada sertifikat Draft.
     - Status berubah menjadi **Publish**, nomor sertifikat final dan tanggal persetujuan disimpan.
     - Setelah Publish, sertifikat tampil di halaman siswa dan dapat diverifikasi publik.
+
+14. **Data akademik tidak dihapus permanen**.
+    - Kelas yang sudah memiliki enrollment tidak dapat dihapus.
+    - Versi kurikulum yang sudah dipakai tidak dapat dihapus; gunakan status **Retired**.
+    - Hanya versi **Draft** tanpa kelas yang boleh dihapus.
 
 ### 3.3 Aturan Status
 
 | Entitas | Status | Makna | Transisi |
 |---|---|---|---|
 | **Kursus** | `draft` | Baru dibuat, belum dapat diakses siswa | `draft` → `published` oleh Admin |
-| **Kursus** | `published` | Aktif dan dapat diakses siswa yang ditugaskan | `published` → `draft` oleh Admin |
-| **Enrollment** | `active` | Siswa ditugaskan dan dapat mengakses kursus | `active` ↔ `dihentikan` |
-| **Enrollment** | `dihentikan` | Akses siswa ke kursus dihentikan sementara | `dihentikan` → `active` |
+| **Kursus** | `published` | Aktif dan dapat diakses siswa yang terdaftar pada kelas | `published` → `draft` oleh Admin |
+| **Versi Kurikulum** | `draft` | Sedang disusun, belum dapat dipakai membuat kelas | `draft` → `published` |
+| **Versi Kurikulum** | `published` | Siap dipakai; dapat dipilih saat membuat kelas | `published` → `locked` saat kelas dibuat; `published` → `retired` |
+| **Versi Kurikulum** | `locked` | Sudah dipakai kelas; konten tidak boleh diubah | Final untuk kelas tersebut; versi baru dibuat via clone |
+| **Versi Kurikulum** | `retired` | Dipensiunkan, tidak dipakai kelas baru | Final |
+| **Kelas/Angkatan** | `draft` | Dalam persiapan, belum dibuka | `draft` → `open` |
+| **Kelas/Angkatan** | `open` | Menerima pendaftaran peserta | `open` → `ongoing` → `completed` |
+| **Kelas/Angkatan** | `ongoing` | Sedang berjalan | `ongoing` → `completed` |
+| **Kelas/Angkatan** | `completed` | Selesai | `completed` → `archived` |
+| **Kelas/Angkatan** | `cancelled` / `archived` | Dibatalkan / diarsipkan; tidak menerima pendaftaran | Final |
+| **Enrollment** | `active` | Peserta terdaftar dan dapat mengakses kelas | `active` ↔ `withdrawn`, `active` → `completed` |
+| **Enrollment** | `completed` | Peserta menyelesaikan kelas | Final |
+| **Enrollment** | `withdrawn` | Peserta berhenti; akses dicabut | `withdrawn` → `active` |
+| **Enrollment** | `cancelled` | Pendaftaran dibatalkan | Final |
 | **Sertifikat** | `draft` | Sudah dinilai instruktur, menunggu persetujuan Admin | `draft` → `publish` |
 | **Sertifikat** | `publish` | Disetujui Admin, tampil di halaman siswa, dapat diverifikasi | Final |
 | **Pengguna** | `aktif` | Dapat login dan menggunakan sistem | `aktif` ↔ `nonaktif` |
 | **Pengguna** | `nonaktif` | Tidak dapat login | `nonaktif` → `aktif` |
+
+Catatan: status kelas `ready`/`ongoing` memerlukan tentor aktif. Kelas dengan status `cancelled` atau `archived` tidak menerima pendaftaran baru. Transisi status kelas yang tidak valid ditolak server.
 
 ### 3.4 Matriks Hak Akses
 
 | Aksi | Admin | Instruktur | Siswa |
 |---|---|---|---|
 | Menambah/mengubah kursus | ✅ | ❌ | ❌ |
-| Menugaskan instruktur ke kursus | ✅ | ❌ | ❌ |
-| Publikasi / menarik kursus ke Draft | ✅ | ❌ | ❌ |
+| Mengelola versi kurikulum (buat/publish/clone/retire/hapus draft) | ✅ | ❌ | ❌ |
+| Membuat/mengubah angkatan/kelas | ✅ | ❌ | ❌ |
+| Menugaskan/mengganti tentor kelas | ✅ | ❌ | ❌ |
 | Menambah/mengubah pengguna | ✅ | ❌ | ❌ |
-| Menugaskan siswa ke kursus | ✅ | ❌ | ❌ |
-| Melihat kursus yang diampu | ✅ (semua) | ✅ (miliknya) | ❌ |
-| Membuat modul & materi | ❌ | ✅ (kursus sendiri) | ❌ |
-| Memberi nilai | ❌ | ✅ (kursus sendiri) | ❌ |
-| Melihat materi kursus | ✅ (pratinjau) | ✅ (pratinjau) | ✅ (kursus ditugaskan & Published) |
-| Melihat sertifikat Draft | ✅ | ✅ (kursus sendiri) | ❌ |
+| Mendaftarkan siswa ke kelas | ✅ | ❌ | ❌ |
+| Melihat kelas/kursus yang diampu | ✅ (semua) | ✅ (miliknya) | ❌ |
+| Membuat modul & materi | ❌ | ✅ (kursus sendiri, versi Draft/Published) | ❌ |
+| Memberi nilai | ❌ | ✅ (kelas yang diampu) | ❌ |
+| Melihat materi kelas | ✅ (pratinjau) | ✅ (pratinjau) | ✅ (kelas diikuti & kursus Published) |
+| Melihat sertifikat Draft | ✅ | ✅ (kelas yang diampu) | ❌ |
 | Menyetujui sertifikat | ✅ | ❌ | ❌ |
 | Melihat sertifikat Publish | ✅ | ✅ | ✅ (milik sendiri) |
+
+Seluruh aturan di atas ditegakkan **di server** (`api/actions.php` + `api/helpers.php`); UI hanya menyembunyikan aksi sebagai lapisan kenyamanan.
 
 ### 3.5 Status Implementasi Demo
 
@@ -138,24 +198,32 @@ Sistem ── kursus Publish / sertifikat terbit ▶ Notifikasi email (simulasi)
 |---|---|---|
 | Admin menambah kursus baru berstatus Draft | ✅ Selesai | `ELIPS.createCourse` selalu memaksa status `draft`; form tambah tidak lagi bisa memilih Published |
 | Admin menambah akun instruktur | ✅ Selesai | `admin/users.html` - tambah pengguna role Instruktur |
-| 1 kursus = 1 instruktur | ✅ Selesai | `course.instructorId`; penugasan ulang menggantikan instruktur lama |
+| Admin menyusun versi kurikulum | ✅ Selesai | `admin/academic.html` + `ELIPS.createCurriculumVersion/updateCurriculumVersion/publishCurriculumVersion/cloneCurriculumVersion/retireCurriculumVersion`; API `curriculum.*` |
+| Modul/materi terhubung ke versi kurikulum | ✅ Selesai | `modules.curriculum_version_id`, `lessons.curriculum_version_id`; snapshot hanya memuat versi aktif per kursus |
+| Versi Draft dapat dipublikasikan | ✅ Selesai | `curriculum.publish`; versi harus memiliki struktur yang valid |
+| Versi terkunci saat kelas dibuat | ✅ Selesai | `class.create` mengunci versi dalam transaksi; `locked`/`retired` menolak perubahan modul/materi/versi |
+| Revisi kurikulum via clone | ✅ Selesai | `curriculum.clone` menyalin modul dan materi ke Draft baru |
+| Versi terpakai dipensiunkan, bukan dihapus | ✅ Selesai | `curriculum.retire`; `curriculum.delete` hanya untuk Draft tanpa kelas |
+| Admin membuat angkatan/kelas | ✅ Selesai | `class.create/update/status/delete`; kode kelas unik, periode tervalidasi, kuota > 0 |
+| Satu kelas = satu tentor, histori pergantian | ✅ Selesai | `classes.instructor_id` + `class_instructor_histories`; `class.assignInstructor` menutup histori lama |
+| Satu tentor dapat mengampu banyak kelas | ✅ Selesai | Dashboard instruktur menampilkan tabel “Kelas yang Diampu” |
+| Enrollment berbasis kelas | ✅ Selesai | `enrollments.class_id`; `enrollment.assignClass` dan `enrollment.classStatus` |
+| Kuota dan status enrollment | ✅ Selesai | Kuota dicek saat pendaftaran; kuota tidak boleh diturunkan di bawah peserta aktif; status `active/completed/withdrawn/cancelled` |
+| Nilai & sertifikat per enrollment | ✅ Selesai | Unique per `enrollment_id`, sehingga angkatan berbeda punya nilai/sertifikat terpisah |
 | Admin menambah akun siswa | ✅ Selesai | `admin/users.html` dan `register.html` |
-| 1 siswa dapat dikaitkan ke beberapa kursus | ✅ Selesai | `admin/enrollment.html` - checkbox multi-kursus |
-| Instruktur login dan hanya melihat kursus sendiri | ✅ Selesai | `instructor/dashboard.html`, `instructor/manage-course.html` |
-| Instruktur membuat modul dan materi | ✅ Selesai | `instructor/manage-course.html` |
-| Siswa hanya mengakses kursus yang ditugaskan | ✅ Selesai | `learning.html` memvalidasi enrollment, status kursus, dan urutan materi |
-| Instruktur memberi nilai di akhir kursus | ✅ Selesai | `instructor/students.html` |
-| Nilai terintegrasi ke e-sertifikat Draft | ✅ Selesai | Nilai disimpan di `elips_grades`; Draft dibuat di `elips_certificates` |
-| Sertifikat Draft tidak tampil di halaman siswa | ✅ Selesai | `student/certificates.html` hanya membaca `ELIPS.getPublishedCertificatesByStudent`; section Draft dihapus; dashboard siswa tidak lagi memberi notifikasi Draft; status/ID data lama dinormalkan dan tampilan disegarkan otomatis saat data berubah dari tab lain |
-| Admin menyetujui Draft menjadi Publish | ✅ Selesai | `admin/certificates.html` memanggil `ELIPS.approveCertificate`; nomor final dan tanggal approval disimpan |
-| Sertifikat Publish tampil di halaman siswa | ✅ Selesai | `student/certificates.html` - hanya section Sertifikat Terbit |
-| Publikasi kursus tervalidasi | ✅ Selesai | `ELIPS.setCourseStatus` menolak publikasi tanpa instruktur aktif atau tanpa modul/materi |
-| Penghapusan instruktur mengembalikan kursus ke Draft | ✅ Selesai | `ELIPS.deleteUser`/`updateUser` melepas kursus dan memaksa status Draft |
-| CRUD terpusat di JavaScript | ✅ Selesai | Seluruh CRUD pengguna, kursus, enrollment, modul, materi, nilai, dan sertifikat memakai modul CRUD di `assets/js/` (lihat §4) |
-| Audit trail perubahan kursus, nilai, dan sertifikat | ✅ Selesai | `assets/js/audit.js` mencatat aktor, aksi, entitas, waktu, dan detail; halaman `admin/audit.html` menyediakan filter, ekspor CSV, dan pembersihan log |
-| Notifikasi email simulasi | ✅ Selesai | `assets/js/notifications.js` mencatat outbox saat kursus dipublikasikan atau sertifikat terbit; `admin/notifications.html` menyediakan filter, ekspor CSV, dan pembersihan outbox |
-| Backend PHP + MySQL | ✅ Selesai | `api/` menyediakan autentikasi sesi, CRUD, snapshot, audit, notifikasi, dan seeding data demo |
-| Dual-mode client | ✅ Selesai | `assets/js/api.js` memakai API saat tersedia dan otomatis fallback ke `localStorage` |
+| 1 siswa dapat dikaitkan ke beberapa kelas | ✅ Selesai | `admin/enrollment.html` dan modal roster `admin/academic.html` |
+| Instruktur login dan hanya melihat kelas/kursus sendiri | ✅ Selesai | `instructor/dashboard.html`, `instructor/manage-course.html` |
+| Instruktur membuat modul dan materi | ✅ Selesai | `instructor/manage-course.html`; ditolak pada versi Locked/Retired |
+| Siswa hanya mengakses kelas yang diikuti | ✅ Selesai | `learning.html` memvalidasi enrollment kelas, status kursus, versi terkunci, dan urutan materi |
+| Instruktur memberi nilai di akhir kursus | ✅ Selesai | `instructor/students.html`; nilai per enrollment |
+| Nilai terintegrasi ke e-sertifikat Draft | ✅ Selesai | Nilai disimpan di `grades`; Draft dibuat di `certificates` |
+| Sertifikat Draft tidak tampil di halaman siswa | ✅ Selesai | `student/certificates.html` hanya membaca `getPublishedCertificatesByStudent` |
+| Admin menyetujui Draft menjadi Publish | ✅ Selesai | `admin/certificates.html` memanggil `ELIPS.approveCertificate` |
+| Publikasi kursus tervalidasi | ✅ Selesai | `ELIPS.setCourseStatus` menolak publikasi tanpa tentor/kurikulum berisi materi |
+| Audit trail perubahan kursus, kurikulum, kelas, nilai, dan sertifikat | ✅ Selesai | `assets/js/audit.js` dan tabel `audit_logs`; halaman `admin/audit.html` |
+| Notifikasi email simulasi | ✅ Selesai | `assets/js/notifications.js` dan tabel `notifications`; halaman `admin/notifications.html` |
+| Backend PHP + MySQL | ✅ Selesai | `api/` menyediakan autentikasi sesi, CRUD v3/v4, snapshot, audit, notifikasi, dan seeding data demo |
+| Dual-mode client | ✅ Selesai | `assets/js/api.js` memakai API saat tersedia dan otomatis fallback ke `localStorage`; `crud-academic.js` menyediakan aturan v4 di kedua mode |
 
 ---
 
@@ -180,7 +248,7 @@ Aplikasi berjalan dalam dua mode yang memakai UI dan aturan bisnis yang sama:
   - `auth.js` - session, role guard, dan logout (memanggil `auth.logout` pada mode server);
   - `audit.js` - audit trail; pada mode server pencatatan dilakukan backend;
   - `notifications.js` - outbox notifikasi; pada mode server notifikasi dibuat backend;
-  - `crud-users.js`, `crud-courses.js`, `crud-enrollments.js`, `crud-content.js`, `crud-grades.js` - CRUD dan aturan bisnis per domain; pada mode server fungsi ini meneruskan aksi ke API;
+  - `crud-users.js`, `crud-courses.js`, `crud-enrollments.js`, `crud-content.js`, `crud-academic.js`, `crud-grades.js` - CRUD dan aturan bisnis per domain; pada mode server fungsi ini meneruskan aksi ke API. `crud-academic.js` menangani versi kurikulum, kelas/angkatan, histori tentor, roster kelas, dan validasi kuota di kedua mode;
   - `utils.js` - helper format, escape HTML, dan toast;
   - `ui.js` - perilaku UI bersama (navigasi, sidebar, katalog, login, logout).
   - Halaman hanya menangani rendering dan interaksi UI.
@@ -192,14 +260,15 @@ Aplikasi berjalan dalam dua mode yang memakai UI dan aturan bisnis yang sama:
 Backend berada di folder `api/` dan terdiri dari front controller, konfigurasi, koneksi, helper, snapshot, aksi bisnis, skema, dan installer. Daftar file lengkap ada di §5 bagian **Backend (`api/`)**; detail tabel database ada di `erd.md` §16.
 
 - **Autentikasi:** sesi PHP native (`$_SESSION`) dengan cookie `HttpOnly`, `SameSite=Lax`; password disimpan dengan `password_hash()` dan diverifikasi dengan `password_verify()`.
-- **Otorisasi:** setiap aksi memeriksa role dan kepemilikan di server. Contoh: instruktur hanya boleh mengelola kursus yang diampu; peserta hanya boleh menandai progres miliknya; hanya Admin yang boleh publish kursus, menyetujui sertifikat, atau membersihkan audit/notifikasi.
-- **Snapshot:** respons tulis menyertakan snapshot terbaru dan data sesi, sehingga cache client selalu identik dengan database tanpa reload halaman.
+- **Otorisasi:** setiap aksi memeriksa role dan kepemilikan di server. Contoh: instruktur hanya boleh mengelola kursus/kelas yang diampu; peserta hanya boleh menandai progres miliknya; hanya Admin yang boleh membuat kurikulum/kelas, mempublikasikan kursus, menyetujui sertifikat, atau membersihkan audit/notifikasi.
+- **Aturan akademik v4:** versi kurikulum dikunci secara transaksional saat kelas dibuat; perubahan pada versi `locked`/`retired` ditolak; kuota kelas dicek saat pendaftaran; kelas dengan enrollment tidak dapat dihapus; nilai/sertifikat unik per enrollment.
+- **Snapshot:** respons tulis menyertakan snapshot terbaru dan data sesi, sehingga cache client selalu identik dengan database tanpa reload halaman. Snapshot memuat modul/materi dari versi kurikulum aktif tiap kursus, sedangkan struktur versi lengkap diambil melalui `curriculum.detail`.
 - **Sanitasi:** konten materi tipe teks disanitasi di server dengan allowlist tag/atribut sebelum disimpan.
 
 ### 4.3 Penyimpanan Data
 
-- **MySQL (mode server):** tabel `users`, `courses`, `modules`, `lessons`, `enrollments`, `grades`, `certificates`, `completed_lessons`, `audit_logs`, `notifications` (lihat `erd.md`).
-- **`localStorage` (mode lokal/fallback):** key `elips_users`, `elips_courses`, `elips_enrollments`, `elips_modules`, `elips_lessons`, `elips_grades`, `elips_certificates`, `elips_completedLessons`, `elips_auditLogs`, `elips_notifications`, dan `elips_session`.
+- **MySQL (mode server):** tabel `users`, `categories`, `courses`, `curriculum_versions`, `classes`, `class_instructor_histories`, `modules`, `lessons`, `enrollments`, `grades`, `certificates`, `completed_lessons`, `audit_logs`, `notifications` (lihat `erd.md`).
+- **`localStorage` (mode lokal/fallback):** key `elips_users`, `elips_categories`, `elips_courses`, `elips_curriculumVersions`, `elips_classes`, `elips_classInstructorHistories`, `elips_enrollments`, `elips_modules`, `elips_lessons`, `elips_grades`, `elips_certificates`, `elips_completedLessons`, `elips_auditLogs`, `elips_notifications`, dan `elips_session`.
 - **Styling:** Custom CSS (`assets/css/style.css`), Bootstrap Icons, Google Fonts (Inter)
 - **Struktur Folder:** Berbasis role (`admin/`, `instructor/`, `student/`)
 
@@ -224,7 +293,8 @@ Backend berada di folder `api/` dan terdiri dari front controller, konfigurasi, 
 | `admin/dashboard.html` | ✅ Selesai | Dashboard admin dengan ringkasan statistik |
 | `admin/users.html` | ✅ Selesai | Tambah pengguna diawali modal pilihan role Admin/Instruktur/Peserta, edit/hapus pengguna, filter role & pencarian, serta penugasan instruktur ke kursus |
 | `admin/courses.html` | ✅ Selesai | Tambah/edit kursus, tugaskan 1 instruktur per kursus, publikasi/Draft, filter status & pencarian |
-| `admin/enrollment.html` | ✅ Selesai | Penugasan siswa ke satu atau beberapa kursus, filter kursus/status, aktif/nonaktifkan penugasan |
+| `admin/academic.html` | ✅ Selesai | Kelola versi kurikulum (buat/publish/clone/retire/hapus draft), kelas/angkatan (versi terkunci, tentor, kuota, periode), histori tentor, roster peserta, dan detail struktur kurikulum |
+| `admin/enrollment.html` | ✅ Selesai | Pendaftaran siswa ke kelas, filter kelas/status, aktif/nonaktifkan enrollment |
 | `admin/certificates.html` | ✅ Selesai | Persetujuan e-sertifikat: Draft → Publish, filter status, dan tampilan nomor/tanggal persetujuan |
 | `admin/notifications.html` | ✅ Selesai | Outbox notifikasi email simulasi: statistik, filter jenis/penerima/tanggal/pencarian, detail isi, ekspor CSV, dan pembersihan outbox |
 | `admin/audit.html` | ✅ Selesai | Audit trail: statistik aktivitas, filter aktor/aksi/entitas/tanggal/pencarian, ekspor CSV, dan pembersihan log |
@@ -265,8 +335,9 @@ Backend berada di folder `api/` dan terdiri dari front controller, konfigurasi, 
 | `assets/js/notifications.js` | ✅ Selesai | Outbox notifikasi email simulasi, filter, daftar penerima, dan pembersihan outbox |
 | `assets/js/crud-users.js` | ✅ Selesai | CRUD pengguna dan penugasan instruktur |
 | `assets/js/crud-courses.js` | ✅ Selesai | CRUD kursus dan aturan Draft/Publish |
-| `assets/js/crud-enrollments.js` | ✅ Selesai | CRUD penugasan peserta ke kursus |
-| `assets/js/crud-content.js` | ✅ Selesai | CRUD modul dan materi dengan validasi kepemilikan |
+| `assets/js/crud-enrollments.js` | ✅ Selesai | CRUD pendaftaran peserta ke kelas |
+| `assets/js/crud-content.js` | ✅ Selesai | CRUD modul dan materi dengan validasi kepemilikan dan versi kurikulum |
+| `assets/js/crud-academic.js` | ✅ Selesai | CRUD versi kurikulum, kelas/angkatan, histori tentor, roster, dan validasi kuota |
 | `assets/js/crud-grades.js` | ✅ Selesai | Input nilai dan alur sertifikat Draft → Publish |
 | `assets/js/ui.js` | ✅ Selesai | Perilaku UI bersama: navigasi, sidebar, katalog, login, logout |
 
@@ -305,18 +376,33 @@ Backend berada di folder `api/` dan terdiri dari front controller, konfigurasi, 
 | Penugasan instruktur (Admin) | ✅ Selesai | Satu kursus hanya memiliki satu instruktur; dapat diubah melalui form kursus atau menu pengguna |
 | Kelola kursus (Instruktur) | ✅ Selesai | `instructor/manage-course.html` - daftar kursus yang diampu, deep link `?course=id` |
 | CRUD modul & materi (Instruktur) | ✅ Selesai | Tambah/ubah/hapus modul dan pelajaran, tipe konten teks/video/file/link, validasi kepemilikan kursus, sinkronisasi jumlah modul/pelajaran pada data kursus, serta sanitasi HTML konten teks |
+| Versi kurikulum per kursus | ✅ Selesai | `admin/academic.html`; status draft/published/locked/retired; kode versi unik per kursus |
+| Penguncian kurikulum per kelas | ✅ Selesai | Versi berubah `locked` saat kelas dibuat; perubahan modul/materi/versi ditolak server |
+| Clone & retire versi kurikulum | ✅ Selesai | Clone menyalin struktur ke Draft baru; versi terpakai dipensiunkan, bukan dihapus |
+
+### 6.2a Manajemen Kelas/Angkatan
+| Fitur | Status | Keterangan |
+|---|---|---|
+| CRUD kelas/angkatan | ✅ Selesai | `admin/academic.html` dan aksi API `class.create/update/status/delete` |
+| Pilih versi kurikulum | ✅ Selesai | Hanya versi `published`/`locked` yang dapat dipilih; versi langsung dikunci |
+| Satu tentor per kelas | ✅ Selesai | `classes.instructor_id`; tentor harus akun instruktur aktif |
+| Histori pergantian tentor | ✅ Selesai | `class_instructor_histories`; entri lama ditutup saat `class.assignInstructor` |
+| Kuota dan status kelas | ✅ Selesai | Kuota dicek saat pendaftaran; status draft/open/ongoing/completed/cancelled/archived |
+| Kelas yang diampu (Instruktur) | ✅ Selesai | Dashboard instruktur menampilkan tabel “Kelas yang Diampu” |
 
 ### 6.3 Enrolment & Progres Belajar
 | Fitur | Status | Keterangan |
 |---|---|---|
-| Penugasan siswa ke kursus | ✅ Selesai | Dilakukan Admin melalui `admin/enrollment.html`, disimpan di `elips_enrollments` |
-| Satu siswa ke beberapa kursus | ✅ Selesai | Form penugasan mendukung pilihan multi-kursus per siswa |
-| Akses kursus oleh siswa | ✅ Selesai | Siswa hanya dapat membuka kursus yang ditugaskan dan berstatus Published |
-| Status enrolment dinamis | ✅ Selesai | Tombol di `course-detail.html` berubah menjadi "Lanjutkan Belajar" bila sudah ditugaskan |
+| Penugasan siswa ke kelas | ✅ Selesai | Dilakukan Admin melalui `admin/enrollment.html` atau roster `admin/academic.html`; disimpan di `enrollments` dengan `class_id` |
+| Satu siswa ke beberapa kelas/kursus | ✅ Selesai | Form pendaftaran mendukung pilihan kelas dari beberapa kursus |
+| Akses kursus oleh siswa | ✅ Selesai | Siswa hanya dapat membuka materi kelas yang diikuti dan kursus berstatus Published |
+| Status enrolment dinamis | ✅ Selesai | Tombol di `course-detail.html` berubah menjadi "Lanjutkan Belajar" bila sudah terdaftar |
 | Halaman belajar | ✅ Selesai | `learning.html` dengan sidebar modul/lesson dan penguncian materi berurutan |
 | Tandai pelajaran selesai | ✅ Selesai | Mode server: tabel `completed_lessons`; mode lokal: `localStorage` (`elips_completedLessons`) |
 | Tracking progres | ✅ Selesai | Progres dihitung berdasarkan pelajaran selesai |
-| Kelola enrolment (Admin) | ✅ Selesai | `admin/enrollment.html` - tambah penugasan, filter, aktif/nonaktifkan, hapus |
+| Kelola enrolment (Admin) | ✅ Selesai | `admin/enrollment.html` dan `admin/academic.html` - tambah pendaftaran, filter, ubah status, hapus |
+| Kuota kelas | ✅ Selesai | Pendaftaran melebihi kuota ditolak; kuota tidak boleh diturunkan di bawah peserta aktif |
+| Status enrollment | ✅ Selesai | `active`, `completed`, `withdrawn`, `cancelled`; status `withdrawn` mencabut akses tanpa menghapus riwayat |
 
 ### 6.4 Sertifikat
 | Fitur | Status | Keterangan |
@@ -398,15 +484,38 @@ else                            -> student/dashboard.html
 - `ELIPS.sanitizeHtml()` menghapus `script`, `iframe`, event handler (`on*`), dan URL berbahaya (`javascript:`, `data:`, `vbscript:`), serta hanya mengizinkan tag/atribut aman.
 - Sanitasi dilakukan saat menyimpan materi (create/update), saat migrasi data lama, dan saat render di `learning.html` (defense in depth).
 
+### Versi Kurikulum
+- Data disimpan di tabel `curriculum_versions` (mode server) atau `localStorage` key `elips_curriculumVersions` (mode lokal).
+- Setiap kursus dapat memiliki banyak versi; kode versi unik per kursus.
+- Status: `draft → published → locked → retired`.
+- Versi baru selalu `draft`. Hanya versi `published` (atau `locked` yang masih aktif) yang dapat dipakai membuat kelas.
+- `class.create` mengunci versi dalam transaksi yang sama: setelah kelas tersimpan, versi berubah `locked` dan tidak dapat diubah/dihapus.
+- Perubahan modul/materi hanya diizinkan pada versi `draft`/`published`; versi `locked`/`retired` ditolak server.
+- Revisi dilakukan dengan `curriculum.clone`: menyalin seluruh modul/materi ke versi `draft` baru.
+- `curriculum.delete` hanya untuk versi `draft` yang belum dipakai kelas; versi terpakai harus `retired`.
+
+### Kelas/Angkatan & Tentor
+- Data disimpan di tabel `classes` dan `class_instructor_histories` (mode server) atau key `elips_classes`/`elips_classInstructorHistories` (mode lokal).
+- Kelas wajib merujuk satu `curriculum_version_id` dan satu `instructor_id` (boleh kosong saat draft, wajib untuk status `ready`/`ongoing`).
+- Satu kelas = satu tentor aktif; satu tentor boleh mengampu banyak kelas.
+- Pergantian tentor melalui `class.assignInstructor`:
+  - entri histori tentor lama diisi `ended_at`;
+  - entri baru dibuat dengan `started_at` dan alasan opsional;
+  - penugasan tentor yang sama bersifat idempoten.
+- Kuota kelas divalidasi saat pendaftaran dan saat update kuota.
+- Kelas dengan enrollment tidak dapat dihapus; status `cancelled`/`archived` tidak menerima pendaftaran baru.
+
 ### Enrolment
 - Data disimpan di tabel `enrollments` (mode server) atau `localStorage` key `elips_enrollments` (mode lokal), berupa array of objects.
-- Penugasan siswa ke kursus hanya dilakukan oleh Admin melalui `admin/enrollment.html`.
-- Satu siswa dapat memiliki banyak enrollment (satu baris per kursus); satu kursus dapat memiliki banyak siswa.
+- Pendaftaran siswa ke kelas hanya dilakukan oleh Admin melalui `admin/enrollment.html` atau roster `admin/academic.html`.
+- Setiap enrollment menyimpan `class_id`, `course_id`, `student_id`, dan status (`active`, `completed`, `withdrawn`, `cancelled`).
+- Satu siswa dapat memiliki banyak enrollment (satu baris per kelas); satu kelas dapat memiliki banyak siswa.
+- Pendaftaran duplikat pada kelas yang sama dilewati (idempoten); pendaftaran melebihi kuota ditolak.
 - Akses siswa divalidasi di `course-detail.html` dan `learning.html`:
   - enrollment harus ada dan berstatus `active`;
   - kursus harus berstatus `published`;
-  - siswa hanya melihat modul/materi dari kursus yang ditugaskan.
-- Enrollment berstatus `dihentikan` mencabut akses siswa tanpa menghapus riwayat progres dan nilai.
+  - siswa hanya melihat modul/materi dari versi kurikulum yang terkunci pada kelasnya.
+- Enrollment berstatus `withdrawn` mencabut akses siswa tanpa menghapus riwayat progres, nilai, dan sertifikat.
 
 ### Progres Belajar
 - Pelajaran selesai disimpan di tabel `completed_lessons` (mode server) atau `localStorage` key `elips_completedLessons` (mode lokal)
@@ -415,8 +524,9 @@ else                            -> student/dashboard.html
 
 ### Penilaian & Sertifikat
 - Nilai disimpan di tabel `grades` (mode server) atau `localStorage` key `elips_grades` (mode lokal), dan hurufnya dihitung otomatis (A–E).
-- Instruktur hanya dapat menilai peserta pada kursus yang diampu.
-- Saat instruktur menyimpan nilai, sistem membuat/memperbarui e-sertifikat dengan status **Draft** dan menyalin nilai/grade ke sertifikat.
+- Nilai terhubung ke **enrollment**, sehingga peserta yang mengikuti kursus yang sama pada angkatan berbeda memiliki nilai terpisah.
+- Instruktur hanya dapat menilai peserta pada kelas/kursus yang diampu.
+- Saat instruktur menyimpan nilai, sistem membuat/memperbarui e-sertifikat untuk enrollment tersebut dengan status **Draft** dan menyalin nilai/grade ke sertifikat.
 - Sertifikat **Draft**:
   - hanya terlihat oleh Admin dan Instruktur pengampu;
   - **tidak ditampilkan** di halaman siswa;
@@ -433,7 +543,7 @@ else                            -> student/dashboard.html
 - Resolusi aktor: `actorId` eksplisit dari pemanggil → user sesi (`elips_session`) → "Sistem". Fallback `getCurrentUser()` tidak dipakai agar tidak salah atribusi saat tidak ada sesi.
 - Operasi yang gagal (validasi ditolak) tidak dicatat.
 - Aksi yang dicatat: `create`, `update`, `delete`, `publish`, `unpublish`, `grade`, `submit`, `approve`, `assign`, dan `status`.
-- Entitas yang dicatat: `course`, `grade`, `certificate`, `user`, `enrollment`, `module`, dan `lesson`.
+- Entitas yang dicatat: `course`, `curriculum`, `class`, `grade`, `certificate`, `user`, `enrollment`, `module`, dan `lesson`.
 - Log diurutkan terbaru lebih dulu, dibatasi 1000 entri, dan dapat difilter berdasarkan aktor, aksi, entitas, rentang tanggal, pencarian, serta limit.
 - Admin dapat mengekspor hasil filter ke CSV dan membersihkan seluruh log dari `admin/audit.html`.
 
@@ -462,6 +572,26 @@ else                            -> student/dashboard.html
 | Admin menambah instruktur | ✅ Lulus uji | Akun instruktur aktif dapat dipilih pada form kursus |
 | Modal pilih role tambah pengguna | ✅ Lulus uji | Modal pertama menampilkan 3 tombol role dan mempreset role pada form pengguna |
 | Penugasan 1 kursus = 1 instruktur | ✅ Lulus uji | Penugasan ulang menggantikan instruktur sebelumnya |
+| Versi kurikulum baru berstatus Draft | ✅ Lulus uji | `curriculum.create` selalu `draft`; kode versi unik per kursus |
+| Publikasi versi kurikulum | ✅ Lulus uji | `curriculum.publish` mengubah Draft → Published |
+| Kelas hanya dapat dibuat dari versi Published | ✅ Lulus uji | `class.create` menolak versi Draft |
+| Pembuatan kelas mengunci versi | ✅ Lulus uji | Status versi berubah `locked` dalam transaksi yang sama |
+| Versi Locked menolak perubahan | ✅ Lulus uji | Create/update/delete modul dan update/delete versi ditolak server |
+| Clone kurikulum menyalin struktur | ✅ Lulus uji | Modul dan materi tersalin ke Draft baru |
+| Versi terpakai tidak dapat dihapus | ✅ Lulus uji | Hanya Draft tanpa kelas yang dapat dihapus; versi terpakai harus Retired |
+| Satu kelas = satu tentor | ✅ Lulus uji | `instructor_id` divalidasi sebagai instruktur aktif |
+| Satu tentor banyak kelas | ✅ Lulus uji | Dashboard instruktur menampilkan seluruh kelas yang diampu |
+| Histori pergantian tentor | ✅ Lulus uji | Entri lama ditutup (`endedAt`), entri baru dibuka; penugasan sama idempoten |
+| Validasi periode kelas | ✅ Lulus uji | Tanggal selesai sebelum tanggal mulai ditolak |
+| Status kelas memerlukan tentor | ✅ Lulus uji | `ready`/`ongoing` ditolak tanpa tentor aktif |
+| Pendaftaran siswa ke kelas | ✅ Lulus uji | `enrollment.assignClass` membuat enrollment dengan `classId` dan `courseId` |
+| Pendaftaran duplikat dilewati | ✅ Lulus uji | `skipped` bertambah, tidak membuat baris ganda |
+| Kuota kelas ditegakkan | ✅ Lulus uji | Pendaftaran melebihi kuota ditolak; update kuota di bawah peserta aktif ditolak |
+| Status enrollment kelas | ✅ Lulus uji | `active` → `withdrawn` mencabut akses tanpa menghapus data |
+| Kelas dengan peserta tidak dapat dihapus | ✅ Lulus uji | `class.delete` ditolak; kelas kosong Draft dapat dihapus |
+| Nilai & sertifikat per enrollment | ✅ Lulus uji | Unique per `enrollment_id`; angkatan berbeda terpisah |
+| Guard role aksi akademik | ✅ Lulus uji | Instruktur/peserta tidak dapat membuat kurikulum/kelas atau mendaftarkan peserta |
+| Halaman akademik admin | ✅ Lulus uji | `test-academic-page` memverifikasi statistik, tabel versi/kelas, modal, roster, histori tentor, dan detail kurikulum |
 | Admin menambah siswa | ✅ Lulus uji | Akun peserta aktif dapat ditugaskan ke kursus |
 | Admin mengaitkan siswa ke beberapa kursus | ✅ Lulus uji | Multi-checkbox pada `admin/enrollment.html` |
 | Siswa hanya mengakses kursus yang ditugaskan | ✅ Lulus uji | `learning.html` menolak kursus tanpa enrollment aktif |
@@ -499,15 +629,19 @@ else                            -> student/dashboard.html
 - **Responsive:** Menggunakan CSS custom yang responsif.
 - **UI Konsisten:** Menggunakan komponen seragam (navbar, sidebar, cards, tables, badges).
 - **Keamanan:** Pada mode server password di-hash, sesi memakai cookie `HttpOnly`/`SameSite=Lax`, dan otorisasi role/kepemilikan ditegakkan di server. Mode lokal tetap bersifat demo dan tidak boleh dianggap aman untuk produksi.
+- **Cakupan v4.0:** Increment ini mencakup **Phase 1–2** (versi kurikulum + kelas/angkatan + enrollment berbasis kelas). Jadwal/presensi offline, materi per kelas, tugas/ujian, pembayaran, dan sertifikat PDF mengikuti phase berikutnya pada `ELIPS-LMS-PRD-v4.0.md`.
+- **Kompatibilitas v3.0:** Struktur v3 tetap dipertahankan. Setiap kursus lama mendapat versi kurikulum `1.0`; enrollment lama dipetakan ke kelas migrasi (`legacy_import`) agar tidak ada data yang hilang.
 
 ---
 
 ## 10. Rencana Pengembangan Lanjutan (Opsional)
 
-Backend PHP/MySQL, autentikasi sesi, validasi role/kepemilikan, audit server-side, dan outbox notifikasi simulasi sudah diimplementasikan. Untuk production, pengembangan berikut masih diperlukan:
+Backend PHP/MySQL, autentikasi sesi, validasi role/kepemilikan, audit server-side, outbox notifikasi simulasi, serta Phase 1–2 v4.0 (kurikulum, kelas, enrollment) sudah diimplementasikan. Untuk production dan phase v4 berikutnya, pengembangan berikut masih diperlukan:
 
 | Fitur | Prioritas | Keterangan |
 |---|---|---|
+| Phase 3 v4.0: jadwal & presensi offline | P1 | Sesi pertemuan, JP rencana/aktual, presensi, koreksi, rekap kehadiran |
+| Phase 4–10 v4.0 | P1 | Materi per kelas, tugas/ujian, pembayaran, sertifikat lanjutan (lihat `ELIPS-LMS-PRD-v4.0.md`) |
 | Hardening API | P0 | Rate limiting login, CSRF token, HTTPS wajib, dan rotasi session ID |
 | Pembatasan baca snapshot | P0 | Snapshot publik saat ini memuat seluruh koleksi demo; produksi perlu proyeksi terbatas per role dan endpoint khusus verifikasi sertifikat |
 | Upload file materi | P0 | Upload PDF, video, gambar ke object storage |

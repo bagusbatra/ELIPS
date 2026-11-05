@@ -122,6 +122,105 @@ function elips_enrollment_row(int $id): ?array
     return $row ?: null;
 }
 
+function elips_class_row(int $id): ?array
+{
+    $stmt = elips_db()->prepare('SELECT * FROM classes WHERE id = ? LIMIT 1');
+    $stmt->execute([$id]);
+    $row = $stmt->fetch();
+    return $row ?: null;
+}
+
+function elips_curriculum_version_row(int $id): ?array
+{
+    $stmt = elips_db()->prepare('SELECT * FROM curriculum_versions WHERE id = ? LIMIT 1');
+    $stmt->execute([$id]);
+    $row = $stmt->fetch();
+    return $row ?: null;
+}
+
+function elips_current_curriculum_version(int $courseId): ?array
+{
+    $db = elips_db();
+    $stmt = $db->prepare(
+        "SELECT * FROM curriculum_versions
+         WHERE course_id = ? AND status <> 'retired'
+         ORDER BY id DESC LIMIT 1"
+    );
+    $stmt->execute([$courseId]);
+    $row = $stmt->fetch();
+    if ($row) {
+        return $row;
+    }
+    $stmt = $db->prepare('SELECT * FROM curriculum_versions WHERE course_id = ? ORDER BY id DESC LIMIT 1');
+    $stmt->execute([$courseId]);
+    $row = $stmt->fetch();
+    return $row ?: null;
+}
+
+function elips_next_curriculum_code(int $courseId): string
+{
+    $db = elips_db();
+    $stmt = $db->prepare('SELECT code FROM curriculum_versions WHERE course_id = ?');
+    $stmt->execute([$courseId]);
+    $existing = array_map('strval', $stmt->fetchAll(PDO::FETCH_COLUMN));
+    for ($major = 1; $major <= 999; $major++) {
+        $code = $major . '.0';
+        if (!in_array($code, $existing, true)) {
+            return $code;
+        }
+    }
+    return 'v' . (count($existing) + 1);
+}
+
+/**
+ * Pastikan kursus memiliki versi kurikulum. Dipakai oleh operasi konten
+ * v3.0 agar modul/materi selalu terhubung ke versi yang valid.
+ */
+function elips_ensure_curriculum_version(int $courseId, ?int $actorId = null): array
+{
+    $existing = elips_current_curriculum_version($courseId);
+    if ($existing) {
+        return $existing;
+    }
+
+    $course = elips_course_row($courseId);
+    $code = elips_next_curriculum_code($courseId);
+    $name = 'Kurikulum ' . $code . ($course ? ' — ' . $course['title'] : '');
+    $stmt = elips_db()->prepare(
+        "INSERT INTO curriculum_versions
+         (course_id, code, name, description, status, effective_date, notes, created_by, updated_by)
+         VALUES (?, ?, ?, '', 'draft', NULL, 'Dibuat otomatis saat konten pertama ditambahkan.', ?, ?)"
+    );
+    $stmt->execute([$courseId, $code, $name, $actorId, $actorId]);
+    return elips_curriculum_version_row((int) elips_db()->lastInsertId());
+}
+
+function elips_curriculum_is_editable(array $version): bool
+{
+    return in_array($version['status'], ['draft', 'published'], true);
+}
+
+function elips_can_manage_class(array $class, array $actor): bool
+{
+    if ($actor['role'] === 'admin') {
+        return true;
+    }
+    return $actor['role'] === 'instruktur'
+        && $class['instructor_id'] !== null
+        && (int) $class['instructor_id'] === (int) $actor['id'];
+}
+
+function elips_class_enrollment_count(int $classId, bool $activeOnly = true): int
+{
+    $sql = 'SELECT COUNT(*) FROM enrollments WHERE class_id = ?';
+    if ($activeOnly) {
+        $sql .= " AND status IN ('active', 'pending')";
+    }
+    $stmt = elips_db()->prepare($sql);
+    $stmt->execute([$classId]);
+    return (int) $stmt->fetchColumn();
+}
+
 function elips_is_active_instructor(?int $id): bool
 {
     if (!$id) {
@@ -165,6 +264,22 @@ function elips_date_only(?string $value): ?string
 {
     $date = elips_datetime_utc($value);
     return $date ? $date->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d') : null;
+}
+
+function elips_normalize_date($value): ?string
+{
+    $value = trim((string) ($value ?? ''));
+    if ($value === '') {
+        return null;
+    }
+    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $value)) {
+        return null;
+    }
+    $parts = explode('-', $value);
+    if (!checkdate((int) $parts[1], (int) $parts[2], (int) $parts[0])) {
+        return null;
+    }
+    return $value;
 }
 
 /**
@@ -284,32 +399,226 @@ function elips_public_user(int $id): ?array
 
 function elips_course_public(int $id): ?array
 {
+    $course = elips_course_row($id);
+    if (!$course) {
+        return null;
+    }
+    $db = elips_db();
+    $stmt = $db->prepare('SELECT name FROM categories WHERE id = ? LIMIT 1');
+    $stmt->execute([$course['category_id'] === null ? 0 : (int) $course['category_id']]);
+    $categoryName = $stmt->fetchColumn() ?: $course['category'];
+
+    $stmt = $db->prepare('SELECT name FROM users WHERE id = ? LIMIT 1');
+    $stmt->execute([$course['instructor_id'] === null ? 0 : (int) $course['instructor_id']]);
+    $instructorName = $stmt->fetchColumn() ?: '';
+
+    $version = elips_current_curriculum_version($id);
+    $versionId = $version ? (int) $version['id'] : null;
+
+    $moduleCount = 0;
+    $lessonCount = 0;
+    if ($versionId !== null) {
+        $stmt = $db->prepare('SELECT COUNT(*) FROM modules WHERE curriculum_version_id = ?');
+        $stmt->execute([$versionId]);
+        $moduleCount = (int) $stmt->fetchColumn();
+        $stmt = $db->prepare('SELECT COUNT(*) FROM lessons WHERE curriculum_version_id = ?');
+        $stmt->execute([$versionId]);
+        $lessonCount = (int) $stmt->fetchColumn();
+    }
+
+    $stmt = $db->prepare('SELECT COUNT(*) FROM classes WHERE course_id = ?');
+    $stmt->execute([$id]);
+    $classCount = (int) $stmt->fetchColumn();
+    $stmt = $db->prepare("SELECT COUNT(*) FROM enrollments WHERE course_id = ? AND status IN ('active', 'pending')");
+    $stmt->execute([$id]);
+    $enrollmentCount = (int) $stmt->fetchColumn();
+
+    return [
+        'id' => (int) $course['id'],
+        'title' => $course['title'],
+        'category' => $categoryName,
+        'categoryId' => $course['category_id'] === null ? null : (int) $course['category_id'],
+        'description' => $course['description'],
+        'instructorId' => $course['instructor_id'] === null ? null : (int) $course['instructor_id'],
+        'instructorName' => $instructorName,
+        'curriculumVersionId' => $versionId,
+        'curriculumVersionCode' => $version ? $version['code'] : null,
+        'curriculumVersionStatus' => $version ? $version['status'] : null,
+        'classes' => $classCount,
+        'enrollments' => $enrollmentCount,
+        'modules' => $moduleCount,
+        'lessons' => $lessonCount,
+        'totalLessons' => $lessonCount,
+        'status' => $course['status'],
+        'createdAt' => elips_date_only($course['created_at']),
+        'updatedAt' => elips_iso($course['updated_at']),
+    ];
+}
+
+function elips_category_public(int $id): ?array
+{
+    $stmt = elips_db()->prepare('SELECT * FROM categories WHERE id = ? LIMIT 1');
+    $stmt->execute([$id]);
+    $row = $stmt->fetch();
+    return $row ? [
+        'id' => (int) $row['id'],
+        'name' => $row['name'],
+        'slug' => $row['slug'],
+        'status' => $row['status'],
+        'createdAt' => elips_iso($row['created_at']),
+        'updatedAt' => elips_iso($row['updated_at']),
+    ] : null;
+}
+
+function elips_resolve_category_id(?int $categoryId, string $name): ?int
+{
+    $db = elips_db();
+    if ($categoryId !== null && $categoryId > 0) {
+        $stmt = $db->prepare('SELECT id FROM categories WHERE id = ? LIMIT 1');
+        $stmt->execute([$categoryId]);
+        $found = $stmt->fetchColumn();
+        if ($found !== false) {
+            return (int) $found;
+        }
+    }
+
+    $name = trim($name);
+    if ($name === '') {
+        return null;
+    }
+    $stmt = $db->prepare('SELECT id FROM categories WHERE name = ? LIMIT 1');
+    $stmt->execute([$name]);
+    $found = $stmt->fetchColumn();
+    if ($found !== false) {
+        return (int) $found;
+    }
+
+    $slug = strtolower(preg_replace('/[^a-z0-9]+/i', '-', $name));
+    $slug = trim((string) $slug, '-') ?: 'kategori';
+    $base = $slug;
+    $suffix = 2;
+    $check = $db->prepare('SELECT COUNT(*) FROM categories WHERE slug = ?');
+    while (true) {
+        $check->execute([$slug]);
+        if ((int) $check->fetchColumn() === 0) {
+            break;
+        }
+        $slug = $base . '-' . $suffix++;
+    }
+    $stmt = $db->prepare("INSERT INTO categories (name, slug, status) VALUES (?, ?, 'active')");
+    $stmt->execute([$name, $slug]);
+    return (int) $db->lastInsertId();
+}
+
+function elips_curriculum_public(int $id): ?array
+{
     $stmt = elips_db()->prepare(
-        'SELECT c.*, u.name AS instructor_name,
-            (SELECT COUNT(*) FROM modules m WHERE m.course_id = c.id) AS module_count,
-            (SELECT COUNT(*) FROM lessons l WHERE l.course_id = c.id) AS lesson_count
-         FROM courses c LEFT JOIN users u ON u.id = c.instructor_id
-         WHERE c.id = ? LIMIT 1'
+        'SELECT cv.*, c.title AS course_title,
+            (SELECT COUNT(*) FROM modules m WHERE m.curriculum_version_id = cv.id) AS module_count,
+            (SELECT COUNT(*) FROM lessons l WHERE l.curriculum_version_id = cv.id) AS lesson_count,
+            (SELECT COUNT(*) FROM classes cl WHERE cl.curriculum_version_id = cv.id) AS class_count
+         FROM curriculum_versions cv
+         JOIN courses c ON c.id = cv.course_id
+         WHERE cv.id = ? LIMIT 1'
     );
     $stmt->execute([$id]);
     $row = $stmt->fetch();
     if (!$row) {
         return null;
     }
-    $lessonCount = (int) $row['lesson_count'];
     return [
         'id' => (int) $row['id'],
-        'title' => $row['title'],
-        'category' => $row['category'],
+        'courseId' => (int) $row['course_id'],
+        'courseTitle' => $row['course_title'],
+        'code' => $row['code'],
+        'name' => $row['name'],
         'description' => $row['description'],
+        'status' => $row['status'],
+        'effectiveDate' => elips_date_only($row['effective_date']),
+        'notes' => $row['notes'],
+        'createdBy' => $row['created_by'] === null ? null : (int) $row['created_by'],
+        'updatedBy' => $row['updated_by'] === null ? null : (int) $row['updated_by'],
+        'modules' => (int) $row['module_count'],
+        'lessons' => (int) $row['lesson_count'],
+        'classes' => (int) $row['class_count'],
+        'createdAt' => elips_iso($row['created_at']),
+        'updatedAt' => elips_iso($row['updated_at']),
+    ];
+}
+
+function elips_class_public(int $id): ?array
+{
+    $stmt = elips_db()->prepare(
+        "SELECT cl.*, c.title AS course_title, u.name AS instructor_name,
+            cv.code AS version_code, cv.name AS version_name,
+            (SELECT COUNT(*) FROM enrollments e WHERE e.class_id = cl.id AND e.status IN ('active', 'pending')) AS active_count,
+            (SELECT COUNT(*) FROM enrollments e WHERE e.class_id = cl.id) AS enrollment_count
+         FROM classes cl
+         JOIN courses c ON c.id = cl.course_id
+         LEFT JOIN users u ON u.id = cl.instructor_id
+         LEFT JOIN curriculum_versions cv ON cv.id = cl.curriculum_version_id
+         WHERE cl.id = ? LIMIT 1"
+    );
+    $stmt->execute([$id]);
+    $row = $stmt->fetch();
+    if (!$row) {
+        return null;
+    }
+    return [
+        'id' => (int) $row['id'],
+        'code' => $row['code'],
+        'name' => $row['name'],
+        'courseId' => (int) $row['course_id'],
+        'courseTitle' => $row['course_title'],
+        'curriculumVersionId' => (int) $row['curriculum_version_id'],
+        'curriculumVersionCode' => $row['version_code'],
+        'curriculumVersionName' => $row['version_name'],
         'instructorId' => $row['instructor_id'] === null ? null : (int) $row['instructor_id'],
         'instructorName' => $row['instructor_name'] ?? '',
-        'modules' => (int) $row['module_count'],
-        'lessons' => $lessonCount,
-        'totalLessons' => $lessonCount,
+        'periodStart' => elips_date_only($row['period_start']),
+        'periodEnd' => elips_date_only($row['period_end']),
+        'quota' => (int) $row['quota'],
+        'location' => $row['location'],
+        'room' => $row['room'],
+        'scheduleNote' => $row['schedule_note'],
+        'plannedJp' => (float) $row['planned_jp'],
         'status' => $row['status'],
-        'createdAt' => elips_date_only($row['created_at']),
+        'legacyImport' => (bool) $row['legacy_import'],
+        'notes' => $row['notes'],
+        'enrollmentCount' => (int) $row['enrollment_count'],
+        'activeEnrollmentCount' => (int) $row['active_count'],
+        'createdBy' => $row['created_by'] === null ? null : (int) $row['created_by'],
+        'updatedBy' => $row['updated_by'] === null ? null : (int) $row['updated_by'],
+        'createdAt' => elips_iso($row['created_at']),
         'updatedAt' => elips_iso($row['updated_at']),
+    ];
+}
+
+function elips_instructor_history_public(int $id): ?array
+{
+    $stmt = elips_db()->prepare(
+        'SELECT h.*, u.name AS instructor_name, a.name AS actor_name
+         FROM class_instructor_histories h
+         LEFT JOIN users u ON u.id = h.instructor_id
+         LEFT JOIN users a ON a.id = h.actor_id
+         WHERE h.id = ? LIMIT 1'
+    );
+    $stmt->execute([$id]);
+    $row = $stmt->fetch();
+    if (!$row) {
+        return null;
+    }
+    return [
+        'id' => (int) $row['id'],
+        'classId' => (int) $row['class_id'],
+        'instructorId' => $row['instructor_id'] === null ? null : (int) $row['instructor_id'],
+        'instructorName' => $row['instructor_name'] ?? '',
+        'startedAt' => elips_date_only($row['started_at']),
+        'endedAt' => elips_date_only($row['ended_at']),
+        'reason' => $row['reason'],
+        'actorId' => $row['actor_id'] === null ? null : (int) $row['actor_id'],
+        'actorName' => $row['actor_name'] ?? '',
+        'createdAt' => elips_iso($row['created_at']),
     ];
 }
 
@@ -324,6 +633,7 @@ function elips_module_public(int $id): ?array
     return [
         'id' => (int) $row['id'],
         'courseId' => (int) $row['course_id'],
+        'curriculumVersionId' => (int) $row['curriculum_version_id'],
         'instructorId' => $row['instructor_id'] === null ? null : (int) $row['instructor_id'],
         'title' => $row['title'],
         'description' => $row['description'],
@@ -345,6 +655,7 @@ function elips_lesson_public(int $id): ?array
         'id' => (int) $row['id'],
         'moduleId' => (int) $row['module_id'],
         'courseId' => (int) $row['course_id'],
+        'curriculumVersionId' => (int) $row['curriculum_version_id'],
         'instructorId' => $row['instructor_id'] === null ? null : (int) $row['instructor_id'],
         'title' => $row['title'],
         'type' => $row['type'],
@@ -365,6 +676,7 @@ function elips_enrollment_public(int $id): ?array
         'id' => (int) $row['id'],
         'studentId' => (int) $row['student_id'],
         'courseId' => (int) $row['course_id'],
+        'classId' => $row['class_id'] === null ? null : (int) $row['class_id'],
         'enrolledBy' => $row['enrolled_by'],
         'enrolledAt' => elips_date_only($row['enrolled_at']),
         'status' => $row['status'],

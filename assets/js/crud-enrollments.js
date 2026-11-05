@@ -19,6 +19,23 @@
             (course ? course.title : 'Kursus #' + enrollment.courseId);
     }
 
+    function activeCountForClass(classId) {
+        return ELIPS.getClassEnrollments(classId).filter(function (e) {
+            return e.status === 'active' || e.status === 'pending';
+        }).length;
+    }
+
+    // Kompatibilitas v3: enrollment berbasis kursus diarahkan ke kelas aktif
+    // yang masih memiliki kuota bila tersedia.
+    function pickOpenClass(courseId) {
+        const found = ELIPS.getClassesByCourse(courseId).find(function (item) {
+            if (['open', 'ready', 'ongoing'].indexOf(item.status) === -1) return false;
+            const quota = Number(item.quota) || 0;
+            return quota === 0 || activeCountForClass(item.id) < quota;
+        });
+        return found ? found.id : null;
+    }
+
     function assignStudentToCourses(studentId, courseIds, enrolledAt) {
         if (ELIPS.api && ELIPS.api.enabled) {
             return ELIPS.api.call('enrollment.assign', {
@@ -52,6 +69,7 @@
                 id: ELIPS.nextId(enrollments),
                 studentId: student.id,
                 courseId: courseId,
+                classId: pickOpenClass(courseId),
                 enrolledBy: 'admin',
                 enrolledAt: enrolledAt || todayString(),
                 status: 'active'
@@ -128,9 +146,107 @@
         return success('Penugasan dan data terkait berhasil dihapus.');
     }
 
+    function assignStudentsToClass(classId, studentIds, enrolledAt) {
+        if (ELIPS.api && ELIPS.api.enabled) {
+            return ELIPS.api.call('enrollment.assignClass', {
+                classId: classId,
+                studentIds: studentIds || [],
+                enrolledAt: enrolledAt
+            });
+        }
+
+        const targetClass = ELIPS.getClassById(classId);
+        if (!targetClass) return failure('Kelas tidak ditemukan.');
+        if (targetClass.status === 'cancelled' || targetClass.status === 'archived') {
+            return failure('Kelas ini tidak menerima pendaftaran peserta.');
+        }
+
+        const requested = (studentIds || []).map(Number).filter(Boolean);
+        if (requested.length === 0) return failure('Pilih minimal satu peserta.');
+
+        const enrollments = ELIPS.getEnrollments();
+        const quota = Number(targetClass.quota) || 0;
+        let activeCount = activeCountForClass(targetClass.id);
+        let added = 0;
+        let skipped = 0;
+
+        for (const studentId of requested) {
+            const student = ELIPS.getUserById(studentId);
+            if (!student || student.role !== 'peserta') return failure('Peserta #' + studentId + ' tidak valid.');
+            if (student.status !== 'aktif') return failure('Peserta "' + student.name + '" tidak aktif.');
+
+            const exists = enrollments.some(function (e) {
+                return e.studentId === student.id && e.classId === targetClass.id;
+            });
+            if (exists) {
+                skipped++;
+                continue;
+            }
+            if (quota > 0 && activeCount >= quota) {
+                return failure('Kuota kelas sudah penuh (' + quota + ' peserta).');
+            }
+
+            enrollments.push({
+                id: ELIPS.nextId(enrollments),
+                studentId: student.id,
+                courseId: targetClass.courseId,
+                classId: targetClass.id,
+                enrolledBy: 'admin',
+                enrolledAt: enrolledAt || todayString(),
+                status: 'active'
+            });
+            added++;
+            activeCount++;
+            recordAudit({
+                action: 'create',
+                entity: 'enrollment',
+                entityId: enrollments[enrollments.length - 1].id,
+                entityLabel: student.name + ' — ' + targetClass.name,
+                detail: 'Mendaftarkan "' + student.name + '" ke kelas "' + targetClass.name +
+                    '" (' + targetClass.code + ').'
+            });
+        }
+
+        ELIPS.setEnrollments(enrollments);
+        return success(
+            added > 0
+                ? added + ' peserta berhasil didaftarkan ke kelas.' + (skipped > 0 ? ' ' + skipped + ' peserta sudah terdaftar.' : '')
+                : 'Semua peserta yang dipilih sudah terdaftar di kelas ini.',
+            { added: added, skipped: skipped }
+        );
+    }
+
+    function setEnrollmentClassStatus(id, status) {
+        if (ELIPS.api && ELIPS.api.enabled) {
+            return ELIPS.api.call('enrollment.classStatus', { id: id, status: status });
+        }
+        const allowed = ['pending', 'active', 'completed', 'withdrawn', 'suspended', 'cancelled', 'dihentikan'];
+        if (allowed.indexOf(status) === -1) return failure('Status enrollment tidak valid.');
+        const enrollments = ELIPS.getEnrollments();
+        const enrollment = enrollments.find(function (e) { return e.id === Number(id); });
+        if (!enrollment) return failure('Enrollment tidak ditemukan.');
+        if (enrollment.classId === null || enrollment.classId === undefined) {
+            return failure('Enrollment ini bukan enrollment berbasis kelas.');
+        }
+
+        enrollment.status = status;
+        enrollment.updatedAt = new Date().toISOString();
+        ELIPS.setEnrollments(enrollments);
+        recordAudit({
+            action: 'status',
+            entity: 'enrollment',
+            entityId: enrollment.id,
+            entityLabel: enrollmentLabel(enrollment),
+            detail: 'Mengubah status enrollment "' + enrollmentLabel(enrollment) + '" menjadi ' + status + '.'
+        });
+        return success('Status enrollment diperbarui menjadi ' + status + '.', enrollment);
+    }
+
     Object.assign(ELIPS, {
         assignStudentToCourses: assignStudentToCourses,
+        assignStudentsToClass: assignStudentsToClass,
         setEnrollmentStatus: setEnrollmentStatus,
+        setEnrollmentClassStatus: setEnrollmentClassStatus,
         deleteEnrollment: deleteEnrollment
     });
 })(window.ELIPS);

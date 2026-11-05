@@ -17,36 +17,77 @@ function elips_snapshot(): array
         $users[] = elips_serialize_user($row);
     }
 
-    $courses = [];
-    $courseSql = 'SELECT c.*, u.name AS instructor_name,
-            (SELECT COUNT(*) FROM modules m WHERE m.course_id = c.id) AS module_count,
-            (SELECT COUNT(*) FROM lessons l WHERE l.course_id = c.id) AS lesson_count
-        FROM courses c
-        LEFT JOIN users u ON u.id = c.instructor_id
-        ORDER BY c.id ASC';
-    foreach ($db->query($courseSql) as $row) {
-        $lessonCount = (int) $row['lesson_count'];
-        $courses[] = [
+    $categories = [];
+    foreach ($db->query('SELECT * FROM categories ORDER BY id ASC') as $row) {
+        $categories[] = [
             'id' => (int) $row['id'],
-            'title' => $row['title'],
-            'category' => $row['category'],
-            'description' => $row['description'],
-            'instructorId' => $row['instructor_id'] === null ? null : (int) $row['instructor_id'],
-            'instructorName' => $row['instructor_name'] ?? '',
-            'modules' => (int) $row['module_count'],
-            'lessons' => $lessonCount,
-            'totalLessons' => $lessonCount,
+            'name' => $row['name'],
+            'slug' => $row['slug'],
             'status' => $row['status'],
-            'createdAt' => elips_date_only($row['created_at']),
+            'createdAt' => elips_iso($row['created_at']),
+            'updatedAt' => elips_iso($row['updated_at']),
+        ];
+    }
+
+    $courses = [];
+    foreach ($db->query('SELECT id FROM courses ORDER BY id ASC') as $row) {
+        $courses[] = elips_course_public((int) $row['id']);
+    }
+
+    $curriculumVersions = [];
+    $versionRows = $db->query(
+        'SELECT cv.*, c.title AS course_title,
+            (SELECT COUNT(*) FROM modules m WHERE m.curriculum_version_id = cv.id) AS module_count,
+            (SELECT COUNT(*) FROM lessons l WHERE l.curriculum_version_id = cv.id) AS lesson_count,
+            (SELECT COUNT(*) FROM classes cl WHERE cl.curriculum_version_id = cv.id) AS class_count
+         FROM curriculum_versions cv
+         JOIN courses c ON c.id = cv.course_id
+         ORDER BY cv.course_id ASC, cv.id ASC'
+    );
+    $currentVersionIds = [];
+    foreach ($db->query(
+        "SELECT c.id AS course_id,
+            (SELECT cv.id FROM curriculum_versions cv
+             WHERE cv.course_id = c.id AND cv.status <> 'retired'
+             ORDER BY cv.id DESC LIMIT 1) AS version_id
+         FROM courses c"
+    ) as $row) {
+        if ($row['version_id'] !== null) {
+            $currentVersionIds[(int) $row['course_id']] = (int) $row['version_id'];
+        }
+    }
+
+    foreach ($versionRows as $row) {
+        $curriculumVersions[] = [
+            'id' => (int) $row['id'],
+            'courseId' => (int) $row['course_id'],
+            'courseTitle' => $row['course_title'],
+            'code' => $row['code'],
+            'name' => $row['name'],
+            'description' => $row['description'],
+            'status' => $row['status'],
+            'effectiveDate' => elips_date_only($row['effective_date']),
+            'notes' => $row['notes'],
+            'createdBy' => $row['created_by'] === null ? null : (int) $row['created_by'],
+            'updatedBy' => $row['updated_by'] === null ? null : (int) $row['updated_by'],
+            'modules' => (int) $row['module_count'],
+            'lessons' => (int) $row['lesson_count'],
+            'classes' => (int) $row['class_count'],
+            'createdAt' => elips_iso($row['created_at']),
             'updatedAt' => elips_iso($row['updated_at']),
         ];
     }
 
     $modules = [];
-    foreach ($db->query('SELECT * FROM modules ORDER BY course_id ASC, sort_order ASC, id ASC') as $row) {
+    foreach ($db->query('SELECT * FROM modules ORDER BY curriculum_version_id ASC, sort_order ASC, id ASC') as $row) {
+        $versionId = (int) $row['curriculum_version_id'];
+        if (!in_array($versionId, $currentVersionIds, true)) {
+            continue;
+        }
         $modules[] = [
             'id' => (int) $row['id'],
             'courseId' => (int) $row['course_id'],
+            'curriculumVersionId' => $versionId,
             'instructorId' => $row['instructor_id'] === null ? null : (int) $row['instructor_id'],
             'title' => $row['title'],
             'description' => $row['description'],
@@ -57,11 +98,16 @@ function elips_snapshot(): array
     }
 
     $lessons = [];
-    foreach ($db->query('SELECT * FROM lessons ORDER BY course_id ASC, module_id ASC, sort_order ASC, id ASC') as $row) {
+    foreach ($db->query('SELECT * FROM lessons ORDER BY curriculum_version_id ASC, module_id ASC, sort_order ASC, id ASC') as $row) {
+        $versionId = (int) $row['curriculum_version_id'];
+        if (!in_array($versionId, $currentVersionIds, true)) {
+            continue;
+        }
         $lessons[] = [
             'id' => (int) $row['id'],
             'moduleId' => (int) $row['module_id'],
             'courseId' => (int) $row['course_id'],
+            'curriculumVersionId' => $versionId,
             'instructorId' => $row['instructor_id'] === null ? null : (int) $row['instructor_id'],
             'title' => $row['title'],
             'type' => $row['type'],
@@ -72,12 +118,79 @@ function elips_snapshot(): array
         ];
     }
 
+    $classes = [];
+    $classRows = $db->query(
+        "SELECT cl.*, c.title AS course_title, u.name AS instructor_name,
+            cv.code AS version_code, cv.name AS version_name,
+            (SELECT COUNT(*) FROM enrollments e WHERE e.class_id = cl.id AND e.status IN ('active', 'pending')) AS active_count,
+            (SELECT COUNT(*) FROM enrollments e WHERE e.class_id = cl.id) AS enrollment_count
+         FROM classes cl
+         JOIN courses c ON c.id = cl.course_id
+         LEFT JOIN users u ON u.id = cl.instructor_id
+         LEFT JOIN curriculum_versions cv ON cv.id = cl.curriculum_version_id
+         ORDER BY cl.id ASC"
+    );
+    foreach ($classRows as $row) {
+        $classes[] = [
+            'id' => (int) $row['id'],
+            'code' => $row['code'],
+            'name' => $row['name'],
+            'courseId' => (int) $row['course_id'],
+            'courseTitle' => $row['course_title'],
+            'curriculumVersionId' => (int) $row['curriculum_version_id'],
+            'curriculumVersionCode' => $row['version_code'],
+            'curriculumVersionName' => $row['version_name'],
+            'instructorId' => $row['instructor_id'] === null ? null : (int) $row['instructor_id'],
+            'instructorName' => $row['instructor_name'] ?? '',
+            'periodStart' => elips_date_only($row['period_start']),
+            'periodEnd' => elips_date_only($row['period_end']),
+            'quota' => (int) $row['quota'],
+            'location' => $row['location'],
+            'room' => $row['room'],
+            'scheduleNote' => $row['schedule_note'],
+            'plannedJp' => (float) $row['planned_jp'],
+            'status' => $row['status'],
+            'legacyImport' => (bool) $row['legacy_import'],
+            'notes' => $row['notes'],
+            'enrollmentCount' => (int) $row['enrollment_count'],
+            'activeEnrollmentCount' => (int) $row['active_count'],
+            'createdBy' => $row['created_by'] === null ? null : (int) $row['created_by'],
+            'updatedBy' => $row['updated_by'] === null ? null : (int) $row['updated_by'],
+            'createdAt' => elips_iso($row['created_at']),
+            'updatedAt' => elips_iso($row['updated_at']),
+        ];
+    }
+
+    $classInstructorHistories = [];
+    $historyRows = $db->query(
+        'SELECT h.*, u.name AS instructor_name, a.name AS actor_name
+         FROM class_instructor_histories h
+         LEFT JOIN users u ON u.id = h.instructor_id
+         LEFT JOIN users a ON a.id = h.actor_id
+         ORDER BY h.class_id ASC, h.started_at ASC, h.id ASC'
+    );
+    foreach ($historyRows as $row) {
+        $classInstructorHistories[] = [
+            'id' => (int) $row['id'],
+            'classId' => (int) $row['class_id'],
+            'instructorId' => $row['instructor_id'] === null ? null : (int) $row['instructor_id'],
+            'instructorName' => $row['instructor_name'] ?? '',
+            'startedAt' => elips_date_only($row['started_at']),
+            'endedAt' => elips_date_only($row['ended_at']),
+            'reason' => $row['reason'],
+            'actorId' => $row['actor_id'] === null ? null : (int) $row['actor_id'],
+            'actorName' => $row['actor_name'] ?? '',
+            'createdAt' => elips_iso($row['created_at']),
+        ];
+    }
+
     $enrollments = [];
     foreach ($db->query('SELECT * FROM enrollments ORDER BY id ASC') as $row) {
         $enrollments[] = [
             'id' => (int) $row['id'],
             'studentId' => (int) $row['student_id'],
             'courseId' => (int) $row['course_id'],
+            'classId' => $row['class_id'] === null ? null : (int) $row['class_id'],
             'enrolledBy' => $row['enrolled_by'],
             'enrolledAt' => elips_date_only($row['enrolled_at']),
             'status' => $row['status'],
@@ -172,7 +285,11 @@ function elips_snapshot(): array
 
     return [
         'users' => $users,
+        'categories' => $categories,
         'courses' => $courses,
+        'curriculumVersions' => $curriculumVersions,
+        'classes' => $classes,
+        'classInstructorHistories' => $classInstructorHistories,
         'enrollments' => $enrollments,
         'modules' => $modules,
         'lessons' => $lessons,

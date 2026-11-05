@@ -1,5 +1,5 @@
 -- ============================================================
--- ELIPS LMS - skema database MySQL 8
+-- ELIPS LMS - skema database MySQL 8 (v4.0 Phase 1-2)
 -- Jalankan melalui api/install.php agar data demo ikut terisi.
 -- ============================================================
 
@@ -8,6 +8,18 @@ CREATE DATABASE IF NOT EXISTS `elips_lms`
     COLLATE utf8mb4_unicode_ci;
 
 USE `elips_lms`;
+
+CREATE TABLE IF NOT EXISTS `categories` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `name` VARCHAR(100) NOT NULL,
+    `slug` VARCHAR(120) NOT NULL,
+    `status` ENUM('active', 'inactive') NOT NULL DEFAULT 'active',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NULL,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uq_categories_slug` (`slug`),
+    KEY `idx_categories_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `users` (
     `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -28,6 +40,7 @@ CREATE TABLE IF NOT EXISTS `courses` (
     `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
     `title` VARCHAR(200) NOT NULL,
     `category` VARCHAR(100) NOT NULL,
+    `category_id` INT UNSIGNED NULL,
     `description` TEXT NOT NULL,
     `instructor_id` INT UNSIGNED NULL,
     `status` ENUM('draft', 'published') NOT NULL DEFAULT 'draft',
@@ -36,12 +49,37 @@ CREATE TABLE IF NOT EXISTS `courses` (
     PRIMARY KEY (`id`),
     KEY `idx_courses_instructor` (`instructor_id`),
     KEY `idx_courses_status` (`status`),
-    CONSTRAINT `fk_courses_instructor` FOREIGN KEY (`instructor_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
+    KEY `idx_courses_category` (`category_id`),
+    CONSTRAINT `fk_courses_instructor` FOREIGN KEY (`instructor_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+    CONSTRAINT `fk_courses_category` FOREIGN KEY (`category_id`) REFERENCES `categories` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `curriculum_versions` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `course_id` INT UNSIGNED NOT NULL,
+    `code` VARCHAR(30) NOT NULL,
+    `name` VARCHAR(150) NOT NULL,
+    `description` TEXT NOT NULL,
+    `status` ENUM('draft', 'published', 'locked', 'retired') NOT NULL DEFAULT 'draft',
+    `effective_date` DATE NULL,
+    `notes` TEXT NOT NULL,
+    `created_by` INT UNSIGNED NULL,
+    `updated_by` INT UNSIGNED NULL,
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NULL,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uq_curriculum_course_code` (`course_id`, `code`),
+    KEY `idx_curriculum_course_status` (`course_id`, `status`),
+    KEY `idx_curriculum_status` (`status`),
+    CONSTRAINT `fk_curriculum_course` FOREIGN KEY (`course_id`) REFERENCES `courses` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_curriculum_created_by` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+    CONSTRAINT `fk_curriculum_updated_by` FOREIGN KEY (`updated_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `modules` (
     `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
     `course_id` INT UNSIGNED NOT NULL,
+    `curriculum_version_id` INT UNSIGNED NOT NULL,
     `instructor_id` INT UNSIGNED NULL,
     `title` VARCHAR(200) NOT NULL,
     `description` TEXT NOT NULL,
@@ -50,8 +88,10 @@ CREATE TABLE IF NOT EXISTS `modules` (
     `updated_at` DATETIME NULL,
     PRIMARY KEY (`id`),
     KEY `idx_modules_course` (`course_id`, `sort_order`),
+    KEY `idx_modules_version` (`curriculum_version_id`, `sort_order`),
     KEY `idx_modules_instructor` (`instructor_id`),
     CONSTRAINT `fk_modules_course` FOREIGN KEY (`course_id`) REFERENCES `courses` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_modules_version` FOREIGN KEY (`curriculum_version_id`) REFERENCES `curriculum_versions` (`id`) ON DELETE CASCADE,
     CONSTRAINT `fk_modules_instructor` FOREIGN KEY (`instructor_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -59,6 +99,7 @@ CREATE TABLE IF NOT EXISTS `lessons` (
     `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
     `module_id` INT UNSIGNED NOT NULL,
     `course_id` INT UNSIGNED NOT NULL,
+    `curriculum_version_id` INT UNSIGNED NOT NULL,
     `instructor_id` INT UNSIGNED NULL,
     `title` VARCHAR(200) NOT NULL,
     `type` ENUM('text', 'video', 'file', 'link') NOT NULL DEFAULT 'text',
@@ -69,26 +110,83 @@ CREATE TABLE IF NOT EXISTS `lessons` (
     PRIMARY KEY (`id`),
     KEY `idx_lessons_module` (`module_id`, `sort_order`),
     KEY `idx_lessons_course` (`course_id`),
+    KEY `idx_lessons_version` (`curriculum_version_id`, `sort_order`),
     KEY `idx_lessons_instructor` (`instructor_id`),
     CONSTRAINT `fk_lessons_module` FOREIGN KEY (`module_id`) REFERENCES `modules` (`id`) ON DELETE CASCADE,
     CONSTRAINT `fk_lessons_course` FOREIGN KEY (`course_id`) REFERENCES `courses` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_lessons_version` FOREIGN KEY (`curriculum_version_id`) REFERENCES `curriculum_versions` (`id`) ON DELETE CASCADE,
     CONSTRAINT `fk_lessons_instructor` FOREIGN KEY (`instructor_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `classes` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `code` VARCHAR(40) NOT NULL,
+    `name` VARCHAR(150) NOT NULL,
+    `course_id` INT UNSIGNED NOT NULL,
+    `curriculum_version_id` INT UNSIGNED NOT NULL,
+    `instructor_id` INT UNSIGNED NULL,
+    `period_start` DATE NULL,
+    `period_end` DATE NULL,
+    `quota` INT UNSIGNED NOT NULL DEFAULT 0,
+    `location` VARCHAR(150) NOT NULL DEFAULT '',
+    `room` VARCHAR(100) NOT NULL DEFAULT '',
+    `schedule_note` VARCHAR(255) NOT NULL DEFAULT '',
+    `planned_jp` DECIMAL(6, 2) NOT NULL DEFAULT 0,
+    `status` ENUM('draft', 'open', 'ready', 'ongoing', 'completed', 'cancelled', 'archived') NOT NULL DEFAULT 'draft',
+    `legacy_import` TINYINT(1) NOT NULL DEFAULT 0,
+    `notes` TEXT NOT NULL,
+    `created_by` INT UNSIGNED NULL,
+    `updated_by` INT UNSIGNED NULL,
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NULL,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uq_classes_code` (`code`),
+    KEY `idx_classes_course` (`course_id`),
+    KEY `idx_classes_version` (`curriculum_version_id`),
+    KEY `idx_classes_instructor` (`instructor_id`),
+    KEY `idx_classes_status` (`status`),
+    CONSTRAINT `fk_classes_course` FOREIGN KEY (`course_id`) REFERENCES `courses` (`id`) ON DELETE RESTRICT,
+    CONSTRAINT `fk_classes_version` FOREIGN KEY (`curriculum_version_id`) REFERENCES `curriculum_versions` (`id`) ON DELETE RESTRICT,
+    CONSTRAINT `fk_classes_instructor` FOREIGN KEY (`instructor_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+    CONSTRAINT `fk_classes_created_by` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+    CONSTRAINT `fk_classes_updated_by` FOREIGN KEY (`updated_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `enrollments` (
     `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
     `student_id` INT UNSIGNED NOT NULL,
     `course_id` INT UNSIGNED NOT NULL,
+    `class_id` INT UNSIGNED NULL,
     `enrolled_by` VARCHAR(50) NOT NULL DEFAULT 'admin',
     `enrolled_at` DATE NOT NULL DEFAULT (CURRENT_DATE),
-    `status` ENUM('active', 'dihentikan') NOT NULL DEFAULT 'active',
+    `status` ENUM('pending', 'active', 'completed', 'withdrawn', 'suspended', 'cancelled', 'dihentikan') NOT NULL DEFAULT 'active',
     `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `updated_at` DATETIME NULL,
     PRIMARY KEY (`id`),
-    UNIQUE KEY `uq_enrollments_student_course` (`student_id`, `course_id`),
+    UNIQUE KEY `uq_enrollments_student_class` (`student_id`, `class_id`),
+    KEY `idx_enrollments_student_course` (`student_id`, `course_id`),
     KEY `idx_enrollments_course` (`course_id`),
+    KEY `idx_enrollments_class` (`class_id`),
     CONSTRAINT `fk_enrollments_student` FOREIGN KEY (`student_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
-    CONSTRAINT `fk_enrollments_course` FOREIGN KEY (`course_id`) REFERENCES `courses` (`id`) ON DELETE CASCADE
+    CONSTRAINT `fk_enrollments_course` FOREIGN KEY (`course_id`) REFERENCES `courses` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_enrollments_class` FOREIGN KEY (`class_id`) REFERENCES `classes` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `class_instructor_histories` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `class_id` INT UNSIGNED NOT NULL,
+    `instructor_id` INT UNSIGNED NULL,
+    `started_at` DATE NOT NULL,
+    `ended_at` DATE NULL,
+    `reason` TEXT NOT NULL,
+    `actor_id` INT UNSIGNED NULL,
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_class_history_class` (`class_id`, `started_at`),
+    KEY `idx_class_history_instructor` (`instructor_id`),
+    CONSTRAINT `fk_class_history_class` FOREIGN KEY (`class_id`) REFERENCES `classes` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_class_history_instructor` FOREIGN KEY (`instructor_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+    CONSTRAINT `fk_class_history_actor` FOREIGN KEY (`actor_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `grades` (
@@ -103,8 +201,8 @@ CREATE TABLE IF NOT EXISTS `grades` (
     `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `updated_at` DATETIME NULL,
     PRIMARY KEY (`id`),
-    UNIQUE KEY `uq_grades_student_course` (`student_id`, `course_id`),
-    KEY `idx_grades_enrollment` (`enrollment_id`),
+    UNIQUE KEY `uq_grades_enrollment` (`enrollment_id`),
+    KEY `idx_grades_student_course` (`student_id`, `course_id`),
     KEY `idx_grades_instructor` (`instructor_id`),
     CONSTRAINT `fk_grades_enrollment` FOREIGN KEY (`enrollment_id`) REFERENCES `enrollments` (`id`) ON DELETE CASCADE,
     CONSTRAINT `fk_grades_student` FOREIGN KEY (`student_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
@@ -128,7 +226,8 @@ CREATE TABLE IF NOT EXISTS `certificates` (
     `updated_at` DATETIME NULL,
     PRIMARY KEY (`id`),
     UNIQUE KEY `uq_certificates_number` (`certificate_number`),
-    UNIQUE KEY `uq_certificates_student_course` (`student_id`, `course_id`),
+    UNIQUE KEY `uq_certificates_enrollment` (`enrollment_id`),
+    KEY `idx_certificates_student_course` (`student_id`, `course_id`),
     KEY `idx_certificates_course` (`course_id`),
     KEY `idx_certificates_status` (`status`),
     CONSTRAINT `fk_certificates_enrollment` FOREIGN KEY (`enrollment_id`) REFERENCES `enrollments` (`id`) ON DELETE CASCADE,

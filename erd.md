@@ -1,22 +1,29 @@
 # ERD — ELIPS LMS
 
-**Versi dokumen:** 2.0  
-**Tanggal:** 2026-11-04  
-**Status:** Dual-mode — skema fisik MySQL 8 + fallback koleksi `localStorage`  
+**Versi dokumen:** 3.0  
+**Tanggal:** 2026-11-05  
+**Status:** Dual-mode — skema fisik MySQL 8 v4.0 Phase 1–2 + fallback koleksi `localStorage`  
 **Dokumen terkait:** `prd.md`, `log.md`, `api/schema.sql`
 
 ---
 
 ## 1. Ringkasan
 
-ELIPS LMS adalah aplikasi Learning Management System dengan tiga role: **Admin**, **Instruktur**, dan **Peserta**. Pada mode server, data disimpan di **MySQL 8** dengan 10 tabel domain dan foreign key fisik (lihat §13 dan §16). Pada mode fallback, data disimpan sebagai koleksi JSON di `localStorage` dengan model logis yang sama. Sesi login pada mode server disimpan di sesi PHP native, bukan tabel database.
+ELIPS LMS adalah aplikasi Learning Management System dengan tiga role: **Admin**, **Instruktur**, dan **Peserta**. Pada mode server, data disimpan di **MySQL 8** dengan 14 tabel (12 domain inti + 2 operasional) dan foreign key fisik (lihat §13 dan §16). Pada mode fallback, data disimpan sebagai koleksi JSON di `localStorage` dengan model logis yang sama. Sesi login pada mode server disimpan di sesi PHP native, bukan tabel database.
+
+Sejak v4.0, kursus dipisahkan dari penyelenggaraannya:
+
+```text
+Kursus → Versi Kurikulum → Modul → Materi
+Kursus → Kelas/Angkatan → Enrollment → Nilai → Sertifikat
+```
 
 Relasi utama:
 
 ```text
-Admin ── mengelola ──► Pengguna, Kursus, Penugasan, Sertifikat
-Instruktur ── mengampu ──► Kursus ── berisi ──► Modul ── berisi ──► Materi
-Peserta ── ditugaskan melalui ──► Enrollment ──► Nilai ──► Sertifikat
+Admin ── mengelola ──► Pengguna, Kategori, Kursus, Versi Kurikulum, Kelas, Sertifikat
+Instruktur ── mengampu ──► Kelas ── memakai ──► Versi Kurikulum ── berisi ──► Modul ──► Materi
+Peserta ── terdaftar melalui ──► Enrollment (kelas) ──► Nilai ──► Sertifikat
 Peserta ── menyelesaikan ──► CompletedLesson
 Semua aktivitas penting ── dicatat ──► AuditLog
 Publikasi kursus / penerbitan sertifikat ── menghasilkan ──► Notification
@@ -26,10 +33,12 @@ Publikasi kursus / penerbitan sertifikat ── menghasilkan ──► Notificat
 
 | Termasuk ERD | Tidak termasuk |
 |---|---|
-| 10 tabel domain MySQL dan koleksi `localStorage` yang setara | Halaman statis dan tampilan UI |
+| 12 tabel domain MySQL + tabel histori/outbox dan koleksi `localStorage` yang setara | Halaman statis dan tampilan UI |
 | Relasi, kardinalitas, foreign key, dan aturan hapus | Data pengaturan halaman Admin (belum dipersistensi) |
-| Enum status dan lifecycle | Data laporan/statistik turunan (dihitung saat runtime) |
+| Enum status dan lifecycle (kursus, kurikulum, kelas, enrollment, sertifikat) | Data laporan/statistik turunan (dihitung saat runtime) |
 | Sesi PHP native (bukan tabel) | Integrasi email nyata (masih simulasi/outbox) |
+
+Catatan: jumlah tabel domain inti adalah 12 (`categories`, `users`, `courses`, `curriculum_versions`, `modules`, `lessons`, `classes`, `class_instructor_histories`, `enrollments`, `grades`, `certificates`, `completed_lessons`) ditambah dua tabel operasional (`audit_logs`, `notifications`).
 
 ---
 
@@ -49,7 +58,7 @@ Publikasi kursus / penerbitan sertifikat ── menghasilkan ──► Notificat
 
 Catatan penting:
 
-- Tidak ada constraint database fisik. Integritas referensi dijaga oleh fungsi CRUD di `assets/js/crud-*.js`.
+- Pada **mode lokal/fallback** tidak ada constraint database fisik; integritas referensi dijaga oleh fungsi CRUD di `assets/js/crud-*.js`. Pada **mode server**, integritas ditegakkan oleh foreign key MySQL 8 (lihat §16.4) ditambah validasi aplikasi.
 - ID setiap koleksi dibuat dengan `nextId()` = `max(id) + 1`, sehingga **ID tidak global** dan bisa dipakai ulang jika record dengan ID terbesar dihapus.
 - Tipe data di bawah adalah tipe logis JSON: `number`, `string`, `boolean`, `date` (`YYYY-MM-DD`), `datetime` (ISO 8601), `enum`, `text`, `object`.
 
@@ -59,6 +68,15 @@ Catatan penting:
 
 ```mermaid
 erDiagram
+    CATEGORIES {
+        number id PK
+        string name
+        string slug UK
+        enum status
+        datetime createdAt
+        datetime updatedAt
+    }
+
     USERS {
         number id PK
         string name
@@ -75,6 +93,7 @@ erDiagram
         number id PK
         string title
         string category
+        number categoryId FK
         text description
         number instructorId FK
         string instructorName
@@ -86,19 +105,71 @@ erDiagram
         datetime updatedAt
     }
 
+    CURRICULUM_VERSIONS {
+        number id PK
+        number courseId FK
+        string code UK
+        string name
+        text description
+        enum status
+        date effectiveDate
+        text notes
+        number createdBy FK
+        number updatedBy FK
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    CLASSES {
+        number id PK
+        string code UK
+        string name
+        number courseId FK
+        number curriculumVersionId FK
+        number instructorId FK
+        date periodStart
+        date periodEnd
+        number quota
+        string location
+        string room
+        string scheduleNote
+        number plannedJp
+        enum status
+        boolean legacyImport
+        text notes
+        number createdBy FK
+        number updatedBy FK
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    CLASS_INSTRUCTOR_HISTORIES {
+        number id PK
+        number classId FK
+        number instructorId FK
+        date startedAt
+        date endedAt
+        text reason
+        number actorId FK
+        datetime createdAt
+    }
+
     ENROLLMENTS {
         number id PK
         number studentId FK
         number courseId FK
+        number classId FK
         string enrolledBy
         date enrolledAt
         enum status
+        datetime createdAt
         datetime updatedAt
     }
 
     MODULES {
         number id PK
         number courseId FK
+        number curriculumVersionId FK
         number instructorId FK
         string title
         text description
@@ -111,6 +182,7 @@ erDiagram
         number id PK
         number moduleId FK
         number courseId FK
+        number curriculumVersionId FK
         number instructorId FK
         string title
         enum type
@@ -192,10 +264,20 @@ erDiagram
         datetime loggedInAt
     }
 
+    CATEGORIES |o--o{ COURSES : "mengklasifikasikan"
     USERS |o--o{ COURSES : "mengampu sebagai instruktur"
-    USERS ||--o{ ENROLLMENTS : "ditugaskan sebagai peserta"
+    COURSES ||--o{ CURRICULUM_VERSIONS : "memiliki versi"
+    COURSES ||--o{ CLASSES : "diselenggarakan sebagai"
+    CURRICULUM_VERSIONS ||--o{ CLASSES : "dipakai kelas"
+    CURRICULUM_VERSIONS ||--o{ MODULES : "berisi modul"
+    CURRICULUM_VERSIONS ||--o{ LESSONS : "berisi materi"
+    USERS |o--o{ CLASSES : "mengampu kelas"
+    CLASSES ||--o{ CLASS_INSTRUCTOR_HISTORIES : "memiliki histori tentor"
+    USERS |o--o{ CLASS_INSTRUCTOR_HISTORIES : "tercatat sebagai tentor"
+    USERS ||--o{ ENROLLMENTS : "terdaftar sebagai peserta"
     COURSES ||--o{ ENROLLMENTS : "memiliki peserta"
-    COURSES ||--o{ MODULES : "berisi modul"
+    CLASSES ||--o{ ENROLLMENTS : "memiliki roster"
+    COURSES ||--o{ MODULES : "memiliki modul"
     MODULES ||--o{ LESSONS : "berisi materi"
     COURSES ||--o{ LESSONS : "memiliki materi denormalisasi"
     ENROLLMENTS ||--o| GRADES : "menghasilkan nilai"
@@ -213,7 +295,7 @@ erDiagram
     USERS ||--o| SESSION : "memiliki sesi aktif"
 ```
 
-> **Cara membaca:** `USERS |o--o{ COURSES` berarti satu instruktur dapat mengampu nol atau banyak kursus, sedangkan satu kursus memiliki nol atau satu instruktur (boleh `null` setelah instruktur dilepas). Relasi peserta ke kursus bersifat **N—N** dan dipecah melalui `ENROLLMENTS`. Notasi `|o` di sisi `USERS` menandai FK yang boleh `null`; `||` menandai FK yang wajib terisi.
+> **Cara membaca:** `USERS |o--o{ CLASSES` berarti satu instruktur dapat mengampu nol atau banyak kelas, sedangkan satu kelas memiliki nol atau satu instruktur (boleh `null` saat draft atau setelah dilepas). Relasi peserta ke kelas bersifat **N—N** dan dipecah melalui `ENROLLMENTS`. Setiap kelas menunjuk tepat satu `curriculum_versions`; begitu kelas dibuat, versi tersebut berstatus `locked`. Notasi `|o` di sisi `USERS` menandai FK yang boleh `null`; `||` menandai FK yang wajib terisi.
 
 ---
 
@@ -223,19 +305,23 @@ Pada mode server, entitas yang sama disimpan di tabel MySQL bernama snake_case (
 
 | No | Entitas | Storage Key | Bentuk | Jumlah Relasi Utama |
 |---|---|---|---|---|
-| 1 | `USERS` | `elips_users` | Array of object | Pusat referensi role dan aktor |
-| 2 | `COURSES` | `elips_courses` | Array of object | Instruktur, enrollment, modul, materi |
-| 3 | `ENROLLMENTS` | `elips_enrollments` | Array of object | Penghubung peserta ↔ kursus |
-| 4 | `MODULES` | `elips_modules` | Array of object | Milik kursus, berisi materi |
-| 5 | `LESSONS` | `elips_lessons` | Array of object | Milik modul dan kursus |
-| 6 | `GRADES` | `elips_grades` | Array of object | Milik enrollment/peserta/kursus |
-| 7 | `CERTIFICATES` | `elips_certificates` | Array of object | Milik peserta/kursus/enrollment |
-| 8 | `COMPLETED_LESSONS` | `elips_completedLessons` | Array of object (tanpa `id` di mode lokal) | Progres peserta per materi |
-| 9 | `AUDIT_LOGS` | `elips_auditLogs` | Array of object | Aktor dan entitas polimorfik |
-| 10 | `NOTIFICATIONS` | `elips_notifications` | Array of object | Penerima dan entitas polimorfik |
-| 11 | `SESSION` | `elips_session` | Object tunggal | Sesi user yang sedang login (mode server: sesi PHP) |
+| 1 | `CATEGORIES` | `elips_categories` | Array of object | Klasifikasi kursus |
+| 2 | `USERS` | `elips_users` | Array of object | Pusat referensi role dan aktor |
+| 3 | `COURSES` | `elips_courses` | Array of object | Kategori, instruktur, versi, kelas, enrollment |
+| 4 | `CURRICULUM_VERSIONS` | `elips_curriculumVersions` | Array of object | Milik kursus, berisi modul/materi, dipakai kelas |
+| 5 | `CLASSES` | `elips_classes` | Array of object | Kursus, versi kurikulum, tentor, roster |
+| 6 | `CLASS_INSTRUCTOR_HISTORIES` | `elips_classInstructorHistories` | Array of object | Histori tentor per kelas |
+| 7 | `ENROLLMENTS` | `elips_enrollments` | Array of object | Penghubung peserta ↔ kelas/kursus |
+| 8 | `MODULES` | `elips_modules` | Array of object | Milik versi kursus, berisi materi |
+| 9 | `LESSONS` | `elips_lessons` | Array of object | Milik modul dan versi |
+| 10 | `GRADES` | `elips_grades` | Array of object | Milik enrollment/peserta/kursus |
+| 11 | `CERTIFICATES` | `elips_certificates` | Array of object | Milik peserta/kursus/enrollment |
+| 12 | `COMPLETED_LESSONS` | `elips_completedLessons` | Array of object (tanpa `id` di mode lokal) | Progres peserta per materi |
+| 13 | `AUDIT_LOGS` | `elips_auditLogs` | Array of object | Aktor dan entitas polimorfik |
+| 14 | `NOTIFICATIONS` | `elips_notifications` | Array of object | Penerima dan entitas polimorfik |
+| 15 | `SESSION` | `elips_session` | Object tunggal | Sesi user yang sedang login (mode server: sesi PHP) |
 
-Key lama yang dimigrasikan: `elips_enrolled` (self-enrollment) dipindahkan ke `elips_enrollments` oleh `seed.js`, lalu dihapus.
+Key lama yang dimigrasikan: `elips_enrolled` (self-enrollment) dipindahkan ke `elips_enrollments` oleh `seed.js`, lalu dihapus. Pada migrasi v3 → v4, `seed.js` membuat entri `elips_categories`/`elips_curriculumVersions`/`elips_classes` bila belum ada dan mengisi `curriculumVersionId` pada modul/materi lama.
 
 ---
 
@@ -279,7 +365,8 @@ Menyimpan kursus beserta instruktur pengampu dan status publikasinya.
 |---|---|---|---|---|---|
 | `id` | number | PK | Ya | `max(id)+1` | ID unik kursus |
 | `title` | string | — | Ya | — | Judul kursus |
-| `category` | string | — | Ya | — | Kategori bebas, mis. `Pelatihan`, `Soft Skill`, `Administrasi`, `Reguler Class` |
+| `category` | string | — | Ya | — | Nama kategori (denormalisasi dari `categories.name`), mis. `Pelatihan`, `Soft Skill`, `Administrasi`, `Reguler Class` |
+| `categoryId` | number | FK → `categories.id` | Tidak | `null` | Kategori terstruktur; boleh `null` untuk data lama |
 | `description` | text | — | Tidak | `''` | Deskripsi kursus |
 | `instructorId` | number | FK → `users.id` | Ya saat dibuat | — | Harus akun ber-role `instruktur` dan `aktif`; dapat menjadi `null` setelah dilepas |
 | `instructorName` | string | — | Ya | dari user | Denormalisasi nama instruktur; disinkronkan saat nama berubah |
@@ -309,67 +396,203 @@ published ── instruktur dilepas/dihapus/nonaktif ──► draft
 
 ---
 
-### 5.3 ENROLLMENTS — `elips_enrollments`
+### 5.2a CATEGORIES — `elips_categories`
 
-Tabel penghubung **N—N** antara peserta dan kursus.
-
-| Field | Tipe | Key | Wajib | Default | Keterangan |
-|---|---|---|---|---|---|
-| `id` | number | PK | Ya | `max(id)+1` | ID unik penugasan |
-| `studentId` | number | FK → `users.id` | Ya | — | Harus user ber-role `peserta` dan `aktif` |
-| `courseId` | number | FK → `courses.id` | Ya | — | Kursus yang ditugaskan |
-| `enrolledBy` | string | — | Ya | `admin` | Pencatat penugasan; data lama dapat berisi nilai lain |
-| `enrolledAt` | date | — | Ya | hari ini | `YYYY-MM-DD` |
-| `status` | enum | — | Ya | `active` | `active`, `dihentikan` |
-| `updatedAt` | datetime | — | Tidak | — | ISO 8601 saat status berubah |
-
-**Aturan:**
-
-- Kombinasi `(studentId, courseId)` **unik**; penugasan ganda tidak dibuat.
-- Satu peserta boleh memiliki banyak enrollment (banyak kursus).
-- Satu kursus boleh memiliki banyak enrollment (banyak peserta).
-- Menghapus enrollment juga menghapus nilai, sertifikat, dan progres peserta pada kursus tersebut.
-- Status `dihentikan` menghentikan akses peserta, tetapi data nilai/sertifikat tidak otomatis dihapus.
-
----
-
-### 5.4 MODULES — `elips_modules`
-
-Modul pembelajaran di dalam kursus.
+Kategori kursus terstruktur. `courses.categoryId` menunjuk ke sini, sedangkan `courses.category` menyimpan nama untuk kompatibilitas tampilan.
 
 | Field | Tipe | Key | Wajib | Default | Keterangan |
 |---|---|---|---|---|---|
-| `id` | number | PK | Ya | `max(id)+1` | ID unik modul |
-| `courseId` | number | FK → `courses.id` | Ya | — | Kursus pemilik modul |
-| `instructorId` | number | FK → `users.id` | Tidak | dari kursus | Denormalisasi pemilik konten; disinkronkan dengan `course.instructorId` |
-| `title` | string | — | Ya | — | Judul modul |
-| `description` | text | — | Tidak | `''` | Deskripsi modul |
-| `order` | number | — | Ya | `max(order)+1` | Urutan modul di dalam kursus, mulai dari 1 |
+| `id` | number | PK | Ya | `max(id)+1` | ID unik kategori |
+| `name` | string | — | Ya | — | Nama kategori |
+| `slug` | string | UK | Ya | dari nama | Slug unik, huruf kecil dan tanda hubung |
+| `status` | enum | — | Ya | `active` | `active`, `inactive` |
 | `createdAt` | datetime | — | Ya | sekarang | ISO 8601 |
 | `updatedAt` | datetime | — | Tidak | — | ISO 8601 |
 
 **Aturan:**
 
-- Instruktur hanya dapat mengelola modul pada kursus yang diampu.
+- `slug` unik; kategori `inactive` tidak ditawarkan pada form kursus baru.
+- Menghapus kategori tidak menghapus kursus; `courses.categoryId` menjadi `null` (FK `SET NULL`).
+
+---
+
+### 5.2b CURRICULUM_VERSIONS — `elips_curriculumVersions`
+
+Versi kurikulum milik satu kursus. Modul dan materi selalu terhubung ke versi, bukan langsung ke kursus.
+
+| Field | Tipe | Key | Wajib | Default | Keterangan |
+|---|---|---|---|---|---|
+| `id` | number | PK | Ya | `max(id)+1` | ID unik versi |
+| `courseId` | number | FK → `courses.id` | Ya | — | Kursus pemilik versi |
+| `code` | string | UK per kursus | Ya | kode berikutnya | Kode versi unik per kursus, mis. `1.0`, `2.0` |
+| `name` | string | — | Ya | `Kurikulum <code> — <judul>` | Nama versi |
+| `description` | text | — | Tidak | `''` | Deskripsi versi |
+| `status` | enum | — | Ya | `draft` | `draft`, `published`, `locked`, `retired` |
+| `effectiveDate` | date | — | Tidak | `null` | Tanggal efektif (`YYYY-MM-DD`) |
+| `notes` | text | — | Tidak | `''` | Catatan perubahan |
+| `createdBy` | number | FK → `users.id` | Tidak | user sesi | Pembuat versi |
+| `updatedBy` | number | FK → `users.id` | Tidak | user sesi | Pengubah terakhir |
+| `createdAt` | datetime | — | Ya | sekarang | ISO 8601 |
+| `updatedAt` | datetime | — | Tidak | — | ISO 8601 |
+
+**Aturan:**
+
+- Kombinasi `(courseId, code)` unik.
+- Versi baru selalu `draft`.
+- Hanya versi `published`/`locked` yang dapat dipilih saat membuat kelas.
+- `draft` → `published` oleh Admin; `published` → `locked` otomatis saat kelas dibuat; `published`/`locked` → `retired` oleh Admin.
+- Versi `locked`/`retired` tidak dapat diubah atau dihapus; revisi dilakukan dengan `clone` ke Draft baru.
+- Hanya versi `draft` tanpa kelas yang boleh dihapus.
+
+**Lifecycle status:**
+
+```text
+draft ── publish ──► published ── kelas dibuat ──► locked
+   │                     │
+   └── delete (draft)     └── retire ──► retired
+locked ── retire ──► retired
+```
+
+---
+
+### 5.2c CLASSES — `elips_classes`
+
+Kelas/angkatan yang menyelenggarakan satu versi kurikulum untuk sekelompok peserta.
+
+| Field | Tipe | Key | Wajib | Default | Keterangan |
+|---|---|---|---|---|---|
+| `id` | number | PK | Ya | `max(id)+1` | ID unik kelas |
+| `code` | string | UK | Ya | dibuat sistem | Kode kelas unik, mis. `ANG-2026-MNJ-01` |
+| `name` | string | — | Ya | — | Nama kelas/angkatan |
+| `courseId` | number | FK → `courses.id` | Ya | — | Kursus yang diselenggarakan |
+| `curriculumVersionId` | number | FK → `curriculum_versions.id` | Ya | — | Versi kurikulum; harus `published`/`locked` |
+| `instructorId` | number | FK → `users.id` | Tidak | `null` | Tentor aktif; wajib untuk status `ready`/`ongoing` |
+| `periodStart` | date | — | Tidak | `null` | Tanggal mulai |
+| `periodEnd` | date | — | Tidak | `null` | Tanggal selesai; tidak boleh sebelum `periodStart` |
+| `quota` | number | — | Ya | `0` | Kuota peserta |
+| `location` | string | — | Tidak | `''` | Lokasi |
+| `room` | string | — | Tidak | `''` | Ruang |
+| `scheduleNote` | string | — | Tidak | `''` | Catatan jadwal |
+| `plannedJp` | number | — | Ya | `0` | JP rencana |
+| `status` | enum | — | Ya | `draft` | `draft`, `open`, `ready`, `ongoing`, `completed`, `cancelled`, `archived` |
+| `legacyImport` | boolean | — | Ya | `false` | Penanda kelas migrasi v3 |
+| `notes` | text | — | Tidak | `''` | Catatan |
+| `createdBy` | number | FK → `users.id` | Tidak | user sesi | Pembuat |
+| `updatedBy` | number | FK → `users.id` | Tidak | user sesi | Pengubah terakhir |
+| `createdAt` | datetime | — | Ya | sekarang | ISO 8601 |
+| `updatedAt` | datetime | — | Tidak | — | ISO 8601 |
+
+**Aturan:**
+
+- `code` unik. `curriculumVersionId` harus milik `courseId` yang sama.
+- Pembuatan kelas mengunci versi kurikulum secara transaksional.
+- `instructorId`, bila diisi, harus akun `instruktur` aktif.
+- Kuota tidak boleh diturunkan di bawah jumlah enrollment aktif.
+- Kelas dengan enrollment tidak dapat dihapus.
+- `cancelled`/`archived` tidak menerima pendaftaran baru.
+
+**Lifecycle status:**
+
+```text
+draft ──► open ──► ongoing ──► completed ──► archived
+   │         │          │
+   └─────────┴──────────┴──► cancelled
+```
+
+---
+
+### 5.2d CLASS_INSTRUCTOR_HISTORIES — `elips_classInstructorHistories`
+
+Riwayat penugasan tentor per kelas. Setiap pergantian menutup entri lama dan membuka entri baru.
+
+| Field | Tipe | Key | Wajib | Default | Keterangan |
+|---|---|---|---|---|---|
+| `id` | number | PK | Ya | `max(id)+1` | ID unik histori |
+| `classId` | number | FK → `classes.id` | Ya | — | Kelas terkait |
+| `instructorId` | number | FK → `users.id` | Tidak | `null` | Tentor pada periode ini |
+| `startedAt` | date | — | Ya | hari ini | Tanggal mulai |
+| `endedAt` | date | — | Tidak | `null` | Tanggal selesai; `null` berarti masih aktif |
+| `reason` | text | — | Tidak | `''` | Alasan pergantian |
+| `actorId` | number | FK → `users.id` | Tidak | user sesi | Admin yang melakukan perubahan |
+| `createdAt` | datetime | — | Ya | sekarang | ISO 8601 |
+
+**Aturan:**
+
+- Penugasan tentor yang sama bersifat idempoten (tidak membuat histori baru).
+- Saat tentor diganti, entri lama diisi `endedAt`, entri baru dibuat dengan `endedAt = null`.
+- Menghapus kelas menghapus seluruh hist histonya (`CASCADE`).
+
+---
+
+### 5.3 ENROLLMENTS — `elips_enrollments`
+
+Tabel penghubung **N—N** antara peserta dan kelas/kursus.
+
+| Field | Tipe | Key | Wajib | Default | Keterangan |
+|---|---|---|---|---|---|
+| `id` | number | PK | Ya | `max(id)+1` | ID unik penugasan |
+| `studentId` | number | FK → `users.id` | Ya | — | Harus user ber-role `peserta` dan `aktif` |
+| `courseId` | number | FK → `courses.id` | Ya | — | Kursus yang diikuti (denormalisasi dari kelas) |
+| `classId` | number | FK → `classes.id` | Tidak | `null` | Kelas/angkatan; `null` untuk data migrasi yang belum dipetakan |
+| `enrolledBy` | string | — | Ya | `admin` | Pencatat penugasan; data lama dapat berisi nilai lain |
+| `enrolledAt` | date | — | Ya | hari ini | `YYYY-MM-DD` |
+| `status` | enum | — | Ya | `active` | `pending`, `active`, `completed`, `withdrawn`, `suspended`, `cancelled`, `dihentikan` (alias lama) |
+| `createdAt` | datetime | — | Ya | sekarang | ISO 8601 |
+| `updatedAt` | datetime | — | Tidak | — | ISO 8601 saat status berubah |
+
+**Aturan:**
+
+- Kombinasi `(studentId, classId)` unik; pendaftaran ganda pada kelas yang sama dilewati.
+- Satu peserta boleh memiliki banyak enrollment (banyak kelas/kursus).
+- Satu kelas boleh memiliki banyak enrollment (banyak peserta), dibatasi `classes.quota`.
+- Enrollment aktif `active` menjadi syarat akses materi.
+- Menghapus enrollment juga menghapus nilai, sertifikat, dan progres peserta pada kelas tersebut.
+- Status `withdrawn`/`dihentikan` menghentikan akses peserta, tetapi data nilai/sertifikat tidak otomatis dihapus.
+- Enrollment lama v3 dipetakan ke kelas migrasi (`legacyImport = true`) agar tetap valid.
+
+---
+
+### 5.4 MODULES — `elips_modules`
+
+Modul pembelajaran di dalam versi kurikulum.
+
+| Field | Tipe | Key | Wajib | Default | Keterangan |
+|---|---|---|---|---|---|
+| `id` | number | PK | Ya | `max(id)+1` | ID unik modul |
+| `courseId` | number | FK → `courses.id` | Ya | — | Kursus pemilik modul |
+| `curriculumVersionId` | number | FK → `curriculum_versions.id` | Ya | — | Versi kurikulum pemilik modul |
+| `instructorId` | number | FK → `users.id` | Tidak | dari kursus | Denormalisasi pemilik konten; disinkronkan dengan `course.instructorId` |
+| `title` | string | — | Ya | — | Judul modul |
+| `description` | text | — | Tidak | `''` | Deskripsi modul |
+| `order` | number | — | Ya | `max(order)+1` per versi | Urutan modul di dalam versi, mulai dari 1 |
+| `createdAt` | datetime | — | Ya | sekarang | ISO 8601 |
+| `updatedAt` | datetime | — | Tidak | — | ISO 8601 |
+
+**Aturan:**
+
+- Instruktur hanya dapat mengelola modul pada kursus yang diampu dan versi yang `draft`/`published`.
+- Versi `locked`/`retired` menolak create/update/delete modul.
 - Menghapus modul menghapus seluruh materi di dalamnya beserta progres `completedLessons` terkait.
-- `order` menentukan urutan tampilan modul.
+- `order` menentukan urutan tampilan modul di dalam versinya.
+- `curriculumVersionId` harus milik `courseId` yang sama.
 
 ---
 
 ### 5.5 LESSONS — `elips_lessons`
 
-Materi/pelajaran di dalam modul.
+Materi/pelajaran di dalam modul pada versi kurikulum tertentu.
 
 | Field | Tipe | Key | Wajib | Default | Keterangan |
 |---|---|---|---|---|---|
 | `id` | number | PK | Ya | `max(id)+1` | ID unik materi |
 | `moduleId` | number | FK → `modules.id` | Ya | — | Modul pemilik materi |
 | `courseId` | number | FK → `courses.id` | Ya | dari modul | Denormalisasi untuk query cepat per kursus |
+| `curriculumVersionId` | number | FK → `curriculum_versions.id` | Ya | dari modul | Versi kurikulum pemilik materi |
 | `instructorId` | number | FK → `users.id` | Tidak | dari modul | Denormalisasi pemilik konten |
 | `title` | string | — | Ya | — | Judul materi |
 | `type` | enum | — | Ya | `text` | `text`, `video`, `file`, `link` |
 | `content` | text | — | Bersyarat | — | HTML untuk `text` (boleh kosong, disanitasi dengan `sanitizeHtml`); URL/nama file **wajib** untuk `video`, `file`, dan `link` |
-| `order` | number | — | Ya | `max(order)+1` | Urutan materi di dalam modul |
+| `order` | number | — | Ya | `max(order)+1` per modul | Urutan materi di dalam modul |
 | `createdAt` | datetime | — | Ya | sekarang | ISO 8601 |
 | `updatedAt` | datetime | — | Tidak | — | ISO 8601 |
 
@@ -384,10 +607,11 @@ Materi/pelajaran di dalam modul.
 
 **Aturan relasi:**
 
-- `moduleId` harus milik `courseId` yang sama.
-- Memindahkan materi ke modul lain hanya diizinkan dalam kursus yang sama.
+- `moduleId` harus milik `courseId` dan `curriculumVersionId` yang sama.
+- Memindahkan materi ke modul lain hanya diizinkan dalam kursus dan versi yang sama.
+- Versi `locked`/`retired` menolak create/update/delete materi.
 - Menghapus materi menghapus progres penyelesaian materi tersebut.
-- Materi hanya dapat diakses peserta jika enrollment `active`, kursus `published`, dan urutan sebelumnya sudah selesai.
+- Materi hanya dapat diakses peserta jika enrollment kelas `active`, kursus `published`, dan urutan sebelumnya sudah selesai.
 
 ---
 
@@ -424,10 +648,11 @@ Nilai akhir peserta per kursus.
 
 **Aturan:**
 
-- Hanya boleh menilai jika enrollment `(studentId, courseId)` ada.
-- Instruktur tidak dapat menilai kursus yang bukan miliknya.
-- Kombinasi `(studentId, courseId)` dianggap unik; penyimpanan ulang memperbarui nilai yang sama.
-- Menyimpan nilai otomatis membuat/memperbarui e-sertifikat **Draft**.
+- Hanya boleh menilai jika enrollment valid dan berstatus `active`/`completed`.
+- Instruktur tidak dapat menilai kelas/kursus yang bukan miliknya.
+- Kombinasi `enrollmentId` **unik**; penyimpanan ulang memperbarui nilai yang sama.
+- Peserta yang mengikuti kursus yang sama pada kelas berbeda memiliki nilai terpisah.
+- Menyimpan nilai otomatis membuat/memperbarui e-sertifikat **Draft** untuk enrollment tersebut.
 - Jika sertifikat sudah `publish`, perubahan nilai memperbarui data sertifikat tetapi **tidak** mengembalikan status ke Draft.
 
 ---
@@ -441,7 +666,7 @@ E-sertifikat peserta per kursus.
 | `id` | number | PK | Ya | `max(id)+1` | ID unik sertifikat |
 | `studentId` | number | FK → `users.id` | Ya | — | Peserta penerima |
 | `courseId` | number | FK → `courses.id` | Ya | — | Kursus terkait |
-| `enrollmentId` | number | FK → `enrollments.id` | Tidak | dicari dari pasangan | Nullable untuk data lama |
+| `enrollmentId` | number | FK → `enrollments.id` | Ya | — | Enrollment terkait; unik per enrollment |
 | `certificateNumber` | string | UK | Ya | dibuat sistem | Draft: `CERT-DRAFT-xxxxxx-XXX`; Publish: `CERT-YYYY-XXXXXX` |
 | `status` | enum | — | Ya | `draft` | `draft`, `publish` |
 | `grade` | string | — | Ya | dari nilai | **Snapshot** grade saat sertifikat dibuat/diperbarui |
@@ -457,14 +682,14 @@ E-sertifikat peserta per kursus.
 
 **Aturan:**
 
-- Satu sertifikat per `(studentId, courseId)`.
+- Satu sertifikat per `enrollmentId`.
 - Sertifikat hanya dibuat jika peserta sudah memiliki nilai dan enrollment.
 - Sertifikat baru selalu `draft`.
 - Hanya Admin yang dapat mengubah `draft` → `publish`.
 - Sertifikat `publish` bersifat final dari sisi status; nilai masih dapat diperbarui.
 - Saat `publish`, nomor Draft diganti nomor final, `approvedByAdminId` dan `approvedAt` diisi.
 - Sertifikat `draft` tidak boleh tampil di halaman peserta dan tidak dapat diverifikasi.
-- Menghapus peserta/enrollment/kursus ikut menghapus sertifikat terkait.
+- Menghapus peserta/enrollment/kelas/kursus ikut menghapus sertifikat terkait.
 
 **Lifecycle status:**
 
@@ -505,7 +730,7 @@ Jejak audit perubahan data penting. Bersifat **append-only** dari sudut pandang 
 |---|---|---|---|---|
 | `id` | number | PK | Ya | ID unik log |
 | `action` | enum | — | Ya | Lihat daftar aksi di bawah |
-| `entity` | enum | — | Ya | `course`, `grade`, `certificate`, `user`, `enrollment`, `module`, `lesson` |
+| `entity` | enum | — | Ya | `course`, `curriculum`, `class`, `grade`, `certificate`, `user`, `enrollment`, `module`, `lesson` |
 | `entityId` | number | FK polimorfik | Tidak | ID entitas yang berubah; `null` jika tidak ada |
 | `entityLabel` | string | — | Tidak | Label entitas saat kejadian (snapshot) |
 | `actorId` | number | FK → `users.id` | Tidak | `null` berarti Sistem |
@@ -600,12 +825,13 @@ Bukan koleksi, melainkan **satu objek** yang merepresentasikan sesi login aktif 
 |---|---|---|---|---|---|
 | R1 | `USERS` (instruktur) → `COURSES` | 1 — N | `courses.instructorId` | Instruktur dihapus/dilepas: `instructorId=null`, `instructorName=''`, kursus Publish → Draft | Satu kursus hanya satu instruktur; satu instruktur banyak kursus |
 | R2 | `USERS` (peserta) → `ENROLLMENTS` | 1 — N | `enrollments.studentId` | Peserta dihapus: seluruh enrollment dihapus | Hanya untuk role `peserta` |
-| R3 | `COURSES` → `ENROLLMENTS` | 1 — N | `enrollments.courseId` | Kursus dihapus: seluruh enrollment dihapus | Relasi N—N peserta ↔ kursus |
+| R3 | `CLASSES` → `ENROLLMENTS` | 1 — N | `enrollments.classId` | Kelas dihapus: enrollment dihapus (namun kelas berisi peserta tidak boleh dihapus) | Relasi N—N peserta ↔ kelas |
+| R3a | `COURSES` → `ENROLLMENTS` | 1 — N | `enrollments.courseId` | Kursus dihapus: seluruh enrollment dihapus | Denormalisasi dari kelas |
 | R4 | `COURSES` → `MODULES` | 1 — N | `modules.courseId` | Kursus dihapus: seluruh modul dihapus | Modul tidak dapat berdiri sendiri |
 | R5 | `MODULES` → `LESSONS` | 1 — N | `lessons.moduleId` | Modul dihapus: seluruh materi + progresnya dihapus | Satu materi hanya milik satu modul |
 | R6 | `COURSES` → `LESSONS` | 1 — N | `lessons.courseId` | Kursus dihapus: seluruh materi dihapus | Denormalisasi dari modul |
-| R7 | `ENROLLMENTS` → `GRADES` | 1 — 0..1 | `grades.enrollmentId` | Enrollment dihapus: nilai dihapus | Satu peserta satu nilai per kursus |
-| R8 | `ENROLLMENTS` → `CERTIFICATES` | 1 — 0..1 | `certificates.enrollmentId` | Enrollment dihapus: sertifikat dihapus | Satu peserta satu sertifikat per kursus |
+| R7 | `ENROLLMENTS` → `GRADES` | 1 — 0..1 | `grades.enrollmentId` | Enrollment dihapus: nilai dihapus | Satu nilai per enrollment/kelas |
+| R8 | `ENROLLMENTS` → `CERTIFICATES` | 1 — 0..1 | `certificates.enrollmentId` | Enrollment dihapus: sertifikat dihapus | Satu sertifikat per enrollment/kelas |
 | R9 | `USERS` (peserta) → `GRADES` | 1 — N | `grades.studentId` | Peserta dihapus: seluruh nilai dihapus | Denormalisasi untuk query |
 | R10 | `USERS` (instruktur) → `GRADES` | 1 — N | `grades.instructorId` | Instruktur dihapus: nilai tetap ada | Referensi dapat menjadi yatim |
 | R11 | `USERS` (peserta) → `CERTIFICATES` | 1 — N | `certificates.studentId` | Peserta dihapus: seluruh sertifikat dihapus | Denormalisasi untuk query |
@@ -616,12 +842,19 @@ Bukan koleksi, melainkan **satu objek** yang merepresentasikan sesi login aktif 
 | R16 | `USERS` → `NOTIFICATIONS` | 1 — N | `notifications.recipientId` | User dihapus: notifikasi tetap ada | Snapshot penerima disimpan |
 | R17 | `COURSES` / `CERTIFICATES` → `NOTIFICATIONS` | 1 — N | `notifications.entity` + `entityId` | Entitas dihapus: notifikasi tetap ada | Referensi polimorfik, bukan FK fisik |
 | R18 | `USERS` → `SESSION` | 1 — 0..1 | `session.userId` | Tidak ada cascade | Sesi dihapus saat logout |
+| R19 | `CATEGORIES` → `COURSES` | 1 — N | `courses.categoryId` | Kategori dihapus: `categoryId=null`, nama kategori tetap | FK `SET NULL` |
+| R20 | `COURSES` → `CURRICULUM_VERSIONS` | 1 — N | `curriculum_versions.courseId` | Kursus dihapus: versi dihapus | Kode versi unik per kursus |
+| R21 | `CURRICULUM_VERSIONS` → `MODULES` | 1 — N | `modules.curriculumVersionId` | Versi dihapus (hanya draft): modul dihapus | Versi locked/retired tidak boleh dihapus |
+| R22 | `CURRICULUM_VERSIONS` → `CLASSES` | 1 — N | `classes.curriculumVersionId` | Versi tidak dapat dihapus selama dipakai kelas | FK `RESTRICT`; versi terkunci saat kelas dibuat |
+| R23 | `USERS` (instruktur) → `CLASSES` | 1 — N | `classes.instructorId` | Instruktur dihapus: `instructorId=null` | Satu kelas satu tentor aktif |
+| R24 | `CLASSES` → `CLASS_INSTRUCTOR_HISTORIES` | 1 — N | `class_instructor_histories.classId` | Kelas dihapus: histori dihapus | Histori pergantian tentor |
+| R25 | `USERS` (instruktur) → `CLASS_INSTRUCTOR_HISTORIES` | 1 — N | `class_instructor_histories.instructorId` | Instruktur dihapus: `instructorId=null` | Riwayat tetap ada |
 
 ### 6.1 Relasi Banyak-ke-Banyak
 
 | Relasi | Tabel Penghubung | Atribut Penghubung | Keunikan |
 |---|---|---|---|
-| Peserta ↔ Kursus | `ENROLLMENTS` | `status`, `enrolledAt`, `enrolledBy` | `(studentId, courseId)` |
+| Peserta ↔ Kelas | `ENROLLMENTS` | `status`, `enrolledAt`, `enrolledBy` | `(studentId, classId)` |
 | Peserta ↔ Materi (progres) | `COMPLETED_LESSONS` | `completedAt` | `(studentId, courseId, lessonId)` |
 
 ---
@@ -641,8 +874,15 @@ Bukan koleksi, melainkan **satu objek** yang merepresentasikan sesi login aktif 
 | Konten materi teks disanitasi sebelum disimpan/dirender | `utils.js` (`sanitizeHtml`), `crud-content.js`, `learning.html` |
 | Kursus wajib punya instruktur aktif saat dibuat/diubah | `crud-courses.js` + `core.isActiveInstructor` |
 | Publikasi kursus wajib punya instruktur aktif, modul, dan materi | `crud-courses.js` |
+| Kode versi kurikulum unik per kursus | `crud-academic.js` + `api/actions.php` |
+| Versi kurikulum hanya dapat diedit pada status `draft`/`published` | `crud-academic.js` + `api/helpers.php` |
+| Kelas hanya boleh memakai versi `published`/`locked` | `crud-academic.js` + `api/actions.php` |
+| Pembuatan kelas mengunci versi secara transaksional | `api/actions.php` |
+| Kelas hanya boleh memakai tentor aktif | `crud-academic.js` + `api/actions.php` |
+| Kuota kelas tidak boleh kurang dari peserta aktif | `crud-academic.js` + `api/actions.php` |
+| Kelas dengan enrollment tidak dapat dihapus | `crud-academic.js` + `api/actions.php` |
 | Enrollment hanya untuk peserta aktif | `crud-enrollments.js` |
-| Enrollment unik per peserta+kursus | `crud-enrollments.js` |
+| Enrollment unik per peserta+kelas | `crud-enrollments.js` |
 | Nilai hanya untuk enrollment yang valid | `crud-grades.js` |
 | Skor 0–100 | `crud-grades.js` |
 | Instruktur hanya mengelola/menilai kursus sendiri | `crud-content.js`, `crud-grades.js` |
@@ -667,9 +907,10 @@ Pada mode server, integritas referensial ditegakkan MySQL melalui foreign key da
 Peserta dapat membuka materi jika **semua** kondisi terpenuhi:
 
 1. Ada sesi peserta yang valid.
-2. Enrollment `(studentId, courseId)` berstatus `active`.
+2. Ada enrollment berstatus `active` pada sebuah kelas.
 3. Kursus berstatus `published`.
-4. Materi berada pada urutan yang sudah terbuka; materi berikutnya terkunci sampai materi sebelumnya selesai.
+4. Materi berasal dari versi kurikulum yang terkunci pada kelas tersebut.
+5. Materi berada pada urutan yang sudah terbuka; materi berikutnya terkunci sampai materi sebelumnya selesai.
 
 Sertifikat hanya terlihat jika `status = publish` dan milik peserta yang sedang login.
 
@@ -681,8 +922,11 @@ Sertifikat hanya terlihat jika `status = publish` dan milik peserta yang sedang 
 |---|---|---|---|
 | Pengguna | `status` | `aktif`, `nonaktif` | aktif ↔ nonaktif |
 | Pengguna | `role` | `admin`, `instruktur`, `peserta` | Dapat diubah; perubahan dari instruktur melepas kursus |
+| Kategori | `status` | `active`, `inactive` | active ↔ inactive |
 | Kursus | `status` | `draft`, `published` | draft → published (validasi), published → draft |
-| Enrollment | `status` | `active`, `dihentikan` | active ↔ dihentikan |
+| Versi Kurikulum | `status` | `draft`, `published`, `locked`, `retired` | draft → published; published → locked (saat kelas dibuat); published/locked → retired; draft → deleted |
+| Kelas | `status` | `draft`, `open`, `ready`, `ongoing`, `completed`, `cancelled`, `archived` | draft → open → ongoing → completed → archived; draft/open/ongoing → cancelled |
+| Enrollment | `status` | `pending`, `active`, `completed`, `withdrawn`, `suspended`, `cancelled`, `dihentikan` | pending → active; active → completed/withdrawn/suspended/cancelled; withdrawn → active |
 | Sertifikat | `status` | `draft`, `publish` | draft → publish; publish tidak kembali ke draft |
 | Nilai | `grade` | A … E | Dihitung ulang setiap skor disimpan |
 | Notifikasi | `status` | `sent` | Tidak berubah (simulasi) |
@@ -694,12 +938,16 @@ Sertifikat hanya terlihat jika `status = publish` dan milik peserta yang sedang 
 | Lokasi | Data | Sumber | Sinkronisasi |
 |---|---|---|---|
 | `courses.instructorName` | Nama instruktur | `users.name` | `syncInstructorNameOnCourses` saat user diubah |
+| `courses.category` | Nama kategori | `categories.name` | Diset saat create/update kursus |
 | `courses.modules` | Jumlah modul | `modules` | `syncCourseCounters` |
 | `courses.lessons` | Jumlah materi | `lessons` | `syncCourseCounters` |
 | `courses.totalLessons` | Duplikat jumlah materi | `courses.lessons` | `syncCourseCounters` |
+| `modules.curriculumVersionId` | Versi kurikulum modul | `modules.courseId` → versi aktif | Diset saat create/update |
+| `lessons.curriculumVersionId` | Versi kurikulum materi | `modules.curriculumVersionId` | Diset saat create/update |
 | `modules.instructorId` | Pemilik konten | `courses.instructorId` | `syncAllContentOwners` |
 | `lessons.instructorId` | Pemilik konten | `courses.instructorId` | `syncAllContentOwners` |
 | `lessons.courseId` | Kursus materi | `modules.courseId` | Diset saat create/update |
+| `enrollments.courseId` | Kursus enrollment | `classes.courseId` | Diset saat pendaftaran kelas |
 | `grades.studentId`, `grades.courseId` | Pasangan peserta+kursus | `enrollments` | Diset saat nilai disimpan |
 | `grades.enrollmentId` | Enrollment | `enrollments` | Diset saat nilai disimpan |
 | `certificates.studentId`, `certificates.courseId` | Pasangan peserta+kursus | `enrollments` | Diset saat sertifikat dibuat |
@@ -717,23 +965,29 @@ Sertifikat hanya terlihat jika `status = publish` dan milik peserta yang sedang 
 
 ## 10. Matriks Cascade
 
-| Operasi | COURSES | ENROLLMENTS | MODULES | LESSONS | GRADES | CERTIFICATES | COMPLETED_LESSONS | AUDIT_LOGS | NOTIFICATIONS | SESSION |
-|---|---|---|---|---|---|---|---|---|---|---|
-| Hapus **User peserta** | — | Hapus milik peserta | — | — | Hapus milik peserta | Hapus milik peserta | Hapus milik peserta | Tetap | Tetap | Tetap |
-| Hapus **User instruktur** | Lepas & Draft | — | Owner di-reset | Owner di-reset | Tetap | Tetap | — | Tetap | Tetap | Tetap |
-| Hapus **User admin** | — | — | — | — | — | Tetap | — | Tetap | Tetap | Tetap |
-| **Nonaktifkan User instruktur** | Publish → Draft (owner tetap) | — | — | — | — | — | — | Tambah log | Tetap | Tetap |
-| Hapus **Kursus** | Hapus | Hapus | Hapus | Hapus | Hapus | Hapus | Hapus | Tetap | Tetap | — |
-| Hapus **Enrollment** | — | Hapus | — | — | Hapus pasangan | Hapus pasangan | Hapus pasangan | Tetap | Tetap | — |
-| Hapus **Modul** | Counter update | — | Hapus | Hapus isi modul | Tetap | Tetap | Hapus milik materi | Tetap | Tetap | — |
-| Hapus **Materi** | Counter update | — | — | Hapus | Tetap | Tetap | Hapus milik materi | Tetap | Tetap | — |
-| **Approve sertifikat** | — | — | — | — | — | Draft → Publish | — | Tambah log | Tambah notifikasi | — |
-| **Publikasi kursus** | Draft → Publish | — | — | — | — | — | — | Tambah log | Tambah notifikasi | — |
+| Operasi | CATEGORIES | CURRICULUM_VERSIONS | CLASSES | CLASS_HISTORIES | COURSES | ENROLLMENTS | MODULES | LESSONS | GRADES | CERTIFICATES | COMPLETED_LESSONS | AUDIT_LOGS | NOTIFICATIONS |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Hapus **User peserta** | — | — | — | — | — | Hapus milik peserta | — | — | Hapus milik peserta | Hapus milik peserta | Hapus milik peserta | Tetap | Tetap |
+| Hapus **User instruktur** | — | — | Tentor → `null` | Tentor → `null` | Lepas & Draft | — | Owner di-reset | Owner di-reset | Tetap | Tetap | — | Tetap | Tetap |
+| Hapus **User admin** | — | — | — | — | — | — | — | — | — | Tetap | — | Tetap | Tetap |
+| **Nonaktifkan User instruktur** | — | — | — | — | Publish → Draft (owner tetap) | — | — | — | — | — | — | Tambah log | Tetap |
+| Hapus **Kursus** | — | Ditolak bila ada kelas; jika tidak hapus | Ditolak bila ada kelas | — | Hapus | Hapus | Hapus | Hapus | Hapus | Hapus | Hapus | Tetap | Tetap |
+| Hapus **Versi kurikulum Draft** | — | Hapus | — | — | — | — | Hapus | Hapus | — | — | — | Tetap | Tetap |
+| **Retire versi kurikulum** | — | Status → `retired` | — | — | — | — | — | — | — | — | — | Tambah log | — |
+| Hapus **Kelas** | — | — | Ditolak bila ada enrollment; jika kosong hapus | Hapus | — | — | — | — | — | — | — | Tetap | Tetap |
+| **Ganti tentor kelas** | — | — | `instructorId` berubah | Tutup lama + buka baru | — | — | — | — | — | — | — | Tambah log | — |
+| Hapus **Enrollment** | — | — | — | — | — | Hapus | — | — | Hapus pasangan | Hapus pasangan | Hapus pasangan | Tetap | Tetap |
+| Hapus **Modul** | — | — | — | — | Counter update | — | Hapus | Hapus isi modul | Tetap | Tetap | Hapus milik materi | Tetap | Tetap |
+| Hapus **Materi** | — | — | — | — | Counter update | — | — | Hapus | Tetap | Tetap | Hapus milik materi | Tetap | Tetap |
+| **Approve sertifikat** | — | — | — | — | — | — | — | — | — | Draft → Publish | — | Tambah log | Tambah notifikasi |
+| **Publikasi kursus** | — | — | — | — | Draft → Publish | — | — | — | — | — | — | Tambah log | Tambah notifikasi |
 
 Keterangan:
 
 - “Tetap” berarti record tidak dihapus dan dapat menyimpan referensi yang sudah tidak valid (yatim).
 - `AUDIT_LOGS` dan `NOTIFICATIONS` sengaja tidak di-cascade agar histori operasional tetap utuh.
+- Data akademik tidak dihapus permanen: kelas dengan enrollment dan versi yang sudah dipakai tidak dapat dihapus.
+- `SESSION` tidak memiliki cascade; sesi dapat menunjuk user yang sudah dihapus sampai logout.
 
 ---
 
@@ -760,6 +1014,7 @@ Keterangan:
   "id": 1,
   "title": "Pelatihan Manajemen Dasar",
   "category": "Pelatihan",
+  "categoryId": 1,
   "description": "Pelatihan konsep dasar manajemen.",
   "instructorId": 2,
   "instructorName": "Ahmad Fauzi, M.M.",
@@ -771,6 +1026,73 @@ Keterangan:
 }
 ```
 
+### 11.2a Kategori, Versi Kurikulum, Kelas, dan Histori
+
+```json
+{
+  "id": 1,
+  "name": "Pelatihan",
+  "slug": "pelatihan",
+  "status": "active",
+  "createdAt": "2026-09-20T00:00:00.000Z"
+}
+```
+
+```json
+{
+  "id": 1,
+  "courseId": 1,
+  "code": "1.0",
+  "name": "Kurikulum 1.0 — Pelatihan Manajemen Dasar",
+  "description": "Versi awal kurikulum Pelatihan Manajemen Dasar.",
+  "status": "locked",
+  "effectiveDate": "2026-09-20",
+  "notes": "Migrasi struktur modul dan materi v3.0.",
+  "createdBy": 1,
+  "updatedBy": 1,
+  "createdAt": "2026-09-20T00:00:00.000Z"
+}
+```
+
+```json
+{
+  "id": 1,
+  "code": "ANG-2026-MNJ-01",
+  "name": "Angkatan 2026 — Pelatihan Manajemen Dasar",
+  "courseId": 1,
+  "courseTitle": "Pelatihan Manajemen Dasar",
+  "curriculumVersionId": 1,
+  "curriculumVersionCode": "1.0",
+  "curriculumVersionName": "Kurikulum 1.0 — Pelatihan Manajemen Dasar",
+  "instructorId": 2,
+  "instructorName": "Ahmad Fauzi, M.M.",
+  "periodStart": "2026-10-01",
+  "periodEnd": "2026-12-31",
+  "quota": 30,
+  "location": "Kampus Pusat",
+  "room": "R-101",
+  "scheduleNote": "Senin & Rabu, 09.00-11.00",
+  "plannedJp": 32,
+  "status": "ongoing",
+  "legacyImport": true,
+  "notes": "Kelas migrasi dari enrollment kursus v3.0.",
+  "createdAt": "2026-10-01T00:00:00.000Z"
+}
+```
+
+```json
+{
+  "id": 1,
+  "classId": 1,
+  "instructorId": 2,
+  "startedAt": "2026-10-01",
+  "endedAt": null,
+  "reason": "Penugasan awal kelas migrasi.",
+  "actorId": 1,
+  "createdAt": "2026-10-01T00:00:00.000Z"
+}
+```
+
 ### 11.3 Enrollment
 
 ```json
@@ -778,6 +1100,7 @@ Keterangan:
   "id": 1,
   "studentId": 5,
   "courseId": 1,
+  "classId": 1,
   "enrolledBy": "admin",
   "enrolledAt": "2026-10-01",
   "status": "active"
@@ -790,6 +1113,7 @@ Keterangan:
 {
   "id": 1,
   "courseId": 1,
+  "curriculumVersionId": 1,
   "instructorId": 2,
   "title": "Modul 1: Pengantar Manajemen",
   "description": "Materi pengantar manajemen.",
@@ -803,6 +1127,7 @@ Keterangan:
   "id": 1,
   "moduleId": 1,
   "courseId": 1,
+  "curriculumVersionId": 1,
   "instructorId": 2,
   "title": "1.1 Pengantar Manajemen - Konsep Dasar",
   "type": "text",
@@ -918,12 +1243,17 @@ Keterangan:
 | Instruktur aktif | `USERS` | Filter `role = instruktur` dan `status = aktif` |
 | Kursus publik | `COURSES` | Filter `status = published` |
 | Kursus per instruktur | `COURSES` | Filter `instructorId` |
+| Versi kurikulum kursus | `CURRICULUM_VERSIONS` | Filter `courseId`, urutkan `id`; versi aktif = non-retired terbaru |
+| Struktur versi | `MODULES` + `LESSONS` | Filter `curriculumVersionId`, urutkan `order` |
+| Kelas per kursus | `CLASSES` | Filter `courseId`, `status` |
+| Kelas per tentor | `CLASSES` | Filter `instructorId` |
+| Histori tentor | `CLASS_INSTRUCTOR_HISTORIES` | Filter `classId`, urutkan `startedAt` |
+| Roster kelas | `ENROLLMENTS` | Filter `classId`, lalu ambil `USERS` |
 | Kursus peserta | `ENROLLMENTS` | Filter `studentId`, lalu ambil `COURSES` |
 | Peserta kursus | `ENROLLMENTS` | Filter `courseId`, lalu ambil `USERS` |
-| Struktur kursus | `MODULES` + `LESSONS` | Filter `courseId`, urutkan `order` |
 | Materi per modul | `LESSONS` | Filter `moduleId`, urutkan `order` |
-| Nilai peserta | `GRADES` | Kombinasi `studentId` + `courseId` |
-| Sertifikat peserta | `CERTIFICATES` | Kombinasi `studentId` + `courseId` |
+| Nilai peserta | `GRADES` | Filter `enrollmentId` (atau `studentId` + `courseId`) |
+| Sertifikat peserta | `CERTIFICATES` | Filter `enrollmentId` (atau `studentId` + `courseId`) |
 | Verifikasi sertifikat | `CERTIFICATES` | Cari `certificateNumber` (uppercase), cek `publish` |
 | Progres | `COMPLETED_LESSONS` | Kombinasi `studentId` + `courseId` + `lessonId` |
 | Audit | `AUDIT_LOGS` | Urut `createdAt` desc, filter aksi/entitas/aktor/tanggal |
@@ -931,13 +1261,17 @@ Keterangan:
 
 ### 12.1 Index yang Dipakai di MySQL
 
-- `users(email)` unik
-- `courses(instructor_id)`, `courses(status)`
-- `enrollments(student_id, course_id)` unik, `enrollments(course_id)`
-- `modules(course_id, sort_order)`, `modules(instructor_id)`
-- `lessons(module_id, sort_order)`, `lessons(course_id)`, `lessons(instructor_id)`
-- `grades(student_id, course_id)` unik, `grades(enrollment_id)`, `grades(instructor_id)`
-- `certificates(student_id, course_id)` unik, `certificates(certificate_number)` unik, `certificates(status)`
+- `categories(slug)` unik, `categories(status)`
+- `users(email)` unik, `users(role)`
+- `courses(instructor_id)`, `courses(status)`, `courses(category_id)`
+- `curriculum_versions(course_id, code)` unik, `curriculum_versions(course_id, status)`, `curriculum_versions(status)`
+- `classes(code)` unik, `classes(course_id)`, `classes(curriculum_version_id)`, `classes(instructor_id)`, `classes(status)`
+- `class_instructor_histories(class_id, started_at)`, `class_instructor_histories(instructor_id)`
+- `enrollments(student_id, class_id)` unik, `enrollments(student_id, course_id)`, `enrollments(course_id)`, `enrollments(class_id)`
+- `modules(course_id, sort_order)`, `modules(curriculum_version_id, sort_order)`, `modules(instructor_id)`
+- `lessons(module_id, sort_order)`, `lessons(course_id)`, `lessons(curriculum_version_id, sort_order)`, `lessons(instructor_id)`
+- `grades(enrollment_id)` unik, `grades(student_id, course_id)`, `grades(instructor_id)`
+- `certificates(certificate_number)` unik, `certificates(enrollment_id)` unik, `certificates(student_id, course_id)`, `certificates(status)`
 - `completed_lessons(student_id, lesson_id)` unik, `completed_lessons(course_id)`
 - `audit_logs(created_at)`, `audit_logs(actor_id)`, `audit_logs(entity)`
 - `notifications(created_at)`, `notifications(type)`, `notifications(recipient_id)`
@@ -950,13 +1284,17 @@ Skema fisik ada di `api/schema.sql` dan dibuat oleh `api/install.php`. Pemetaan 
 
 | Entitas Logis | Tabel | Primary Key | Foreign Key / Unique |
 |---|---|---|---|
+| `CATEGORIES` | `categories` | `id` | `slug` UNIQUE |
 | `USERS` | `users` | `id` | `email` UNIQUE |
-| `COURSES` | `courses` | `id` | `instructor_id` → `users.id` ON DELETE SET NULL |
-| `ENROLLMENTS` | `enrollments` | `id` | `student_id` → `users.id` CASCADE; `course_id` → `courses.id` CASCADE; UNIQUE(`student_id`, `course_id`) |
-| `MODULES` | `modules` | `id` | `course_id` → `courses.id` ON DELETE CASCADE; `instructor_id` → `users.id` SET NULL |
-| `LESSONS` | `lessons` | `id` | `module_id` → `modules.id` CASCADE; `course_id` → `courses.id` CASCADE; `instructor_id` → `users.id` SET NULL |
-| `GRADES` | `grades` | `id` | `enrollment_id` → `enrollments.id` CASCADE; `student_id`/`course_id` → CASCADE; `instructor_id` SET NULL; UNIQUE(`student_id`, `course_id`) |
-| `CERTIFICATES` | `certificates` | `id` | `enrollment_id` → `enrollments.id` CASCADE; `student_id`/`course_id` CASCADE; `approved_by_admin_id` SET NULL; UNIQUE(`student_id`, `course_id`), `certificate_number` UNIQUE |
+| `COURSES` | `courses` | `id` | `instructor_id` → `users.id` SET NULL; `category_id` → `categories.id` SET NULL |
+| `CURRICULUM_VERSIONS` | `curriculum_versions` | `id` | `course_id` → `courses.id` CASCADE; `created_by`/`updated_by` → `users.id` SET NULL; UNIQUE(`course_id`, `code`) |
+| `CLASSES` | `classes` | `id` | `course_id` → `courses.id` RESTRICT; `curriculum_version_id` → `curriculum_versions.id` RESTRICT; `instructor_id` → `users.id` SET NULL; `code` UNIQUE |
+| `CLASS_INSTRUCTOR_HISTORIES` | `class_instructor_histories` | `id` | `class_id` → `classes.id` CASCADE; `instructor_id`/`actor_id` → `users.id` SET NULL |
+| `ENROLLMENTS` | `enrollments` | `id` | `student_id` → `users.id` CASCADE; `course_id` → `courses.id` CASCADE; `class_id` → `classes.id` CASCADE; UNIQUE(`student_id`, `class_id`) |
+| `MODULES` | `modules` | `id` | `course_id` → `courses.id` CASCADE; `curriculum_version_id` → `curriculum_versions.id` CASCADE; `instructor_id` → `users.id` SET NULL |
+| `LESSONS` | `lessons` | `id` | `module_id` → `modules.id` CASCADE; `course_id` → `courses.id` CASCADE; `curriculum_version_id` → `curriculum_versions.id` CASCADE; `instructor_id` SET NULL |
+| `GRADES` | `grades` | `id` | `enrollment_id` → `enrollments.id` CASCADE; `student_id`/`course_id` CASCADE; `instructor_id` SET NULL; UNIQUE(`enrollment_id`) |
+| `CERTIFICATES` | `certificates` | `id` | `enrollment_id` → `enrollments.id` CASCADE; `student_id`/`course_id` CASCADE; `approved_by_admin_id` SET NULL; UNIQUE(`enrollment_id`), `certificate_number` UNIQUE |
 | `COMPLETED_LESSONS` | `completed_lessons` | `id` | UNIQUE(`student_id`, `lesson_id`); FK ke `users`, `courses`, `lessons` CASCADE |
 | `AUDIT_LOGS` | `audit_logs` | `id` | `actor_id` → `users.id` SET NULL (polimorfik `entity` + `entity_id`) |
 | `NOTIFICATIONS` | `notifications` | `id` | `recipient_id` → `users.id` SET NULL |
@@ -966,9 +1304,10 @@ Skema fisik ada di `api/schema.sql` dan dibuat oleh `api/install.php`. Pemetaan 
 
 - `entity` + `entity_id` pada audit/notifikasi tetap polimorfik.
 - Password disimpan sebagai `password_hash` (bcrypt/argon2 via `password_hash()`); login divalidasi di server.
-- Operasi cascade multi-tabel memakai foreign key dan transaksi eksplisit (mis. hapus enrollment).
+- Operasi cascade multi-tabel memakai foreign key dan transaksi eksplisit (mis. hapus enrollment, pembuatan kelas + penguncian versi).
 - `created_at`/`updated_at` memakai `DATE`/`DATETIME` UTC; snapshot mengirim ISO 8601.
-- Nama instruktur dan counter modul/materi tidak didenormalisasi di tabel; nilainya dihitung lewat JOIN/subquery saat snapshot dibangun.
+- Nama instruktur, nama kategori, dan counter modul/materi tidak didenormalisasi di tabel; nilainya dihitung lewat JOIN/subquery saat snapshot dibangun.
+- `classes.course_id` dan `classes.curriculum_version_id` memakai `ON DELETE RESTRICT` untuk melindungi riwayat akademik; penghapusan harus melalui alur aplikasi.
 
 ---
 
@@ -979,7 +1318,7 @@ Skema fisik ada di `api/schema.sql` dan dibuat oleh `api/install.php`. Pemetaan 
 | Pembacaan | `ELIPS.read(key, fallback)` melakukan `JSON.parse`; error dikembalikan sebagai fallback |
 | Penulisan | `ELIPS.write(key, value)` melakukan `JSON.stringify` |
 | ID | `ELIPS.nextId(list)` = `max(id)+1` per koleksi |
-| Normalisasi | `seed.js` menjalankan migrasi saat modul dimuat, termasuk normalisasi sertifikat; dilewati pada mode server |
+| Normalisasi | `seed.js` menjalankan migrasi saat modul dimuat, termasuk normalisasi sertifikat dan migrasi v3 → v4 (kategori, versi kurikulum, kelas migrasi, `curriculumVersionId` pada modul/materi); dilewati pada mode server |
 | Batas log | Audit dan notifikasi maksimal 1000 entri, terbaru di depan |
 | Isolasi | Data per browser/perangkat; tidak sinkron antar perangkat |
 | Keamanan | Tidak ada enkripsi; password demo diverifikasi di client tetapi tersimpan apa adanya di `localStorage`. Guard role juga client-side. Mode ini bukan untuk produksi |
@@ -992,10 +1331,13 @@ Pada mode server, `api.js` mengganti `ELIPS.read`/`ELIPS.write` dengan cache sna
 ## 15. Ringkasan Relasi Inti
 
 ```text
-USERS (instruktur) 1 ─── N COURSES
+CATEGORIES         1 ─── N COURSES
+COURSES            1 ─── N CURRICULUM_VERSIONS 1 ─── N MODULES 1 ─── N LESSONS
+COURSES            1 ─── N CLASSES N ─── 1 CURRICULUM_VERSIONS
+USERS (instruktur) 1 ─── N CLASSES
+CLASSES            1 ─── N CLASS_INSTRUCTOR_HISTORIES
+USERS (peserta)    1 ─── N ENROLLMENTS N ─── 1 CLASSES
 USERS (peserta)    1 ─── N ENROLLMENTS N ─── 1 COURSES
-COURSES            1 ─── N MODULES    1 ─── N LESSONS
-COURSES            1 ─── N LESSONS    (denormalisasi)
 ENROLLMENTS        1 ─── 0..1 GRADES
 ENROLLMENTS        1 ─── 0..1 CERTIFICATES
 USERS (peserta)    1 ─── N GRADES / CERTIFICATES / COMPLETED_LESSONS
@@ -1006,9 +1348,11 @@ USERS              1 ─── 0..1 SESSION
 
 Dengan demikian, inti model data ELIPS LMS adalah:
 
-- **Kursus** sebagai pusat konten, dimiliki satu **Instruktur**.
-- **Enrollment** sebagai penghubung peserta ke kursus.
-- **Nilai** dan **Sertifikat** sebagai hasil akhir pembelajaran per pasangan peserta–kursus.
+- **Kursus** sebagai wadah jangka panjang, diklasifikasikan oleh **Kategori**.
+- **Versi Kurikulum** sebagai struktur konten yang dapat direvisi; modul/materi terikat ke versi dan dikunci saat dipakai kelas.
+- **Kelas/Angkatan** sebagai penyelenggaraan nyata, dengan satu versi kurikulum terkunci dan satu tentor aktif.
+- **Enrollment** sebagai penghubung peserta ke kelas/kursus.
+- **Nilai** dan **Sertifikat** sebagai hasil akhir pembelajaran per enrollment (per angkatan).
 - **CompletedLessons** sebagai bukti progres per materi.
 - **AuditLogs** dan **Notifications** sebagai catatan operasional yang bersifat historis.
 
@@ -1022,16 +1366,20 @@ Bagian ini mendokumentasikan skema yang benar-benar dieksekusi oleh `api/schema.
 
 | # | Tabel | Fungsi | Kolom kunci | Relasi utama |
 |---|---|---|---|---|
-| 1 | `users` | Akun Admin, Instruktur, Peserta | `id`, `email`, `password_hash`, `role`, `status` | — |
-| 2 | `courses` | Kursus dan instruktur pengampu | `id`, `title`, `instructor_id`, `status` | `instructor_id` → `users.id` |
-| 3 | `modules` | Modul di dalam kursus | `id`, `course_id`, `instructor_id`, `sort_order` | `course_id` → `courses.id` |
-| 4 | `lessons` | Materi di dalam modul | `id`, `module_id`, `course_id`, `type`, `content`, `sort_order` | `module_id` → `modules.id`; `course_id` → `courses.id` |
-| 5 | `enrollments` | Penugasan peserta ke kursus | `id`, `student_id`, `course_id`, `enrolled_at`, `status` | `student_id` → `users.id`; `course_id` → `courses.id` |
-| 6 | `grades` | Nilai akhir per peserta–kursus | `id`, `enrollment_id`, `student_id`, `course_id`, `score`, `grade` | `enrollment_id` → `enrollments.id` |
-| 7 | `certificates` | E-sertifikat Draft/Publish | `id`, `enrollment_id`, `student_id`, `course_id`, `certificate_number`, `status` | `enrollment_id` → `enrollments.id`; `approved_by_admin_id` → `users.id` |
-| 8 | `completed_lessons` | Progres materi per peserta | `id`, `student_id`, `course_id`, `lesson_id`, `completed_at` | `student_id` → `users.id`; `lesson_id` → `lessons.id` |
-| 9 | `audit_logs` | Jejak audit operasional | `id`, `action`, `entity`, `entity_id`, `actor_id`, `created_at` | `actor_id` → `users.id` |
-| 10 | `notifications` | Outbox notifikasi email simulasi | `id`, `type`, `recipient_id`, `recipient_email`, `subject`, `created_at` | `recipient_id` → `users.id` |
+| 1 | `categories` | Kategori kursus | `id`, `name`, `slug`, `status` | — |
+| 2 | `users` | Akun Admin, Instruktur, Peserta | `id`, `email`, `password_hash`, `role`, `status` | — |
+| 3 | `courses` | Kursus dan instruktur pengampu | `id`, `title`, `category_id`, `instructor_id`, `status` | `category_id` → `categories.id`; `instructor_id` → `users.id` |
+| 4 | `curriculum_versions` | Versi kurikulum per kursus | `id`, `course_id`, `code`, `status` | `course_id` → `courses.id`; `created_by`/`updated_by` → `users.id` |
+| 5 | `classes` | Kelas/angkatan | `id`, `code`, `course_id`, `curriculum_version_id`, `instructor_id`, `status` | `course_id` → `courses.id`; `curriculum_version_id` → `curriculum_versions.id`; `instructor_id` → `users.id` |
+| 6 | `class_instructor_histories` | Histori pergantian tentor | `id`, `class_id`, `instructor_id`, `started_at`, `ended_at` | `class_id` → `classes.id`; `instructor_id`/`actor_id` → `users.id` |
+| 7 | `modules` | Modul di dalam versi kurikulum | `id`, `course_id`, `curriculum_version_id`, `instructor_id`, `sort_order` | `course_id` → `courses.id`; `curriculum_version_id` → `curriculum_versions.id` |
+| 8 | `lessons` | Materi di dalam modul | `id`, `module_id`, `course_id`, `curriculum_version_id`, `type`, `content`, `sort_order` | `module_id` → `modules.id`; `course_id` → `courses.id`; `curriculum_version_id` → `curriculum_versions.id` |
+| 9 | `enrollments` | Pendaftaran peserta ke kelas | `id`, `student_id`, `course_id`, `class_id`, `enrolled_at`, `status` | `student_id` → `users.id`; `course_id` → `courses.id`; `class_id` → `classes.id` |
+| 10 | `grades` | Nilai akhir per enrollment | `id`, `enrollment_id`, `student_id`, `course_id`, `score`, `grade` | `enrollment_id` → `enrollments.id` |
+| 11 | `certificates` | E-sertifikat Draft/Publish | `id`, `enrollment_id`, `student_id`, `course_id`, `certificate_number`, `status` | `enrollment_id` → `enrollments.id`; `approved_by_admin_id` → `users.id` |
+| 12 | `completed_lessons` | Progres materi per peserta | `id`, `student_id`, `course_id`, `lesson_id`, `completed_at` | `student_id` → `users.id`; `lesson_id` → `lessons.id` |
+| 13 | `audit_logs` | Jejak audit operasional | `id`, `action`, `entity`, `entity_id`, `actor_id`, `created_at` | `actor_id` → `users.id` |
+| 14 | `notifications` | Outbox notifikasi email simulasi | `id`, `type`, `recipient_id`, `recipient_email`, `subject`, `created_at` | `recipient_id` → `users.id` |
 
 Sesi login **tidak** memakai tabel: autentikasi memakai sesi PHP native (`$_SESSION`) dengan cookie `HttpOnly` dan `SameSite=Lax`.
 
@@ -1051,18 +1399,85 @@ Sesi login **tidak** memakai tabel: autentikasi memakai sesi PHP native (`$_SESS
 | `created_at` | `DATE` | tidak | `CURRENT_DATE` | Tanggal dibuat |
 | `updated_at` | `DATETIME` | ya | `NULL` | Waktu perubahan terakhir (UTC) |
 
+**`categories`**
+
+| Kolom | Tipe | Null | Default | Keterangan |
+|---|---|---|---|---|
+| `id` | `INT UNSIGNED` | tidak | AUTO_INCREMENT | Primary key |
+| `name` | `VARCHAR(100)` | tidak | — | Nama kategori |
+| `slug` | `VARCHAR(120)` | tidak | — | Slug unik |
+| `status` | `ENUM('active','inactive')` | tidak | `'active'` | Status kategori |
+| `created_at` | `DATETIME` | tidak | `CURRENT_TIMESTAMP` | Waktu dibuat |
+| `updated_at` | `DATETIME` | ya | `NULL` | Waktu perubahan terakhir |
+
 **`courses`**
 
 | Kolom | Tipe | Null | Default | Keterangan |
 |---|---|---|---|---|
 | `id` | `INT UNSIGNED` | tidak | AUTO_INCREMENT | Primary key |
 | `title` | `VARCHAR(200)` | tidak | — | Judul kursus |
-| `category` | `VARCHAR(100)` | tidak | — | Kategori |
+| `category` | `VARCHAR(100)` | tidak | — | Nama kategori (denormalisasi) |
+| `category_id` | `INT UNSIGNED` | ya | `NULL` | Kategori terstruktur |
 | `description` | `TEXT` | tidak | — | Deskripsi |
 | `instructor_id` | `INT UNSIGNED` | ya | `NULL` | Satu instruktur pengampu |
 | `status` | `ENUM('draft','published')` | tidak | `'draft'` | Lifecycle kursus |
 | `created_at` | `DATE` | tidak | `CURRENT_DATE` | Tanggal dibuat |
 | `updated_at` | `DATETIME` | ya | `NULL` | Waktu perubahan terakhir |
+
+**`curriculum_versions`**
+
+| Kolom | Tipe | Null | Default | Keterangan |
+|---|---|---|---|---|
+| `id` | `INT UNSIGNED` | tidak | AUTO_INCREMENT | Primary key |
+| `course_id` | `INT UNSIGNED` | tidak | — | Kursus pemilik |
+| `code` | `VARCHAR(30)` | tidak | — | Kode versi unik per kursus |
+| `name` | `VARCHAR(150)` | tidak | — | Nama versi |
+| `description` | `TEXT` | tidak | — | Deskripsi |
+| `status` | `ENUM('draft','published','locked','retired')` | tidak | `'draft'` | Lifecycle versi |
+| `effective_date` | `DATE` | ya | `NULL` | Tanggal efektif |
+| `notes` | `TEXT` | tidak | — | Catatan perubahan |
+| `created_by` | `INT UNSIGNED` | ya | `NULL` | Pembuat |
+| `updated_by` | `INT UNSIGNED` | ya | `NULL` | Pengubah terakhir |
+| `created_at` | `DATETIME` | tidak | `CURRENT_TIMESTAMP` | Waktu dibuat |
+| `updated_at` | `DATETIME` | ya | `NULL` | Waktu perubahan terakhir |
+
+**`classes`**
+
+| Kolom | Tipe | Null | Default | Keterangan |
+|---|---|---|---|---|
+| `id` | `INT UNSIGNED` | tidak | AUTO_INCREMENT | Primary key |
+| `code` | `VARCHAR(40)` | tidak | — | Kode kelas unik |
+| `name` | `VARCHAR(150)` | tidak | — | Nama kelas/angkatan |
+| `course_id` | `INT UNSIGNED` | tidak | — | Kursus |
+| `curriculum_version_id` | `INT UNSIGNED` | tidak | — | Versi kurikulum terkunci |
+| `instructor_id` | `INT UNSIGNED` | ya | `NULL` | Tentor aktif |
+| `period_start` | `DATE` | ya | `NULL` | Tanggal mulai |
+| `period_end` | `DATE` | ya | `NULL` | Tanggal selesai |
+| `quota` | `INT UNSIGNED` | tidak | `0` | Kuota peserta |
+| `location` | `VARCHAR(150)` | tidak | `''` | Lokasi |
+| `room` | `VARCHAR(100)` | tidak | `''` | Ruang |
+| `schedule_note` | `VARCHAR(255)` | tidak | `''` | Catatan jadwal |
+| `planned_jp` | `DECIMAL(6,2)` | tidak | `0` | JP rencana |
+| `status` | `ENUM('draft','open','ready','ongoing','completed','cancelled','archived')` | tidak | `'draft'` | Lifecycle kelas |
+| `legacy_import` | `TINYINT(1)` | tidak | `0` | Penanda kelas migrasi |
+| `notes` | `TEXT` | tidak | — | Catatan |
+| `created_by` | `INT UNSIGNED` | ya | `NULL` | Pembuat |
+| `updated_by` | `INT UNSIGNED` | ya | `NULL` | Pengubah terakhir |
+| `created_at` | `DATETIME` | tidak | `CURRENT_TIMESTAMP` | Waktu dibuat |
+| `updated_at` | `DATETIME` | ya | `NULL` | Waktu perubahan terakhir |
+
+**`class_instructor_histories`**
+
+| Kolom | Tipe | Null | Default | Keterangan |
+|---|---|---|---|---|
+| `id` | `INT UNSIGNED` | tidak | AUTO_INCREMENT | Primary key |
+| `class_id` | `INT UNSIGNED` | tidak | — | Kelas |
+| `instructor_id` | `INT UNSIGNED` | ya | `NULL` | Tentor pada periode ini |
+| `started_at` | `DATE` | tidak | — | Tanggal mulai |
+| `ended_at` | `DATE` | ya | `NULL` | Tanggal selesai; `NULL` = masih aktif |
+| `reason` | `TEXT` | tidak | — | Alasan pergantian |
+| `actor_id` | `INT UNSIGNED` | ya | `NULL` | Admin pelaku |
+| `created_at` | `DATETIME` | tidak | `CURRENT_TIMESTAMP` | Waktu dibuat |
 
 **`modules`**
 
@@ -1070,10 +1485,11 @@ Sesi login **tidak** memakai tabel: autentikasi memakai sesi PHP native (`$_SESS
 |---|---|---|---|---|
 | `id` | `INT UNSIGNED` | tidak | AUTO_INCREMENT | Primary key |
 | `course_id` | `INT UNSIGNED` | tidak | — | Kursus induk |
+| `curriculum_version_id` | `INT UNSIGNED` | tidak | — | Versi kurikulum pemilik modul |
 | `instructor_id` | `INT UNSIGNED` | ya | `NULL` | Instruktur pemilik konten |
 | `title` | `VARCHAR(200)` | tidak | — | Judul modul |
 | `description` | `TEXT` | tidak | — | Deskripsi |
-| `sort_order` | `INT UNSIGNED` | tidak | `1` | Urutan dalam kursus |
+| `sort_order` | `INT UNSIGNED` | tidak | `1` | Urutan dalam versi |
 | `created_at` | `DATETIME` | tidak | `CURRENT_TIMESTAMP` | Waktu dibuat |
 | `updated_at` | `DATETIME` | ya | `NULL` | Waktu perubahan terakhir |
 
@@ -1084,6 +1500,7 @@ Sesi login **tidak** memakai tabel: autentikasi memakai sesi PHP native (`$_SESS
 | `id` | `INT UNSIGNED` | tidak | AUTO_INCREMENT | Primary key |
 | `module_id` | `INT UNSIGNED` | tidak | — | Modul induk |
 | `course_id` | `INT UNSIGNED` | tidak | — | Kursus induk (denormalisasi untuk query cepat) |
+| `curriculum_version_id` | `INT UNSIGNED` | tidak | — | Versi kurikulum pemilik materi |
 | `instructor_id` | `INT UNSIGNED` | ya | `NULL` | Instruktur pemilik konten |
 | `title` | `VARCHAR(200)` | tidak | — | Judul materi |
 | `type` | `ENUM('text','video','file','link')` | tidak | `'text'` | Jenis materi |
@@ -1099,18 +1516,21 @@ Sesi login **tidak** memakai tabel: autentikasi memakai sesi PHP native (`$_SESS
 | `id` | `INT UNSIGNED` | tidak | AUTO_INCREMENT | Primary key |
 | `student_id` | `INT UNSIGNED` | tidak | — | Peserta |
 | `course_id` | `INT UNSIGNED` | tidak | — | Kursus |
+| `class_id` | `INT UNSIGNED` | ya | `NULL` | Kelas/angkatan; `NULL` untuk data migrasi yang belum dipetakan |
 | `enrolled_by` | `VARCHAR(50)` | tidak | `'admin'` | Sumber penugasan |
 | `enrolled_at` | `DATE` | tidak | `CURRENT_DATE` | Tanggal penugasan |
-| `status` | `ENUM('active','dihentikan')` | tidak | `'active'` | Status penugasan |
+| `status` | `ENUM('pending','active','completed','withdrawn','suspended','cancelled','dihentikan')` | tidak | `'active'` | Status penugasan; `dihentikan` = alias lama |
 | `created_at` | `DATETIME` | tidak | `CURRENT_TIMESTAMP` | Waktu dibuat |
 | `updated_at` | `DATETIME` | ya | `NULL` | Waktu perubahan terakhir |
+
+Catatan: unique key `uq_enrollments_student_class (student_id, class_id)` membuat satu peserta hanya terdaftar sekali per kelas; `course_id` didenormalisasi dari `classes.course_id`.
 
 **`grades`**
 
 | Kolom | Tipe | Null | Default | Keterangan |
 |---|---|---|---|---|
 | `id` | `INT UNSIGNED` | tidak | AUTO_INCREMENT | Primary key |
-| `enrollment_id` | `INT UNSIGNED` | ya | `NULL` | Enrollment terkait |
+| `enrollment_id` | `INT UNSIGNED` | ya | `NULL` | Enrollment terkait; unik per enrollment |
 | `course_id` | `INT UNSIGNED` | tidak | — | Kursus |
 | `student_id` | `INT UNSIGNED` | tidak | — | Peserta |
 | `instructor_id` | `INT UNSIGNED` | ya | `NULL` | Instruktur penilai |
@@ -1120,6 +1540,8 @@ Sesi login **tidak** memakai tabel: autentikasi memakai sesi PHP native (`$_SESS
 | `created_at` | `DATETIME` | tidak | `CURRENT_TIMESTAMP` | Waktu dibuat |
 | `updated_at` | `DATETIME` | ya | `NULL` | Waktu perubahan terakhir |
 
+Catatan: `uq_grades_enrollment (enrollment_id)` menggantikan keunikan lama `(student_id, course_id)`, sehingga nilai untuk angkatan berbeda tersimpan terpisah.
+
 **`certificates`**
 
 | Kolom | Tipe | Null | Default | Keterangan |
@@ -1127,7 +1549,7 @@ Sesi login **tidak** memakai tabel: autentikasi memakai sesi PHP native (`$_SESS
 | `id` | `INT UNSIGNED` | tidak | AUTO_INCREMENT | Primary key |
 | `student_id` | `INT UNSIGNED` | tidak | — | Peserta |
 | `course_id` | `INT UNSIGNED` | tidak | — | Kursus |
-| `enrollment_id` | `INT UNSIGNED` | ya | `NULL` | Enrollment terkait |
+| `enrollment_id` | `INT UNSIGNED` | ya | `NULL` | Enrollment terkait; unik per enrollment |
 | `certificate_number` | `VARCHAR(80)` | tidak | — | Nomor unik (`CERT-DRAFT-*` → `CERT-YYYY-*`) |
 | `status` | `ENUM('draft','publish')` | tidak | `'draft'` | Hanya `publish` tampil ke peserta |
 | `grade` | `CHAR(2)` | ya | `NULL` | Huruf mutu saat terbit |
@@ -1137,6 +1559,8 @@ Sesi login **tidak** memakai tabel: autentikasi memakai sesi PHP native (`$_SESS
 | `approved_at` | `DATETIME` | ya | `NULL` | Waktu approval |
 | `created_at` | `DATETIME` | tidak | `CURRENT_TIMESTAMP` | Waktu dibuat |
 | `updated_at` | `DATETIME` | ya | `NULL` | Waktu perubahan terakhir |
+
+Catatan: `uq_certificates_enrollment (enrollment_id)` memastikan satu sertifikat per enrollment/angkatan, sedangkan `uq_certificates_number` menjaga nomor sertifikat tetap unik.
 
 **`completed_lessons`**
 
@@ -1187,17 +1611,24 @@ Sesi login **tidak** memakai tabel: autentikasi memakai sesi PHP native (`$_SESS
 
 | Tabel | Index / Constraint | Tipe |
 |---|---|---|
+| `categories` | `uq_categories_slug (slug)` | UNIQUE |
+| `categories` | `idx_categories_status (status)` | INDEX |
 | `users` | `uq_users_email (email)` | UNIQUE |
 | `users` | `idx_users_role (role)` | INDEX |
-| `courses` | `idx_courses_instructor (instructor_id)`, `idx_courses_status (status)` | INDEX |
-| `modules` | `idx_modules_course (course_id, sort_order)`, `idx_modules_instructor (instructor_id)` | INDEX |
-| `lessons` | `idx_lessons_module (module_id, sort_order)`, `idx_lessons_course (course_id)`, `idx_lessons_instructor (instructor_id)` | INDEX |
-| `enrollments` | `uq_enrollments_student_course (student_id, course_id)` | UNIQUE |
-| `enrollments` | `idx_enrollments_course (course_id)` | INDEX |
-| `grades` | `uq_grades_student_course (student_id, course_id)` | UNIQUE |
-| `grades` | `idx_grades_enrollment (enrollment_id)`, `idx_grades_instructor (instructor_id)` | INDEX |
-| `certificates` | `uq_certificates_number (certificate_number)`, `uq_certificates_student_course (student_id, course_id)` | UNIQUE |
-| `certificates` | `idx_certificates_course (course_id)`, `idx_certificates_status (status)` | INDEX |
+| `courses` | `idx_courses_instructor (instructor_id)`, `idx_courses_status (status)`, `idx_courses_category (category_id)` | INDEX |
+| `curriculum_versions` | `uq_curriculum_course_code (course_id, code)` | UNIQUE |
+| `curriculum_versions` | `idx_curriculum_course_status (course_id, status)`, `idx_curriculum_status (status)` | INDEX |
+| `classes` | `uq_classes_code (code)` | UNIQUE |
+| `classes` | `idx_classes_course (course_id)`, `idx_classes_version (curriculum_version_id)`, `idx_classes_instructor (instructor_id)`, `idx_classes_status (status)` | INDEX |
+| `class_instructor_histories` | `idx_class_history_class (class_id, started_at)`, `idx_class_history_instructor (instructor_id)` | INDEX |
+| `enrollments` | `uq_enrollments_student_class (student_id, class_id)` | UNIQUE |
+| `enrollments` | `idx_enrollments_student_course (student_id, course_id)`, `idx_enrollments_course (course_id)`, `idx_enrollments_class (class_id)` | INDEX |
+| `modules` | `idx_modules_course (course_id, sort_order)`, `idx_modules_version (curriculum_version_id, sort_order)`, `idx_modules_instructor (instructor_id)` | INDEX |
+| `lessons` | `idx_lessons_module (module_id, sort_order)`, `idx_lessons_course (course_id)`, `idx_lessons_version (curriculum_version_id, sort_order)`, `idx_lessons_instructor (instructor_id)` | INDEX |
+| `grades` | `uq_grades_enrollment (enrollment_id)` | UNIQUE |
+| `grades` | `idx_grades_student_course (student_id, course_id)`, `idx_grades_instructor (instructor_id)` | INDEX |
+| `certificates` | `uq_certificates_number (certificate_number)`, `uq_certificates_enrollment (enrollment_id)` | UNIQUE |
+| `certificates` | `idx_certificates_student_course (student_id, course_id)`, `idx_certificates_course (course_id)`, `idx_certificates_status (status)` | INDEX |
 | `completed_lessons` | `uq_completed_student_lesson (student_id, lesson_id)` | UNIQUE |
 | `completed_lessons` | `idx_completed_course (course_id)` | INDEX |
 | `audit_logs` | `idx_audit_created (created_at)`, `idx_audit_actor (actor_id)`, `idx_audit_entity (entity)` | INDEX |
@@ -1208,13 +1639,28 @@ Sesi login **tidak** memakai tabel: autentikasi memakai sesi PHP native (`$_SESS
 | Constraint | Kolom | Referensi | ON DELETE |
 |---|---|---|---|
 | `fk_courses_instructor` | `courses.instructor_id` | `users.id` | `SET NULL` |
+| `fk_courses_category` | `courses.category_id` | `categories.id` | `SET NULL` |
+| `fk_curriculum_course` | `curriculum_versions.course_id` | `courses.id` | `CASCADE` |
+| `fk_curriculum_created_by` | `curriculum_versions.created_by` | `users.id` | `SET NULL` |
+| `fk_curriculum_updated_by` | `curriculum_versions.updated_by` | `users.id` | `SET NULL` |
+| `fk_classes_course` | `classes.course_id` | `courses.id` | `RESTRICT` |
+| `fk_classes_version` | `classes.curriculum_version_id` | `curriculum_versions.id` | `RESTRICT` |
+| `fk_classes_instructor` | `classes.instructor_id` | `users.id` | `SET NULL` |
+| `fk_classes_created_by` | `classes.created_by` | `users.id` | `SET NULL` |
+| `fk_classes_updated_by` | `classes.updated_by` | `users.id` | `SET NULL` |
+| `fk_class_history_class` | `class_instructor_histories.class_id` | `classes.id` | `CASCADE` |
+| `fk_class_history_instructor` | `class_instructor_histories.instructor_id` | `users.id` | `SET NULL` |
+| `fk_class_history_actor` | `class_instructor_histories.actor_id` | `users.id` | `SET NULL` |
 | `fk_modules_course` | `modules.course_id` | `courses.id` | `CASCADE` |
+| `fk_modules_version` | `modules.curriculum_version_id` | `curriculum_versions.id` | `CASCADE` |
 | `fk_modules_instructor` | `modules.instructor_id` | `users.id` | `SET NULL` |
 | `fk_lessons_module` | `lessons.module_id` | `modules.id` | `CASCADE` |
 | `fk_lessons_course` | `lessons.course_id` | `courses.id` | `CASCADE` |
+| `fk_lessons_version` | `lessons.curriculum_version_id` | `curriculum_versions.id` | `CASCADE` |
 | `fk_lessons_instructor` | `lessons.instructor_id` | `users.id` | `SET NULL` |
 | `fk_enrollments_student` | `enrollments.student_id` | `users.id` | `CASCADE` |
 | `fk_enrollments_course` | `enrollments.course_id` | `courses.id` | `CASCADE` |
+| `fk_enrollments_class` | `enrollments.class_id` | `classes.id` | `CASCADE` |
 | `fk_grades_enrollment` | `grades.enrollment_id` | `enrollments.id` | `CASCADE` |
 | `fk_grades_student` | `grades.student_id` | `users.id` | `CASCADE` |
 | `fk_grades_course` | `grades.course_id` | `courses.id` | `CASCADE` |
@@ -1227,7 +1673,7 @@ Sesi login **tidak** memakai tabel: autentikasi memakai sesi PHP native (`$_SESS
 | `fk_completed_course` | `completed_lessons.course_id` | `courses.id` | `CASCADE` |
 | `fk_completed_lesson` | `completed_lessons.lesson_id` | `lessons.id` | `CASCADE` |
 
-Catatan: `audit_logs` dan `notifications` sengaja tidak memiliki foreign key fisik ke `users`. Keduanya menyimpan snapshot nama/role/email agar riwayat tetap terbaca meski akun asal dihapus, dan penghapusan pengguna tidak terblokir oleh riwayat.
+Catatan: `audit_logs` dan `notifications` sengaja tidak memiliki foreign key fisik ke `users`. Keduanya menyimpan snapshot nama/role/email agar riwayat tetap terbaca meski akun asal dihapus, dan penghapusan pengguna tidak terblokir oleh riwayat. `classes.course_id` dan `classes.curriculum_version_id` memakai `RESTRICT` agar penghapusan kursus/versi yang sudah dipakai kelas ditolak di level database, bukan hanya di level aplikasi.
 
 ### 16.5 Pemetaan Tabel ke Koleksi Client
 
@@ -1236,10 +1682,14 @@ Snapshot API memakai nama koleksi yang sama dengan model `localStorage`, sehingg
 | Tabel MySQL | Koleksi snapshot / key `localStorage` | Catatan transformasi |
 |---|---|---|
 | `users` | `users` | `password_hash` tidak pernah diserialisasi; `created_at` → `createdAt` (ISO) |
-| `courses` | `courses` | `instructor_name` dihitung dari JOIN; `moduleCount`/`lessonCount` dari subquery |
-| `modules` | `modules` | `course_id` → `courseId`; `sort_order` → `order` |
-| `lessons` | `lessons` | `course_id` → `courseId`; `module_id` → `moduleId`; `sort_order` → `order` |
-| `enrollments` | `enrollments` | `student_id`/`course_id` → camelCase; tanggal → `YYYY-MM-DD` |
+| `categories` | `categories` | `created_at`/`updated_at` → camelCase |
+| `courses` | `courses` | `instructor_name` dihitung dari JOIN; `moduleCount`/`lessonCount` dari subquery; `category_id` → `categoryId` |
+| `curriculum_versions` | `curriculumVersions` | `course_id`/`created_by`/`updated_by` → camelCase; `effective_date` → `YYYY-MM-DD` |
+| `classes` | `classes` | `course_id`/`curriculum_version_id`/`instructor_id` → camelCase; `courseTitle`, `curriculumVersionCode`, `curriculumVersionName`, `instructorName` dari JOIN |
+| `class_instructor_histories` | `classInstructorHistories` | `class_id`/`instructor_id`/`actor_id` → camelCase; `started_at`/`ended_at` → `YYYY-MM-DD` |
+| `enrollments` | `enrollments` | `student_id`/`course_id`/`class_id` → camelCase; tanggal → `YYYY-MM-DD` |
+| `modules` | `modules` | `course_id`/`curriculum_version_id` → camelCase; `sort_order` → `order` |
+| `lessons` | `lessons` | `course_id`/`module_id`/`curriculum_version_id` → camelCase; `sort_order` → `order` |
 | `grades` | `grades` | `enrollment_id` → `enrollmentId`; `student_id`/`course_id` → camelCase |
 | `certificates` | `certificates` | `approved_by_admin_id` → `approvedByAdminId`; `approved_at` → ISO |
 | `completed_lessons` | `completedLessons` | `student_id`/`course_id`/`lesson_id` → camelCase |
@@ -1247,10 +1697,19 @@ Snapshot API memakai nama koleksi yang sama dengan model `localStorage`, sehingg
 | `notifications` | `notifications` | `recipient_id`/`recipient_email` → camelCase; `created_at` → ISO |
 | Sesi PHP | `session` (cache di `api.js`) | `{ userId }` dari `$_SESSION`, bukan tabel |
 
+Snapshot hanya memuat modul/materi dari versi kurikulum aktif (non-`retired`) tiap kursus. Struktur versi lain diambil lewat aksi `curriculum.detail`.
+
 ### 16.6 Catatan Operasional
 
-- **Instalasi:** `php api/install.php --fresh` menghapus database lama, membuat ulang skema, dan mengisi data demo (7 pengguna, 4 kursus, 25 modul, 75 materi, 3 enrollment). Password demo `elips123` di-hash saat seeding.
+- **Instalasi:** `php api/install.php --fresh` menghapus database lama, membuat ulang skema, dan mengisi data demo (7 pengguna, 4 kategori, 4 kursus, 4 versi kurikulum, 25 modul, 75 materi, 1 kelas migrasi, 1 histori tentor, 3 enrollment). Password demo `elips123` di-hash saat seeding.
 - **Timezone:** koneksi PDO disetel UTC; kolom `DATE` untuk tanggal kalender dan `DATETIME` untuk timestamp.
-- **Transaksi:** operasi multi-tabel dijalankan dalam transaksi eksplisit: hapus enrollment (nilai + sertifikat + progres terkait) dan simpan nilai (nilai + sertifikat Draft).
+- **Transaksi:** operasi multi-tabel dijalankan dalam transaksi eksplisit:
+  - pembuatan kelas + penguncian versi kurikulum (`curriculum_versions.status = 'locked'`) + histori tentor awal;
+  - pergantian tentor (tutup histori lama, buka histori baru, update `classes.instructor_id`);
+  - clone kurikulum (versi baru + salinan modul/materi);
+  - hapus enrollment (nilai + sertifikat + progres terkait);
+  - simpan nilai (nilai + sertifikat Draft).
+- **Penguncian versi:** `class.create` membaca versi dengan `FOR UPDATE` di dalam transaksi; setelah kelas tersimpan, versi tidak dapat diubah/dihapus. `classes` memakai FK `RESTRICT` sebagai pengaman terakhir.
 - **Retensi:** backend memangkas `audit_logs` dan `notifications` ke 1000 baris terbaru setelah penulisan.
+- **Seed migrasi:** hanya satu kelas migrasi (`ANG-2026-MNJ-01`, `legacy_import = 1`) yang di-seed; seluruh enrollment v3 dipetakan ke kelas tersebut agar setiap kelas selalu merujuk versi kurikulum yang terkunci.
 - **Ekstensi:** seluruh tabel memakai `InnoDB` dan `utf8mb4`; `AUTO_INCREMENT` dipakai untuk ID numerik yang juga dipakai client.

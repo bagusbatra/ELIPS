@@ -112,10 +112,49 @@
 
     function seedEnrollments() {
         return [
-            { id: 1, studentId: 5, courseId: 1, enrolledBy: 'admin', enrolledAt: '2026-10-01', status: 'active' },
-            { id: 2, studentId: 6, courseId: 1, enrolledBy: 'admin', enrolledAt: '2026-10-05', status: 'active' },
-            { id: 3, studentId: 7, courseId: 1, enrolledBy: 'admin', enrolledAt: '2026-10-10', status: 'active' }
+            { id: 1, studentId: 5, courseId: 1, classId: 1, enrolledBy: 'admin', enrolledAt: '2026-10-01', status: 'active' },
+            { id: 2, studentId: 6, courseId: 1, classId: 1, enrolledBy: 'admin', enrolledAt: '2026-10-05', status: 'active' },
+            { id: 3, studentId: 7, courseId: 1, classId: 1, enrolledBy: 'admin', enrolledAt: '2026-10-10', status: 'active' }
         ];
+    }
+
+    function seedCategories() {
+        return [
+            { id: 1, name: 'Pelatihan', slug: 'pelatihan', status: 'active' },
+            { id: 2, name: 'Soft Skill', slug: 'soft-skill', status: 'active' },
+            { id: 3, name: 'Administrasi', slug: 'administrasi', status: 'active' },
+            { id: 4, name: 'Reguler Class', slug: 'reguler-class', status: 'active' }
+        ];
+    }
+
+    function seedCurriculumVersions() {
+        return [
+            { id: 1, courseId: 1, code: '1.0', name: 'Kurikulum 1.0 — Pelatihan Manajemen Dasar', description: 'Versi awal kurikulum Pelatihan Manajemen Dasar.', status: 'locked', effectiveDate: '2026-09-20', notes: 'Migrasi struktur modul dan materi v3.0.' },
+            { id: 2, courseId: 2, code: '1.0', name: 'Kurikulum 1.0 — Komunikasi Efektif', description: 'Versi awal kurikulum Komunikasi Efektif di Tempat Kerja.', status: 'draft', effectiveDate: '2026-09-25', notes: 'Migrasi struktur modul dan materi v3.0.' },
+            { id: 3, courseId: 3, code: '1.0', name: 'Kurikulum 1.0 — Administrasi Perkantoran Modern', description: 'Versi awal kurikulum Administrasi Perkantoran Modern.', status: 'draft', effectiveDate: '2026-09-28', notes: 'Migrasi struktur modul dan materi v3.0.' },
+            { id: 4, courseId: 4, code: '1.0', name: 'Kurikulum 1.0 — Microsoft Office', description: 'Versi awal kurikulum Microsoft Office.', status: 'published', effectiveDate: '2026-10-02', notes: 'Migrasi struktur modul dan materi v3.0.' }
+        ];
+    }
+
+    function seedClasses() {
+        // Hanya kelas migrasi. Setiap kelas di aplikasi selalu merujuk versi
+        // kurikulum Published yang langsung dikunci saat kelas dibuat.
+        return [
+            { id: 1, code: 'ANG-2026-MNJ-01', name: 'Angkatan 2026 — Pelatihan Manajemen Dasar', courseId: 1, courseTitle: 'Pelatihan Manajemen Dasar', curriculumVersionId: 1, curriculumVersionCode: '1.0', curriculumVersionName: 'Kurikulum 1.0 — Pelatihan Manajemen Dasar', instructorId: 2, instructorName: 'Ahmad Fauzi, M.M.', periodStart: '2026-10-01', periodEnd: '2026-12-31', quota: 30, location: 'Kampus Pusat', room: 'R-101', scheduleNote: 'Senin & Rabu, 09.00-11.00', plannedJp: 32, status: 'ongoing', legacyImport: true, notes: 'Kelas migrasi dari enrollment kursus v3.0.' }
+        ];
+    }
+
+    function seedClassHistories() {
+        return seedClasses().map(function (item) {
+            return {
+                id: item.id,
+                classId: item.id,
+                instructorId: item.instructorId,
+                startedAt: item.periodStart,
+                endedAt: null,
+                reason: 'Penetapan tentor awal saat kelas dibuat.'
+            };
+        });
     }
 
     function buildStructure(courses, users) {
@@ -134,6 +173,7 @@
                 modules.push({
                     id: currentModuleId,
                     courseId: course.id,
+                    curriculumVersionId: course.curriculumVersionId || course.id,
                     instructorId: course.instructorId,
                     title: 'Modul ' + (mIndex + 1) + ': ' + title,
                     description: 'Materi ' + title.toLowerCase() + ' pada kursus ' + course.title + '.',
@@ -147,6 +187,7 @@
                         id: lessonId++,
                         moduleId: currentModuleId,
                         courseId: course.id,
+                        curriculumVersionId: course.curriculumVersionId || course.id,
                         instructorId: course.instructorId,
                         title: (mIndex + 1) + '.' + lIndex + ' ' + title + (lIndex === 1 ? ' - Konsep Dasar' : lIndex === 2 ? ' - Penerapan' : ' - Studi Kasus'),
                         type: isVideo ? 'video' : 'text',
@@ -193,8 +234,15 @@
         }
 
         const currentCourses = read(KEYS.courses, []);
+        const seedCategoryList = seedCategories();
         currentCourses.forEach(function (course) {
             if (course.status !== 'draft' && course.status !== 'published') course.status = 'draft';
+
+            if (!course.categoryId) {
+                const match = seedCategoryList.find(function (c) { return c.name === course.category; });
+                course.categoryId = match ? match.id : null;
+            }
+            if (!course.curriculumVersionId) course.curriculumVersionId = course.id;
 
             // Satu kursus hanya boleh diampu oleh akun ber-role instruktur.
             // Jika instruktur tidak valid, kursus dikosongkan dan dikembalikan ke Draft.
@@ -210,6 +258,19 @@
             }
         });
         write(KEYS.courses, currentCourses);
+
+        if (!Array.isArray(read(KEYS.categories, null)) || read(KEYS.categories, []).length === 0) {
+            write(KEYS.categories, seedCategoryList);
+        }
+        if (!Array.isArray(read(KEYS.curriculumVersions, null)) || read(KEYS.curriculumVersions, []).length === 0) {
+            write(KEYS.curriculumVersions, seedCurriculumVersions());
+        }
+        if (!Array.isArray(read(KEYS.classes, null)) || read(KEYS.classes, []).length === 0) {
+            write(KEYS.classes, seedClasses());
+        }
+        if (!Array.isArray(read(KEYS.classInstructorHistories, null)) || read(KEYS.classInstructorHistories, []).length === 0) {
+            write(KEYS.classInstructorHistories, seedClassHistories());
+        }
 
         if (!Array.isArray(read(KEYS.enrollments, null))) {
             write(KEYS.enrollments, seedEnrollments());
@@ -239,10 +300,17 @@
 
         // Normalize enrollments
         const enrollments = ELIPS.getEnrollments();
+        const seededClasses = ELIPS.getClasses();
         enrollments.forEach(function (e) {
             if (!e.status) e.status = 'active';
             if (!e.enrolledBy) e.enrolledBy = 'admin';
             if (!e.enrolledAt) e.enrolledAt = new Date().toISOString().split('T')[0];
+            if (e.classId === undefined || e.classId === null) {
+                const match = seededClasses.find(function (c) {
+                    return c.courseId === Number(e.courseId) && c.status !== 'archived';
+                });
+                e.classId = match ? match.id : null;
+            }
         });
         write(KEYS.enrollments, enrollments);
 
@@ -254,10 +322,27 @@
             write(KEYS.courses, currentCourses);
         }
 
+        // Pastikan modul/materi lama memiliki relasi versi kurikulum.
+        const modules = ELIPS.getModules();
+        let modulesChanged = false;
+        modules.forEach(function (module) {
+            if (!module.curriculumVersionId) {
+                const version = ELIPS.getCurrentCurriculumVersion(module.courseId);
+                module.curriculumVersionId = version ? version.id : Number(module.courseId);
+                modulesChanged = true;
+            }
+        });
+        if (modulesChanged) write(KEYS.modules, modules);
+
         // Sanitasi konten materi teks lama agar HTML berbahaya tidak tersimpan.
         const lessons = ELIPS.getLessons();
         let lessonsChanged = false;
         lessons.forEach(function (lesson) {
+            if (!lesson.curriculumVersionId) {
+                const version = ELIPS.getCurrentCurriculumVersion(lesson.courseId);
+                lesson.curriculumVersionId = version ? version.id : Number(lesson.courseId);
+                lessonsChanged = true;
+            }
             if (lesson.type !== 'text') return;
             const safeContent = ELIPS.sanitizeHtml(lesson.content || '');
             if (safeContent !== lesson.content) {
