@@ -1,20 +1,21 @@
 # ERD — ELIPS LMS
 
-**Versi dokumen:** 3.0  
+**Versi dokumen:** 4.0  
 **Tanggal:** 2026-11-05  
-**Status:** Dual-mode — skema fisik MySQL 8 v4.0 Phase 1–2 + fallback koleksi `localStorage`  
+**Status:** Dual-mode — skema fisik MySQL 8 v4.0 Phase 1–3 + fallback koleksi `localStorage`  
 **Dokumen terkait:** `prd.md`, `log.md`, `api/schema.sql`
 
 ---
 
 ## 1. Ringkasan
 
-ELIPS LMS adalah aplikasi Learning Management System dengan tiga role: **Admin**, **Instruktur**, dan **Peserta**. Pada mode server, data disimpan di **MySQL 8** dengan 14 tabel (12 domain inti + 2 operasional) dan foreign key fisik (lihat §13 dan §16). Pada mode fallback, data disimpan sebagai koleksi JSON di `localStorage` dengan model logis yang sama. Sesi login pada mode server disimpan di sesi PHP native, bukan tabel database.
+ELIPS LMS adalah aplikasi Learning Management System dengan tiga role: **Admin**, **Instruktur**, dan **Peserta**. Pada mode server, data disimpan di **MySQL 8** dengan 17 tabel (15 domain inti + 2 operasional) dan foreign key fisik (lihat §13 dan §16). Pada mode fallback, data disimpan sebagai koleksi JSON di `localStorage` dengan model logis yang sama. Sesi login pada mode server disimpan di sesi PHP native, bukan tabel database.
 
 Sejak v4.0, kursus dipisahkan dari penyelenggaraannya:
 
 ```text
 Kursus → Versi Kurikulum → Modul → Materi
+Kursus → Kelas/Angkatan → Sesi Pertemuan → Presensi
 Kursus → Kelas/Angkatan → Enrollment → Nilai → Sertifikat
 ```
 
@@ -23,6 +24,7 @@ Relasi utama:
 ```text
 Admin ── mengelola ──► Pengguna, Kategori, Kursus, Versi Kurikulum, Kelas, Sertifikat
 Instruktur ── mengampu ──► Kelas ── memakai ──► Versi Kurikulum ── berisi ──► Modul ──► Materi
+Instruktur ── menyusun ──► Sesi Pertemuan ── mencatat ──► Presensi
 Peserta ── terdaftar melalui ──► Enrollment (kelas) ──► Nilai ──► Sertifikat
 Peserta ── menyelesaikan ──► CompletedLesson
 Semua aktivitas penting ── dicatat ──► AuditLog
@@ -33,12 +35,12 @@ Publikasi kursus / penerbitan sertifikat ── menghasilkan ──► Notificat
 
 | Termasuk ERD | Tidak termasuk |
 |---|---|
-| 12 tabel domain MySQL + tabel histori/outbox dan koleksi `localStorage` yang setara | Halaman statis dan tampilan UI |
+| 15 tabel domain MySQL + tabel histori/outbox dan koleksi `localStorage` yang setara | Halaman statis dan tampilan UI |
 | Relasi, kardinalitas, foreign key, dan aturan hapus | Data pengaturan halaman Admin (belum dipersistensi) |
-| Enum status dan lifecycle (kursus, kurikulum, kelas, enrollment, sertifikat) | Data laporan/statistik turunan (dihitung saat runtime) |
+| Enum status dan lifecycle (kursus, kurikulum, kelas, sesi, presensi, enrollment, sertifikat) | Data laporan/statistik turunan (dihitung saat runtime) |
 | Sesi PHP native (bukan tabel) | Integrasi email nyata (masih simulasi/outbox) |
 
-Catatan: jumlah tabel domain inti adalah 12 (`categories`, `users`, `courses`, `curriculum_versions`, `modules`, `lessons`, `classes`, `class_instructor_histories`, `enrollments`, `grades`, `certificates`, `completed_lessons`) ditambah dua tabel operasional (`audit_logs`, `notifications`).
+Catatan: jumlah tabel domain inti adalah 15 (`categories`, `users`, `courses`, `curriculum_versions`, `modules`, `lessons`, `classes`, `class_instructor_histories`, `enrollments`, `class_sessions`, `attendances`, `attendance_corrections`, `grades`, `certificates`, `completed_lessons`) ditambah dua tabel operasional (`audit_logs`, `notifications`).
 
 ---
 
@@ -166,6 +168,59 @@ erDiagram
         datetime updatedAt
     }
 
+    CLASS_SESSIONS {
+        number id PK
+        number classId FK
+        number sessionNumber UK
+        string title
+        number moduleId FK
+        date sessionDate
+        string startTime
+        string endTime
+        string location
+        string room
+        number instructorId FK
+        number plannedJp
+        number actualJp
+        enum status
+        number rescheduledFromId FK
+        text notes
+        number createdBy FK
+        number updatedBy FK
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    ATTENDANCES {
+        number id PK
+        number sessionId FK
+        number enrollmentId FK
+        number studentId FK
+        enum status
+        number recordedBy FK
+        datetime recordedAt
+        text note
+        datetime correctedAt
+        text correctionReason
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    ATTENDANCE_CORRECTIONS {
+        number id PK
+        number attendanceId FK
+        number sessionId FK
+        number enrollmentId FK
+        string oldStatus
+        string newStatus
+        number actorId FK
+        string actorName
+        string actorRole
+        text reason
+        datetime correctedAt
+        datetime createdAt
+    }
+
     MODULES {
         number id PK
         number courseId FK
@@ -277,6 +332,18 @@ erDiagram
     USERS ||--o{ ENROLLMENTS : "terdaftar sebagai peserta"
     COURSES ||--o{ ENROLLMENTS : "memiliki peserta"
     CLASSES ||--o{ ENROLLMENTS : "memiliki roster"
+    CLASSES ||--o{ CLASS_SESSIONS : "memiliki sesi"
+    MODULES |o--o{ CLASS_SESSIONS : "menjadi modul sesi"
+    USERS |o--o{ CLASS_SESSIONS : "mengajar sesi"
+    CLASS_SESSIONS |o--o{ CLASS_SESSIONS : "digantikan sesi"
+    CLASS_SESSIONS ||--o{ ATTENDANCES : "memiliki presensi"
+    ENROLLMENTS ||--o{ ATTENDANCES : "mencatat kehadiran"
+    USERS ||--o{ ATTENDANCES : "hadir sebagai peserta"
+    USERS |o--o{ ATTENDANCES : "mencatat presensi"
+    ATTENDANCES ||--o{ ATTENDANCE_CORRECTIONS : "dikoreksi"
+    CLASS_SESSIONS ||--o{ ATTENDANCE_CORRECTIONS : "memiliki koreksi"
+    ENROLLMENTS ||--o{ ATTENDANCE_CORRECTIONS : "memiliki koreksi"
+    USERS |o--o{ ATTENDANCE_CORRECTIONS : "melakukan koreksi"
     COURSES ||--o{ MODULES : "memiliki modul"
     MODULES ||--o{ LESSONS : "berisi materi"
     COURSES ||--o{ LESSONS : "memiliki materi denormalisasi"
@@ -309,19 +376,22 @@ Pada mode server, entitas yang sama disimpan di tabel MySQL bernama snake_case (
 | 2 | `USERS` | `elips_users` | Array of object | Pusat referensi role dan aktor |
 | 3 | `COURSES` | `elips_courses` | Array of object | Kategori, instruktur, versi, kelas, enrollment |
 | 4 | `CURRICULUM_VERSIONS` | `elips_curriculumVersions` | Array of object | Milik kursus, berisi modul/materi, dipakai kelas |
-| 5 | `CLASSES` | `elips_classes` | Array of object | Kursus, versi kurikulum, tentor, roster |
+| 5 | `CLASSES` | `elips_classes` | Array of object | Kursus, versi kurikulum, tentor, roster, sesi |
 | 6 | `CLASS_INSTRUCTOR_HISTORIES` | `elips_classInstructorHistories` | Array of object | Histori tentor per kelas |
 | 7 | `ENROLLMENTS` | `elips_enrollments` | Array of object | Penghubung peserta ↔ kelas/kursus |
-| 8 | `MODULES` | `elips_modules` | Array of object | Milik versi kursus, berisi materi |
-| 9 | `LESSONS` | `elips_lessons` | Array of object | Milik modul dan versi |
-| 10 | `GRADES` | `elips_grades` | Array of object | Milik enrollment/peserta/kursus |
-| 11 | `CERTIFICATES` | `elips_certificates` | Array of object | Milik peserta/kursus/enrollment |
-| 12 | `COMPLETED_LESSONS` | `elips_completedLessons` | Array of object (tanpa `id` di mode lokal) | Progres peserta per materi |
-| 13 | `AUDIT_LOGS` | `elips_auditLogs` | Array of object | Aktor dan entitas polimorfik |
-| 14 | `NOTIFICATIONS` | `elips_notifications` | Array of object | Penerima dan entitas polimorfik |
-| 15 | `SESSION` | `elips_session` | Object tunggal | Sesi user yang sedang login (mode server: sesi PHP) |
+| 8 | `CLASS_SESSIONS` | `elips_classSessions` | Array of object | Kelas, modul, tentor, sesi pengganti |
+| 9 | `ATTENDANCES` | `elips_attendances` | Array of object | Sesi, enrollment, peserta, pencatat |
+| 10 | `ATTENDANCE_CORRECTIONS` | `elips_attendanceCorrections` | Array of object | Presensi, sesi, enrollment, aktor koreksi |
+| 11 | `MODULES` | `elips_modules` | Array of object | Milik versi kursus, berisi materi |
+| 12 | `LESSONS` | `elips_lessons` | Array of object | Milik modul dan versi |
+| 13 | `GRADES` | `elips_grades` | Array of object | Milik enrollment/peserta/kursus |
+| 14 | `CERTIFICATES` | `elips_certificates` | Array of object | Milik peserta/kursus/enrollment |
+| 15 | `COMPLETED_LESSONS` | `elips_completedLessons` | Array of object (tanpa `id` di mode lokal) | Progres peserta per materi |
+| 16 | `AUDIT_LOGS` | `elips_auditLogs` | Array of object | Aktor dan entitas polimorfik |
+| 17 | `NOTIFICATIONS` | `elips_notifications` | Array of object | Penerima dan entitas polimorfik |
+| 18 | `SESSION` | `elips_session` | Object tunggal | Sesi user yang sedang login (mode server: sesi PHP) |
 
-Key lama yang dimigrasikan: `elips_enrolled` (self-enrollment) dipindahkan ke `elips_enrollments` oleh `seed.js`, lalu dihapus. Pada migrasi v3 → v4, `seed.js` membuat entri `elips_categories`/`elips_curriculumVersions`/`elips_classes` bila belum ada dan mengisi `curriculumVersionId` pada modul/materi lama.
+Key lama yang dimigrasikan: `elips_enrolled` (self-enrollment) dipindahkan ke `elips_enrollments` oleh `seed.js`, lalu dihapus. Pada migrasi v3 → v4, `seed.js` membuat entri `elips_categories`/`elips_curriculumVersions`/`elips_classes` bila belum ada, mengisi `curriculumVersionId` pada modul/materi lama, lalu menambahkan sesi dan presensi demo untuk kelas migrasi.
 
 ---
 
@@ -549,6 +619,98 @@ Tabel penghubung **N—N** antara peserta dan kelas/kursus.
 - Menghapus enrollment juga menghapus nilai, sertifikat, dan progres peserta pada kelas tersebut.
 - Status `withdrawn`/`dihentikan` menghentikan akses peserta, tetapi data nilai/sertifikat tidak otomatis dihapus.
 - Enrollment lama v3 dipetakan ke kelas migrasi (`legacyImport = true`) agar tetap valid.
+
+---
+
+### 5.3a CLASS_SESSIONS — `elips_classSessions`
+
+Sesi pertemuan per kelas/angkatan. Satu kelas memiliki banyak sesi; nomor pertemuan unik di dalam kelas.
+
+| Field | Tipe | Key | Wajib | Default | Keterangan |
+|---|---|---|---|---|---|
+| `id` | number | PK | Ya | `max(id)+1` | ID unik sesi |
+| `classId` | number | FK → `classes.id` | Ya | — | Kelas pemilik sesi |
+| `sessionNumber` | number | UK per kelas | Ya | nomor berikutnya | Nomor pertemuan unik per kelas |
+| `title` | string | — | Ya | `Pertemuan <n>` | Judul/topik sesi |
+| `moduleId` | number | FK → `modules.id` | Tidak | `null` | Modul terkait; harus dari versi kurikulum kelas |
+| `sessionDate` | date | — | Ya | — | Tanggal sesi (`YYYY-MM-DD`) |
+| `startTime` | string | — | Ya | — | Jam mulai `HH:MM` |
+| `endTime` | string | — | Ya | — | Jam selesai `HH:MM`, harus setelah mulai |
+| `location` | string | — | Tidak | lokasi kelas | Lokasi pertemuan |
+| `room` | string | — | Tidak | ruang kelas | Ruang pertemuan |
+| `instructorId` | number | FK → `users.id` | Tidak | tentor kelas | Tentor sesi; harus instruktur aktif |
+| `plannedJp` | number | — | Ya | `0` | JP rencana |
+| `actualJp` | number | — | Ya | `0` | JP aktual; `completed` tanpa nilai diisi dari JP rencana |
+| `status` | enum | — | Ya | `scheduled` | `scheduled`, `confirmed`, `completed`, `rescheduled`, `cancelled`, `no_show` |
+| `rescheduledFromId` | number | FK → `class_sessions.id` | Tidak | `null` | Sesi asal bila sesi ini adalah pengganti |
+| `notes` | text | — | Tidak | `''` | Catatan sesi |
+| `createdBy` | number | FK → `users.id` | Tidak | user sesi | Pembuat |
+| `updatedBy` | number | FK → `users.id` | Tidak | user sesi | Pengubah terakhir |
+| `createdAt` | datetime | — | Ya | sekarang | ISO 8601 |
+| `updatedAt` | datetime | — | Tidak | — | ISO 8601 saat berubah |
+
+**Field turunan (dihitung saat snapshot/serialisasi):** `classCode`, `className`, `courseId`, `courseTitle`, `moduleTitle`, `instructorName`, `presentCount`, `lateCount`, `permissionCount`, `sickCount`, `absentCount`, `excusedCount`, `attendanceCount`.
+
+**Aturan:**
+
+- `(classId, sessionNumber)` unik; pembuatan massal memberi nomor berurutan.
+- Sesi `completed` tidak dapat dihapus; sesi yang memiliki presensi juga tidak dapat dihapus (batalkan).
+- Sesi `cancelled`, `no_show`, dan `rescheduled` tidak dihitung sebagai JP aktual maupun JP wajib rekap.
+- Reschedule membuat sesi baru dan menandai sesi asal `rescheduled`; sesi baru menyimpan `rescheduledFromId`.
+- Admin dapat mengelola semua kelas; Instruktur hanya kelas yang diampu atau sesi dengan `instructorId` miliknya.
+
+---
+
+### 5.3b ATTENDANCES — `elips_attendances`
+
+Presensi peserta per sesi. Satu baris mewakili satu enrollment pada satu sesi.
+
+| Field | Tipe | Key | Wajib | Default | Keterangan |
+|---|---|---|---|---|---|
+| `id` | number | PK | Ya | `max(id)+1` | ID unik presensi |
+| `sessionId` | number | FK → `class_sessions.id` | Ya | — | Sesi terkait |
+| `enrollmentId` | number | FK → `enrollments.id` | Ya | — | Enrollment peserta pada kelas |
+| `studentId` | number | FK → `users.id` | Ya | — | Peserta (denormalisasi dari enrollment) |
+| `status` | enum | — | Ya | `absent` | `present`, `late`, `permission`, `sick`, `absent`, `excused` |
+| `recordedBy` | number | FK → `users.id` | Tidak | user sesi | Pencatat presensi |
+| `recordedAt` | datetime | — | Tidak | sekarang | Waktu pencatatan |
+| `note` | text | — | Tidak | `''` | Catatan presensi |
+| `correctedAt` | datetime | — | Tidak | `null` | Waktu koreksi terakhir |
+| `correctionReason` | text | — | Tidak | `''` | Alasan koreksi terakhir (ringkasan) |
+| `createdAt` | datetime | — | Ya | sekarang | ISO 8601 |
+| `updatedAt` | datetime | — | Tidak | — | ISO 8601 saat berubah |
+
+**Field turunan:** `studentName`, `sessionDate`, `sessionNumber`, `classId`, dan label kelas/sesi dari JOIN.
+
+**Aturan:**
+
+- `(sessionId, enrollmentId)` unik; penyimpanan massal memperbarui baris yang ada.
+- Presensi hanya dapat dicatat untuk sesi yang belum `cancelled`/`no_show`/`rescheduled` dan enrollment yang valid pada kelas tersebut.
+- Perubahan status yang sudah tercatat dianggap koreksi dan wajib alasan; detailnya disimpan di `attendance_corrections`.
+- Peserta hanya dapat membaca presensi miliknya sendiri.
+
+---
+
+### 5.3c ATTENDANCE_CORRECTIONS — `elips_attendanceCorrections`
+
+Audit koreksi presensi. Baris bersifat append-only dan menyimpan snapshot aktor.
+
+| Field | Tipe | Key | Wajib | Default | Keterangan |
+|---|---|---|---|---|---|
+| `id` | number | PK | Ya | `max(id)+1` | ID unik koreksi |
+| `attendanceId` | number | FK → `attendances.id` | Ya | — | Baris presensi yang dikoreksi |
+| `sessionId` | number | FK → `class_sessions.id` | Ya | — | Sesi terkait (denormalisasi) |
+| `enrollmentId` | number | FK → `enrollments.id` | Ya | — | Enrollment terkait (denormalisasi) |
+| `oldStatus` | string | — | Ya | `''` | Status sebelum koreksi (`''` bila belum ada) |
+| `newStatus` | string | — | Ya | — | Status setelah koreksi |
+| `actorId` | number | FK → `users.id` | Tidak | user sesi | Pelaku koreksi |
+| `actorName` | string | — | Ya | `Sistem` | Snapshot nama aktor |
+| `actorRole` | string | — | Ya | `sistem` | Snapshot role aktor |
+| `reason` | text | — | Ya | — | Alasan koreksi (wajib) |
+| `correctedAt` | datetime | — | Ya | sekarang | Waktu koreksi |
+| `createdAt` | datetime | — | Ya | sekarang | Waktu dibuat |
+
+**Aturan:** koreksi tanpa alasan ditolak; baris tidak diubah/dihapus oleh operasi normal sehingga riwayat tetap utuh.
 
 ---
 
@@ -849,6 +1011,18 @@ Bukan koleksi, melainkan **satu objek** yang merepresentasikan sesi login aktif 
 | R23 | `USERS` (instruktur) → `CLASSES` | 1 — N | `classes.instructorId` | Instruktur dihapus: `instructorId=null` | Satu kelas satu tentor aktif |
 | R24 | `CLASSES` → `CLASS_INSTRUCTOR_HISTORIES` | 1 — N | `class_instructor_histories.classId` | Kelas dihapus: histori dihapus | Histori pergantian tentor |
 | R25 | `USERS` (instruktur) → `CLASS_INSTRUCTOR_HISTORIES` | 1 — N | `class_instructor_histories.instructorId` | Instruktur dihapus: `instructorId=null` | Riwayat tetap ada |
+| R26 | `CLASSES` → `CLASS_SESSIONS` | 1 — N | `class_sessions.classId` | Kelas dihapus: sesi dan presensinya dihapus (kelas berisi enrollment tidak boleh dihapus) | Sesi unik per nomor dalam kelas |
+| R27 | `MODULES` → `CLASS_SESSIONS` | 1 — N | `class_sessions.moduleId` | Modul dihapus: `moduleId=null` | Modul harus dari versi kurikulum kelas |
+| R28 | `USERS` (instruktur) → `CLASS_SESSIONS` | 1 — N | `class_sessions.instructorId` | Instruktur dihapus: `instructorId=null` | Default tentor kelas |
+| R29 | `CLASS_SESSIONS` → `CLASS_SESSIONS` | 1 — N | `class_sessions.rescheduledFromId` | Sesi asal dihapus: `rescheduledFromId=null` | Sesi pengganti hasil reschedule |
+| R30 | `CLASS_SESSIONS` → `ATTENDANCES` | 1 — N | `attendances.sessionId` | Sesi dihapus: presensi dihapus | Sesi berpresensi tidak boleh dihapus via aplikasi |
+| R31 | `ENROLLMENTS` → `ATTENDANCES` | 1 — N | `attendances.enrollmentId` | Enrollment dihapus: presensi dihapus | Satu baris per enrollment per sesi |
+| R32 | `USERS` (peserta) → `ATTENDANCES` | 1 — N | `attendances.studentId` | Peserta dihapus: presensi dihapus | Denormalisasi dari enrollment |
+| R33 | `USERS` (pencatat) → `ATTENDANCES` | 1 — N | `attendances.recordedBy` | User dihapus: `recordedBy=null` | Snapshot nama tidak disimpan di presensi |
+| R34 | `ATTENDANCES` → `ATTENDANCE_CORRECTIONS` | 1 — N | `attendance_corrections.attendanceId` | Presensi dihapus: koreksi dihapus | Audit koreksi per baris presensi |
+| R35 | `CLASS_SESSIONS` → `ATTENDANCE_CORRECTIONS` | 1 — N | `attendance_corrections.sessionId` | Sesi dihapus: koreksi dihapus | Denormalisasi untuk query rekap |
+| R36 | `ENROLLMENTS` → `ATTENDANCE_CORRECTIONS` | 1 — N | `attendance_corrections.enrollmentId` | Enrollment dihapus: koreksi dihapus | Denormalisasi untuk query peserta |
+| R37 | `USERS` (aktor) → `ATTENDANCE_CORRECTIONS` | 1 — N | `attendance_corrections.actorId` | User dihapus: `actorId=null`, snapshot nama/role tetap | Audit historis |
 
 ### 6.1 Relasi Banyak-ke-Banyak
 
@@ -881,6 +1055,13 @@ Bukan koleksi, melainkan **satu objek** yang merepresentasikan sesi login aktif 
 | Kelas hanya boleh memakai tentor aktif | `crud-academic.js` + `api/actions.php` |
 | Kuota kelas tidak boleh kurang dari peserta aktif | `crud-academic.js` + `api/actions.php` |
 | Kelas dengan enrollment tidak dapat dihapus | `crud-academic.js` + `api/actions.php` |
+| Nomor sesi unik per kelas | `crud-academic.js` + unique `(class_id, session_number)` |
+| Waktu sesi valid dan modul sesuai versi kelas | `crud-academic.js` + `api/actions.php` |
+| Sesi completed / berpresensi tidak dapat dihapus | `crud-academic.js` + `api/actions.php` |
+| Presensi unik per sesi + enrollment | `crud-academic.js` + unique `(session_id, enrollment_id)` |
+| Koreksi presensi wajib alasan dan tercatat | `crud-academic.js` + `api/actions.php` |
+| Presensi hanya untuk enrollment kelas yang valid | `crud-academic.js` + `api/actions.php` |
+| Peserta hanya membaca presensi/rekap sendiri | `api/helpers.php` + `crud-academic.js` |
 | Enrollment hanya untuk peserta aktif | `crud-enrollments.js` |
 | Enrollment unik per peserta+kelas | `crud-enrollments.js` |
 | Nilai hanya untuk enrollment yang valid | `crud-grades.js` |
@@ -914,6 +1095,8 @@ Peserta dapat membuka materi jika **semua** kondisi terpenuhi:
 
 Sertifikat hanya terlihat jika `status = publish` dan milik peserta yang sedang login.
 
+Presensi dan rekap kehadiran hanya dapat dibaca peserta untuk enrollment miliknya sendiri; `attendance.myRecap` memfilter berdasarkan sesi kelas yang diikuti dan menolak permintaan kelas lain. Admin dan Instruktur pengampu dapat membaca rekap seluruh peserta pada kelas yang dikelolanya.
+
 ---
 
 ## 8. Status Lifecycle
@@ -926,6 +1109,8 @@ Sertifikat hanya terlihat jika `status = publish` dan milik peserta yang sedang 
 | Kursus | `status` | `draft`, `published` | draft → published (validasi), published → draft |
 | Versi Kurikulum | `status` | `draft`, `published`, `locked`, `retired` | draft → published; published → locked (saat kelas dibuat); published/locked → retired; draft → deleted |
 | Kelas | `status` | `draft`, `open`, `ready`, `ongoing`, `completed`, `cancelled`, `archived` | draft → open → ongoing → completed → archived; draft/open/ongoing → cancelled |
+| Sesi Pertemuan | `status` | `scheduled`, `confirmed`, `completed`, `rescheduled`, `cancelled`, `no_show` | scheduled → confirmed/completed/cancelled/no_show/rescheduled; confirmed → completed/cancelled/no_show/rescheduled; completed final |
+| Presensi | `status` | `present`, `late`, `permission`, `sick`, `absent`, `excused` | Dapat berubah melalui koreksi beralasan |
 | Enrollment | `status` | `pending`, `active`, `completed`, `withdrawn`, `suspended`, `cancelled`, `dihentikan` | pending → active; active → completed/withdrawn/suspended/cancelled; withdrawn → active |
 | Sertifikat | `status` | `draft`, `publish` | draft → publish; publish tidak kembali ke draft |
 | Nilai | `grade` | A … E | Dihitung ulang setiap skor disimpan |
@@ -953,6 +1138,13 @@ Sertifikat hanya terlihat jika `status = publish` dan milik peserta yang sedang 
 | `certificates.studentId`, `certificates.courseId` | Pasangan peserta+kursus | `enrollments` | Diset saat sertifikat dibuat |
 | `certificates.enrollmentId` | Enrollment | `enrollments` | Diset saat sertifikat dibuat |
 | `certificates.grade`, `certificates.score` | Nilai saat terbit | `grades` | Snapshot; diperbarui saat nilai disimpan ulang |
+| `classSessions.classCode`, `className`, `courseId`, `courseTitle` | Identitas kelas | `classes`/`courses` | Diset saat serialisasi/snapshot |
+| `classSessions.moduleTitle`, `instructorName` | Label modul/tentor | `modules`/`users` | Diset saat serialisasi/snapshot |
+| `classSessions.presentCount` … `attendanceCount` | Hitungan presensi | `attendances` | Dihitung ulang saat snapshot/serialisasi |
+| `attendances.studentId` | Peserta | `enrollments.studentId` | Diset saat presensi disimpan |
+| `attendances.studentName` | Nama peserta | `users.name` | Diset saat serialisasi/snapshot |
+| `attendanceCorrections.actorName`, `actorRole` | Identitas aktor | `users` | Snapshot historis |
+| `attendanceCorrections.sessionId`, `enrollmentId` | Konteks koreksi | `attendances` | Denormalisasi untuk query rekap |
 | `auditLogs.actorName`, `actorRole`, `entityLabel` | Identitas saat kejadian | `users`/entitas | Snapshot historis |
 | `notifications.recipientName`, `recipientEmail`, `recipientRole`, `entityLabel` | Data saat notifikasi dibuat | `users`/entitas | Snapshot historis |
 
@@ -988,6 +1180,21 @@ Keterangan:
 - `AUDIT_LOGS` dan `NOTIFICATIONS` sengaja tidak di-cascade agar histori operasional tetap utuh.
 - Data akademik tidak dihapus permanen: kelas dengan enrollment dan versi yang sudah dipakai tidak dapat dihapus.
 - `SESSION` tidak memiliki cascade; sesi dapat menunjuk user yang sudah dihapus sampai logout.
+
+---
+
+### 10.1 Cascade Sesi & Presensi
+
+| Operasi | CLASS_SESSIONS | ATTENDANCES | ATTENDANCE_CORRECTIONS | Catatan |
+|---|---|---|---|---|
+| Hapus **Kelas** | Dihapus | Dihapus melalui sesi | Dihapus melalui sesi/presensi | Aplikasi menolak hapus kelas yang masih memiliki enrollment |
+| Hapus **Enrollment** | — | Dihapus milik enrollment | Dihapus milik enrollment | Riwayat presensi peserta pada kelas ikut hilang |
+| Hapus **Sesi** | Dihapus | Dihapus milik sesi | Dihapus milik sesi | Aplikasi menolak hapus sesi `completed` atau yang sudah berpresensi |
+| Hapus **Modul** | `moduleId` → `null` | — | — | Sesi tetap ada tanpa modul |
+| Hapus **User peserta** | — | Dihapus milik peserta | Dihapus melalui presensi/enrollment | — |
+| Hapus **User instruktur** | `instructorId` → `null` | `recordedBy` → `null` | `actorId` → `null`, snapshot tetap | Riwayat tetap terbaca |
+| **Koreksi presensi** | — | `status`, `correctedAt`, `correctionReason` diperbarui | Tambah baris baru | Baris koreksi append-only |
+| **Reschedule** | Sesi asal → `rescheduled`; sesi baru dibuat | — | — | Sesi baru menyimpan `rescheduledFromId` |
 
 ---
 
@@ -1090,6 +1297,74 @@ Keterangan:
   "reason": "Penugasan awal kelas migrasi.",
   "actorId": 1,
   "createdAt": "2026-10-01T00:00:00.000Z"
+}
+```
+
+### 11.2b Sesi Pertemuan dan Presensi
+
+```json
+{
+  "id": 4,
+  "classId": 1,
+  "classCode": "ANG-2026-MNJ-01",
+  "className": "Angkatan 2026 — Manajemen Dasar",
+  "courseId": 1,
+  "courseTitle": "Pelatihan Manajemen Dasar",
+  "sessionNumber": 4,
+  "title": "Pertemuan 4",
+  "moduleId": 3,
+  "moduleTitle": "Fungsi Manajemen",
+  "sessionDate": "2026-10-14",
+  "startTime": "09:00",
+  "endTime": "11:00",
+  "location": "Ruang Training A",
+  "room": "A-101",
+  "instructorId": 2,
+  "instructorName": "Ahmad Fauzi, M.M.",
+  "plannedJp": 4,
+  "actualJp": 0,
+  "status": "scheduled",
+  "rescheduledFromId": null,
+  "notes": "",
+  "createdBy": 1,
+  "updatedBy": 1,
+  "createdAt": "2026-10-01T08:00:00.000Z",
+  "updatedAt": null
+}
+```
+
+```json
+{
+  "id": 1,
+  "sessionId": 1,
+  "enrollmentId": 1,
+  "studentId": 5,
+  "studentName": "Budi Santoso",
+  "status": "present",
+  "recordedBy": 2,
+  "recordedAt": "2026-10-05T11:05:00.000Z",
+  "note": "",
+  "correctedAt": null,
+  "correctionReason": "",
+  "createdAt": "2026-10-05T11:05:00.000Z",
+  "updatedAt": null
+}
+```
+
+```json
+{
+  "id": 1,
+  "attendanceId": 3,
+  "sessionId": 3,
+  "enrollmentId": 3,
+  "oldStatus": "absent",
+  "newStatus": "late",
+  "actorId": 2,
+  "actorName": "Ahmad Fauzi, M.M.",
+  "actorRole": "instruktur",
+  "reason": "Peserta hadir terlambat dan menunjukkan bukti",
+  "correctedAt": "2026-10-13T09:15:00.000Z",
+  "createdAt": "2026-10-13T09:15:00.000Z"
 }
 ```
 
@@ -1249,6 +1524,11 @@ Keterangan:
 | Kelas per tentor | `CLASSES` | Filter `instructorId` |
 | Histori tentor | `CLASS_INSTRUCTOR_HISTORIES` | Filter `classId`, urutkan `startedAt` |
 | Roster kelas | `ENROLLMENTS` | Filter `classId`, lalu ambil `USERS` |
+| Sesi per kelas | `CLASS_SESSIONS` | Filter `classId`, urutkan `sessionDate`, `sessionNumber` |
+| Presensi per sesi | `ATTENDANCES` | Filter `sessionId`, lalu ambil `ENROLLMENTS`/`USERS` |
+| Presensi peserta | `ATTENDANCES` | Filter `studentId` atau `enrollmentId` |
+| Rekap kehadiran | `CLASS_SESSIONS` + `ATTENDANCES` | Filter `classId`, hitung JP dari status sesi dan status presensi |
+| Audit koreksi presensi | `ATTENDANCE_CORRECTIONS` | Filter `attendanceId`/`sessionId`/`enrollmentId`, urutkan `correctedAt` |
 | Kursus peserta | `ENROLLMENTS` | Filter `studentId`, lalu ambil `COURSES` |
 | Peserta kursus | `ENROLLMENTS` | Filter `courseId`, lalu ambil `USERS` |
 | Materi per modul | `LESSONS` | Filter `moduleId`, urutkan `order` |
@@ -1268,6 +1548,9 @@ Keterangan:
 - `classes(code)` unik, `classes(course_id)`, `classes(curriculum_version_id)`, `classes(instructor_id)`, `classes(status)`
 - `class_instructor_histories(class_id, started_at)`, `class_instructor_histories(instructor_id)`
 - `enrollments(student_id, class_id)` unik, `enrollments(student_id, course_id)`, `enrollments(course_id)`, `enrollments(class_id)`
+- `class_sessions(class_id, session_number)` unik, `class_sessions(class_id, session_date)`, `class_sessions(status)`, `class_sessions(module_id)`, `class_sessions(instructor_id)`, `class_sessions(rescheduled_from_id)`
+- `attendances(session_id, enrollment_id)` unik, `attendances(student_id)`, `attendances(enrollment_id)`, `attendances(status)`
+- `attendance_corrections(attendance_id)`, `attendance_corrections(session_id)`, `attendance_corrections(enrollment_id)`
 - `modules(course_id, sort_order)`, `modules(curriculum_version_id, sort_order)`, `modules(instructor_id)`
 - `lessons(module_id, sort_order)`, `lessons(course_id)`, `lessons(curriculum_version_id, sort_order)`, `lessons(instructor_id)`
 - `grades(enrollment_id)` unik, `grades(student_id, course_id)`, `grades(instructor_id)`
@@ -1291,6 +1574,9 @@ Skema fisik ada di `api/schema.sql` dan dibuat oleh `api/install.php`. Pemetaan 
 | `CLASSES` | `classes` | `id` | `course_id` → `courses.id` RESTRICT; `curriculum_version_id` → `curriculum_versions.id` RESTRICT; `instructor_id` → `users.id` SET NULL; `code` UNIQUE |
 | `CLASS_INSTRUCTOR_HISTORIES` | `class_instructor_histories` | `id` | `class_id` → `classes.id` CASCADE; `instructor_id`/`actor_id` → `users.id` SET NULL |
 | `ENROLLMENTS` | `enrollments` | `id` | `student_id` → `users.id` CASCADE; `course_id` → `courses.id` CASCADE; `class_id` → `classes.id` CASCADE; UNIQUE(`student_id`, `class_id`) |
+| `CLASS_SESSIONS` | `class_sessions` | `id` | `class_id` → `classes.id` CASCADE; `module_id` → `modules.id` SET NULL; `instructor_id`/`created_by`/`updated_by` → `users.id` SET NULL; `rescheduled_from_id` → `class_sessions.id` SET NULL; UNIQUE(`class_id`, `session_number`) |
+| `ATTENDANCES` | `attendances` | `id` | `session_id` → `class_sessions.id` CASCADE; `enrollment_id` → `enrollments.id` CASCADE; `student_id` → `users.id` CASCADE; `recorded_by` → `users.id` SET NULL; UNIQUE(`session_id`, `enrollment_id`) |
+| `ATTENDANCE_CORRECTIONS` | `attendance_corrections` | `id` | `attendance_id` → `attendances.id` CASCADE; `session_id` → `class_sessions.id` CASCADE; `enrollment_id` → `enrollments.id` CASCADE; `actor_id` → `users.id` SET NULL |
 | `MODULES` | `modules` | `id` | `course_id` → `courses.id` CASCADE; `curriculum_version_id` → `curriculum_versions.id` CASCADE; `instructor_id` → `users.id` SET NULL |
 | `LESSONS` | `lessons` | `id` | `module_id` → `modules.id` CASCADE; `course_id` → `courses.id` CASCADE; `curriculum_version_id` → `curriculum_versions.id` CASCADE; `instructor_id` SET NULL |
 | `GRADES` | `grades` | `id` | `enrollment_id` → `enrollments.id` CASCADE; `student_id`/`course_id` CASCADE; `instructor_id` SET NULL; UNIQUE(`enrollment_id`) |
@@ -1336,6 +1622,9 @@ COURSES            1 ─── N CURRICULUM_VERSIONS 1 ─── N MODULES 1 ─
 COURSES            1 ─── N CLASSES N ─── 1 CURRICULUM_VERSIONS
 USERS (instruktur) 1 ─── N CLASSES
 CLASSES            1 ─── N CLASS_INSTRUCTOR_HISTORIES
+CLASSES            1 ─── N CLASS_SESSIONS 1 ─── N ATTENDANCES 1 ─── N ATTENDANCE_CORRECTIONS
+ENROLLMENTS        1 ─── N ATTENDANCES
+USERS (peserta)    1 ─── N ATTENDANCES
 USERS (peserta)    1 ─── N ENROLLMENTS N ─── 1 CLASSES
 USERS (peserta)    1 ─── N ENROLLMENTS N ─── 1 COURSES
 ENROLLMENTS        1 ─── 0..1 GRADES
@@ -1351,6 +1640,8 @@ Dengan demikian, inti model data ELIPS LMS adalah:
 - **Kursus** sebagai wadah jangka panjang, diklasifikasikan oleh **Kategori**.
 - **Versi Kurikulum** sebagai struktur konten yang dapat direvisi; modul/materi terikat ke versi dan dikunci saat dipakai kelas.
 - **Kelas/Angkatan** sebagai penyelenggaraan nyata, dengan satu versi kurikulum terkunci dan satu tentor aktif.
+- **Sesi Pertemuan** sebagai jadwal pertemuan per kelas, dengan JP rencana/aktual dan status kehadiran sesi.
+- **Presensi** sebagai catatan kehadiran peserta per sesi, dilengkapi audit koreksi beralasan.
 - **Enrollment** sebagai penghubung peserta ke kelas/kursus.
 - **Nilai** dan **Sertifikat** sebagai hasil akhir pembelajaran per enrollment (per angkatan).
 - **CompletedLessons** sebagai bukti progres per materi.
@@ -1380,6 +1671,9 @@ Bagian ini mendokumentasikan skema yang benar-benar dieksekusi oleh `api/schema.
 | 12 | `completed_lessons` | Progres materi per peserta | `id`, `student_id`, `course_id`, `lesson_id`, `completed_at` | `student_id` → `users.id`; `lesson_id` → `lessons.id` |
 | 13 | `audit_logs` | Jejak audit operasional | `id`, `action`, `entity`, `entity_id`, `actor_id`, `created_at` | `actor_id` → `users.id` |
 | 14 | `notifications` | Outbox notifikasi email simulasi | `id`, `type`, `recipient_id`, `recipient_email`, `subject`, `created_at` | `recipient_id` → `users.id` |
+| 15 | `class_sessions` | Sesi pertemuan per kelas | `id`, `class_id`, `session_number`, `session_date`, `planned_jp`, `actual_jp`, `status` | `class_id` → `classes.id`; `module_id` → `modules.id`; `instructor_id` → `users.id`; `rescheduled_from_id` → `class_sessions.id` |
+| 16 | `attendances` | Presensi peserta per sesi | `id`, `session_id`, `enrollment_id`, `student_id`, `status` | `session_id` → `class_sessions.id`; `enrollment_id` → `enrollments.id`; `student_id` → `users.id`; `recorded_by` → `users.id` |
+| 17 | `attendance_corrections` | Audit koreksi presensi | `id`, `attendance_id`, `old_status`, `new_status`, `reason`, `corrected_at` | `attendance_id` → `attendances.id`; `session_id`/`enrollment_id` → tabel terkait; `actor_id` → `users.id` |
 
 Sesi login **tidak** memakai tabel: autentikasi memakai sesi PHP native (`$_SESSION`) dengan cookie `HttpOnly` dan `SameSite=Lax`.
 
@@ -1525,6 +1819,69 @@ Sesi login **tidak** memakai tabel: autentikasi memakai sesi PHP native (`$_SESS
 
 Catatan: unique key `uq_enrollments_student_class (student_id, class_id)` membuat satu peserta hanya terdaftar sekali per kelas; `course_id` didenormalisasi dari `classes.course_id`.
 
+**`class_sessions`**
+
+| Kolom | Tipe | Null | Default | Keterangan |
+|---|---|---|---|---|
+| `id` | `INT UNSIGNED` | tidak | AUTO_INCREMENT | Primary key |
+| `class_id` | `INT UNSIGNED` | tidak | — | Kelas pemilik sesi |
+| `session_number` | `INT UNSIGNED` | tidak | — | Nomor pertemuan unik per kelas |
+| `title` | `VARCHAR(200)` | tidak | `''` | Judul/topik sesi |
+| `module_id` | `INT UNSIGNED` | ya | `NULL` | Modul terkait |
+| `session_date` | `DATE` | tidak | — | Tanggal sesi |
+| `start_time` | `TIME` | ya | `NULL` | Jam mulai |
+| `end_time` | `TIME` | ya | `NULL` | Jam selesai |
+| `location` | `VARCHAR(150)` | tidak | `''` | Lokasi |
+| `room` | `VARCHAR(100)` | tidak | `''` | Ruang |
+| `instructor_id` | `INT UNSIGNED` | ya | `NULL` | Tentor sesi |
+| `planned_jp` | `DECIMAL(6,2)` | tidak | `0` | JP rencana |
+| `actual_jp` | `DECIMAL(6,2)` | tidak | `0` | JP aktual |
+| `status` | `ENUM('scheduled','confirmed','completed','rescheduled','cancelled','no_show')` | tidak | `'scheduled'` | Lifecycle sesi |
+| `rescheduled_from_id` | `INT UNSIGNED` | ya | `NULL` | Sesi asal untuk sesi pengganti |
+| `notes` | `TEXT` | tidak | — | Catatan |
+| `created_by` | `INT UNSIGNED` | ya | `NULL` | Pembuat |
+| `updated_by` | `INT UNSIGNED` | ya | `NULL` | Pengubah terakhir |
+| `created_at` | `DATETIME` | tidak | `CURRENT_TIMESTAMP` | Waktu dibuat |
+| `updated_at` | `DATETIME` | ya | `NULL` | Waktu perubahan terakhir |
+
+Catatan: `uq_class_sessions_number (class_id, session_number)` menjaga nomor pertemuan unik per kelas.
+
+**`attendances`**
+
+| Kolom | Tipe | Null | Default | Keterangan |
+|---|---|---|---|---|
+| `id` | `INT UNSIGNED` | tidak | AUTO_INCREMENT | Primary key |
+| `session_id` | `INT UNSIGNED` | tidak | — | Sesi terkait |
+| `enrollment_id` | `INT UNSIGNED` | tidak | — | Enrollment peserta |
+| `student_id` | `INT UNSIGNED` | tidak | — | Peserta (denormalisasi) |
+| `status` | `ENUM('present','late','permission','sick','absent','excused')` | tidak | `'absent'` | Status presensi |
+| `recorded_by` | `INT UNSIGNED` | ya | `NULL` | Pencatat presensi |
+| `recorded_at` | `DATETIME` | ya | `NULL` | Waktu pencatatan |
+| `note` | `TEXT` | tidak | — | Catatan |
+| `corrected_at` | `DATETIME` | ya | `NULL` | Waktu koreksi terakhir |
+| `correction_reason` | `TEXT` | tidak | — | Alasan koreksi terakhir |
+| `created_at` | `DATETIME` | tidak | `CURRENT_TIMESTAMP` | Waktu dibuat |
+| `updated_at` | `DATETIME` | ya | `NULL` | Waktu perubahan terakhir |
+
+Catatan: `uq_attendances_session_enrollment (session_id, enrollment_id)` mencegah duplikasi presensi.
+
+**`attendance_corrections`**
+
+| Kolom | Tipe | Null | Default | Keterangan |
+|---|---|---|---|---|
+| `id` | `INT UNSIGNED` | tidak | AUTO_INCREMENT | Primary key |
+| `attendance_id` | `INT UNSIGNED` | tidak | — | Presensi yang dikoreksi |
+| `session_id` | `INT UNSIGNED` | tidak | — | Sesi terkait (denormalisasi) |
+| `enrollment_id` | `INT UNSIGNED` | tidak | — | Enrollment terkait (denormalisasi) |
+| `old_status` | `VARCHAR(20)` | tidak | `''` | Status sebelum koreksi |
+| `new_status` | `VARCHAR(20)` | tidak | — | Status setelah koreksi |
+| `actor_id` | `INT UNSIGNED` | ya | `NULL` | Pelaku koreksi |
+| `actor_name` | `VARCHAR(150)` | tidak | `'Sistem'` | Snapshot nama aktor |
+| `actor_role` | `VARCHAR(30)` | tidak | `'sistem'` | Snapshot role aktor |
+| `reason` | `TEXT` | tidak | — | Alasan koreksi |
+| `corrected_at` | `DATETIME` | tidak | `CURRENT_TIMESTAMP` | Waktu koreksi |
+| `created_at` | `DATETIME` | tidak | `CURRENT_TIMESTAMP` | Waktu dibuat |
+
 **`grades`**
 
 | Kolom | Tipe | Null | Default | Keterangan |
@@ -1623,6 +1980,11 @@ Catatan: `uq_certificates_enrollment (enrollment_id)` memastikan satu sertifikat
 | `class_instructor_histories` | `idx_class_history_class (class_id, started_at)`, `idx_class_history_instructor (instructor_id)` | INDEX |
 | `enrollments` | `uq_enrollments_student_class (student_id, class_id)` | UNIQUE |
 | `enrollments` | `idx_enrollments_student_course (student_id, course_id)`, `idx_enrollments_course (course_id)`, `idx_enrollments_class (class_id)` | INDEX |
+| `class_sessions` | `uq_class_sessions_number (class_id, session_number)` | UNIQUE |
+| `class_sessions` | `idx_class_sessions_class_date (class_id, session_date)`, `idx_class_sessions_status (status)`, `idx_class_sessions_module (module_id)`, `idx_class_sessions_instructor (instructor_id)`, `idx_class_sessions_replaced (rescheduled_from_id)` | INDEX |
+| `attendances` | `uq_attendances_session_enrollment (session_id, enrollment_id)` | UNIQUE |
+| `attendances` | `idx_attendances_student (student_id)`, `idx_attendances_enrollment (enrollment_id)`, `idx_attendances_status (status)` | INDEX |
+| `attendance_corrections` | `idx_attendance_corrections_attendance (attendance_id)`, `idx_attendance_corrections_session (session_id)`, `idx_attendance_corrections_enrollment (enrollment_id)` | INDEX |
 | `modules` | `idx_modules_course (course_id, sort_order)`, `idx_modules_version (curriculum_version_id, sort_order)`, `idx_modules_instructor (instructor_id)` | INDEX |
 | `lessons` | `idx_lessons_module (module_id, sort_order)`, `idx_lessons_course (course_id)`, `idx_lessons_version (curriculum_version_id, sort_order)`, `idx_lessons_instructor (instructor_id)` | INDEX |
 | `grades` | `uq_grades_enrollment (enrollment_id)` | UNIQUE |
@@ -1661,6 +2023,20 @@ Catatan: `uq_certificates_enrollment (enrollment_id)` memastikan satu sertifikat
 | `fk_enrollments_student` | `enrollments.student_id` | `users.id` | `CASCADE` |
 | `fk_enrollments_course` | `enrollments.course_id` | `courses.id` | `CASCADE` |
 | `fk_enrollments_class` | `enrollments.class_id` | `classes.id` | `CASCADE` |
+| `fk_class_sessions_class` | `class_sessions.class_id` | `classes.id` | `CASCADE` |
+| `fk_class_sessions_module` | `class_sessions.module_id` | `modules.id` | `SET NULL` |
+| `fk_class_sessions_instructor` | `class_sessions.instructor_id` | `users.id` | `SET NULL` |
+| `fk_class_sessions_created_by` | `class_sessions.created_by` | `users.id` | `SET NULL` |
+| `fk_class_sessions_updated_by` | `class_sessions.updated_by` | `users.id` | `SET NULL` |
+| `fk_class_sessions_replaced` | `class_sessions.rescheduled_from_id` | `class_sessions.id` | `SET NULL` |
+| `fk_attendances_session` | `attendances.session_id` | `class_sessions.id` | `CASCADE` |
+| `fk_attendances_enrollment` | `attendances.enrollment_id` | `enrollments.id` | `CASCADE` |
+| `fk_attendances_student` | `attendances.student_id` | `users.id` | `CASCADE` |
+| `fk_attendances_recorded_by` | `attendances.recorded_by` | `users.id` | `SET NULL` |
+| `fk_attendance_corrections_attendance` | `attendance_corrections.attendance_id` | `attendances.id` | `CASCADE` |
+| `fk_attendance_corrections_session` | `attendance_corrections.session_id` | `class_sessions.id` | `CASCADE` |
+| `fk_attendance_corrections_enrollment` | `attendance_corrections.enrollment_id` | `enrollments.id` | `CASCADE` |
+| `fk_attendance_corrections_actor` | `attendance_corrections.actor_id` | `users.id` | `SET NULL` |
 | `fk_grades_enrollment` | `grades.enrollment_id` | `enrollments.id` | `CASCADE` |
 | `fk_grades_student` | `grades.student_id` | `users.id` | `CASCADE` |
 | `fk_grades_course` | `grades.course_id` | `courses.id` | `CASCADE` |
@@ -1688,6 +2064,9 @@ Snapshot API memakai nama koleksi yang sama dengan model `localStorage`, sehingg
 | `classes` | `classes` | `course_id`/`curriculum_version_id`/`instructor_id` → camelCase; `courseTitle`, `curriculumVersionCode`, `curriculumVersionName`, `instructorName` dari JOIN |
 | `class_instructor_histories` | `classInstructorHistories` | `class_id`/`instructor_id`/`actor_id` → camelCase; `started_at`/`ended_at` → `YYYY-MM-DD` |
 | `enrollments` | `enrollments` | `student_id`/`course_id`/`class_id` → camelCase; tanggal → `YYYY-MM-DD` |
+| `class_sessions` | `classSessions` | `class_id`/`session_number`/`module_id`/`instructor_id`/`planned_jp`/`actual_jp`/`rescheduled_from_id` → camelCase; `session_date` → `YYYY-MM-DD`; `start_time`/`end_time` → `HH:MM`; label kelas/modul/tentor dan hitungan presensi dari JOIN/subquery |
+| `attendances` | `attendances` | `session_id`/`enrollment_id`/`student_id`/`recorded_by` → camelCase; `recorded_at`/`corrected_at` → ISO; `studentName` dari JOIN |
+| `attendance_corrections` | `attendanceCorrections` | `attendance_id`/`session_id`/`enrollment_id`/`old_status`/`new_status`/`actor_id`/`actor_name`/`actor_role` → camelCase; `corrected_at`/`created_at` → ISO |
 | `modules` | `modules` | `course_id`/`curriculum_version_id` → camelCase; `sort_order` → `order` |
 | `lessons` | `lessons` | `course_id`/`module_id`/`curriculum_version_id` → camelCase; `sort_order` → `order` |
 | `grades` | `grades` | `enrollment_id` → `enrollmentId`; `student_id`/`course_id` → camelCase |
@@ -1701,14 +2080,16 @@ Snapshot hanya memuat modul/materi dari versi kurikulum aktif (non-`retired`) ti
 
 ### 16.6 Catatan Operasional
 
-- **Instalasi:** `php api/install.php --fresh` menghapus database lama, membuat ulang skema, dan mengisi data demo (7 pengguna, 4 kategori, 4 kursus, 4 versi kurikulum, 25 modul, 75 materi, 1 kelas migrasi, 1 histori tentor, 3 enrollment). Password demo `elips123` di-hash saat seeding.
+- **Instalasi:** `php api/install.php --fresh` menghapus database lama, membuat ulang skema, dan mengisi data demo (7 pengguna, 4 kategori, 4 kursus, 4 versi kurikulum, 25 modul, 75 materi, 1 kelas migrasi, 1 histori tentor, 3 enrollment, 4 sesi pertemuan, dan 9 baris presensi). Password demo `elips123` di-hash saat seeding.
 - **Timezone:** koneksi PDO disetel UTC; kolom `DATE` untuk tanggal kalender dan `DATETIME` untuk timestamp.
 - **Transaksi:** operasi multi-tabel dijalankan dalam transaksi eksplisit:
   - pembuatan kelas + penguncian versi kurikulum (`curriculum_versions.status = 'locked'`) + histori tentor awal;
   - pergantian tentor (tutup histori lama, buka histori baru, update `classes.instructor_id`);
   - clone kurikulum (versi baru + salinan modul/materi);
   - hapus enrollment (nilai + sertifikat + progres terkait);
-  - simpan nilai (nilai + sertifikat Draft).
+  - simpan nilai (nilai + sertifikat Draft);
+  - simpan presensi massal (upsert `attendances` + audit koreksi bila status berubah);
+  - reschedule (buat sesi baru + tandai sesi asal `rescheduled`).
 - **Penguncian versi:** `class.create` membaca versi dengan `FOR UPDATE` di dalam transaksi; setelah kelas tersimpan, versi tidak dapat diubah/dihapus. `classes` memakai FK `RESTRICT` sebagai pengaman terakhir.
 - **Retensi:** backend memangkas `audit_logs` dan `notifications` ke 1000 baris terbaru setelah penulisan.
 - **Seed migrasi:** hanya satu kelas migrasi (`ANG-2026-MNJ-01`, `legacy_import = 1`) yang di-seed; seluruh enrollment v3 dipetakan ke kelas tersebut agar setiap kelas selalu merujuk versi kurikulum yang terkunci.

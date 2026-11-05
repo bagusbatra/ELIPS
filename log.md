@@ -2,7 +2,7 @@
 
 **Versi dokumen:** 4.0  
 **Terakhir diperbarui:** 2026-11-05  
-**Status proyek:** Dual-mode — PHP 8/MySQL 8 + fallback `localStorage`; v4.0 Phase 1–2 (kurikulum, kelas/angkatan, enrollment berbasis kelas)  
+**Status proyek:** Dual-mode — PHP 8/MySQL 8 + fallback `localStorage`; v4.0 Phase 1–3 (kurikulum, kelas/angkatan, enrollment berbasis kelas, jadwal & presensi offline)  
 **Dokumen terkait:** `prd.md`, `erd.md`, `ELIPS-LMS-PRD-v4.0.md`
 
 ---
@@ -122,8 +122,8 @@ config → core → api → utils → data → seed → sync → progress → au
 | `core.js` | Namespace `window.ELIPS`, daftar key storage, helper baca/tulis, `nextId`, objek hasil `{ ok, message, data }`, validasi dasar, password demo | `ELIPS.read`, `ELIPS.write`, `ELIPS.nextId`, `ELIPS.DEFAULT_PASSWORD`, `ELIPS._` |
 | `api.js` | Jembatan dual-mode: bootstrap snapshot, cache sinkron, panggilan aksi tulis, fallback lokal | `ELIPS.api.enabled`, `ELIPS.api.call`, `ELIPS.api.refresh` |
 | `utils.js` | Konversi nilai ke huruf, nomor sertifikat, escape HTML, sanitasi HTML materi, format tanggal, toast | `gradeLetter`, `generateCertificateNumber`, `escapeHtml`, `sanitizeHtml`, `formatDate`, `toast` |
-| `data.js` | Getter/setter seluruh koleksi data; tidak berisi aturan bisnis | `getUsers`, `getCourses`, `getCurriculumVersions`, `getClasses`, `getClassInstructorHistories`, `getEnrollments`, `getModules`, `getLessons`, `getGrades`, `getCertificates`, `getCompletedLessons`, `getPublishedCertificatesByStudent` |
-| `seed.js` | Data demo awal dan migrasi/normalisasi data lama; dilewati pada mode server | dijalankan otomatis saat modul dimuat (kecuali mode server) |
+| `data.js` | Getter/setter seluruh koleksi data; tidak berisi aturan bisnis | `getUsers`, `getCourses`, `getCurriculumVersions`, `getClasses`, `getClassInstructorHistories`, `getEnrollments`, `getClassSessions`, `getSessionsByClass`, `getAttendances`, `getSessionAttendances`, `getAttendanceCorrections`, `getModules`, `getLessons`, `getGrades`, `getCertificates`, `getCompletedLessons`, `getPublishedCertificatesByStudent` |
+| `seed.js` | Data demo awal (termasuk sesi & presensi) dan migrasi/normalisasi data lama; dilewati pada mode server | dijalankan otomatis saat modul dimuat (kecuali mode server) |
 | `sync.js` | Sinkronisasi data turunan: nama instruktur, kepemilikan konten, counter modul/materi, pelepasan kursus | `syncCourseCounters` dan helper internal `syncAllContentOwners`, `releaseInstructorCourses` |
 | `progress.js` | Struktur kursus, progres belajar, overview siswa dan instruktur | `getCourseStructure`, `getCourseProgress`, `isLessonUnlocked`, `getStudentCourseOverview`, `getInstructorCourses`, `getInstructorSummary` |
 | `auth.js` | Session, user aktif (tanpa fallback path), path dashboard per role, guard halaman | `getSessionUser`, `getCurrentUser`, `requireRole`, `setCurrentUser`, `logout` |
@@ -133,7 +133,7 @@ config → core → api → utils → data → seed → sync → progress → au
 | `crud-courses.js` | CRUD kursus dan aturan Draft/Publish | `createCourse`, `updateCourse`, `deleteCourse`, `setCourseStatus`, `toggleCourseStatus` |
 | `crud-enrollments.js` | CRUD pendaftaran peserta ke kelas | `assignStudentToCourses`, `assignStudentsToClass`, `setEnrollmentClassStatus`, `setEnrollmentStatus`, `deleteEnrollment` |
 | `crud-content.js` | CRUD modul dan materi dengan validasi kepemilikan dan versi kurikulum | `createModule`, `updateModule`, `deleteModule`, `createLesson`, `updateLesson`, `deleteLesson` |
-| `crud-academic.js` | CRUD versi kurikulum, kelas/angkatan, histori tentor, roster, dan validasi kuota | `createCurriculumVersion`, `updateCurriculumVersion`, `publishCurriculumVersion`, `cloneCurriculumVersion`, `retireCurriculumVersion`, `deleteCurriculumVersion`, `getCurriculumDetail`, `createClass`, `updateClass`, `setClassStatus`, `assignClassInstructor`, `deleteClass`, `assignStudentsToClass`, `setEnrollmentClassStatus` |
+| `crud-academic.js` | CRUD versi kurikulum, kelas/angkatan, histori tentor, roster, validasi kuota, jadwal sesi (tunggal/berulang), presensi, koreksi beralasan, dan rekap kehadiran | `createCurriculumVersion`, `updateCurriculumVersion`, `publishCurriculumVersion`, `cloneCurriculumVersion`, `retireCurriculumVersion`, `deleteCurriculumVersion`, `getCurriculumDetail`, `createClass`, `updateClass`, `setClassStatus`, `assignClassInstructor`, `deleteClass`, `assignStudentsToClass`, `setEnrollmentClassStatus`, `getAttendancePolicy`, `createSession`, `createBulkSessions`, `updateSession`, `setSessionStatus`, `deleteSession`, `getSessionDetail`, `saveAttendanceBulk`, `correctAttendance`, `getAttendanceRecap`, `getMyAttendanceRecap` |
 | `crud-grades.js` | Input nilai dan alur sertifikat Draft → Publish | `saveGrade`, `createDraftCertificateForEnrollment`, `approveCertificate` |
 | `ui.js` | Perilaku UI bersama: navigasi mobile, sidebar dashboard, katalog beranda, login (email + password), logout, style toast | dijalankan pada `DOMContentLoaded` |
 
@@ -148,6 +148,71 @@ Prinsip yang dipakai:
 ---
 
 ## 3. Riwayat Perubahan
+
+### v4.0 - 2026-11-05 - Phase 3: jadwal pertemuan dan presensi offline
+
+**Tujuan:** menambahkan penyelenggaraan pertemuan per kelas dan pencatatan presensi peserta, termasuk koreksi beralasan dan rekap kehadiran, tanpa mengubah alur kursus/nilai/sertifikat yang sudah ada.
+
+Perubahan backend:
+
+- `api/schema.sql`:
+  - tabel baru `class_sessions` (jadwal per kelas, JP rencana/aktual, status, sesi pengganti);
+  - tabel baru `attendances` (satu baris per sesi + enrollment, status presensi, alasan koreksi terakhir);
+  - tabel baru `attendance_corrections` (audit koreksi: nilai lama/baru, aktor, alasan, waktu);
+  - unique `(class_id, session_number)`, unique `(session_id, enrollment_id)`, index tanggal/status/kelas, serta FK cascade ke kelas/enrollment dan `SET NULL` ke modul/instruktur/aktor.
+- `api/config.php` menambahkan kebijakan kehadiran:
+  - `attendance_present_statuses = ['present', 'late']`;
+  - `attendance_counted_statuses = ['confirmed', 'completed']`.
+- `api/helpers.php`:
+  - serializer sesi (termasuk hitungan presensi) dan presensi;
+  - resolusi kelas dari sesi/enrollment, cek akses admin/instruktur/peserta;
+  - validasi status sesi/presensi, JP rencana/aktual, tanggal/jam, dan modul sesi;
+  - perhitungan rekap berbasis JP dan pembulatan 2 desimal;
+  - pencatatan audit koreksi presensi.
+- `api/actions.php` menambahkan aksi:
+  - `session.create`, `session.createBulk`, `session.update`, `session.status`, `session.delete`, `session.detail`;
+  - `attendance.saveBulk`, `attendance.correct`, `attendance.recap`, `attendance.myRecap`;
+  - guard Admin untuk semua kelas, Instruktur untuk kelas yang diampu, Peserta hanya data sendiri.
+- `api/snapshot.php` memuat koleksi `classSessions`, `attendances`, dan `attendanceCorrections`.
+- `api/install.php` menambahkan seed 4 sesi untuk kelas migrasi (3 `completed`, 1 `scheduled`) dan 9 baris presensi untuk enrollment 1–3.
+
+Perubahan client:
+
+- `assets/js/core.js`: key `elips_classSessions`, `elips_attendances`, `elips_attendanceCorrections`.
+- `assets/js/data.js`: accessor sesi, presensi per sesi/enrollment/peserta, dan audit koreksi.
+- `assets/js/seed.js`: data demo sesi dan presensi dengan baseline rekap (Budi 100%, Rina 66,67%).
+- `assets/js/audit.js`: label aksi `attendance`/`correct` dan entitas `session`/`attendance`.
+- `assets/js/crud-academic.js`: implementasi lokal `createSession`, `createBulkSessions`, `updateSession`, `setSessionStatus`, `deleteSession`, `getSessionDetail`, `saveAttendanceBulk`, `correctAttendance`, `getAttendanceRecap`, `getMyAttendanceRecap`, dan `getAttendancePolicy`.
+- `admin/academic.html`: tabel sesi + ringkasan, filter kelas, modal sesi tunggal/berulang, modal presensi dengan alasan wajib saat koreksi, dan modal rekap per peserta/sesi.
+- `instructor/dashboard.html`: tabel sesi kelas yang diampu, buat/ubah/batalkan sesi, presensi, dan rekap.
+- `student/dashboard.html`: kartu statistik kehadiran, badge kebijakan, dan rekap per kelas dengan detail sesi milik sendiri.
+
+Aturan bisnis utama:
+
+- Sesi dengan status `completed` tidak dapat dihapus; sesi yang sudah memiliki presensi juga tidak dapat dihapus (batalkan saja).
+- Status `cancelled`, `no_show`, dan `rescheduled` tidak dihitung sebagai JP aktual maupun JP wajib rekap.
+- Reschedule membuat sesi baru yang tertaut `rescheduled_from_id`; sesi lama menjadi `rescheduled`.
+- Presensi unik per sesi + enrollment; perubahan status yang sudah tercatat wajib alasan dan menghasilkan baris audit koreksi.
+- Persentase kehadiran = JP hadir ÷ JP wajib × 100, dengan status hadir dan status sesi mengikuti konfigurasi.
+
+Pengujian:
+
+- `php api/install.php --fresh` berhasil; seed sesi/presensi konsisten.
+- `php -l` lulus untuk seluruh `api/*.php`.
+- `api-v4.js` 39/39, `api-v4-sessions.js` 37/37.
+- `local-v4.js` 36/36, `local-v4-sessions.js` 47/47.
+- `test-sessions-page.js` 47/47 (UI admin/instruktur/peserta, koreksi, rekap).
+- `test-sessions-server.js` 20/20 terhadap API PHP/MySQL.
+- Regresi lama tetap lulus: `test-academic-page.js`, `test-render.js`, `test-instructor.js`, dan `test-server-mode.js` 18/18.
+
+Batasan increment ini:
+
+- Jadwal belum tersinkron ke kalender eksternal (Google Calendar/iCal) dan belum ada pengingat otomatis.
+- Kebijakan kehadiran masih diubah lewat konfigurasi server, belum ada halaman pengaturan khusus.
+- Koreksi presensi menyimpan audit terpisah; laporan rekap belum diekspor ke PDF/Excel.
+- Phase 4–10 (materi per kelas, tugas/ujian, pembayaran, sertifikat PDF) mengikuti `ELIPS-LMS-PRD-v4.0.md`.
+
+---
 
 ### v4.0 - 2026-11-05 - Phase 1–2: versi kurikulum, kelas/angkatan, enrollment berbasis kelas
 
@@ -492,6 +557,15 @@ Perubahan sentralisasi:
 | Penerima notifikasi sertifikat | Peserta pemilik sertifikat yang akunnya aktif dan memiliki email valid |
 | Notifikasi gagal tidak menggagalkan bisnis | Pembuatan notifikasi dibungkus try/catch dan tidak mengubah hasil CRUD |
 | Outbox notifikasi dibatasi | Maksimal 1000 notifikasi terbaru disimpan di `elips_notifications` |
+| Sesi unik per kelas | Nomor pertemuan unik per kelas; jadwal berulang maksimal 52 sesi per permintaan |
+| Sesi completed tidak dapat dihapus | `deleteSession` menolak status `completed` |
+| Sesi berpresensi tidak dapat dihapus | Harus dibatalkan; riwayat presensi dipertahankan |
+| JP aktual mengecualikan sesi batal | `cancelled`, `no_show`, dan `rescheduled` tidak dihitung |
+| Reschedule tertaut | Sesi pengganti menyimpan `rescheduledFromId`; sesi asal menjadi `rescheduled` |
+| Presensi unik per sesi + enrollment | `saveAttendanceBulk` memperbarui baris yang ada, bukan membuat duplikat |
+| Koreksi presensi wajib alasan | `correctAttendance` menolak alasan kosong dan menulis audit koreksi |
+| Rekap kehadiran berbasis JP | JP hadir ÷ JP wajib × 100; status hadir/sesi mengikuti kebijakan |
+| Peserta hanya melihat presensi sendiri | `getMyAttendanceRecap`/`attendance.myRecap` memfilter berdasarkan sesi peserta |
 | Otorisasi server-side | Aksi API memeriksa sesi, role, dan kepemilikan kursus sebelum menulis; contoh: `elips_require_admin`, `elips_can_manage_course` |
 | Password aman di server | Password disimpan dengan `password_hash()` dan diverifikasi dengan `password_verify()`; hash tidak pernah masuk snapshot |
 | Snapshot konsisten | Respons tulis menyertakan snapshot terbaru dan sesi; `api.js` mengganti seluruh cache dari respons tersebut |
@@ -503,21 +577,28 @@ Perubahan sentralisasi:
 
 ### 5.1 MySQL (mode server)
 
-Tabel: `users`, `courses`, `modules`, `lessons`, `enrollments`, `grades`, `certificates`, `completed_lessons`, `audit_logs`, dan `notifications`. Detail kolom, relasi, dan foreign key ada di `erd.md` §16. Sesi login disimpan di sesi PHP native, bukan tabel database.
+Tabel: `users`, `categories`, `courses`, `curriculum_versions`, `classes`, `class_instructor_histories`, `modules`, `lessons`, `enrollments`, `class_sessions`, `attendances`, `attendance_corrections`, `grades`, `certificates`, `completed_lessons`, `audit_logs`, dan `notifications` (17 tabel). Detail kolom, relasi, dan foreign key ada di `erd.md` §16. Sesi login disimpan di sesi PHP native, bukan tabel database.
 
 ### 5.2 `localStorage` (mode fallback)
 
 | Key | Isi |
 |---|---|
 | `elips_users` | Pengguna: admin, instruktur, peserta |
+| `elips_categories` | Kategori kursus |
 | `elips_courses` | Kursus, instruktur pengampu, status, counter modul/materi |
-| `elips_enrollments` | Penugasan peserta ke kursus |
-| `elips_modules` | Modul per kursus |
+| `elips_curriculumVersions` | Versi kurikulum per kursus (draft/published/locked/retired) |
+| `elips_classes` | Kelas/angkatan, versi terkunci, tentor, kuota, periode |
+| `elips_classInstructorHistories` | Histori pergantian tentor per kelas |
+| `elips_enrollments` | Penugasan peserta ke kelas/kursus |
+| `elips_classSessions` | Sesi pertemuan per kelas (tanggal, jam, JP, status, sesi pengganti) |
+| `elips_attendances` | Presensi peserta per sesi |
+| `elips_attendanceCorrections` | Audit koreksi presensi (status lama/baru, aktor, alasan) |
+| `elips_modules` | Modul per versi kurikulum |
 | `elips_lessons` | Materi per modul |
-| `elips_grades` | Nilai akhir peserta per kursus |
+| `elips_grades` | Nilai akhir peserta per enrollment |
 | `elips_certificates` | Sertifikat Draft/Publish, nomor, grade, approver |
 | `elips_completedLessons` | Progres pelajaran yang diselesaikan |
-| `elips_auditLogs` | Jejak audit perubahan kursus, nilai, sertifikat, pengguna, penugasan, modul, dan materi |
+| `elips_auditLogs` | Jejak audit perubahan kursus, nilai, sertifikat, pengguna, penugasan, modul, materi, sesi, dan presensi |
 | `elips_notifications` | Outbox notifikasi email simulasi: penerima, subjek, isi, entitas, dan waktu |
 | `elips_session` | Sesi pengguna yang sedang login |
 
@@ -539,11 +620,11 @@ Akun lama tanpa password otomatis dimigrasikan ke password demo `elips123` saat 
 
 ## 6. Hasil Pengujian Terakhir
 
-Pengujian dijalankan setelah backend PHP/MySQL dan client dual-mode (v3.0):
+Pengujian dijalankan setelah backend PHP/MySQL, client dual-mode (v3.0), dan increment v4.0 Phase 1–3:
 
 | Pemeriksaan | Hasil |
 |---|---|
-| Syntax 25 HTML + 17 JS + 8 PHP | ✅ Lulus |
+| Syntax 26 HTML + 18 JS + 7 PHP | ✅ Lulus |
 | Guard sesi, password, sanitasi (`test-p0`) | ✅ Lulus |
 | Notifikasi email (`test-notifications`) | ✅ Lulus |
 | Audit trail (`test-audit`) | ✅ Lulus |
@@ -554,10 +635,17 @@ Pengujian dijalankan setelah backend PHP/MySQL dan client dual-mode (v3.0):
 | Halaman admin (`test-admin-pages`) | ✅ Lulus |
 | Modal pilih role tambah pengguna | ✅ Lulus |
 | Visibilitas sertifikat peserta & data lama | ✅ Lulus |
-| Semua 25 halaman dimuat tanpa error (`test-all-pages`) | ✅ Lulus |
+| Semua halaman dimuat tanpa error (`test-all-pages`) | ✅ Lulus |
 | Semua tautan lokal (`check-links`) | ✅ Lulus |
 | Data layer (`test-data`) | ✅ Lulus |
 | Integrasi API PHP/MySQL (55 pemeriksaan) | ✅ Lulus |
+| API v4 Phase 1–2 (`api-v4`) | ✅ 39/39 |
+| API v4 Phase 3 (`api-v4-sessions`) | ✅ 37/37 |
+| Mode lokal v4 Phase 1–2 (`local-v4`) | ✅ 36/36 |
+| Mode lokal v4 Phase 3 (`local-v4-sessions`) | ✅ 47/47 |
+| UI akademik admin (`test-academic-page`) | ✅ Lulus |
+| UI jadwal/presensi lokal (`test-sessions-page`) | ✅ 47/47 |
+| UI jadwal/presensi server (`test-sessions-server`) | ✅ 20/20 |
 | Smoke test server-mode JSDOM (18 pemeriksaan) | ✅ Lulus |
 
 Catatan penting yang diuji:
@@ -586,6 +674,12 @@ Catatan penting yang diuji:
 - Snapshot server tidak pernah memuat hash password.
 - Mode server memuat katalog dari MySQL tanpa menjalankan seed `localStorage`.
 - Logout API menghapus sesi dan aksi tulis berikutnya ditolak.
+- Sesi pertemuan dapat dibuat tunggal maupun berulang; nomor pertemuan unik per kelas dan jadwal berulang dibatasi 52 sesi.
+- Sesi `completed` dan sesi berpresensi tidak dapat dihapus; pembatalan mempertahankan riwayat.
+- Reschedule membuat sesi pengganti bertaut `rescheduledFromId` dan menandai sesi asal `rescheduled`.
+- Presensi unik per sesi + enrollment; koreksi tanpa alasan ditolak, koreksi beralasan menghasilkan baris audit.
+- Rekap kehadiran memakai JP hadir ÷ JP wajib dan mengabaikan sesi `cancelled`/`no_show`/`rescheduled`.
+- Peserta hanya dapat membaca rekap miliknya; akses lintas peserta ditolak server.
 
 ---
 

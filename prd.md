@@ -2,7 +2,7 @@
 
 **Versi:** 4.0  
 **Tanggal:** 2026-11-05  
-**Status:** Implemented Phase 1–2 (Dual-mode - PHP 8/MySQL 8 + fallback `localStorage`). v3.0 tetap menjadi baseline alur kursus; v4.0 menambahkan versi kurikulum, angkatan/kelas, penguncian kurikulum per kelas, histori tentor, dan enrollment berbasis kelas.  
+**Status:** Implemented Phase 1–3 (Dual-mode - PHP 8/MySQL 8 + fallback `localStorage`). v3.0 tetap menjadi baseline alur kursus; v4.0 menambahkan versi kurikulum, angkatan/kelas, penguncian kurikulum per kelas, histori tentor, enrollment berbasis kelas, serta jadwal pertemuan dan presensi offline.  
 **Baseline v4.0 lengkap:** `ELIPS-LMS-PRD-v4.0.md`  
 **Log pengembangan:** `log.md`
 **ERD:** `erd.md`
@@ -14,7 +14,7 @@
 
 Membangun sistem Learning Management System (LMS) berbasis web untuk pelatihan dan kursus. Aplikasi memakai vanilla HTML, CSS, dan JavaScript di sisi client, dengan backend PHP 8 + MySQL 8 sebagai penyimpanan utama dan `localStorage` sebagai fallback demo saat API tidak tersedia.
 
-### 1.1 Cakupan v4.0 Phase 1–2
+### 1.1 Cakupan v4.0 Phase 1–3
 
 Model akademik v4.0 memisahkan **Kursus** dari penyelenggaraannya:
 
@@ -23,6 +23,8 @@ Kursus
   └── Versi Kurikulum (draft → published → locked → retired)
         └── Modul → Materi
   └── Kelas/Angkatan (satu versi kurikulum terkunci, satu tentor)
+        └── Sesi Pertemuan (jadwal, JP rencana/aktual, status)
+              └── Presensi peserta
         └── Enrollment peserta
               └── Nilai → Sertifikat
 ```
@@ -34,6 +36,9 @@ Aturan inti yang sudah diterapkan:
 - Versi **Locked/Retired** tidak boleh diubah atau dihapus; revisi dilakukan dengan **clone** menjadi Draft baru.
 - Satu kelas hanya memiliki satu tentor aktif, tetapi satu tentor boleh mengampu banyak kelas. Pergantian tentor dicatat di histori.
 - Enrollment terhubung ke kelas, memiliki status pendaftaran, dan tunduk pada kuota kelas.
+- Jadwal pertemuan dibuat per kelas (single atau berulang), dengan JP rencana dan JP aktual; sesi yang dibatalkan/rescheduled tidak dihitung sebagai JP aktual.
+- Presensi dicatat per sesi dan per enrollment; koreksi presensi wajib menyimpan alasan, aktor, nilai lama, dan nilai baru.
+- Rekap kehadiran dihitung dari JP sesi yang dihitung dibagi JP wajib sesuai kebijakan kehadiran.
 - Nilai dan sertifikat unik per enrollment, sehingga peserta dapat mengikuti kursus yang sama pada angkatan berbeda.
 - Data akademik tidak dihapus permanen; kelas dengan enrollment tidak dapat dihapus dan versi terpakai harus dipensiunkan, bukan dihapus.
 
@@ -43,9 +48,9 @@ Aturan inti yang sudah diterapkan:
 
 | Role | Deskripsi | Kebutuhan Utama |
 |---|---|---|
-| **Admin** | Pengelola sistem | Menambah kursus (Draft), mengelola versi kurikulum, membuat angkatan/kelas, menugaskan 1 tentor per kelas, menambah pengguna, mendaftarkan siswa ke kelas, menyetujui sertifikat Draft → Publish |
-| **Instruktur/Trainer** | Pengajar kursus/kelas | Login, melihat kelas yang diampu, mengelola modul/materi pada versi kurikulum yang masih dapat diubah, memantau progres, memberi nilai akhir |
-| **Peserta/Student** | Peserta pelatihan | Mengakses materi dari kelas yang diikuti, menandai pelajaran selesai, melihat sertifikat yang sudah Publish |
+| **Admin** | Pengelola sistem | Menambah kursus (Draft), mengelola versi kurikulum, membuat angkatan/kelas, menugaskan 1 tentor per kelas, menyusun jadwal sesi, memantau presensi/rekap, menambah pengguna, mendaftarkan siswa ke kelas, menyetujui sertifikat Draft → Publish |
+| **Instruktur/Trainer** | Pengajar kursus/kelas | Login, melihat kelas yang diampu, mengelola modul/materi pada versi kurikulum yang masih dapat diubah, menyusun jadwal, mencatat presensi dan koreksi, memantau progres, memberi nilai akhir |
+| **Peserta/Student** | Peserta pelatihan | Mengakses materi dari kelas yang diikuti, menandai pelajaran selesai, melihat rekap kehadiran sendiri, melihat sertifikat yang sudah Publish |
 
 ---
 
@@ -63,6 +68,10 @@ Admin ── susun versi kurikulum ──────▶ Versi [Draft] → [Publ
 Admin ── buat angkatan/kelas ────────▶ Kelas (versi Published dikunci, 1 tentor)
 Admin ── tambah siswa ───────────────▶ Siswa
 Admin ── daftarkan siswa ────────────▶ Kelas (kuota & status enrollment)
+Admin/Instruktur ── susun jadwal ────▶ Sesi Pertemuan (single/berulang, JP rencana)
+Instruktur ── catat presensi ────────▶ Presensi per sesi & enrollment
+Instruktur ── koreksi presensi ──────▶ Audit koreksi (alasan, aktor, nilai lama/baru)
+Sistem ── hitung rekap ──────────────▶ Persentase kehadiran peserta
 Instruktur ── login ─────────────────▶ Buat modul & materi pada versi yang belum terkunci
 Siswa ── belajar ────────────────────▶ Hanya materi dari kelas yang diikuti
 Instruktur ── beri nilai akhir ──────▶ Nilai per enrollment
@@ -117,6 +126,18 @@ Sistem ── kursus Publish / sertifikat terbit ▶ Notifikasi email (simulasi)
    - Versi Locked/Retired menolak perubahan; instruktur harus meminta Admin membuat versi baru.
    - Materi mendukung tipe teks, video, file, dan link eksternal.
 
+8a. **Admin atau Instruktur menyusun jadwal pertemuan** melalui `admin/academic.html` atau `instructor/dashboard.html`.
+    - Sesi dapat dibuat satu per satu atau berulang (mis. setiap Senin selama 8 pertemuan, maksimal 52 sesi per permintaan).
+    - Setiap sesi menyimpan nomor pertemuan unik per kelas, tanggal, jam mulai/selesai, lokasi/ruang, modul terkait, serta JP rencana.
+    - Status sesi: `scheduled`, `confirmed`, `completed`, `rescheduled`, `cancelled`, atau `no_show`.
+    - Reschedule membuat sesi pengganti baru yang tertaut ke sesi asal; sesi asal ditandai `rescheduled` dan tidak dihitung sebagai JP aktual.
+
+8b. **Instruktur mencatat presensi** melalui modal presensi pada halaman akademik/dashboard instruktur.
+    - Presensi dicatat per sesi dan per enrollment dengan status `present`, `late`, `permission`, `sick`, `absent`, atau `excused`.
+    - Satu enrollment hanya memiliki satu baris presensi per sesi.
+    - Perubahan status yang sudah tercatat wajib menyertakan alasan dan menghasilkan baris audit koreksi (nilai lama, nilai baru, aktor, waktu, alasan).
+    - Peserta hanya dapat melihat presensi dan rekap miliknya sendiri.
+
 9. **Siswa mempelajari materi** melalui `learning.html`.
    - Hanya kelas yang diikuti dan kursus berstatus Published yang dapat diakses.
    - Materi yang ditampilkan berasal dari versi kurikulum yang terkunci pada kelas tersebut.
@@ -165,12 +186,20 @@ Sistem ── kursus Publish / sertifikat terbit ▶ Notifikasi email (simulasi)
 | **Enrollment** | `completed` | Peserta menyelesaikan kelas | Final |
 | **Enrollment** | `withdrawn` | Peserta berhenti; akses dicabut | `withdrawn` → `active` |
 | **Enrollment** | `cancelled` | Pendaftaran dibatalkan | Final |
+| **Sesi Pertemuan** | `scheduled` | Sesi terjadwal, presensi belum tentu lengkap | `scheduled` → `confirmed`/`completed`/`cancelled`/`no_show`/`rescheduled` |
+| **Sesi Pertemuan** | `confirmed` | Sesi dikonfirmasi akan berlangsung | `confirmed` → `completed`/`cancelled`/`no_show`/`rescheduled` |
+| **Sesi Pertemuan** | `completed` | Sesi selesai; tidak dapat dihapus | Final (JP aktual dihitung) |
+| **Sesi Pertemuan** | `rescheduled` | Diganti sesi lain; tidak dihitung JP aktual | Final |
+| **Sesi Pertemuan** | `cancelled` / `no_show` | Dibatalkan / tidak terlaksana; tidak dihitung JP aktual | Final |
+| **Presensi** | `present` / `late` | Hadir / terlambat; dihitung hadir sesuai kebijakan | Dapat dikoreksi dengan alasan |
+| **Presensi** | `permission` / `sick` / `excused` | Izin / sakit / dispensasi | Dapat dikoreksi dengan alasan |
+| **Presensi** | `absent` | Tidak hadir | Dapat dikoreksi dengan alasan |
 | **Sertifikat** | `draft` | Sudah dinilai instruktur, menunggu persetujuan Admin | `draft` → `publish` |
 | **Sertifikat** | `publish` | Disetujui Admin, tampil di halaman siswa, dapat diverifikasi | Final |
 | **Pengguna** | `aktif` | Dapat login dan menggunakan sistem | `aktif` ↔ `nonaktif` |
 | **Pengguna** | `nonaktif` | Tidak dapat login | `nonaktif` → `aktif` |
 
-Catatan: status kelas `ready`/`ongoing` memerlukan tentor aktif. Kelas dengan status `cancelled` atau `archived` tidak menerima pendaftaran baru. Transisi status kelas yang tidak valid ditolak server.
+Catatan: status kelas `ready`/`ongoing` memerlukan tentor aktif. Kelas dengan status `cancelled` atau `archived` tidak menerima pendaftaran baru. Transisi status kelas yang tidak valid ditolak server. Sesi `cancelled`/`no_show`/`rescheduled` menyimpan riwayat tetapi tidak dihitung sebagai JP aktual atau JP wajib rekap.
 
 ### 3.4 Matriks Hak Akses
 
@@ -179,6 +208,10 @@ Catatan: status kelas `ready`/`ongoing` memerlukan tentor aktif. Kelas dengan st
 | Menambah/mengubah kursus | ✅ | ❌ | ❌ |
 | Mengelola versi kurikulum (buat/publish/clone/retire/hapus draft) | ✅ | ❌ | ❌ |
 | Membuat/mengubah angkatan/kelas | ✅ | ❌ | ❌ |
+| Menyusun/mengubah jadwal sesi | ✅ (semua kelas) | ✅ (kelas diampu) | ❌ |
+| Menghapus/membatalkan sesi | ✅ (semua kelas) | ✅ (kelas diampu, belum completed & belum berpresensi) | ❌ |
+| Mencatat/mengoreksi presensi | ✅ (semua kelas) | ✅ (kelas diampu) | ❌ |
+| Melihat presensi & rekap kehadiran | ✅ (semua kelas) | ✅ (kelas diampu) | ✅ (milik sendiri) |
 | Menugaskan/mengganti tentor kelas | ✅ | ❌ | ❌ |
 | Menambah/mengubah pengguna | ✅ | ❌ | ❌ |
 | Mendaftarkan siswa ke kelas | ✅ | ❌ | ❌ |
@@ -209,6 +242,14 @@ Seluruh aturan di atas ditegakkan **di server** (`api/actions.php` + `api/helper
 | Satu tentor dapat mengampu banyak kelas | ✅ Selesai | Dashboard instruktur menampilkan tabel “Kelas yang Diampu” |
 | Enrollment berbasis kelas | ✅ Selesai | `enrollments.class_id`; `enrollment.assignClass` dan `enrollment.classStatus` |
 | Kuota dan status enrollment | ✅ Selesai | Kuota dicek saat pendaftaran; kuota tidak boleh diturunkan di bawah peserta aktif; status `active/completed/withdrawn/cancelled` |
+| Jadwal sesi tunggal & berulang | ✅ Selesai | `session.create`/`session.createBulk`; tanggal eksplisit atau `startDate` + `weekdays` + `occurrences` (maks. 52) |
+| JP rencana/aktual & lifecycle sesi | ✅ Selesai | `session.update`/`session.status`; sesi `cancelled`/`no_show`/`rescheduled` tidak dihitung JP aktual |
+| Reschedule dengan sesi pengganti | ✅ Selesai | Sesi asal → `rescheduled`; sesi baru menyimpan `rescheduledFromId` |
+| Presensi per sesi & enrollment | ✅ Selesai | `attendance.saveBulk`; unik `(sessionId, enrollmentId)`; status `present/late/permission/sick/absent/excused` |
+| Koreksi presensi dengan audit | ✅ Selesai | `attendance.correct` + tabel `attendance_corrections` (nilai lama/baru, aktor, alasan, waktu) |
+| Rekap kehadiran per kebijakan | ✅ Selesai | `attendance.recap`/`attendance.myRecap`; persentase = JP hadir ÷ JP wajib × 100 |
+| UI jadwal & presensi admin/instruktur | ✅ Selesai | Tabel sesi, modal single/berulang, modal presensi dengan alasan koreksi, dan modal rekap |
+| Peserta melihat rekap sendiri | ✅ Selesai | `student/dashboard.html` menampilkan statistik, kebijakan, dan detail sesi milik peserta |
 | Nilai & sertifikat per enrollment | ✅ Selesai | Unique per `enrollment_id`, sehingga angkatan berbeda punya nilai/sertifikat terpisah |
 | Admin menambah akun siswa | ✅ Selesai | `admin/users.html` dan `register.html` |
 | 1 siswa dapat dikaitkan ke beberapa kelas | ✅ Selesai | `admin/enrollment.html` dan modal roster `admin/academic.html` |
@@ -248,7 +289,7 @@ Aplikasi berjalan dalam dua mode yang memakai UI dan aturan bisnis yang sama:
   - `auth.js` - session, role guard, dan logout (memanggil `auth.logout` pada mode server);
   - `audit.js` - audit trail; pada mode server pencatatan dilakukan backend;
   - `notifications.js` - outbox notifikasi; pada mode server notifikasi dibuat backend;
-  - `crud-users.js`, `crud-courses.js`, `crud-enrollments.js`, `crud-content.js`, `crud-academic.js`, `crud-grades.js` - CRUD dan aturan bisnis per domain; pada mode server fungsi ini meneruskan aksi ke API. `crud-academic.js` menangani versi kurikulum, kelas/angkatan, histori tentor, roster kelas, dan validasi kuota di kedua mode;
+  - `crud-users.js`, `crud-courses.js`, `crud-enrollments.js`, `crud-content.js`, `crud-academic.js`, `crud-grades.js` - CRUD dan aturan bisnis per domain; pada mode server fungsi ini meneruskan aksi ke API. `crud-academic.js` menangani versi kurikulum, kelas/angkatan, histori tentor, roster kelas, validasi kuota, jadwal sesi, presensi, koreksi, dan rekap kehadiran di kedua mode;
   - `utils.js` - helper format, escape HTML, dan toast;
   - `ui.js` - perilaku UI bersama (navigasi, sidebar, katalog, login, logout).
   - Halaman hanya menangani rendering dan interaksi UI.
@@ -267,8 +308,8 @@ Backend berada di folder `api/` dan terdiri dari front controller, konfigurasi, 
 
 ### 4.3 Penyimpanan Data
 
-- **MySQL (mode server):** tabel `users`, `categories`, `courses`, `curriculum_versions`, `classes`, `class_instructor_histories`, `modules`, `lessons`, `enrollments`, `grades`, `certificates`, `completed_lessons`, `audit_logs`, `notifications` (lihat `erd.md`).
-- **`localStorage` (mode lokal/fallback):** key `elips_users`, `elips_categories`, `elips_courses`, `elips_curriculumVersions`, `elips_classes`, `elips_classInstructorHistories`, `elips_enrollments`, `elips_modules`, `elips_lessons`, `elips_grades`, `elips_certificates`, `elips_completedLessons`, `elips_auditLogs`, `elips_notifications`, dan `elips_session`.
+- **MySQL (mode server):** tabel `users`, `categories`, `courses`, `curriculum_versions`, `classes`, `class_instructor_histories`, `modules`, `lessons`, `enrollments`, `class_sessions`, `attendances`, `attendance_corrections`, `grades`, `certificates`, `completed_lessons`, `audit_logs`, `notifications` (lihat `erd.md`).
+- **`localStorage` (mode lokal/fallback):** key `elips_users`, `elips_categories`, `elips_courses`, `elips_curriculumVersions`, `elips_classes`, `elips_classInstructorHistories`, `elips_enrollments`, `elips_classSessions`, `elips_attendances`, `elips_attendanceCorrections`, `elips_modules`, `elips_lessons`, `elips_grades`, `elips_certificates`, `elips_completedLessons`, `elips_auditLogs`, `elips_notifications`, dan `elips_session`.
 - **Styling:** Custom CSS (`assets/css/style.css`), Bootstrap Icons, Google Fonts (Inter)
 - **Struktur Folder:** Berbasis role (`admin/`, `instructor/`, `student/`)
 
@@ -293,7 +334,7 @@ Backend berada di folder `api/` dan terdiri dari front controller, konfigurasi, 
 | `admin/dashboard.html` | ✅ Selesai | Dashboard admin dengan ringkasan statistik |
 | `admin/users.html` | ✅ Selesai | Tambah pengguna diawali modal pilihan role Admin/Instruktur/Peserta, edit/hapus pengguna, filter role & pencarian, serta penugasan instruktur ke kursus |
 | `admin/courses.html` | ✅ Selesai | Tambah/edit kursus, tugaskan 1 instruktur per kursus, publikasi/Draft, filter status & pencarian |
-| `admin/academic.html` | ✅ Selesai | Kelola versi kurikulum (buat/publish/clone/retire/hapus draft), kelas/angkatan (versi terkunci, tentor, kuota, periode), histori tentor, roster peserta, dan detail struktur kurikulum |
+| `admin/academic.html` | ✅ Selesai | Kelola versi kurikulum (buat/publish/clone/retire/hapus draft), kelas/angkatan (versi terkunci, tentor, kuota, periode), histori tentor, roster peserta, detail struktur kurikulum, serta jadwal sesi, presensi, koreksi, dan rekap kehadiran |
 | `admin/enrollment.html` | ✅ Selesai | Pendaftaran siswa ke kelas, filter kelas/status, aktif/nonaktifkan enrollment |
 | `admin/certificates.html` | ✅ Selesai | Persetujuan e-sertifikat: Draft → Publish, filter status, dan tampilan nomor/tanggal persetujuan |
 | `admin/notifications.html` | ✅ Selesai | Outbox notifikasi email simulasi: statistik, filter jenis/penerima/tanggal/pencarian, detail isi, ekspor CSV, dan pembersihan outbox |
@@ -304,7 +345,7 @@ Backend berada di folder `api/` dan terdiri dari front controller, konfigurasi, 
 ### Role Instruktur (`instructor/`)
 | File | Status | Deskripsi |
 |---|---|---|
-| `instructor/dashboard.html` | ✅ Selesai | Dashboard dinamis: statistik kursus/peserta/pelajaran/sertifikat, notifikasi draft & penilaian tertunda, daftar kursus, dan aktivitas peserta terbaru |
+| `instructor/dashboard.html` | ✅ Selesai | Dashboard dinamis: statistik kursus/peserta/pelajaran/sertifikat, notifikasi draft & penilaian tertunda, daftar kursus, aktivitas peserta terbaru, jadwal sesi kelas yang diampu, pencatatan presensi, dan rekap kehadiran |
 | `instructor/manage-course.html` | ✅ Selesai | Kelola struktur kursus: tambah/ubah/hapus modul dan materi (teks, video, file, link) dengan validasi kepemilikan kursus |
 | `instructor/students.html` | ✅ Selesai | Daftar peserta per kursus dengan filter status/pencarian, progres, riwayat nilai, serta modal penilaian yang otomatis membuat e-sertifikat Draft |
 | `instructor/certificates.html` | ✅ Selesai | Monitoring e-sertifikat peserta (Draft/Terbit), filter kursus & status, pengajuan sertifikat untuk peserta yang sudah dinilai namun belum memiliki sertifikat |
@@ -313,7 +354,7 @@ Backend berada di folder `api/` dan terdiri dari front controller, konfigurasi, 
 ### Role Peserta (`student/`)
 | File | Status | Deskripsi |
 |---|---|---|
-| `student/dashboard.html` | ✅ Selesai | Dashboard peserta dengan kursus yang diikuti, progres, nilai, status sertifikat, dan ringkasan statistik |
+| `student/dashboard.html` | ✅ Selesai | Dashboard peserta dengan kursus yang diikuti, progres, nilai, status sertifikat, ringkasan statistik, serta persentase dan rekap kehadiran per kelas (hanya milik sendiri) |
 | `student/courses.html` | ✅ Selesai | Daftar seluruh kursus peserta dengan filter status, pencarian, progres, nilai, dan akses belajar |
 | `student/certificates.html` | ✅ Selesai | Daftar sertifikat peserta; hanya sertifikat **Publish** yang ditampilkan, Draft sepenuhnya disembunyikan |
 | `student/profile.html` | ✅ Selesai | Profil peserta dan pembaruan nama/no. telepon |
@@ -326,8 +367,8 @@ Backend berada di folder `api/` dan terdiri dari front controller, konfigurasi, 
 | `assets/js/api.js` | ✅ Selesai | Jembatan dual-mode: bootstrap snapshot, cache sinkron, panggilan aksi API, dan fallback lokal |
 | `assets/js/core.js` | ✅ Selesai | Namespace, storage helper, result object, dan validasi dasar |
 | `assets/js/utils.js` | ✅ Selesai | Helper grade, nomor sertifikat, escape HTML, format tanggal, toast |
-| `assets/js/data.js` | ✅ Selesai | Getter/setter seluruh koleksi data |
-| `assets/js/seed.js` | ✅ Selesai | Data demo awal dan normalisasi/migrasi data lama |
+| `assets/js/data.js` | ✅ Selesai | Getter/setter seluruh koleksi data, termasuk sesi, presensi, dan audit koreksi |
+| `assets/js/seed.js` | ✅ Selesai | Data demo awal (termasuk sesi & presensi) dan normalisasi/migrasi data lama |
 | `assets/js/sync.js` | ✅ Selesai | Sinkronisasi nama instruktur, kepemilikan konten, counter kursus |
 | `assets/js/progress.js` | ✅ Selesai | Struktur kursus, progres belajar, overview siswa/instruktur |
 | `assets/js/auth.js` | ✅ Selesai | Session, user aktif, redirect, dan role guard |
@@ -337,7 +378,7 @@ Backend berada di folder `api/` dan terdiri dari front controller, konfigurasi, 
 | `assets/js/crud-courses.js` | ✅ Selesai | CRUD kursus dan aturan Draft/Publish |
 | `assets/js/crud-enrollments.js` | ✅ Selesai | CRUD pendaftaran peserta ke kelas |
 | `assets/js/crud-content.js` | ✅ Selesai | CRUD modul dan materi dengan validasi kepemilikan dan versi kurikulum |
-| `assets/js/crud-academic.js` | ✅ Selesai | CRUD versi kurikulum, kelas/angkatan, histori tentor, roster, dan validasi kuota |
+| `assets/js/crud-academic.js` | ✅ Selesai | CRUD versi kurikulum, kelas/angkatan, histori tentor, roster, validasi kuota, jadwal sesi (tunggal/berulang), presensi, koreksi beralasan, dan rekap kehadiran |
 | `assets/js/crud-grades.js` | ✅ Selesai | Input nilai dan alur sertifikat Draft → Publish |
 | `assets/js/ui.js` | ✅ Selesai | Perilaku UI bersama: navigasi, sidebar, katalog, login, logout |
 
@@ -347,11 +388,11 @@ Backend berada di folder `api/` dan terdiri dari front controller, konfigurasi, 
 | `api/index.php` | ✅ Selesai | Front controller API dan pengaturan sesi PHP |
 | `api/config.php` | ✅ Selesai | Konfigurasi database (override via environment variable) |
 | `api/db.php` | ✅ Selesai | Koneksi PDO MySQL dan timezone UTC |
-| `api/helpers.php` | ✅ Selesai | Sesi, otorisasi, serializer, sanitasi HTML, audit, dan notifikasi |
-| `api/snapshot.php` | ✅ Selesai | Snapshot koleksi untuk cache client |
-| `api/actions.php` | ✅ Selesai | Aksi bisnis dan validasi role/kepemilikan di server |
-| `api/schema.sql` | ✅ Selesai | Skema MySQL 8 dan foreign key |
-| `api/install.php` | ✅ Selesai | Installer/seeder data demo (`--fresh` untuk reset) |
+| `api/helpers.php` | ✅ Selesai | Sesi, otorisasi, serializer (termasuk sesi/presensi/koreksi), kebijakan kehadiran, rekap, sanitasi HTML, audit, dan notifikasi |
+| `api/snapshot.php` | ✅ Selesai | Snapshot koleksi untuk cache client, termasuk `classSessions`, `attendances`, dan `attendanceCorrections` |
+| `api/actions.php` | ✅ Selesai | Aksi bisnis dan validasi role/kepemilikan di server, termasuk aksi `session.*` dan `attendance.*` |
+| `api/schema.sql` | ✅ Selesai | Skema MySQL 8 (17 tabel), foreign key, dan index |
+| `api/install.php` | ✅ Selesai | Installer/seeder data demo (`--fresh` untuk reset), termasuk sesi dan presensi |
 
 ---
 
@@ -389,6 +430,22 @@ Backend berada di folder `api/` dan terdiri dari front controller, konfigurasi, 
 | Histori pergantian tentor | ✅ Selesai | `class_instructor_histories`; entri lama ditutup saat `class.assignInstructor` |
 | Kuota dan status kelas | ✅ Selesai | Kuota dicek saat pendaftaran; status draft/open/ongoing/completed/cancelled/archived |
 | Kelas yang diampu (Instruktur) | ✅ Selesai | Dashboard instruktur menampilkan tabel “Kelas yang Diampu” |
+
+### 6.2b Jadwal Sesi & Presensi
+
+| Fitur | Status | Keterangan |
+|---|---|---|
+| Jadwal sesi tunggal | ✅ Selesai | `admin/academic.html` dan `instructor/dashboard.html`; aksi `session.create` |
+| Jadwal berulang | ✅ Selesai | `session.createBulk` dengan `dates[]` atau `startDate` + `weekdays` (ISO 1–7) + `occurrences` (maks. 52) |
+| Modul terkait sesi | ✅ Selesai | Sesi dapat merujuk modul dari versi kurikulum kelas; modul hanya informatif dan tidak mengubah struktur |
+| JP rencana & aktual | ✅ Selesai | `plannedJp`/`actualJp`; sesi `cancelled`/`no_show`/`rescheduled` dikecualikan dari JP aktual |
+| Lifecycle sesi | ✅ Selesai | `scheduled`, `confirmed`, `completed`, `rescheduled`, `cancelled`, `no_show`; sesi `completed` tidak dapat dihapus |
+| Hapus vs batalkan sesi | ✅ Selesai | Sesi dengan presensi tidak dapat dihapus; gunakan status `cancelled` agar riwayat tetap utuh |
+| Presensi per sesi & enrollment | ✅ Selesai | `attendance.saveBulk`; unik per `(sessionId, enrollmentId)`; status `present`, `late`, `permission`, `sick`, `absent`, `excused` |
+| Koreksi presensi | ✅ Selesai | `attendance.correct` wajib alasan; baris `attendance_corrections` menyimpan nilai lama/baru, aktor, waktu, dan alasan |
+| Rekap kehadiran | ✅ Selesai | `attendance.recap` (admin/instruktur) dan `attendance.myRecap` (peserta); persentase dibulatkan 2 desimal |
+| Kebijakan kehadiran | ✅ Selesai | `attendance_present_statuses` = `present`+`late`; `attendance_counted_statuses` = `confirmed`+`completed`; dapat diubah di `api/config.php` |
+| Akses peserta | ✅ Selesai | Peserta hanya membaca presensi/rekap miliknya; akses lintas peserta ditolak server |
 
 ### 6.3 Enrolment & Progres Belajar
 | Fitur | Status | Keterangan |
@@ -442,7 +499,8 @@ Backend berada di folder `api/` dan terdiri dari front controller, konfigurasi, 
 | Pencatatan perubahan kursus | ✅ Selesai | Create, update, delete, publish, dan unpublish kursus tercatat di `elips_auditLogs` |
 | Pencatatan nilai | ✅ Selesai | Setiap penyimpanan nilai mencatat aktor, skor, grade, catatan, peserta, dan kursus |
 | Pencatatan status sertifikat | ✅ Selesai | Pengajuan Draft dan persetujuan Draft → Publish tercatat |
-| Pencatatan domain lain | ✅ Selesai | Pengguna, penugasan peserta, modul, dan materi juga tercatat |
+| Pencatatan domain lain | ✅ Selesai | Pengguna, penugasan peserta, modul, materi, sesi pertemuan, dan presensi juga tercatat |
+| Pencatatan koreksi presensi | ✅ Selesai | Koreksi menyimpan alasan, aktor, status lama/baru, dan waktu di `attendance_corrections` |
 | Resolusi aktor | ✅ Selesai | Prioritas: `actorId` eksplisit → user sesi → "Sistem"; tidak memakai fallback berbasis path halaman |
 | Filter & ekspor | ✅ Selesai | `admin/audit.html` memfilter berdasarkan aktor, aksi, entitas, tanggal, pencarian, dan limit; dapat diekspor ke CSV |
 | Batas penyimpanan | ✅ Selesai | Maksimal 1000 entri terbaru disimpan; backend memangkas tabel `audit_logs`, mode lokal membatasi `localStorage` |
@@ -517,6 +575,30 @@ else                            -> student/dashboard.html
   - siswa hanya melihat modul/materi dari versi kurikulum yang terkunci pada kelasnya.
 - Enrollment berstatus `withdrawn` mencabut akses siswa tanpa menghapus riwayat progres, nilai, dan sertifikat.
 
+### Jadwal Sesi Pertemuan
+- Data disimpan di tabel `class_sessions` (mode server) atau key `elips_classSessions` (mode lokal).
+- Admin dapat mengelola sesi seluruh kelas; Instruktur hanya kelas yang diampu (atau sesi dengan `instructorId` miliknya).
+- Setiap sesi menyimpan `classId`, `sessionNumber` (unik per kelas), `sessionDate`, `startTime`, `endTime`, `moduleId`, `plannedJp`, `actualJp`, `status`, dan `rescheduledFromId`.
+- Waktu selesai harus setelah waktu mulai; modul sesi harus berasal dari versi kurikulum kelas.
+- Jadwal berulang dibuat melalui `session.createBulk`:
+  - daftar `dates[]` eksplisit, atau
+  - `startDate` + `weekdays` ISO (1=Senin … 7=Minggu) + `occurrences` (1–52).
+- Sesi berstatus `cancelled`, `no_show`, atau `rescheduled` tidak dihitung sebagai JP aktual.
+- Sesi `completed` tidak dapat dihapus. Sesi yang sudah memiliki presensi juga tidak dapat dihapus; gunakan pembatalan agar riwayat tetap ada.
+- Reschedule membuat sesi pengganti baru dan menandai sesi asal `rescheduled`; sesi pengganti menyimpan `rescheduledFromId`.
+
+### Presensi & Rekap Kehadiran
+- Presensi disimpan di tabel `attendances` (mode server) atau key `elips_attendances` (mode lokal), unik per `(sessionId, enrollmentId)`.
+- Status presensi: `present`, `late`, `permission`, `sick`, `absent`, `excused`.
+- `attendance.saveBulk` menyimpan seluruh baris satu sesi; baris baru mencatat `recordedBy` dan `recordedAt`.
+- Perubahan status yang sudah tercatat dianggap koreksi dan wajib menyertakan alasan. Server menulis baris `attendance_corrections` berisi `oldStatus`, `newStatus`, `actorId`, `actorName`, `actorRole`, `reason`, dan `correctedAt`.
+- Kebijakan kehadiran dibaca dari `api/config.php`:
+  - `attendance_present_statuses` = `['present', 'late']` (status yang dihitung hadir);
+  - `attendance_counted_statuses` = `['confirmed', 'completed']` (status sesi yang masuk JP wajib).
+- Rekap per kelas menghitung JP wajib dari sesi yang dihitung, JP hadir dari sesi dengan status hadir, lalu `persentase = JP hadir ÷ JP wajib × 100` (dibulatkan 2 desimal).
+- `attendance.recap` tersedia untuk Admin dan Instruktur pengampu; `attendance.myRecap` hanya mengembalikan data peserta yang sedang login.
+- Peserta tidak dapat membaca presensi peserta lain; percobaan lintas peserta/kelas ditolak server.
+
 ### Progres Belajar
 - Pelajaran selesai disimpan di tabel `completed_lessons` (mode server) atau `localStorage` key `elips_completedLessons` (mode lokal)
 - Progres dihitung berdasarkan jumlah pelajaran selesai vs total pelajaran
@@ -542,8 +624,8 @@ else                            -> student/dashboard.html
 - Entri audit menyimpan `action`, `entity`, `entityId`, `entityLabel`, `actorId`, `actorName`, `actorRole`, `detail`, dan `createdAt`.
 - Resolusi aktor: `actorId` eksplisit dari pemanggil → user sesi (`elips_session`) → "Sistem". Fallback `getCurrentUser()` tidak dipakai agar tidak salah atribusi saat tidak ada sesi.
 - Operasi yang gagal (validasi ditolak) tidak dicatat.
-- Aksi yang dicatat: `create`, `update`, `delete`, `publish`, `unpublish`, `grade`, `submit`, `approve`, `assign`, dan `status`.
-- Entitas yang dicatat: `course`, `curriculum`, `class`, `grade`, `certificate`, `user`, `enrollment`, `module`, dan `lesson`.
+- Aksi yang dicatat: `create`, `update`, `delete`, `publish`, `unpublish`, `grade`, `submit`, `approve`, `assign`, `status`, `attendance`, dan `correct`.
+- Entitas yang dicatat: `course`, `curriculum`, `class`, `grade`, `certificate`, `user`, `enrollment`, `module`, `lesson`, `session`, dan `attendance`.
 - Log diurutkan terbaru lebih dulu, dibatasi 1000 entri, dan dapat difilter berdasarkan aktor, aksi, entitas, rentang tanggal, pencarian, serta limit.
 - Admin dapat mengekspor hasil filter ke CSV dan membersihkan seluruh log dari `admin/audit.html`.
 
@@ -589,6 +671,21 @@ else                            -> student/dashboard.html
 | Kuota kelas ditegakkan | ✅ Lulus uji | Pendaftaran melebihi kuota ditolak; update kuota di bawah peserta aktif ditolak |
 | Status enrollment kelas | ✅ Lulus uji | `active` → `withdrawn` mencabut akses tanpa menghapus data |
 | Kelas dengan peserta tidak dapat dihapus | ✅ Lulus uji | `class.delete` ditolak; kelas kosong Draft dapat dihapus |
+| Sesi pertemuan tunggal dibuat | ✅ Lulus uji | `session.create` menyimpan nomor unik per kelas, tanggal, jam, JP rencana |
+| Jadwal berulang dibuat | ✅ Lulus uji | `session.createBulk` menerima `dates[]` atau `startDate` + `weekdays` + `occurrences` (maks. 52) |
+| Validasi waktu & modul sesi | ✅ Lulus uji | Waktu selesai harus setelah mulai; modul harus dari versi kurikulum kelas |
+| Reschedule membuat sesi pengganti | ✅ Lulus uji | Sesi asal → `rescheduled`; sesi baru menyimpan `rescheduledFromId` |
+| Sesi completed tidak dapat dihapus | ✅ Lulus uji | `session.delete` ditolak untuk status `completed` |
+| Sesi berpresensi tidak dapat dihapus | ✅ Lulus uji | Harus dibatalkan (`cancelled`) agar riwayat presensi tetap utuh |
+| Presensi per sesi & enrollment | ✅ Lulus uji | `attendance.saveBulk` menyimpan satu baris per enrollment; unique `(sessionId, enrollmentId)` |
+| Koreksi presensi wajib alasan | ✅ Lulus uji | Perubahan status yang sudah tercatat tanpa alasan ditolak |
+| Audit koreksi presensi | ✅ Lulus uji | Nilai lama/baru, aktor, alasan, dan waktu tersimpan di `attendance_corrections` |
+| Rekap kehadiran sesuai kebijakan | ✅ Lulus uji | JP hadir ÷ JP wajib; sesi `cancelled`/`no_show`/`rescheduled` tidak dihitung |
+| Peserta hanya melihat presensi sendiri | ✅ Lulus uji | `attendance.myRecap` mengembalikan data peserta yang login; akses lintas peserta ditolak |
+| UI jadwal & presensi admin | ✅ Lulus uji | `test-sessions-page` memverifikasi tabel sesi, modal single/berulang, presensi, koreksi, dan rekap |
+| UI jadwal & presensi instruktur | ✅ Lulus uji | Dashboard instruktur hanya menampilkan/mengelola kelas yang diampu |
+| Rekap kehadiran peserta | ✅ Lulus uji | Statistik, badge kebijakan, dan detail sesi tampil di `student/dashboard.html` |
+| Server-mode jadwal & presensi | ✅ Lulus uji | `test-sessions-server` 20/20 terhadap API PHP/MySQL |
 | Nilai & sertifikat per enrollment | ✅ Lulus uji | Unique per `enrollment_id`; angkatan berbeda terpisah |
 | Guard role aksi akademik | ✅ Lulus uji | Instruktur/peserta tidak dapat membuat kurikulum/kelas atau mendaftarkan peserta |
 | Halaman akademik admin | ✅ Lulus uji | `test-academic-page` memverifikasi statistik, tabel versi/kelas, modal, roster, histori tentor, dan detail kurikulum |
@@ -629,18 +726,17 @@ else                            -> student/dashboard.html
 - **Responsive:** Menggunakan CSS custom yang responsif.
 - **UI Konsisten:** Menggunakan komponen seragam (navbar, sidebar, cards, tables, badges).
 - **Keamanan:** Pada mode server password di-hash, sesi memakai cookie `HttpOnly`/`SameSite=Lax`, dan otorisasi role/kepemilikan ditegakkan di server. Mode lokal tetap bersifat demo dan tidak boleh dianggap aman untuk produksi.
-- **Cakupan v4.0:** Increment ini mencakup **Phase 1–2** (versi kurikulum + kelas/angkatan + enrollment berbasis kelas). Jadwal/presensi offline, materi per kelas, tugas/ujian, pembayaran, dan sertifikat PDF mengikuti phase berikutnya pada `ELIPS-LMS-PRD-v4.0.md`.
+- **Cakupan v4.0:** Increment ini mencakup **Phase 1–3** (versi kurikulum + kelas/angkatan + enrollment berbasis kelas + jadwal sesi/presensi offline). Materi per kelas, tugas/ujian, pembayaran, dan sertifikat PDF mengikuti phase berikutnya pada `ELIPS-LMS-PRD-v4.0.md`.
 - **Kompatibilitas v3.0:** Struktur v3 tetap dipertahankan. Setiap kursus lama mendapat versi kurikulum `1.0`; enrollment lama dipetakan ke kelas migrasi (`legacy_import`) agar tidak ada data yang hilang.
 
 ---
 
 ## 10. Rencana Pengembangan Lanjutan (Opsional)
 
-Backend PHP/MySQL, autentikasi sesi, validasi role/kepemilikan, audit server-side, outbox notifikasi simulasi, serta Phase 1–2 v4.0 (kurikulum, kelas, enrollment) sudah diimplementasikan. Untuk production dan phase v4 berikutnya, pengembangan berikut masih diperlukan:
+Backend PHP/MySQL, autentikasi sesi, validasi role/kepemilikan, audit server-side, outbox notifikasi simulasi, serta Phase 1–3 v4.0 (kurikulum, kelas, enrollment, jadwal & presensi) sudah diimplementasikan. Untuk production dan phase v4 berikutnya, pengembangan berikut masih diperlukan:
 
 | Fitur | Prioritas | Keterangan |
 |---|---|---|
-| Phase 3 v4.0: jadwal & presensi offline | P1 | Sesi pertemuan, JP rencana/aktual, presensi, koreksi, rekap kehadiran |
 | Phase 4–10 v4.0 | P1 | Materi per kelas, tugas/ujian, pembayaran, sertifikat lanjutan (lihat `ELIPS-LMS-PRD-v4.0.md`) |
 | Hardening API | P0 | Rate limiting login, CSRF token, HTTPS wajib, dan rotasi session ID |
 | Pembatasan baca snapshot | P0 | Snapshot publik saat ini memuat seluruh koleksi demo; produksi perlu proyeksi terbatas per role dan endpoint khusus verifikasi sertifikat |
