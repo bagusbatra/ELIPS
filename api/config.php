@@ -20,4 +20,8 @@ return [
     // Batas jumlah entri audit/notifikasi yang disimpan di database.
     'audit_limit' => 1000,
     'notification_limit' => 1000,
+    // Kebijakan rekap kehadiran. Hanya status ini yang dihitung hadir,
+    // dan hanya sesi berstatus ini yang masuk perhitungan JP wajib.
+    'attendance_present_statuses' => ['present', 'late'],
+    'attendance_counted_statuses' => ['confirmed', 'completed'],
 ];

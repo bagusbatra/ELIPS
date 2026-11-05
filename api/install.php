@@ -247,6 +247,62 @@ try {
     $enrollmentStmt->execute([2, 6, 1, 1, '2026-10-05']);
     $enrollmentStmt->execute([3, 7, 1, 1, '2026-10-10']);
 
+    // ---------- Sesi pertemuan & presensi ----------
+    $sessionStmt = $db->prepare(
+        "INSERT INTO class_sessions
+         (id, class_id, session_number, title, module_id, session_date, start_time, end_time,
+          location, room, instructor_id, planned_jp, actual_jp, status, notes, created_by, updated_by, created_at)
+         VALUES (?, 1, ?, ?, ?, ?, '09:00:00', '11:00:00', 'Kampus Pusat', 'R-101', 2, 4, ?, ?, ?, 1, 1, ?)"
+    );
+    $sessions = [
+        [1, 1, 'Pertemuan 1: Pengantar Manajemen', 1, '2026-10-05', 4, 'completed', 'Sesi pembuka dan kontrak belajar.', '2026-10-05 09:00:00'],
+        [2, 2, 'Pertemuan 2: Perencanaan (Planning)', 2, '2026-10-07', 4, 'completed', 'Latihan menyusun rencana kerja sederhana.', '2026-10-07 09:00:00'],
+        [3, 3, 'Pertemuan 3: Pengorganisasian (Organizing)', 3, '2026-10-12', 4, 'completed', 'Diskusi struktur organisasi dan pembagian tugas.', '2026-10-12 09:00:00'],
+        [4, 4, 'Pertemuan 4: Kepemimpinan (Leading)', 4, '2026-10-14', 0, 'scheduled', 'Sesi berikutnya, presensi belum diisi.', '2026-10-14 09:00:00'],
+    ];
+    foreach ($sessions as $session) {
+        $sessionStmt->execute([
+            $session[0],
+            $session[1],
+            $session[2],
+            $session[3],
+            $session[4],
+            $session[5],
+            $session[6],
+            $session[7],
+            $session[8],
+        ]);
+    }
+
+    $attendanceStmt = $db->prepare(
+        "INSERT INTO attendances
+         (id, session_id, enrollment_id, student_id, status, recorded_by, recorded_at, note, correction_reason, created_at)
+         VALUES (?, ?, ?, ?, ?, 2, ?, ?, '', ?)"
+    );
+    $attendances = [
+        [1, 1, 1, 5, 'present', '2026-10-05 11:05:00', '', '2026-10-05 11:05:00'],
+        [2, 1, 2, 6, 'present', '2026-10-05 11:05:00', '', '2026-10-05 11:05:00'],
+        [3, 1, 3, 7, 'late', '2026-10-05 11:05:00', 'Datang 15 menit setelah sesi dimulai.', '2026-10-05 11:05:00'],
+        [4, 2, 1, 5, 'present', '2026-10-07 11:05:00', '', '2026-10-07 11:05:00'],
+        [5, 2, 2, 6, 'permission', '2026-10-07 11:05:00', 'Izin keperluan keluarga.', '2026-10-07 11:05:00'],
+        [6, 2, 3, 7, 'present', '2026-10-07 11:05:00', '', '2026-10-07 11:05:00'],
+        [7, 3, 1, 5, 'late', '2026-10-12 11:05:00', 'Terlambat 10 menit.', '2026-10-12 11:05:00'],
+        [8, 3, 2, 6, 'present', '2026-10-12 11:05:00', '', '2026-10-12 11:05:00'],
+        [9, 3, 3, 7, 'absent', '2026-10-12 11:05:00', 'Tidak hadir tanpa keterangan.', '2026-10-12 11:05:00'],
+    ];
+    foreach ($attendances as $attendance) {
+        $attendanceStmt->execute([
+            $attendance[0],
+            $attendance[1],
+            $attendance[2],
+            $attendance[3],
+            $attendance[4],
+            $attendance[5],
+            $attendance[6],
+            $attendance[7],
+        ]);
+    }
+
     $db->commit();
 
     echo "Data demo berhasil dimasukkan.\n";

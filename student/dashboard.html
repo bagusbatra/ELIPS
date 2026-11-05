@@ -107,6 +107,15 @@
                     </div>
                 </div>
                 <div class="stat-card">
+                    <div class="stat-card-icon green">
+                        <i class="bi bi-calendar-check"></i>
+                    </div>
+                    <div class="stat-card-info">
+                        <div class="stat-card-value" id="statAttendance">0%</div>
+                        <div class="stat-card-label">Rata-rata Kehadiran</div>
+                    </div>
+                </div>
+                <div class="stat-card">
                     <div class="stat-card-icon purple">
                         <i class="bi bi-award"></i>
                     </div>
@@ -137,6 +146,16 @@
                     </table>
                 </div>
             </div>
+
+            <div class="dashboard-section">
+                <div class="dashboard-section-header">
+                    <h2 class="dashboard-section-title">Rekap Kehadiran Saya</h2>
+                    <span class="badge badge-primary" id="attendancePolicyBadge">Hadir = present + late</span>
+                </div>
+                <div class="dashboard-section-body" id="attendanceRecapBody" style="padding: 1.5rem;">
+                    <p style="color: var(--text-secondary);">Memuat rekap kehadiran...</p>
+                </div>
+            </div>
         </main>
     </div>
 
@@ -156,6 +175,7 @@
     <script src="../assets/js/crud-enrollments.js"></script>
     <script src="../assets/js/crud-content.js"></script>
     <script src="../assets/js/crud-grades.js"></script>
+    <script src="../assets/js/crud-academic.js"></script>
     <script src="../assets/js/ui.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function () {
@@ -262,6 +282,7 @@
             document.getElementById('statLessons').textContent = completedLessons;
             document.getElementById('statProgress').textContent = activeOverview.length > 0 ? Math.round(progressSum / activeOverview.length) + '%' : '0%';
             document.getElementById('statCertificates').textContent = publishedCerts.length;
+            renderStudentAttendance();
 
             const notices = [];
             if (awaitingGrade.length > 0) {
@@ -287,6 +308,113 @@
                 if (event.persisted) window.location.reload();
             });
         });
+
+        function renderStudentAttendance() {
+            const body = document.getElementById('attendanceRecapBody');
+            const result = ELIPS.getMyAttendanceRecap();
+            if (!result.ok) {
+                body.innerHTML = '<p style="color: var(--text-secondary);">' + ELIPS.escapeHtml(result.message || 'Rekap kehadiran belum tersedia.') + '</p>';
+                return;
+            }
+
+            const classes = (result.data && result.data.classes) || [];
+            if (classes.length === 0) {
+                body.innerHTML = [
+                    '<div style="text-align: center; padding: 1.5rem 1rem; color: var(--text-secondary);">',
+                    '  <i class="bi bi-calendar-x" style="display: block; font-size: 2rem; opacity: .45; margin-bottom: .5rem;"></i>',
+                    '  Belum ada kelas dengan jadwal presensi untuk akun Anda.',
+                    '</div>'
+                ].join('');
+                document.getElementById('statAttendance').textContent = '0%';
+                return;
+            }
+
+            const attendanceLabels = {
+                present: 'Hadir', late: 'Terlambat', permission: 'Izin',
+                sick: 'Sakit', absent: 'Alpa', excused: 'Dispensasi'
+            };
+            const sessionLabels = {
+                scheduled: 'Terjadwal', confirmed: 'Terkonfirmasi', completed: 'Selesai',
+                rescheduled: 'Dijadwalkan Ulang', cancelled: 'Dibatalkan', no_show: 'Tidak Hadir'
+            };
+            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+
+            function formatDate(value) {
+                const parts = String(value || '').split('-');
+                if (parts.length !== 3) return value || '-';
+                return Number(parts[2]) + ' ' + (months[Number(parts[1]) - 1] || parts[1]) + ' ' + parts[0];
+            }
+
+            let totalPercentage = 0;
+            const html = classes.map(function (recap) {
+                const student = recap.students && recap.students[0];
+                if (!student) return '';
+                const percentage = Number(student.percentage) || 0;
+                totalPercentage += percentage;
+                const badgeClass = percentage >= 75 ? 'badge-success' : (percentage >= 50 ? 'badge-warning' : 'badge');
+                const sessions = student.sessions || [];
+                const rows = sessions.length === 0
+                    ? '<tr><td colspan="5" style="text-align: center; color: var(--text-secondary);">Belum ada sesi pertemuan.</td></tr>'
+                    : sessions.map(function (detail) {
+                        const counted = (recap.policy.countedStatuses || []).indexOf(detail.sessionStatus) !== -1;
+                        const status = detail.status ? (attendanceLabels[detail.status] || detail.status) : 'Belum diisi';
+                        const statusClass = detail.status === 'present' ? 'badge-success'
+                            : (detail.status === 'late' || detail.status === 'permission' || detail.status === 'sick') ? 'badge-warning'
+                            : 'badge';
+                        return '<tr>' +
+                            '<td>Pertemuan ' + ELIPS.escapeHtml(detail.sessionNumber) + '</td>' +
+                            '<td>' + ELIPS.escapeHtml(formatDate(detail.sessionDate)) + '</td>' +
+                            '<td>' + ELIPS.escapeHtml(sessionLabels[detail.sessionStatus] || detail.sessionStatus) + '</td>' +
+                            '<td><span class="badge ' + statusClass + '">' + ELIPS.escapeHtml(status) + '</span></td>' +
+                            '<td>' + (counted ? (Number(detail.actualJp) || Number(detail.plannedJp) || 0) + ' JP' : '<span style="color: var(--text-secondary);">Tidak dihitung</span>') + '</td>' +
+                            '</tr>';
+                    }).join('');
+
+                return '<div style="border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.25rem; margin-bottom: 1rem;">' +
+                    '<div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-bottom: 0.75rem;">' +
+                    '  <div>' +
+                    '    <div style="font-weight: 600;">' + ELIPS.escapeHtml(recap.className) + '</div>' +
+                    '    <div class="table-course-meta">' + ELIPS.escapeHtml(recap.classCode) + ' • ' + ELIPS.escapeHtml(recap.courseTitle) + '</div>' +
+                    '  </div>' +
+                    '  <div style="text-align: right;">' +
+                    '    <span class="badge ' + badgeClass + '">' + percentage + '% kehadiran</span>' +
+                    '    <div class="table-course-meta">' + (Number(student.presentJp) || 0) + ' / ' + (Number(student.requiredJp) || 0) + ' JP wajib</div>' +
+                    '  </div>' +
+                    '</div>' +
+                    '<div class="progress-inline" style="margin-bottom: 0.75rem;">' +
+                    '  <div class="progress-inline-bar"><div class="progress-inline-fill" style="width: ' + Math.min(100, percentage) + '%;' + (percentage >= 75 ? ' background: var(--success);' : '') + '"></div></div>' +
+                    '  <span class="progress-inline-text">' + percentage + '%</span>' +
+                    '</div>' +
+                    '<div class="table-course-meta" style="margin-bottom: 0.75rem;">Hadir ' + (Number(student.present) || 0) +
+                    ' • Terlambat ' + (Number(student.late) || 0) +
+                    ' • Izin ' + (Number(student.permission) || 0) +
+                    ' • Sakit ' + (Number(student.sick) || 0) +
+                    ' • Alpa ' + (Number(student.absent) || 0) +
+                    ' • Dispensasi ' + (Number(student.excused) || 0) + '</div>' +
+                    '<details>' +
+                    '  <summary style="cursor: pointer; font-size: 0.875rem; color: var(--primary);">Lihat detail per pertemuan</summary>' +
+                    '  <div style="overflow-x: auto; margin-top: 0.5rem;">' +
+                    '    <table class="dashboard-table">' +
+                    '      <thead><tr><th>Pertemuan</th><th>Tanggal</th><th>Status Sesi</th><th>Presensi</th><th>Bobot</th></tr></thead>' +
+                    '      <tbody>' + rows + '</tbody>' +
+                    '    </table>' +
+                    '  </div>' +
+                    '</details>' +
+                    '</div>';
+            }).join('');
+
+            body.innerHTML = html;
+            document.getElementById('statAttendance').textContent = classes.length > 0
+                ? Math.round(totalPercentage / classes.length) + '%'
+                : '0%';
+            const policy = classes[0].policy || {};
+            if (policy.presentStatuses) {
+                document.getElementById('attendancePolicyBadge').textContent =
+                    'Hadir = ' + policy.presentStatuses.map(function (status) {
+                        return attendanceLabels[status] || status;
+                    }).join(' + ');
+            }
+        }
     </script>
 </body>
 </html>

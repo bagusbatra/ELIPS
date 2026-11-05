@@ -118,6 +118,70 @@
         ];
     }
 
+    function seedAttendances() {
+        return [
+            { id: 1, sessionId: 1, enrollmentId: 1, studentId: 5, studentName: 'Budi Santoso', status: 'present', recordedBy: 2, recordedByName: 'Ahmad Fauzi, M.M.', recordedAt: '2026-10-05T11:05:00.000Z', note: '', correctedAt: null, correctionReason: '', createdAt: '2026-10-05T11:05:00.000Z', updatedAt: null },
+            { id: 2, sessionId: 1, enrollmentId: 2, studentId: 6, studentName: 'Ani Nurhayati', status: 'present', recordedBy: 2, recordedByName: 'Ahmad Fauzi, M.M.', recordedAt: '2026-10-05T11:05:00.000Z', note: '', correctedAt: null, correctionReason: '', createdAt: '2026-10-05T11:05:00.000Z', updatedAt: null },
+            { id: 3, sessionId: 1, enrollmentId: 3, studentId: 7, studentName: 'Rina Setiawati', status: 'late', recordedBy: 2, recordedByName: 'Ahmad Fauzi, M.M.', recordedAt: '2026-10-05T11:05:00.000Z', note: 'Datang 15 menit setelah sesi dimulai.', correctedAt: null, correctionReason: '', createdAt: '2026-10-05T11:05:00.000Z', updatedAt: null },
+            { id: 4, sessionId: 2, enrollmentId: 1, studentId: 5, studentName: 'Budi Santoso', status: 'present', recordedBy: 2, recordedByName: 'Ahmad Fauzi, M.M.', recordedAt: '2026-10-07T11:05:00.000Z', note: '', correctedAt: null, correctionReason: '', createdAt: '2026-10-07T11:05:00.000Z', updatedAt: null },
+            { id: 5, sessionId: 2, enrollmentId: 2, studentId: 6, studentName: 'Ani Nurhayati', status: 'permission', recordedBy: 2, recordedByName: 'Ahmad Fauzi, M.M.', recordedAt: '2026-10-07T11:05:00.000Z', note: 'Izin keperluan keluarga.', correctedAt: null, correctionReason: '', createdAt: '2026-10-07T11:05:00.000Z', updatedAt: null },
+            { id: 6, sessionId: 2, enrollmentId: 3, studentId: 7, studentName: 'Rina Setiawati', status: 'present', recordedBy: 2, recordedByName: 'Ahmad Fauzi, M.M.', recordedAt: '2026-10-07T11:05:00.000Z', note: '', correctedAt: null, correctionReason: '', createdAt: '2026-10-07T11:05:00.000Z', updatedAt: null },
+            { id: 7, sessionId: 3, enrollmentId: 1, studentId: 5, studentName: 'Budi Santoso', status: 'late', recordedBy: 2, recordedByName: 'Ahmad Fauzi, M.M.', recordedAt: '2026-10-12T11:05:00.000Z', note: 'Terlambat 10 menit.', correctedAt: null, correctionReason: '', createdAt: '2026-10-12T11:05:00.000Z', updatedAt: null },
+            { id: 8, sessionId: 3, enrollmentId: 2, studentId: 6, studentName: 'Ani Nurhayati', status: 'present', recordedBy: 2, recordedByName: 'Ahmad Fauzi, M.M.', recordedAt: '2026-10-12T11:05:00.000Z', note: '', correctedAt: null, correctionReason: '', createdAt: '2026-10-12T11:05:00.000Z', updatedAt: null },
+            { id: 9, sessionId: 3, enrollmentId: 3, studentId: 7, studentName: 'Rina Setiawati', status: 'absent', recordedBy: 2, recordedByName: 'Ahmad Fauzi, M.M.', recordedAt: '2026-10-12T11:05:00.000Z', note: 'Tidak hadir tanpa keterangan.', correctedAt: null, correctionReason: '', createdAt: '2026-10-12T11:05:00.000Z', updatedAt: null }
+        ];
+    }
+
+    function seedClassSessions() {
+        const base = {
+            classId: 1,
+            classCode: 'ANG-2026-MNJ-01',
+            className: 'Angkatan 2026 — Pelatihan Manajemen Dasar',
+            courseId: 1,
+            courseTitle: 'Pelatihan Manajemen Dasar',
+            location: 'Kampus Pusat',
+            room: 'R-101',
+            instructorId: 2,
+            instructorName: 'Ahmad Fauzi, M.M.',
+            startTime: '09:00',
+            endTime: '11:00',
+            plannedJp: 4,
+            rescheduledFromId: null,
+            createdBy: 1,
+            updatedBy: 1
+        };
+        return [
+            Object.assign({}, base, {
+                id: 1, sessionNumber: 1, title: 'Pertemuan 1: Pengantar Manajemen', moduleId: 1,
+                moduleTitle: 'Modul 1: Pengantar Manajemen', sessionDate: '2026-10-05', actualJp: 4,
+                status: 'completed', notes: 'Sesi pembuka dan kontrak belajar.',
+                presentCount: 2, lateCount: 1, permissionCount: 0, sickCount: 0, absentCount: 0,
+                excusedCount: 0, attendanceCount: 3, createdAt: '2026-10-05T09:00:00.000Z'
+            }),
+            Object.assign({}, base, {
+                id: 2, sessionNumber: 2, title: 'Pertemuan 2: Perencanaan (Planning)', moduleId: 2,
+                moduleTitle: 'Modul 2: Perencanaan (Planning)', sessionDate: '2026-10-07', actualJp: 4,
+                status: 'completed', notes: 'Latihan menyusun rencana kerja sederhana.',
+                presentCount: 2, lateCount: 0, permissionCount: 1, sickCount: 0, absentCount: 0,
+                excusedCount: 0, attendanceCount: 3, createdAt: '2026-10-07T09:00:00.000Z'
+            }),
+            Object.assign({}, base, {
+                id: 3, sessionNumber: 3, title: 'Pertemuan 3: Pengorganisasian (Organizing)', moduleId: 3,
+                moduleTitle: 'Modul 3: Pengorganisasian (Organizing)', sessionDate: '2026-10-12', actualJp: 4,
+                status: 'completed', notes: 'Diskusi struktur organisasi dan pembagian tugas.',
+                presentCount: 1, lateCount: 1, permissionCount: 0, sickCount: 0, absentCount: 1,
+                excusedCount: 0, attendanceCount: 3, createdAt: '2026-10-12T09:00:00.000Z'
+            }),
+            Object.assign({}, base, {
+                id: 4, sessionNumber: 4, title: 'Pertemuan 4: Kepemimpinan (Leading)', moduleId: 4,
+                moduleTitle: 'Modul 4: Kepemimpinan (Leading)', sessionDate: '2026-10-14', actualJp: 0,
+                status: 'scheduled', notes: 'Sesi berikutnya, presensi belum diisi.',
+                presentCount: 0, lateCount: 0, permissionCount: 0, sickCount: 0, absentCount: 0,
+                excusedCount: 0, attendanceCount: 0, createdAt: '2026-10-14T09:00:00.000Z'
+            })
+        ];
+    }
+
     function seedCategories() {
         return [
             { id: 1, name: 'Pelatihan', slug: 'pelatihan', status: 'active' },
@@ -313,6 +377,16 @@
             }
         });
         write(KEYS.enrollments, enrollments);
+
+        if (!Array.isArray(read(KEYS.classSessions, null))) {
+            write(KEYS.classSessions, seedClassSessions());
+        }
+        if (!Array.isArray(read(KEYS.attendances, null))) {
+            write(KEYS.attendances, seedAttendances());
+        }
+        if (!Array.isArray(read(KEYS.attendanceCorrections, null))) {
+            write(KEYS.attendanceCorrections, []);
+        }
 
         // Seed module & lesson structure only when empty
         if (ELIPS.getModules().length === 0 || ELIPS.getLessons().length === 0) {

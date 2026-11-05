@@ -25,7 +25,9 @@
         submit: 'Ajukan Draft',
         approve: 'Setujui',
         assign: 'Penugasan',
-        status: 'Ubah Status'
+        status: 'Ubah Status',
+        attendance: 'Presensi',
+        correct: 'Koreksi'
     };
 
     const ENTITY_LABELS = {
@@ -35,7 +37,9 @@
         user: 'Pengguna',
         enrollment: 'Penugasan',
         module: 'Modul',
-        lesson: 'Materi'
+        lesson: 'Materi',
+        session: 'Sesi Pertemuan',
+        attendance: 'Presensi'
     };
 
     function actionLabel(action) {

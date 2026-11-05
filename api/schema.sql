@@ -1,5 +1,5 @@
 -- ============================================================
--- ELIPS LMS - skema database MySQL 8 (v4.0 Phase 1-2)
+-- ELIPS LMS - skema database MySQL 8 (v4.0 Phase 1-3)
 -- Jalankan melalui api/install.php agar data demo ikut terisi.
 -- ============================================================
 
@@ -265,6 +265,89 @@ CREATE TABLE IF NOT EXISTS `audit_logs` (
     KEY `idx_audit_created` (`created_at`),
     KEY `idx_audit_actor` (`actor_id`),
     KEY `idx_audit_entity` (`entity`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `class_sessions` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `class_id` INT UNSIGNED NOT NULL,
+    `session_number` INT UNSIGNED NOT NULL,
+    `title` VARCHAR(200) NOT NULL DEFAULT '',
+    `module_id` INT UNSIGNED NULL,
+    `session_date` DATE NOT NULL,
+    `start_time` TIME NULL,
+    `end_time` TIME NULL,
+    `location` VARCHAR(150) NOT NULL DEFAULT '',
+    `room` VARCHAR(100) NOT NULL DEFAULT '',
+    `instructor_id` INT UNSIGNED NULL,
+    `planned_jp` DECIMAL(6, 2) NOT NULL DEFAULT 0,
+    `actual_jp` DECIMAL(6, 2) NOT NULL DEFAULT 0,
+    `status` ENUM('scheduled', 'confirmed', 'completed', 'rescheduled', 'cancelled', 'no_show') NOT NULL DEFAULT 'scheduled',
+    `rescheduled_from_id` INT UNSIGNED NULL,
+    `notes` TEXT NOT NULL,
+    `created_by` INT UNSIGNED NULL,
+    `updated_by` INT UNSIGNED NULL,
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NULL,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uq_class_sessions_number` (`class_id`, `session_number`),
+    KEY `idx_class_sessions_class_date` (`class_id`, `session_date`),
+    KEY `idx_class_sessions_status` (`status`),
+    KEY `idx_class_sessions_module` (`module_id`),
+    KEY `idx_class_sessions_instructor` (`instructor_id`),
+    KEY `idx_class_sessions_replaced` (`rescheduled_from_id`),
+    CONSTRAINT `fk_class_sessions_class` FOREIGN KEY (`class_id`) REFERENCES `classes` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_class_sessions_module` FOREIGN KEY (`module_id`) REFERENCES `modules` (`id`) ON DELETE SET NULL,
+    CONSTRAINT `fk_class_sessions_instructor` FOREIGN KEY (`instructor_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+    CONSTRAINT `fk_class_sessions_created_by` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+    CONSTRAINT `fk_class_sessions_updated_by` FOREIGN KEY (`updated_by`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+    CONSTRAINT `fk_class_sessions_replaced` FOREIGN KEY (`rescheduled_from_id`) REFERENCES `class_sessions` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `attendances` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `session_id` INT UNSIGNED NOT NULL,
+    `enrollment_id` INT UNSIGNED NOT NULL,
+    `student_id` INT UNSIGNED NOT NULL,
+    `status` ENUM('present', 'late', 'permission', 'sick', 'absent', 'excused') NOT NULL DEFAULT 'absent',
+    `recorded_by` INT UNSIGNED NULL,
+    `recorded_at` DATETIME NULL,
+    `note` TEXT NOT NULL,
+    `corrected_at` DATETIME NULL,
+    `correction_reason` TEXT NOT NULL,
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NULL,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uq_attendances_session_enrollment` (`session_id`, `enrollment_id`),
+    KEY `idx_attendances_student` (`student_id`),
+    KEY `idx_attendances_enrollment` (`enrollment_id`),
+    KEY `idx_attendances_status` (`status`),
+    CONSTRAINT `fk_attendances_session` FOREIGN KEY (`session_id`) REFERENCES `class_sessions` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_attendances_enrollment` FOREIGN KEY (`enrollment_id`) REFERENCES `enrollments` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_attendances_student` FOREIGN KEY (`student_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_attendances_recorded_by` FOREIGN KEY (`recorded_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `attendance_corrections` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `attendance_id` INT UNSIGNED NOT NULL,
+    `session_id` INT UNSIGNED NOT NULL,
+    `enrollment_id` INT UNSIGNED NOT NULL,
+    `old_status` VARCHAR(20) NOT NULL DEFAULT '',
+    `new_status` VARCHAR(20) NOT NULL,
+    `actor_id` INT UNSIGNED NULL,
+    `actor_name` VARCHAR(150) NOT NULL DEFAULT 'Sistem',
+    `actor_role` VARCHAR(30) NOT NULL DEFAULT 'sistem',
+    `reason` TEXT NOT NULL,
+    `corrected_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_attendance_corrections_attendance` (`attendance_id`),
+    KEY `idx_attendance_corrections_session` (`session_id`),
+    KEY `idx_attendance_corrections_enrollment` (`enrollment_id`),
+    CONSTRAINT `fk_attendance_corrections_attendance` FOREIGN KEY (`attendance_id`) REFERENCES `attendances` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_attendance_corrections_session` FOREIGN KEY (`session_id`) REFERENCES `class_sessions` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_attendance_corrections_enrollment` FOREIGN KEY (`enrollment_id`) REFERENCES `enrollments` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_attendance_corrections_actor` FOREIGN KEY (`actor_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `notifications` (

@@ -138,6 +138,30 @@ function elips_curriculum_version_row(int $id): ?array
     return $row ?: null;
 }
 
+function elips_session_row(int $id): ?array
+{
+    $stmt = elips_db()->prepare('SELECT * FROM class_sessions WHERE id = ? LIMIT 1');
+    $stmt->execute([$id]);
+    $row = $stmt->fetch();
+    return $row ?: null;
+}
+
+function elips_attendance_row(int $id): ?array
+{
+    $stmt = elips_db()->prepare('SELECT * FROM attendances WHERE id = ? LIMIT 1');
+    $stmt->execute([$id]);
+    $row = $stmt->fetch();
+    return $row ?: null;
+}
+
+function elips_attendance_correction_row(int $id): ?array
+{
+    $stmt = elips_db()->prepare('SELECT * FROM attendance_corrections WHERE id = ? LIMIT 1');
+    $stmt->execute([$id]);
+    $row = $stmt->fetch();
+    return $row ?: null;
+}
+
 function elips_current_curriculum_version(int $courseId): ?array
 {
     $db = elips_db();
@@ -681,6 +705,347 @@ function elips_enrollment_public(int $id): ?array
         'enrolledAt' => elips_date_only($row['enrolled_at']),
         'status' => $row['status'],
         'updatedAt' => elips_iso($row['updated_at']),
+    ];
+}
+
+function elips_time_short(?string $value): ?string
+{
+    if ($value === null || $value === '') {
+        return null;
+    }
+    if (preg_match('/^(\d{2}):(\d{2})/', $value, $matches)) {
+        return $matches[1] . ':' . $matches[2];
+    }
+    return null;
+}
+
+function elips_time_normalized($value): ?string
+{
+    $text = trim((string) ($value ?? ''));
+    if ($text === '') {
+        return null;
+    }
+    if (!preg_match('/^([01]\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?$/', $text, $matches)) {
+        return null;
+    }
+    return $matches[1] . ':' . $matches[2] . ':' . ($matches[3] ?? '00');
+}
+
+function elips_can_manage_session(array $session, array $actor): bool
+{
+    if ($actor['role'] === 'admin') {
+        return true;
+    }
+    if ($actor['role'] !== 'instruktur') {
+        return false;
+    }
+    $class = elips_class_row((int) $session['class_id']);
+    if (!$class) {
+        return false;
+    }
+    $actorId = (int) $actor['id'];
+    $sessionInstructor = $session['instructor_id'] === null ? null : (int) $session['instructor_id'];
+    if ($sessionInstructor !== null && $sessionInstructor === $actorId) {
+        return true;
+    }
+    return $sessionInstructor === null
+        && $class['instructor_id'] !== null
+        && (int) $class['instructor_id'] === $actorId;
+}
+
+function elips_attendance_policy(): array
+{
+    $config = elips_config();
+    $validAttendance = ['present', 'late', 'permission', 'sick', 'absent', 'excused'];
+    $validSession = ['scheduled', 'confirmed', 'completed', 'rescheduled', 'cancelled', 'no_show'];
+    $present = array_values(array_intersect(
+        $validAttendance,
+        (array) ($config['attendance_present_statuses'] ?? ['present', 'late'])
+    ));
+    $counted = array_values(array_intersect(
+        $validSession,
+        (array) ($config['attendance_counted_statuses'] ?? ['confirmed', 'completed'])
+    ));
+    return [
+        'presentStatuses' => $present ?: ['present', 'late'],
+        'countedStatuses' => $counted ?: ['confirmed', 'completed'],
+        'presentPercentageBasis' => 'JP',
+    ];
+}
+
+function elips_session_recap_weight(array $session): float
+{
+    $planned = (float) $session['planned_jp'];
+    if ($planned > 0) {
+        return $planned;
+    }
+    $actual = (float) $session['actual_jp'];
+    if ($actual > 0) {
+        return $actual;
+    }
+    return 1.0;
+}
+
+function elips_session_public(int $id): ?array
+{
+    $stmt = elips_db()->prepare(
+        "SELECT s.*, cl.code AS class_code, cl.name AS class_name, cl.course_id, cl.instructor_id AS class_instructor_id,
+            c.title AS course_title, u.name AS instructor_name, m.title AS module_title,
+            (SELECT COUNT(*) FROM attendances a WHERE a.session_id = s.id AND a.status = 'present') AS present_count,
+            (SELECT COUNT(*) FROM attendances a WHERE a.session_id = s.id AND a.status = 'late') AS late_count,
+            (SELECT COUNT(*) FROM attendances a WHERE a.session_id = s.id AND a.status = 'permission') AS permission_count,
+            (SELECT COUNT(*) FROM attendances a WHERE a.session_id = s.id AND a.status = 'sick') AS sick_count,
+            (SELECT COUNT(*) FROM attendances a WHERE a.session_id = s.id AND a.status = 'absent') AS absent_count,
+            (SELECT COUNT(*) FROM attendances a WHERE a.session_id = s.id AND a.status = 'excused') AS excused_count,
+            (SELECT COUNT(*) FROM attendances a WHERE a.session_id = s.id) AS attendance_count
+         FROM class_sessions s
+         JOIN classes cl ON cl.id = s.class_id
+         JOIN courses c ON c.id = cl.course_id
+         LEFT JOIN users u ON u.id = s.instructor_id
+         LEFT JOIN modules m ON m.id = s.module_id
+         WHERE s.id = ? LIMIT 1"
+    );
+    $stmt->execute([$id]);
+    $row = $stmt->fetch();
+    if (!$row) {
+        return null;
+    }
+    $instructorId = $row['instructor_id'] === null
+        ? ($row['class_instructor_id'] === null ? null : (int) $row['class_instructor_id'])
+        : (int) $row['instructor_id'];
+    $instructorName = $row['instructor_name'] ?? '';
+    if ($instructorName === '' && $instructorId !== null) {
+        $instructor = elips_user_row($instructorId);
+        $instructorName = $instructor ? $instructor['name'] : '';
+    }
+    return [
+        'id' => (int) $row['id'],
+        'classId' => (int) $row['class_id'],
+        'classCode' => $row['class_code'],
+        'className' => $row['class_name'],
+        'courseId' => (int) $row['course_id'],
+        'courseTitle' => $row['course_title'],
+        'sessionNumber' => (int) $row['session_number'],
+        'title' => $row['title'],
+        'moduleId' => $row['module_id'] === null ? null : (int) $row['module_id'],
+        'moduleTitle' => $row['module_title'] ?? '',
+        'sessionDate' => elips_date_only($row['session_date']),
+        'startTime' => elips_time_short($row['start_time']),
+        'endTime' => elips_time_short($row['end_time']),
+        'location' => $row['location'],
+        'room' => $row['room'],
+        'instructorId' => $instructorId,
+        'instructorName' => $instructorName,
+        'plannedJp' => (float) $row['planned_jp'],
+        'actualJp' => (float) $row['actual_jp'],
+        'status' => $row['status'],
+        'rescheduledFromId' => $row['rescheduled_from_id'] === null ? null : (int) $row['rescheduled_from_id'],
+        'notes' => $row['notes'],
+        'presentCount' => (int) $row['present_count'],
+        'lateCount' => (int) $row['late_count'],
+        'permissionCount' => (int) $row['permission_count'],
+        'sickCount' => (int) $row['sick_count'],
+        'absentCount' => (int) $row['absent_count'],
+        'excusedCount' => (int) $row['excused_count'],
+        'attendanceCount' => (int) $row['attendance_count'],
+        'createdBy' => $row['created_by'] === null ? null : (int) $row['created_by'],
+        'updatedBy' => $row['updated_by'] === null ? null : (int) $row['updated_by'],
+        'createdAt' => elips_iso($row['created_at']),
+        'updatedAt' => elips_iso($row['updated_at']),
+    ];
+}
+
+function elips_attendance_public(int $id): ?array
+{
+    $stmt = elips_db()->prepare(
+        'SELECT a.*, u.name AS student_name, r.name AS recorder_name
+         FROM attendances a
+         LEFT JOIN users u ON u.id = a.student_id
+         LEFT JOIN users r ON r.id = a.recorded_by
+         WHERE a.id = ? LIMIT 1'
+    );
+    $stmt->execute([$id]);
+    $row = $stmt->fetch();
+    if (!$row) {
+        return null;
+    }
+    return [
+        'id' => (int) $row['id'],
+        'sessionId' => (int) $row['session_id'],
+        'enrollmentId' => (int) $row['enrollment_id'],
+        'studentId' => (int) $row['student_id'],
+        'studentName' => $row['student_name'] ?? '',
+        'status' => $row['status'],
+        'recordedBy' => $row['recorded_by'] === null ? null : (int) $row['recorded_by'],
+        'recordedByName' => $row['recorder_name'] ?? '',
+        'recordedAt' => elips_iso($row['recorded_at']),
+        'note' => $row['note'],
+        'correctedAt' => elips_iso($row['corrected_at']),
+        'correctionReason' => $row['correction_reason'],
+        'createdAt' => elips_iso($row['created_at']),
+        'updatedAt' => elips_iso($row['updated_at']),
+    ];
+}
+
+function elips_attendance_correction_public(int $id): ?array
+{
+    $row = elips_attendance_correction_row($id);
+    if (!$row) {
+        return null;
+    }
+    return [
+        'id' => (int) $row['id'],
+        'attendanceId' => (int) $row['attendance_id'],
+        'sessionId' => (int) $row['session_id'],
+        'enrollmentId' => (int) $row['enrollment_id'],
+        'oldStatus' => $row['old_status'],
+        'newStatus' => $row['new_status'],
+        'actorId' => $row['actor_id'] === null ? null : (int) $row['actor_id'],
+        'actorName' => $row['actor_name'],
+        'actorRole' => $row['actor_role'],
+        'reason' => $row['reason'],
+        'correctedAt' => elips_iso($row['corrected_at']) ?: elips_iso($row['created_at']),
+        'createdAt' => elips_iso($row['created_at']),
+    ];
+}
+
+/**
+ * Rekap kehadiran berbasis JP. Hanya sesi yang memenuhi kebijakan
+ * yang dihitung sebagai JP wajib; status di luar kebijakan tetap
+ * dilaporkan terpisah.
+ */
+function elips_attendance_recap(int $classId, ?int $studentId = null): ?array
+{
+    $class = elips_class_row($classId);
+    if (!$class) {
+        return null;
+    }
+    $db = elips_db();
+    $course = elips_course_row((int) $class['course_id']);
+
+    $stmt = $db->prepare('SELECT * FROM class_sessions WHERE class_id = ? ORDER BY session_number ASC, id ASC');
+    $stmt->execute([$classId]);
+    $sessions = $stmt->fetchAll();
+
+    $policy = elips_attendance_policy();
+    $countedSessions = array_values(array_filter($sessions, function ($session) use ($policy) {
+        return in_array($session['status'], $policy['countedStatuses'], true);
+    }));
+    $requiredJp = 0.0;
+    foreach ($countedSessions as $session) {
+        $requiredJp += elips_session_recap_weight($session);
+    }
+    $plannedJp = 0.0;
+    $actualJp = 0.0;
+    foreach ($sessions as $session) {
+        $plannedJp += (float) $session['planned_jp'];
+        if (!in_array($session['status'], ['cancelled', 'no_show', 'rescheduled'], true)) {
+            $actualJp += (float) $session['actual_jp'];
+        }
+    }
+
+    $sql = "SELECT * FROM enrollments WHERE class_id = ? AND status IN ('active', 'pending', 'completed')";
+    $params = [$classId];
+    if ($studentId !== null) {
+        $sql .= ' AND student_id = ?';
+        $params[] = $studentId;
+    }
+    $sql .= ' ORDER BY id ASC';
+    $stmt = $db->prepare($sql);
+    $stmt->execute($params);
+    $enrollments = $stmt->fetchAll();
+
+    $attendanceMap = [];
+    if ($enrollments) {
+        $stmt = $db->prepare(
+            'SELECT a.* FROM attendances a
+             JOIN class_sessions s ON s.id = a.session_id
+             WHERE s.class_id = ?'
+        );
+        $stmt->execute([$classId]);
+        foreach ($stmt->fetchAll() as $attendance) {
+            $key = (int) $attendance['enrollment_id'] . ':' . (int) $attendance['session_id'];
+            $attendanceMap[$key] = $attendance;
+        }
+    }
+
+    $students = [];
+    foreach ($enrollments as $enrollment) {
+        $student = elips_user_row((int) $enrollment['student_id']);
+        $counts = ['present' => 0, 'late' => 0, 'permission' => 0, 'sick' => 0, 'absent' => 0, 'excused' => 0];
+        $missing = 0;
+        $presentJp = 0.0;
+        $sessionDetails = [];
+
+        foreach ($sessions as $session) {
+            $sessionId = (int) $session['id'];
+            $attendance = $attendanceMap[(int) $enrollment['id'] . ':' . $sessionId] ?? null;
+            $status = $attendance ? $attendance['status'] : null;
+            $counted = in_array($session['status'], $policy['countedStatuses'], true);
+            $weight = elips_session_recap_weight($session);
+
+            if ($status === null) {
+                $missing++;
+            } elseif (isset($counts[$status])) {
+                $counts[$status]++;
+            }
+
+            if ($counted) {
+                if ($status !== null && in_array($status, $policy['presentStatuses'], true)) {
+                    $presentJp += $weight;
+                } elseif ($status === null) {
+                    // Tidak ada catatan pada sesi yang sudah dihitung tetap
+                    // dilaporkan sebagai alfa pada rekap, bukan hadir.
+                    $counts['absent']++;
+                }
+            }
+
+            $sessionDetails[] = [
+                'sessionId' => $sessionId,
+                'sessionNumber' => (int) $session['session_number'],
+                'sessionDate' => elips_date_only($session['session_date']),
+                'sessionStatus' => $session['status'],
+                'plannedJp' => (float) $session['planned_jp'],
+                'actualJp' => (float) $session['actual_jp'],
+                'status' => $status,
+            ];
+        }
+
+        $countedPresent = $requiredJp > 0 ? $presentJp : 0.0;
+        $percentage = $requiredJp > 0 ? round($countedPresent / $requiredJp * 100, 2) : 0.0;
+
+        $students[] = [
+            'enrollmentId' => (int) $enrollment['id'],
+            'studentId' => (int) $enrollment['student_id'],
+            'studentName' => $student ? $student['name'] : 'Peserta #' . $enrollment['student_id'],
+            'studentEmail' => $student ? $student['email'] : '',
+            'enrollmentStatus' => $enrollment['status'],
+            'present' => $counts['present'],
+            'late' => $counts['late'],
+            'permission' => $counts['permission'],
+            'sick' => $counts['sick'],
+            'absent' => $counts['absent'],
+            'excused' => $counts['excused'],
+            'missing' => $missing,
+            'presentJp' => round($countedPresent, 2),
+            'requiredJp' => round($requiredJp, 2),
+            'percentage' => $percentage,
+            'sessions' => $sessionDetails,
+        ];
+    }
+
+    return [
+        'classId' => (int) $class['id'],
+        'classCode' => $class['code'],
+        'className' => $class['name'],
+        'courseId' => (int) $class['course_id'],
+        'courseTitle' => $course ? $course['title'] : 'Kursus #' . $class['course_id'],
+        'totalSessions' => count($sessions),
+        'countedSessions' => count($countedSessions),
+        'plannedJp' => round($plannedJp, 2),
+        'actualJp' => round($actualJp, 2),
+        'policy' => $policy,
+        'students' => $students,
     ];
 }
 

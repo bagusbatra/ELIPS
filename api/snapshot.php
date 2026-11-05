@@ -198,6 +198,24 @@ function elips_snapshot(): array
         ];
     }
 
+    $classSessions = [];
+    foreach ($db->query('SELECT id FROM class_sessions ORDER BY class_id ASC, session_number ASC, id ASC') as $row) {
+        $session = elips_session_public((int) $row['id']);
+        if ($session) $classSessions[] = $session;
+    }
+
+    $attendances = [];
+    foreach ($db->query('SELECT id FROM attendances ORDER BY session_id ASC, enrollment_id ASC, id ASC') as $row) {
+        $attendance = elips_attendance_public((int) $row['id']);
+        if ($attendance) $attendances[] = $attendance;
+    }
+
+    $attendanceCorrections = [];
+    foreach ($db->query('SELECT id FROM attendance_corrections ORDER BY id ASC') as $row) {
+        $correction = elips_attendance_correction_public((int) $row['id']);
+        if ($correction) $attendanceCorrections[] = $correction;
+    }
+
     $grades = [];
     foreach ($db->query('SELECT * FROM grades ORDER BY id ASC') as $row) {
         $grades[] = [
@@ -291,6 +309,9 @@ function elips_snapshot(): array
         'classes' => $classes,
         'classInstructorHistories' => $classInstructorHistories,
         'enrollments' => $enrollments,
+        'classSessions' => $classSessions,
+        'attendances' => $attendances,
+        'attendanceCorrections' => $attendanceCorrections,
         'modules' => $modules,
         'lessons' => $lessons,
         'grades' => $grades,

@@ -79,6 +79,45 @@
     }
     function isEnrolled(studentId, courseId) { return !!getEnrollment(studentId, courseId); }
 
+    // ---------- Class sessions ----------
+    function getClassSessions() { return read(KEYS.classSessions, []); }
+    function setClassSessions(list) { return write(KEYS.classSessions, list); }
+    function getClassSessionById(id) {
+        return getClassSessions().find(function (s) { return s.id === Number(id); }) || null;
+    }
+    function getSessionsByClass(classId) {
+        return getClassSessions()
+            .filter(function (s) { return Number(s.classId) === Number(classId); })
+            .sort(function (a, b) {
+                const dateCompare = String(a.sessionDate || '').localeCompare(String(b.sessionDate || ''));
+                if (dateCompare !== 0) return dateCompare;
+                return (Number(a.sessionNumber) || 0) - (Number(b.sessionNumber) || 0);
+            });
+    }
+
+    // ---------- Attendance ----------
+    function getAttendances() { return read(KEYS.attendances, []); }
+    function setAttendances(list) { return write(KEYS.attendances, list); }
+    function getSessionAttendances(sessionId) {
+        return getAttendances().filter(function (a) { return Number(a.sessionId) === Number(sessionId); });
+    }
+    function getAttendance(sessionId, enrollmentId) {
+        return getAttendances().find(function (a) {
+            return Number(a.sessionId) === Number(sessionId) &&
+                Number(a.enrollmentId) === Number(enrollmentId);
+        }) || null;
+    }
+    function getAttendancesByStudent(studentId) {
+        return getAttendances().filter(function (a) { return Number(a.studentId) === Number(studentId); });
+    }
+    function getAttendanceCorrections() { return read(KEYS.attendanceCorrections, []); }
+    function setAttendanceCorrections(list) { return write(KEYS.attendanceCorrections, list); }
+    function getCorrectionsByAttendance(attendanceId) {
+        return getAttendanceCorrections().filter(function (c) {
+            return Number(c.attendanceId) === Number(attendanceId);
+        });
+    }
+
     // ---------- Modules ----------
     function getModules() { return read(KEYS.modules, []); }
     function setModules(list) { return write(KEYS.modules, list); }
@@ -210,6 +249,18 @@
         getEnrollmentsByCourse: getEnrollmentsByCourse,
         getEnrollment: getEnrollment,
         isEnrolled: isEnrolled,
+        getClassSessions: getClassSessions,
+        setClassSessions: setClassSessions,
+        getClassSessionById: getClassSessionById,
+        getSessionsByClass: getSessionsByClass,
+        getAttendances: getAttendances,
+        setAttendances: setAttendances,
+        getSessionAttendances: getSessionAttendances,
+        getAttendance: getAttendance,
+        getAttendancesByStudent: getAttendancesByStudent,
+        getAttendanceCorrections: getAttendanceCorrections,
+        setAttendanceCorrections: setAttendanceCorrections,
+        getCorrectionsByAttendance: getCorrectionsByAttendance,
         getModules: getModules,
         setModules: setModules,
         getModulesByCourse: getModulesByCourse,

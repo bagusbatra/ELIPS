@@ -65,6 +65,26 @@ function elips_dispatch(string $action, array $payload): array
             return elips_action_enrollment_class_status($payload);
         case 'enrollment.delete':
             return elips_action_enrollment_delete($payload);
+        case 'session.create':
+            return elips_action_session_create($payload);
+        case 'session.createBulk':
+            return elips_action_session_create_bulk($payload);
+        case 'session.update':
+            return elips_action_session_update($payload);
+        case 'session.status':
+            return elips_action_session_status($payload);
+        case 'session.delete':
+            return elips_action_session_delete($payload);
+        case 'session.detail':
+            return elips_action_session_detail($payload);
+        case 'attendance.saveBulk':
+            return elips_action_attendance_save_bulk($payload);
+        case 'attendance.correct':
+            return elips_action_attendance_correct($payload);
+        case 'attendance.recap':
+            return elips_action_attendance_recap($payload);
+        case 'attendance.myRecap':
+            return elips_action_attendance_my_recap($payload);
         case 'module.create':
             return elips_action_module_create($payload);
         case 'module.update':
@@ -1483,6 +1503,743 @@ function elips_action_enrollment_delete(array $p): array
     );
 
     return elips_ok('Penugasan dan data terkait berhasil dihapus.');
+}
+
+// ---------- Class sessions & attendance ----------
+
+function elips_session_statuses(): array
+{
+    return ['scheduled', 'confirmed', 'completed', 'rescheduled', 'cancelled', 'no_show'];
+}
+
+function elips_attendance_statuses(): array
+{
+    return ['present', 'late', 'permission', 'sick', 'absent', 'excused'];
+}
+
+function elips_session_time_value($value, string $label): string
+{
+    $text = trim((string) ($value ?? ''));
+    if ($text === '') {
+        throw new ElipsError($label . ' wajib diisi.');
+    }
+    $normalized = elips_time_normalized($text);
+    if ($normalized === null) {
+        throw new ElipsError('Format ' . strtolower($label) . ' tidak valid (JJ:MM).');
+    }
+    return $normalized;
+}
+
+function elips_session_next_number(int $classId): int
+{
+    $stmt = elips_db()->prepare('SELECT COALESCE(MAX(session_number), 0) FROM class_sessions WHERE class_id = ?');
+    $stmt->execute([$classId]);
+    return (int) $stmt->fetchColumn() + 1;
+}
+
+function elips_session_normalize(array $class, array $p, int $sessionNumber): array
+{
+    $date = trim((string) ($p['sessionDate'] ?? ''));
+    if (!preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $date, $matches)
+        || !checkdate((int) $matches[2], (int) $matches[3], (int) $matches[1])) {
+        throw new ElipsError('Tanggal sesi tidak valid.');
+    }
+
+    $start = elips_session_time_value($p['startTime'] ?? null, 'Waktu mulai');
+    $end = elips_session_time_value($p['endTime'] ?? null, 'Waktu selesai');
+    if ($end <= $start) {
+        throw new ElipsError('Waktu selesai harus setelah waktu mulai.');
+    }
+
+    $moduleId = (int) ($p['moduleId'] ?? 0);
+    if ($moduleId > 0) {
+        $stmt = elips_db()->prepare('SELECT * FROM modules WHERE id = ? LIMIT 1');
+        $stmt->execute([$moduleId]);
+        $module = $stmt->fetch();
+        if (!$module
+            || (int) $module['course_id'] !== (int) $class['course_id']
+            || (int) $module['curriculum_version_id'] !== (int) $class['curriculum_version_id']) {
+            throw new ElipsError('Modul sesi tidak sesuai dengan kurikulum kelas.');
+        }
+    }
+
+    $instructorId = array_key_exists('instructorId', $p)
+        ? (int) $p['instructorId']
+        : (int) ($class['instructor_id'] ?? 0);
+    if ($instructorId <= 0) {
+        $instructorId = (int) ($class['instructor_id'] ?? 0);
+    }
+    if ($instructorId > 0 && !elips_is_active_instructor($instructorId)) {
+        throw new ElipsError('Instruktur sesi harus berstatus aktif.');
+    }
+
+    $plannedJp = max(0, (float) ($p['plannedJp'] ?? 0));
+    $actualJp = max(0, (float) ($p['actualJp'] ?? 0));
+    $status = (string) ($p['status'] ?? 'scheduled');
+    if (!in_array($status, elips_session_statuses(), true)) {
+        throw new ElipsError('Status sesi tidak valid.');
+    }
+    if ($status === 'completed' && $actualJp <= 0) {
+        $actualJp = $plannedJp;
+    }
+
+    $title = trim((string) ($p['title'] ?? ''));
+    if ($title === '') {
+        $title = 'Pertemuan ' . $sessionNumber;
+    }
+
+    return [
+        'title' => $title,
+        'moduleId' => $moduleId > 0 ? $moduleId : null,
+        'sessionDate' => $date,
+        'startTime' => $start,
+        'endTime' => $end,
+        'location' => array_key_exists('location', $p) ? trim((string) $p['location']) : (string) $class['location'],
+        'room' => array_key_exists('room', $p) ? trim((string) $p['room']) : (string) $class['room'],
+        'instructorId' => $instructorId > 0 ? $instructorId : null,
+        'plannedJp' => round($plannedJp, 2),
+        'actualJp' => round($actualJp, 2),
+        'status' => $status,
+        'notes' => trim((string) ($p['notes'] ?? '')),
+    ];
+}
+
+function elips_session_store(array $class, array $p, array $actor, int $sessionNumber): int
+{
+    $values = elips_session_normalize($class, $p, $sessionNumber);
+    $rescheduledFromId = (int) ($p['rescheduledFromId'] ?? 0);
+    $original = null;
+    if ($rescheduledFromId > 0) {
+        $original = elips_session_row($rescheduledFromId);
+        if (!$original || (int) $original['class_id'] !== (int) $class['id']) {
+            throw new ElipsError('Sesi asal penjadwalan ulang tidak ditemukan pada kelas ini.');
+        }
+        if ($original['status'] === 'completed') {
+            throw new ElipsError('Sesi yang sudah selesai tidak dapat dijadwalkan ulang.');
+        }
+    }
+
+    $stmt = elips_db()->prepare(
+        'INSERT INTO class_sessions
+         (class_id, session_number, title, module_id, session_date, start_time, end_time,
+          location, room, instructor_id, planned_jp, actual_jp, status, rescheduled_from_id,
+          notes, created_by, updated_by, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP())'
+    );
+    $stmt->execute([
+        (int) $class['id'],
+        $sessionNumber,
+        $values['title'],
+        $values['moduleId'],
+        $values['sessionDate'],
+        $values['startTime'],
+        $values['endTime'],
+        $values['location'],
+        $values['room'],
+        $values['instructorId'],
+        $values['plannedJp'],
+        $values['actualJp'],
+        $values['status'],
+        $original !== null ? (int) $original['id'] : null,
+        $values['notes'],
+        (int) $actor['id'],
+        (int) $actor['id'],
+    ]);
+    $id = (int) elips_db()->lastInsertId();
+
+    if ($original !== null) {
+        $stmt = elips_db()->prepare(
+            "UPDATE class_sessions SET status = 'rescheduled', updated_by = ?, updated_at = UTC_TIMESTAMP() WHERE id = ?"
+        );
+        $stmt->execute([(int) $actor['id'], (int) $original['id']]);
+    }
+
+    elips_audit(
+        'create',
+        'session',
+        $id,
+        $class['name'] . ' — Pertemuan ' . $sessionNumber,
+        'Menambahkan sesi pertemuan ' . $sessionNumber . ' untuk kelas "' . $class['name'] . '" pada '
+            . $values['sessionDate'] . ' pukul ' . substr($values['startTime'], 0, 5)
+            . '-' . substr($values['endTime'], 0, 5) . ' (' . $values['plannedJp'] . ' JP).',
+        $actor
+    );
+
+    return $id;
+}
+
+function elips_action_session_create(array $p): array
+{
+    $actor = elips_require_login();
+    $classId = (int) ($p['classId'] ?? 0);
+    $class = elips_class_row($classId);
+    if (!$class) return elips_fail('Kelas tidak ditemukan.');
+    if (!elips_can_manage_class($class, $actor)) {
+        return elips_fail('Anda tidak berhak mengelola jadwal kelas ini.');
+    }
+    if (in_array($class['status'], ['cancelled', 'archived'], true)) {
+        return elips_fail('Kelas ini tidak dapat dijadwalkan.');
+    }
+
+    $db = elips_db();
+    $db->beginTransaction();
+    try {
+        $requestedNumber = (int) ($p['sessionNumber'] ?? 0);
+        if ($requestedNumber > 0) {
+            $stmt = $db->prepare('SELECT id FROM class_sessions WHERE class_id = ? AND session_number = ? LIMIT 1');
+            $stmt->execute([$classId, $requestedNumber]);
+            if ($stmt->fetch()) {
+                throw new ElipsError('Nomor pertemuan ' . $requestedNumber . ' sudah digunakan pada kelas ini.');
+            }
+            $sessionNumber = $requestedNumber;
+        } else {
+            $sessionNumber = elips_session_next_number($classId);
+        }
+        $id = elips_session_store($class, $p, $actor, $sessionNumber);
+        $db->commit();
+    } catch (Throwable $e) {
+        $db->rollBack();
+        throw $e;
+    }
+
+    return elips_ok('Sesi pertemuan berhasil dibuat.', elips_session_public($id));
+}
+
+function elips_action_session_create_bulk(array $p): array
+{
+    $actor = elips_require_login();
+    $classId = (int) ($p['classId'] ?? 0);
+    $class = elips_class_row($classId);
+    if (!$class) return elips_fail('Kelas tidak ditemukan.');
+    if (!elips_can_manage_class($class, $actor)) {
+        return elips_fail('Anda tidak berhak mengelola jadwal kelas ini.');
+    }
+    if (in_array($class['status'], ['cancelled', 'archived'], true)) {
+        return elips_fail('Kelas ini tidak dapat dijadwalkan.');
+    }
+
+    $dates = [];
+    if (isset($p['dates']) && is_array($p['dates'])) {
+        foreach ($p['dates'] as $value) {
+            $value = trim((string) $value);
+            if ($value === '') continue;
+            if (!preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $value, $matches)
+                || !checkdate((int) $matches[2], (int) $matches[3], (int) $matches[1])) {
+                return elips_fail('Tanggal "' . $value . '" tidak valid.');
+            }
+            $dates[$value] = true;
+        }
+        $dates = array_keys($dates);
+        sort($dates);
+    } else {
+        $startDate = trim((string) ($p['startDate'] ?? ''));
+        if (!preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $startDate, $matches)
+            || !checkdate((int) $matches[2], (int) $matches[3], (int) $matches[1])) {
+            return elips_fail('Tanggal awal jadwal tidak valid.');
+        }
+        $weekdays = [];
+        foreach ((array) ($p['weekdays'] ?? []) as $weekday) {
+            $weekday = (int) $weekday;
+            if ($weekday >= 1 && $weekday <= 7) $weekdays[$weekday] = true;
+        }
+        if (!$weekdays) {
+            return elips_fail('Pilih minimal satu hari dalam seminggu.');
+        }
+        $occurrences = max(1, min(52, (int) ($p['occurrences'] ?? count($weekdays))));
+        $cursor = new DateTimeImmutable($startDate, new DateTimeZone('UTC'));
+        $guard = 0;
+        while (count($dates) < $occurrences && $guard < 366) {
+            $isoDay = (int) $cursor->format('N');
+            if (isset($weekdays[$isoDay])) {
+                $dates[] = $cursor->format('Y-m-d');
+            }
+            $cursor = $cursor->modify('+1 day');
+            $guard++;
+        }
+        if (!$dates) {
+            return elips_fail('Tidak ada tanggal yang cocok dengan pola jadwal.');
+        }
+    }
+
+    if (!$dates) return elips_fail('Tidak ada tanggal sesi yang dipilih.');
+    if (count($dates) > 52) return elips_fail('Maksimal 52 sesi dapat dibuat sekaligus.');
+
+    $db = elips_db();
+    $db->beginTransaction();
+    try {
+        $sessionNumber = elips_session_next_number($classId);
+        $created = [];
+        foreach ($dates as $date) {
+            $input = $p;
+            $input['sessionDate'] = $date;
+            unset($input['dates'], $input['startDate'], $input['weekdays'], $input['occurrences'], $input['sessionNumber']);
+            $created[] = elips_session_store($class, $input, $actor, $sessionNumber);
+            $sessionNumber++;
+        }
+        $db->commit();
+    } catch (Throwable $e) {
+        $db->rollBack();
+        throw $e;
+    }
+
+    $sessions = [];
+    foreach ($created as $id) {
+        $session = elips_session_public($id);
+        if ($session) $sessions[] = $session;
+    }
+
+    return elips_ok(count($sessions) . ' sesi pertemuan berhasil dibuat.', ['sessions' => $sessions]);
+}
+
+function elips_action_session_update(array $p): array
+{
+    $actor = elips_require_login();
+    $id = (int) ($p['id'] ?? 0);
+    $session = elips_session_row($id);
+    if (!$session) return elips_fail('Sesi tidak ditemukan.');
+    if (!elips_can_manage_session($session, $actor)) {
+        return elips_fail('Anda tidak berhak memperbarui sesi ini.');
+    }
+    $class = elips_class_row((int) $session['class_id']);
+    if (!$class) return elips_fail('Kelas sesi tidak ditemukan.');
+
+    $input = isset($p['data']) && is_array($p['data']) ? $p['data'] : $p;
+    $data = array_merge([
+        'title' => $session['title'],
+        'moduleId' => $session['module_id'] === null ? 0 : (int) $session['module_id'],
+        'sessionDate' => elips_date_only($session['session_date']),
+        'startTime' => elips_time_short($session['start_time']),
+        'endTime' => elips_time_short($session['end_time']),
+        'location' => $session['location'],
+        'room' => $session['room'],
+        'instructorId' => $session['instructor_id'] === null ? (int) ($class['instructor_id'] ?? 0) : (int) $session['instructor_id'],
+        'plannedJp' => (float) $session['planned_jp'],
+        'actualJp' => (float) $session['actual_jp'],
+        'status' => $session['status'],
+        'notes' => $session['notes'],
+    ], $input);
+    unset($data['id'], $data['classId'], $data['data']);
+
+    $sessionNumber = (int) $session['session_number'];
+    $requestedNumber = (int) ($input['sessionNumber'] ?? $sessionNumber);
+    if ($requestedNumber > 0 && $requestedNumber !== $sessionNumber) {
+        $stmt = elips_db()->prepare('SELECT id FROM class_sessions WHERE class_id = ? AND session_number = ? AND id <> ? LIMIT 1');
+        $stmt->execute([(int) $session['class_id'], $requestedNumber, $id]);
+        if ($stmt->fetch()) {
+            return elips_fail('Nomor pertemuan ' . $requestedNumber . ' sudah digunakan pada kelas ini.');
+        }
+        $sessionNumber = $requestedNumber;
+    }
+
+    $values = elips_session_normalize($class, $data, $sessionNumber);
+    $stmt = elips_db()->prepare(
+        'UPDATE class_sessions
+         SET session_number = ?, title = ?, module_id = ?, session_date = ?, start_time = ?, end_time = ?,
+             location = ?, room = ?, instructor_id = ?, planned_jp = ?, actual_jp = ?, status = ?,
+             notes = ?, updated_by = ?, updated_at = UTC_TIMESTAMP()
+         WHERE id = ?'
+    );
+    $stmt->execute([
+        $sessionNumber,
+        $values['title'],
+        $values['moduleId'],
+        $values['sessionDate'],
+        $values['startTime'],
+        $values['endTime'],
+        $values['location'],
+        $values['room'],
+        $values['instructorId'],
+        $values['plannedJp'],
+        $values['actualJp'],
+        $values['status'],
+        $values['notes'],
+        (int) $actor['id'],
+        $id,
+    ]);
+
+    elips_audit(
+        'update',
+        'session',
+        $id,
+        $values['title'],
+        'Memperbarui sesi pertemuan ' . $sessionNumber . ' kelas "' . $class['name'] . '" pada '
+            . $values['sessionDate'] . ' (' . $values['status'] . ').',
+        $actor
+    );
+
+    return elips_ok('Sesi pertemuan berhasil diperbarui.', elips_session_public($id));
+}
+
+function elips_action_session_status(array $p): array
+{
+    $actor = elips_require_login();
+    $id = (int) ($p['id'] ?? 0);
+    $status = (string) ($p['status'] ?? '');
+    $session = elips_session_row($id);
+    if (!$session) return elips_fail('Sesi tidak ditemukan.');
+    if (!elips_can_manage_session($session, $actor)) {
+        return elips_fail('Anda tidak berhak mengubah status sesi ini.');
+    }
+    if (!in_array($status, elips_session_statuses(), true)) {
+        return elips_fail('Status sesi tidak valid.');
+    }
+
+    $actualJp = array_key_exists('actualJp', $p)
+        ? max(0, (float) $p['actualJp'])
+        : (float) $session['actual_jp'];
+    if ($status === 'completed' && $actualJp <= 0) {
+        $actualJp = (float) $session['planned_jp'];
+    }
+
+    $stmt = elips_db()->prepare(
+        'UPDATE class_sessions SET status = ?, actual_jp = ?, updated_by = ?, updated_at = UTC_TIMESTAMP() WHERE id = ?'
+    );
+    $stmt->execute([$status, round($actualJp, 2), (int) $actor['id'], $id]);
+
+    $class = elips_class_row((int) $session['class_id']);
+    $label = ($class ? $class['name'] : 'Kelas #' . $session['class_id']) . ' — Pertemuan ' . $session['session_number'];
+    elips_audit(
+        'status',
+        'session',
+        $id,
+        $label,
+        'Mengubah status sesi "' . $label . '" dari ' . $session['status'] . ' menjadi ' . $status . '.',
+        $actor
+    );
+
+    return elips_ok('Status sesi diperbarui menjadi ' . $status . '.', elips_session_public($id));
+}
+
+function elips_action_session_delete(array $p): array
+{
+    $actor = elips_require_login();
+    $id = (int) ($p['id'] ?? 0);
+    $session = elips_session_row($id);
+    if (!$session) return elips_fail('Sesi tidak ditemukan.');
+    if (!elips_can_manage_session($session, $actor)) {
+        return elips_fail('Anda tidak berhak menghapus sesi ini.');
+    }
+    if ($session['status'] === 'completed') {
+        return elips_fail('Sesi yang sudah berlangsung tidak dapat dihapus. Batalkan atau koreksi datanya.');
+    }
+
+    $stmt = elips_db()->prepare('SELECT COUNT(*) FROM attendances WHERE session_id = ?');
+    $stmt->execute([$id]);
+    if ((int) $stmt->fetchColumn() > 0) {
+        return elips_fail('Sesi sudah memiliki presensi sehingga tidak dapat dihapus. Batalkan sesi untuk menjaga histori.');
+    }
+
+    $class = elips_class_row((int) $session['class_id']);
+    $label = ($class ? $class['name'] : 'Kelas #' . $session['class_id']) . ' — Pertemuan ' . $session['session_number'];
+
+    $stmt = elips_db()->prepare('DELETE FROM class_sessions WHERE id = ?');
+    $stmt->execute([$id]);
+
+    elips_audit(
+        'delete',
+        'session',
+        $id,
+        $label,
+        'Menghapus sesi "' . $label . '" yang belum memiliki presensi.',
+        $actor
+    );
+
+    return elips_ok('Sesi pertemuan berhasil dihapus.');
+}
+
+function elips_action_session_detail(array $p): array
+{
+    $actor = elips_require_login();
+    $id = (int) ($p['id'] ?? 0);
+    $session = elips_session_row($id);
+    if (!$session) return elips_fail('Sesi tidak ditemukan.');
+
+    if ($actor['role'] === 'peserta') {
+        $stmt = elips_db()->prepare(
+            "SELECT id FROM enrollments WHERE class_id = ? AND student_id = ? AND status IN ('active', 'pending', 'completed') LIMIT 1"
+        );
+        $stmt->execute([(int) $session['class_id'], (int) $actor['id']]);
+        if (!$stmt->fetch()) return elips_fail('Anda tidak terdaftar pada kelas ini.');
+    } elseif (!elips_can_manage_session($session, $actor)) {
+        return elips_fail('Anda tidak berhak melihat sesi ini.');
+    }
+
+    return elips_ok('Detail sesi dimuat.', elips_session_public($id));
+}
+
+function elips_attendance_lookup_enrollment(array $session, array $record): ?array
+{
+    $enrollmentId = (int) ($record['enrollmentId'] ?? 0);
+    if ($enrollmentId > 0) {
+        $enrollment = elips_enrollment_row($enrollmentId);
+        if ($enrollment && (int) $enrollment['class_id'] === (int) $session['class_id']) {
+            return $enrollment;
+        }
+        return null;
+    }
+
+    $studentId = (int) ($record['studentId'] ?? 0);
+    if ($studentId <= 0) {
+        return null;
+    }
+    $stmt = elips_db()->prepare(
+        "SELECT * FROM enrollments
+         WHERE class_id = ? AND student_id = ? AND status IN ('active', 'pending', 'completed')
+         ORDER BY id ASC LIMIT 1"
+    );
+    $stmt->execute([(int) $session['class_id'], $studentId]);
+    $row = $stmt->fetch();
+    return $row ?: null;
+}
+
+function elips_action_attendance_save_bulk(array $p): array
+{
+    $actor = elips_require_login();
+    $sessionId = (int) ($p['sessionId'] ?? 0);
+    $session = elips_session_row($sessionId);
+    if (!$session) return elips_fail('Sesi tidak ditemukan.');
+    if (!elips_can_manage_session($session, $actor)) {
+        return elips_fail('Anda tidak berhak mengisi presensi sesi ini.');
+    }
+    if (in_array($session['status'], ['cancelled', 'rescheduled', 'no_show'], true)) {
+        return elips_fail('Presensi tidak dapat diisi untuk sesi berstatus ' . $session['status'] . '.');
+    }
+
+    $records = elips_payload_array($p, 'records');
+    if (!$records) return elips_fail('Tidak ada data presensi yang dikirim.');
+
+    $db = elips_db();
+    $db->beginTransaction();
+    $saved = 0;
+    $updated = 0;
+    $corrected = 0;
+    try {
+        foreach ($records as $record) {
+            if (!is_array($record)) continue;
+            $status = (string) ($record['status'] ?? '');
+            if (!in_array($status, elips_attendance_statuses(), true)) {
+                throw new ElipsError('Status presensi "' . $status . '" tidak valid.');
+            }
+            $enrollment = elips_attendance_lookup_enrollment($session, $record);
+            if (!$enrollment) {
+                throw new ElipsError('Peserta pada data presensi bukan anggota kelas sesi ini.');
+            }
+
+            $note = trim((string) ($record['note'] ?? ''));
+            $reason = trim((string) ($record['reason'] ?? ''));
+            $stmt = $db->prepare('SELECT * FROM attendances WHERE session_id = ? AND enrollment_id = ? LIMIT 1');
+            $stmt->execute([$sessionId, (int) $enrollment['id']]);
+            $existing = $stmt->fetch() ?: null;
+
+            if (!$existing) {
+                $stmt = $db->prepare(
+                    "INSERT INTO attendances
+                     (session_id, enrollment_id, student_id, status, recorded_by, recorded_at, note, correction_reason, created_at)
+                     VALUES (?, ?, ?, ?, ?, UTC_TIMESTAMP(), ?, '', UTC_TIMESTAMP())"
+                );
+                $stmt->execute([
+                    $sessionId,
+                    (int) $enrollment['id'],
+                    (int) $enrollment['student_id'],
+                    $status,
+                    (int) $actor['id'],
+                    $note,
+                ]);
+                $saved++;
+                continue;
+            }
+
+            $changed = $existing['status'] !== $status;
+            if ($changed) {
+                if ($reason === '') {
+                    $reason = 'Pembaruan presensi sesi pertemuan ' . $session['session_number'] . '.';
+                }
+                $stmt = $db->prepare(
+                    'INSERT INTO attendance_corrections
+                     (attendance_id, session_id, enrollment_id, old_status, new_status,
+                      actor_id, actor_name, actor_role, reason, corrected_at, created_at)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP())'
+                );
+                $stmt->execute([
+                    (int) $existing['id'],
+                    $sessionId,
+                    (int) $enrollment['id'],
+                    $existing['status'],
+                    $status,
+                    (int) $actor['id'],
+                    $actor['name'],
+                    $actor['role'],
+                    $reason,
+                ]);
+                $corrected++;
+            }
+
+            $stmt = $db->prepare(
+                'UPDATE attendances
+                 SET status = ?, note = ?, recorded_by = ?, recorded_at = UTC_TIMESTAMP(),
+                     corrected_at = ?, correction_reason = ?, updated_at = UTC_TIMESTAMP()
+                 WHERE id = ?'
+            );
+            $stmt->execute([
+                $status,
+                $note,
+                (int) $actor['id'],
+                $changed ? gmdate('Y-m-d H:i:s') : $existing['corrected_at'],
+                $changed ? $reason : $existing['correction_reason'],
+                (int) $existing['id'],
+            ]);
+            $updated++;
+        }
+        $db->commit();
+    } catch (Throwable $e) {
+        $db->rollBack();
+        throw $e;
+    }
+
+    $class = elips_class_row((int) $session['class_id']);
+    elips_audit(
+        'attendance',
+        'session',
+        $sessionId,
+        ($class ? $class['name'] : 'Kelas #' . $session['class_id']) . ' — Pertemuan ' . $session['session_number'],
+        'Menyimpan presensi sesi pertemuan ' . $session['session_number'] . ': '
+            . $saved . ' baru, ' . $updated . ' diperbarui, ' . $corrected . ' dikoreksi.',
+        $actor
+    );
+
+    return elips_ok('Presensi berhasil disimpan.', [
+        'saved' => $saved,
+        'updated' => $updated,
+        'corrected' => $corrected,
+        'session' => elips_session_public($sessionId),
+    ]);
+}
+
+function elips_action_attendance_correct(array $p): array
+{
+    $actor = elips_require_login();
+    $id = (int) ($p['id'] ?? 0);
+    $status = (string) ($p['status'] ?? '');
+    $reason = trim((string) ($p['reason'] ?? ''));
+
+    $attendance = elips_attendance_row($id);
+    if (!$attendance) return elips_fail('Presensi tidak ditemukan.');
+    $session = elips_session_row((int) $attendance['session_id']);
+    if (!$session) return elips_fail('Sesi presensi tidak ditemukan.');
+    if (!elips_can_manage_session($session, $actor)) {
+        return elips_fail('Anda tidak berhak mengoreksi presensi sesi ini.');
+    }
+    if (!in_array($status, elips_attendance_statuses(), true)) {
+        return elips_fail('Status presensi tidak valid.');
+    }
+    if ($reason === '') return elips_fail('Alasan koreksi wajib diisi.');
+    if ($attendance['status'] === $status) {
+        return elips_fail('Status baru sama dengan status presensi saat ini.');
+    }
+
+    $db = elips_db();
+    $db->beginTransaction();
+    try {
+        $stmt = $db->prepare(
+            'INSERT INTO attendance_corrections
+             (attendance_id, session_id, enrollment_id, old_status, new_status,
+              actor_id, actor_name, actor_role, reason, corrected_at, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP())'
+        );
+        $stmt->execute([
+            $id,
+            (int) $attendance['session_id'],
+            (int) $attendance['enrollment_id'],
+            $attendance['status'],
+            $status,
+            (int) $actor['id'],
+            $actor['name'],
+            $actor['role'],
+            $reason,
+        ]);
+        $correctionId = (int) $db->lastInsertId();
+
+        $stmt = $db->prepare(
+            'UPDATE attendances
+             SET status = ?, corrected_at = UTC_TIMESTAMP(), correction_reason = ?, updated_at = UTC_TIMESTAMP()
+             WHERE id = ?'
+        );
+        $stmt->execute([$status, $reason, $id]);
+        $db->commit();
+    } catch (Throwable $e) {
+        $db->rollBack();
+        throw $e;
+    }
+
+    $student = elips_user_row((int) $attendance['student_id']);
+    $class = elips_class_row((int) $session['class_id']);
+    $label = ($student ? $student['name'] : 'Peserta #' . $attendance['student_id'])
+        . ' — ' . ($class ? $class['name'] : 'Kelas #' . $session['class_id'])
+        . ' / Pertemuan ' . $session['session_number'];
+
+    elips_audit(
+        'correct',
+        'attendance',
+        $id,
+        $label,
+        'Mengoreksi presensi "' . $label . '" dari ' . $attendance['status'] . ' menjadi ' . $status . '. Alasan: ' . $reason,
+        $actor
+    );
+
+    return elips_ok('Koreksi presensi berhasil disimpan.', [
+        'attendance' => elips_attendance_public($id),
+        'correction' => elips_attendance_correction_public($correctionId),
+        'session' => elips_session_public((int) $attendance['session_id']),
+    ]);
+}
+
+function elips_action_attendance_recap(array $p): array
+{
+    $actor = elips_require_login();
+    $classId = (int) ($p['classId'] ?? 0);
+    $class = elips_class_row($classId);
+    if (!$class) return elips_fail('Kelas tidak ditemukan.');
+    if ($actor['role'] !== 'admin'
+        && !($actor['role'] === 'instruktur'
+            && $class['instructor_id'] !== null
+            && (int) $class['instructor_id'] === (int) $actor['id'])) {
+        return elips_fail('Anda tidak berhak melihat rekap kelas ini.');
+    }
+
+    $recap = elips_attendance_recap($classId);
+    if (!$recap) return elips_fail('Rekap kehadiran tidak tersedia.');
+
+    return elips_ok('Rekap kehadiran dimuat.', $recap);
+}
+
+function elips_action_attendance_my_recap(array $p): array
+{
+    $actor = elips_require_login();
+    if ($actor['role'] !== 'peserta') {
+        return elips_fail('Rekap ini hanya tersedia untuk akun peserta.');
+    }
+
+    $db = elips_db();
+    $classId = (int) ($p['classId'] ?? 0);
+    $sql = "SELECT DISTINCT class_id FROM enrollments
+            WHERE student_id = ? AND class_id IS NOT NULL AND status IN ('active', 'pending', 'completed')";
+    $params = [(int) $actor['id']];
+    if ($classId > 0) {
+        $sql .= ' AND class_id = ?';
+        $params[] = $classId;
+    }
+    $sql .= ' ORDER BY class_id ASC';
+    $stmt = $db->prepare($sql);
+    $stmt->execute($params);
+    $classIds = array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
+
+    $classes = [];
+    foreach ($classIds as $id) {
+        $recap = elips_attendance_recap($id, (int) $actor['id']);
+        if ($recap) $classes[] = $recap;
+    }
+
+    return elips_ok('Rekap kehadiran Anda dimuat.', ['classes' => $classes]);
 }
 
 // ---------- Modules ----------
