@@ -383,6 +383,52 @@
             write(KEYS.classInstructorHistories, seedClassHistories());
         }
 
+        // ---------- Phase 4: materi dan akses kelas ----------
+        // Setiap kelas memiliki satu pengaturan akses. Kelas lama otomatis
+        // mendapat mode "open" agar perilaku sebelumnya tidak berubah.
+        if (!Array.isArray(read(KEYS.classMaterialSettings, null))) {
+            write(KEYS.classMaterialSettings, []);
+        }
+        const materialSettings = read(KEYS.classMaterialSettings, []);
+        const validModes = ['open', 'sequential', 'scheduled', 'conditional'];
+        materialSettings.forEach(function (row) {
+            row.id = Number(row.id) || nextId(materialSettings);
+            row.classId = Number(row.classId);
+            if (validModes.indexOf(row.accessMode) === -1) row.accessMode = 'open';
+            row.requireInstructorApproval = !!row.requireInstructorApproval;
+            row.notes = String(row.notes || '');
+        });
+        write(KEYS.classMaterialSettings, materialSettings);
+
+        if (!Array.isArray(read(KEYS.classMaterials, null))) {
+            write(KEYS.classMaterials, []);
+        }
+        const materialRows = read(KEYS.classMaterials, []);
+        materialRows.forEach(function (item) {
+            item.id = Number(item.id);
+            item.classId = Number(item.classId);
+            item.order = Number(item.order) || 1;
+            item.lessonId = item.lessonId === null || item.lessonId === undefined ? null : Number(item.lessonId);
+            item.sessionId = item.sessionId === null || item.sessionId === undefined ? null : Number(item.sessionId);
+            item.accessLevel = item.accessLevel || 'optional';
+            item.status = item.status === 'hidden' ? 'hidden' : 'active';
+            item.type = item.type || 'text';
+            item.content = String(item.content || '');
+            item.fileName = String(item.fileName || '');
+            item.filePath = String(item.filePath || '');
+            item.mimeType = String(item.mimeType || '');
+            item.reason = String(item.reason || '');
+            item.availableFrom = item.availableFrom || null;
+        });
+        write(KEYS.classMaterials, materialRows);
+
+        if (!Array.isArray(read(KEYS.classLessonProgress, null))) {
+            write(KEYS.classLessonProgress, []);
+        }
+        if (!Array.isArray(read(KEYS.classMaterialProgress, null))) {
+            write(KEYS.classMaterialProgress, []);
+        }
+
         if (!Array.isArray(read(KEYS.enrollments, null))) {
             write(KEYS.enrollments, seedEnrollments());
         }

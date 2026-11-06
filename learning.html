@@ -63,12 +63,17 @@
     <script src="assets/js/crud-enrollments.js"></script>
     <script src="assets/js/crud-content.js"></script>
     <script src="assets/js/crud-grades.js"></script>
+    <script src="assets/js/crud-academic.js"></script>
     <script src="assets/js/ui.js"></script>
     <script>
         let activeCourse = null;
         let activeStudent = null;
+        let activeEnrollment = null;
+        let activeClassId = null;
+        let classroom = null;
         let flatLessons = [];
         let activeLessonId = null;
+        let activeMaterialId = null;
         let canBypassLock = false;
         let isPreviewMode = false;
 
@@ -120,13 +125,13 @@
                 }
             }
 
-            const enrollment = ELIPS.getEnrollment(activeStudent.id, courseId);
+            activeEnrollment = ELIPS.getEnrollment(activeStudent.id, courseId);
             const isPrivileged = activeStudent.role === 'admin' ||
                 (activeStudent.role === 'instruktur' && activeCourse.instructorId === activeStudent.id);
             canBypassLock = isPrivileged;
 
             if (!isPrivileged) {
-                if (!enrollment || enrollment.status !== 'active') {
+                if (!activeEnrollment || activeEnrollment.status !== 'active') {
                     renderBlocked('Akses Ditolak', 'Anda tidak terdaftar pada kursus ini. Siswa hanya dapat mengakses kursus yang ditugaskan oleh Admin.');
                     return;
                 }
@@ -136,39 +141,118 @@
                 }
             }
 
-            flatLessons = [];
-            ELIPS.getCourseStructure(courseId).forEach(function (item) {
-                item.lessons.forEach(function (lesson) {
-                    flatLessons.push({ lesson: lesson, module: item.module });
-                });
-            });
+            // Phase 4: gunakan konteks kelas bila tersedia agar mode akses
+            // dan materi tambahan mengikuti pengaturan kelas, bukan kursus.
+            if (isPrivileged) {
+                let classes = ELIPS.getClassesByCourse(courseId);
+                if (activeStudent.role === 'instruktur') {
+                    const mine = classes.filter(function (item) {
+                        return Number(item.instructorId) === Number(activeStudent.id);
+                    });
+                    if (mine.length > 0) classes = mine;
+                }
+                if (classes.length > 0) activeClassId = Number(classes[0].id);
+            } else if (activeEnrollment && activeEnrollment.classId) {
+                activeClassId = Number(activeEnrollment.classId);
+            }
 
-            if (flatLessons.length === 0) {
+            if (activeClassId) {
+                if (!loadClassroom()) return;
+                buildFlatLessonsFromClassroom();
+            } else {
+                flatLessons = [];
+                ELIPS.getCourseStructure(courseId).forEach(function (item) {
+                    item.lessons.forEach(function (lesson) {
+                        flatLessons.push({ lesson: lesson, module: item.module });
+                    });
+                });
+            }
+
+            const hasContent = flatLessons.length > 0 || (classroom && classroom.materials.length > 0);
+            if (!hasContent) {
                 renderBlocked('Materi Belum Tersedia', 'Instruktur belum menambahkan modul atau materi untuk kursus ini.');
                 return;
             }
 
             const requestedLesson = parseInt(params.get('lesson'), 10);
             const firstUnlocked = flatLessons.find(function (entry) {
-                return !ELIPS.isLessonCompleted(activeStudent.id, courseId, entry.lesson.id);
+                return !isLessonCompleted(entry.lesson.id);
             });
-            const fallbackLesson = firstUnlocked ? firstUnlocked.lesson.id : flatLessons[0].lesson.id;
+            const fallbackLesson = firstUnlocked ? firstUnlocked.lesson.id : (flatLessons[0] ? flatLessons[0].lesson.id : null);
             const requestedValid = requestedLesson && flatLessons.some(function (e) { return e.lesson.id === requestedLesson; });
 
             if (requestedValid && lessonUnlocked(requestedLesson)) {
                 activeLessonId = requestedLesson;
+            } else if (requestedValid) {
+                activeLessonId = fallbackLesson;
+                ELIPS.toast('Materi tersebut masih terkunci. Selesaikan prasyaratnya terlebih dahulu.');
             } else {
                 activeLessonId = fallbackLesson;
-                if (requestedValid) {
-                    ELIPS.toast('Materi tersebut masih terkunci. Selesaikan pelajaran sebelumnya terlebih dahulu.');
+            }
+
+            const requestedMaterial = parseInt(params.get('material'), 10);
+            if (requestedMaterial && classroom && classroom.materials.some(function (item) { return item.id === requestedMaterial; })) {
+                if (materialUnlocked(requestedMaterial)) {
+                    activeMaterialId = requestedMaterial;
+                    activeLessonId = null;
+                } else {
+                    ELIPS.toast('Materi tambahan tersebut masih terkunci.');
                 }
             }
 
             renderAll();
         }
 
+        function loadClassroom() {
+            const result = ELIPS.getMaterialClassroom({ classId: activeClassId });
+            if (!result.ok) {
+                renderBlocked('Akses Materi', result.message);
+                return false;
+            }
+            classroom = result.data;
+            return true;
+        }
+
+        function buildFlatLessonsFromClassroom() {
+            flatLessons = (classroom && classroom.lessons ? classroom.lessons : []).map(function (lesson) {
+                return {
+                    lesson: lesson,
+                    module: { id: lesson.moduleId, title: lesson.moduleTitle }
+                };
+            });
+        }
+
+        function classroomLesson(lessonId) {
+            if (!classroom) return null;
+            return classroom.lessons.find(function (item) {
+                return Number(item.id) === Number(lessonId);
+            }) || null;
+        }
+
+        function classroomMaterial(materialId) {
+            if (!classroom) return null;
+            return classroom.materials.find(function (item) {
+                return Number(item.id) === Number(materialId);
+            }) || null;
+        }
+
+        function isLessonCompleted(lessonId) {
+            const item = classroomLesson(lessonId);
+            if (item) return !!item.completed;
+            return ELIPS.isLessonCompleted(activeStudent.id, activeCourse.id, lessonId);
+        }
+
+        function materialUnlocked(materialId) {
+            if (canBypassLock) return true;
+            const item = classroomMaterial(materialId);
+            return !!item && !item.locked;
+        }
+
         function lessonUnlocked(lessonId) {
-            return canBypassLock || ELIPS.isLessonUnlocked(activeStudent.id, activeCourse.id, lessonId);
+            if (canBypassLock) return true;
+            const item = classroomLesson(lessonId);
+            if (item) return !item.locked;
+            return ELIPS.isLessonUnlocked(activeStudent.id, activeCourse.id, lessonId);
         }
 
         function renderBlocked(title, message) {
@@ -192,16 +276,36 @@
         }
 
         function renderAll() {
+            if (!activeLessonId && !activeMaterialId && classroom && classroom.materials.length > 0) {
+                activeMaterialId = Number(classroom.materials[0].id);
+            }
             renderSidebar();
             renderProgress();
-            renderLesson(activeLessonId);
+            if (activeMaterialId) renderMaterial(activeMaterialId);
+            else renderLesson(activeLessonId);
         }
 
         function renderProgress() {
             if (isPreviewMode) {
+                const materialCount = classroom ? classroom.materials.length : 0;
                 document.getElementById('learningProgressText').textContent =
-                    'Mode Pratinjau • ' + flatLessons.length + ' Pelajaran';
+                    'Mode Pratinjau • ' + flatLessons.length + ' Pelajaran' +
+                    (materialCount > 0 ? ' • ' + materialCount + ' Materi Tambahan' : '');
                 document.getElementById('learningProgressFill').style.width = '0%';
+                return;
+            }
+
+            if (classroom) {
+                const stats = classroom.stats || {};
+                const total = Number(stats.lessonTotal) || 0;
+                const completed = Number(stats.lessonCompleted) || 0;
+                const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
+                let text = 'Progres: ' + completed + '/' + total + ' Pelajaran (' + percentage + '%)';
+                if (Number(stats.materialTotal) > 0) {
+                    text += ' • Materi Tambahan: ' + (Number(stats.materialCompleted) || 0) + '/' + Number(stats.materialTotal);
+                }
+                document.getElementById('learningProgressText').textContent = text;
+                document.getElementById('learningProgressFill').style.width = percentage + '%';
                 return;
             }
 
@@ -211,49 +315,127 @@
             document.getElementById('learningProgressFill').style.width = progress.percentage + '%';
         }
 
+        function typeLabel(type) {
+            return type === 'video' ? 'Video'
+                : type === 'link' ? 'Link'
+                : type === 'file' ? 'File'
+                : type === 'document' ? 'Dokumen'
+                : 'Teks';
+        }
+
+        function lessonProgressIcon(completed, unlocked) {
+            return completed ? 'bi-check-circle-fill lesson-completed' : (unlocked ? 'bi-circle' : 'bi-lock-fill');
+        }
+
+        function lessonSidebarHtml(lesson) {
+            const completed = !!lesson.completed;
+            const unlocked = canBypassLock || !lesson.locked;
+            const isActive = !activeMaterialId && Number(lesson.id) === Number(activeLessonId);
+            const reason = lesson.reason || '';
+            return '<a href="#" class="learning-lesson ' + (isActive ? 'active ' : '') + (unlocked ? '' : 'locked') + '"' +
+                (reason ? ' title="' + ELIPS.escapeHtml(reason) + '"' : '') +
+                ' onclick="selectLesson(' + lesson.id + ', event)">' +
+                '<div class="learning-lesson-left">' +
+                '<i class="bi ' + lessonProgressIcon(completed, unlocked) + '"></i>' +
+                '<span class="learning-lesson-title">' + ELIPS.escapeHtml(lesson.title) + '</span>' +
+                '</div>' +
+                '<span class="learning-lesson-type">' + typeLabel(lesson.type) + '</span>' +
+                '</a>';
+        }
+
+        function materialSidebarHtml(item) {
+            const completed = !!item.completed;
+            const unlocked = canBypassLock || !item.locked;
+            const isActive = Number(item.id) === Number(activeMaterialId);
+            const reason = item.reason || '';
+            return '<a href="#" class="learning-lesson ' + (isActive ? 'active ' : '') + (unlocked ? '' : 'locked') + '"' +
+                (reason ? ' title="' + ELIPS.escapeHtml(reason) + '"' : '') +
+                ' onclick="selectMaterial(' + item.id + ', event)">' +
+                '<div class="learning-lesson-left">' +
+                '<i class="bi ' + lessonProgressIcon(completed, unlocked) + '"></i>' +
+                '<span class="learning-lesson-title">' + ELIPS.escapeHtml(item.title) + '</span>' +
+                '</div>' +
+                '<span class="learning-lesson-type">' + typeLabel(item.type) + '</span>' +
+                '</a>';
+        }
+
+        function appendSidebarModule(container, title, itemsHtml, isOpen) {
+            const moduleEl = document.createElement('div');
+            moduleEl.className = 'learning-module';
+            moduleEl.innerHTML =
+                '<div class="learning-module-header">' +
+                '<span class="learning-module-name">' + ELIPS.escapeHtml(title) + '</span>' +
+                '<i class="bi bi-chevron-down"></i>' +
+                '</div>' +
+                '<div class="learning-lesson-list" style="display: ' + (isOpen ? 'flex' : 'none') + ';">' + itemsHtml + '</div>';
+
+            const header = moduleEl.querySelector('.learning-module-header');
+            header.addEventListener('click', function () {
+                const list = header.nextElementSibling;
+                list.style.display = list.style.display === 'none' ? 'flex' : 'none';
+            });
+            container.appendChild(moduleEl);
+        }
+
         function renderSidebar() {
             const container = document.getElementById('learningModules');
+            container.innerHTML = '';
+
+            if (classroom) {
+                const modules = [];
+                const moduleMap = {};
+                classroom.lessons.forEach(function (lesson) {
+                    const moduleId = Number(lesson.moduleId);
+                    if (!moduleMap[moduleId]) {
+                        moduleMap[moduleId] = {
+                            id: moduleId,
+                            title: lesson.moduleTitle || 'Modul',
+                            order: Number(lesson.moduleOrder) || 0,
+                            lessons: []
+                        };
+                        modules.push(moduleMap[moduleId]);
+                    }
+                    moduleMap[moduleId].lessons.push(lesson);
+                });
+
+                const activeEntry = flatLessons.find(function (entry) { return entry.lesson.id === activeLessonId; });
+                const activeModuleId = activeEntry ? Number(activeEntry.module.id) : null;
+
+                modules.forEach(function (item, moduleIndex) {
+                    const isOpen = activeModuleId
+                        ? Number(item.id) === activeModuleId
+                        : (!activeMaterialId && moduleIndex === 0);
+                    appendSidebarModule(container, item.title, item.lessons.map(lessonSidebarHtml).join(''), isOpen);
+                });
+
+                if (classroom.materials.length > 0) {
+                    appendSidebarModule(
+                        container,
+                        'Materi Tambahan Kelas',
+                        classroom.materials.map(materialSidebarHtml).join(''),
+                        !!activeMaterialId
+                    );
+                }
+                return;
+            }
+
             const structure = ELIPS.getCourseStructure(activeCourse.id);
             const activeEntry = flatLessons.find(function (entry) { return entry.lesson.id === activeLessonId; });
             const activeModuleId = activeEntry ? activeEntry.module.id : null;
-            container.innerHTML = '';
 
             structure.forEach(function (item, moduleIndex) {
-                const moduleEl = document.createElement('div');
-                moduleEl.className = 'learning-module';
-
-                const moduleLessons = item.lessons.map(function (lesson) {
-                    const completed = ELIPS.isLessonCompleted(activeStudent.id, activeCourse.id, lesson.id);
-                    const unlocked = lessonUnlocked(lesson.id);
-                    const isActive = lesson.id === activeLessonId;
-                    const icon = completed ? 'bi-check-circle-fill lesson-completed' : (unlocked ? 'bi-circle' : 'bi-lock-fill');
-                    const typeLabel = lesson.type === 'video' ? 'Video' : lesson.type === 'link' ? 'Link' : lesson.type === 'file' ? 'File' : 'Teks';
-
-                    return '<a href="#" class="learning-lesson ' + (isActive ? 'active ' : '') + (unlocked ? '' : 'locked') + '" onclick="selectLesson(' + lesson.id + ', event)">' +
-                        '<div class="learning-lesson-left">' +
-                        '<i class="bi ' + icon + '"></i>' +
-                        '<span class="learning-lesson-title">' + ELIPS.escapeHtml(lesson.title) + '</span>' +
-                        '</div>' +
-                        '<span class="learning-lesson-type">' + typeLabel + '</span>' +
-                        '</a>';
-                }).join('');
-
-                const isModuleOpen = activeModuleId ? item.module.id === activeModuleId : moduleIndex === 0;
-
-                moduleEl.innerHTML =
-                    '<div class="learning-module-header">' +
-                    '<span class="learning-module-name">' + ELIPS.escapeHtml(item.module.title) + '</span>' +
-                    '<i class="bi bi-chevron-down"></i>' +
-                    '</div>' +
-                    '<div class="learning-lesson-list" style="display: ' + (isModuleOpen ? 'flex' : 'none') + ';">' + moduleLessons + '</div>';
-
-                const header = moduleEl.querySelector('.learning-module-header');
-                header.addEventListener('click', function () {
-                    const list = header.nextElementSibling;
-                    list.style.display = list.style.display === 'none' ? 'flex' : 'none';
+                const lessons = item.lessons.map(function (lesson) {
+                    return {
+                        id: lesson.id,
+                        title: lesson.title,
+                        type: lesson.type,
+                        completed: ELIPS.isLessonCompleted(activeStudent.id, activeCourse.id, lesson.id),
+                        locked: !lessonUnlocked(lesson.id),
+                        reason: ''
+                    };
                 });
-
-                container.appendChild(moduleEl);
+                const isModuleOpen = activeModuleId ? item.module.id === activeModuleId : moduleIndex === 0;
+                appendSidebarModule(container, item.module.title, lessons.map(lessonSidebarHtml).join(''), isModuleOpen);
             });
         }
 
@@ -263,11 +445,28 @@
             if (!entry) return;
 
             if (!lessonUnlocked(lessonId)) {
-                ELIPS.toast('Selesaikan pelajaran sebelumnya terlebih dahulu untuk membuka materi ini.');
+                const item = classroomLesson(lessonId);
+                ELIPS.toast(item && item.reason ? item.reason : 'Selesaikan prasyaratnya terlebih dahulu untuk membuka materi ini.');
                 return;
             }
 
             activeLessonId = lessonId;
+            activeMaterialId = null;
+            renderAll();
+            const main = document.querySelector('.learning-main');
+            if (main) main.scrollTop = 0;
+        }
+
+        function selectMaterial(materialId, event) {
+            if (event) event.preventDefault();
+            const item = classroomMaterial(materialId);
+            if (!item) return;
+            if (!canBypassLock && item.locked) {
+                ELIPS.toast(item.reason || 'Materi tambahan ini masih terkunci.');
+                return;
+            }
+            activeMaterialId = Number(materialId);
+            activeLessonId = null;
             renderAll();
             const main = document.querySelector('.learning-main');
             if (main) main.scrollTop = 0;
@@ -282,30 +481,43 @@
             }
 
             const lesson = entry.lesson;
-            const completed = ELIPS.isLessonCompleted(activeStudent.id, activeCourse.id, lesson.id);
+            const classLesson = classroomLesson(lesson.id);
+            const content = classLesson ? String(classLesson.content || '') : String(lesson.content || '');
+            const completed = classLesson ? !!classLesson.completed : ELIPS.isLessonCompleted(activeStudent.id, activeCourse.id, lesson.id);
             const index = flatLessons.findIndex(function (e) { return e.lesson.id === lesson.id; });
             const prev = index > 0 ? flatLessons[index - 1] : null;
             const next = index < flatLessons.length - 1 ? flatLessons[index + 1] : null;
             const nextUnlocked = next ? lessonUnlocked(next.lesson.id) : false;
-            const allProgress = ELIPS.getCourseProgress(activeStudent.id, activeCourse.id);
-            const allComplete = allProgress.total > 0 && allProgress.completed === allProgress.total;
-            const certificate = ELIPS.getCertificate(activeStudent.id, activeCourse.id);
+            const approvalRequired = !!(!isPreviewMode && classroom && classroom.settings &&
+                classroom.settings.requireInstructorApproval);
+            let allComplete = false;
+            let certificate = null;
+            if (classroom) {
+                const stats = classroom.stats || {};
+                allComplete = Number(stats.lessonTotal) > 0 && Number(stats.lessonCompleted) === Number(stats.lessonTotal);
+            } else {
+                const allProgress = ELIPS.getCourseProgress(activeStudent.id, activeCourse.id);
+                allComplete = allProgress.total > 0 && allProgress.completed === allProgress.total;
+            }
+            certificate = ELIPS.getCertificate(activeStudent.id, activeCourse.id);
 
             let media = '';
             if (lesson.type === 'video') {
-                const embed = toEmbedUrl(lesson.content);
+                const embed = toEmbedUrl(content);
                 media = embed
                     ? '<div class="learning-video" style="padding: 0; overflow: hidden;"><iframe src="' + ELIPS.escapeHtml(embed) + '" style="width:100%; height:100%; border:0;" allowfullscreen></iframe></div>'
-                    : '<div class="learning-video"><i class="bi bi-play-circle" style="font-size: 3rem;"></i></div><p style="color: var(--text-secondary);">Video: ' + ELIPS.escapeHtml(lesson.content || 'Belum ada URL video') + '</p>';
+                    : '<div class="learning-video"><i class="bi bi-play-circle" style="font-size: 3rem;"></i></div><p style="color: var(--text-secondary);">Video: ' + ELIPS.escapeHtml(content || 'Belum ada URL video') + '</p>';
             } else if (lesson.type === 'link') {
-                media = '<p><a href="' + ELIPS.escapeHtml(lesson.content || '#') + '" target="_blank" rel="noopener" class="btn btn-outline"><i class="bi bi-box-arrow-up-right"></i> Buka Link Materi</a></p>';
+                media = '<p><a href="' + ELIPS.escapeHtml(content || '#') + '" target="_blank" rel="noopener" class="btn btn-outline"><i class="bi bi-box-arrow-up-right"></i> Buka Link Materi</a></p>';
             } else if (lesson.type === 'file') {
-                media = '<p><a href="' + ELIPS.escapeHtml(lesson.content || '#') + '" target="_blank" rel="noopener" class="btn btn-outline"><i class="bi bi-file-earmark-arrow-down"></i> ' + ELIPS.escapeHtml(lesson.content || 'Unduh File') + '</a></p>';
+                media = '<p><a href="' + ELIPS.escapeHtml(content || '#') + '" target="_blank" rel="noopener" class="btn btn-outline"><i class="bi bi-file-earmark-arrow-down"></i> ' + ELIPS.escapeHtml(content || 'Unduh File') + '</a></p>';
             }
 
             let completionNotice = '';
             if (isPreviewMode) {
                 completionNotice = '<div style="padding: 1rem; background: #eff6ff; color: #1e40af; border-radius: var(--radius); margin-top: 1.5rem;"><i class="bi bi-eye"></i> Mode pratinjau: Anda melihat materi sebagai instruktur. Progres peserta tidak berubah saat Anda membuka pelajaran ini.</div>';
+            } else if (approvalRequired && !completed) {
+                completionNotice = '<div style="padding: 1rem; background: #fef3c7; color: #92400e; border-radius: var(--radius); margin-top: 1.5rem;"><i class="bi bi-hourglass-split"></i> Kelas ini mewajibkan konfirmasi instruktur. Hubungi instruktur setelah Anda menyelesaikan materi ini.</div>';
             } else if (allComplete) {
                 if (certificate && certificate.status === 'publish') {
                     completionNotice = '<div style="padding: 1rem; background: #dcfce7; color: #166534; border-radius: var(--radius); margin-top: 1.5rem;"><i class="bi bi-patch-check-fill"></i> Selamat! Seluruh materi selesai dan e-sertifikat Anda sudah terbit. <a href="student/certificates.html">Lihat sertifikat</a>.</div>';
@@ -316,6 +528,17 @@
                 }
             }
 
+            let completionButton = '';
+            if (isPreviewMode) {
+                completionButton = '<span class="badge badge-primary" style="padding: 0.5rem 0.75rem;"><i class="bi bi-eye"></i> Mode Pratinjau</span>';
+            } else if (completed) {
+                completionButton = '<button id="markCompleteBtn" class="btn btn-primary" disabled style="background: var(--success);"><i class="bi bi-check-circle-fill"></i> Selesai</button>';
+            } else if (approvalRequired) {
+                completionButton = '<button class="btn btn-outline" disabled title="Menunggu konfirmasi instruktur"><i class="bi bi-hourglass-split"></i> Menunggu Konfirmasi Instruktur</button>';
+            } else {
+                completionButton = '<button id="markCompleteBtn" class="btn btn-primary" onclick="markComplete()"><i class="bi bi-check-circle"></i> Tandai Selesai</button>';
+            }
+
             container.innerHTML =
                 '<article class="learning-article">' +
                 '<header class="learning-article-header">' +
@@ -323,7 +546,7 @@
                 '<h1 class="learning-article-title">' + ELIPS.escapeHtml(lesson.title) + '</h1>' +
                 '</header>' +
                 '<div class="learning-article-body">' +
-                (lesson.content && lesson.type === 'text' ? ELIPS.sanitizeHtml(lesson.content) : '<p>Materi ini belum memiliki konten teks. Silakan gunakan media di bawah.</p>') +
+                (content && lesson.type === 'text' ? ELIPS.sanitizeHtml(content) : '<p>Materi ini belum memiliki konten teks. Silakan gunakan media di bawah.</p>') +
                 media +
                 completionNotice +
                 '</div>' +
@@ -332,11 +555,94 @@
                 (prev ? '<button class="btn btn-ghost" onclick="selectLesson(' + prev.lesson.id + ', event)"><i class="bi bi-arrow-left"></i> Sebelumnya</button>' : '') +
                 (next ? '<button class="btn btn-ghost" ' + (nextUnlocked ? '' : 'disabled title="Selesaikan pelajaran ini terlebih dahulu"') + ' onclick="selectLesson(' + next.lesson.id + ', event)">Selanjutnya <i class="bi bi-arrow-right"></i></button>' : '') +
                 '</div>' +
-                (isPreviewMode
-                    ? '<span class="badge badge-primary" style="padding: 0.5rem 0.75rem;"><i class="bi bi-eye"></i> Mode Pratinjau</span>'
-                    : '<button id="markCompleteBtn" class="btn btn-primary" ' + (completed ? 'disabled style="background: var(--success);"' : '') + ' onclick="markComplete()">' +
-                      (completed ? '<i class="bi bi-check-circle-fill"></i> Selesai' : '<i class="bi bi-check-circle"></i> Tandai Selesai') +
-                      '</button>') +
+                completionButton +
+                '</div>' +
+                '</article>';
+        }
+
+        function renderMaterial(materialId) {
+            const container = document.getElementById('learningContent');
+            const item = classroomMaterial(materialId);
+            if (!item) {
+                container.innerHTML = '<p style="color: var(--text-secondary);">Materi tambahan tidak ditemukan.</p>';
+                return;
+            }
+
+            const completed = !!item.completed;
+            const content = String(item.content || '');
+            const approvalRequired = !!(!isPreviewMode && classroom && classroom.settings &&
+                classroom.settings.requireInstructorApproval);
+
+            let body = '';
+            if (item.type === 'text') {
+                body = content ? ELIPS.sanitizeHtml(content) : '<p>Materi ini belum memiliki konten teks.</p>';
+            } else if (item.type === 'video') {
+                const embed = toEmbedUrl(content);
+                body = embed
+                    ? '<div class="learning-video" style="padding: 0; overflow: hidden;"><iframe src="' + ELIPS.escapeHtml(embed) + '" style="width:100%; height:100%; border:0;" allowfullscreen></iframe></div>'
+                    : (content ? '<p><a href="' + ELIPS.escapeHtml(content) + '" target="_blank" rel="noopener" class="btn btn-outline"><i class="bi bi-play-circle"></i> Buka Video</a></p>' : '<p>Belum ada URL video.</p>');
+            } else if (item.type === 'link') {
+                body = content
+                    ? '<p><a href="' + ELIPS.escapeHtml(content) + '" target="_blank" rel="noopener" class="btn btn-outline"><i class="bi bi-box-arrow-up-right"></i> Buka Link Materi</a></p>'
+                    : '<p>Belum ada URL materi.</p>';
+            } else {
+                const label = item.fileName || content || 'Unduh File';
+                const meta = [];
+                if (item.fileName) meta.push(item.fileName);
+                if (item.fileSize !== null && item.fileSize !== undefined) meta.push(item.fileSize + ' byte');
+                if (item.mimeType) meta.push(item.mimeType);
+                body = content
+                    ? '<p><a href="' + ELIPS.escapeHtml(content) + '" target="_blank" rel="noopener" class="btn btn-outline"><i class="bi bi-file-earmark-arrow-down"></i> ' + ELIPS.escapeHtml(label) + '</a></p>'
+                    : '<p style="color: var(--text-secondary);">File materi belum tersedia untuk diunduh.</p>';
+                if (meta.length > 0) {
+                    body += '<p style="font-size: 0.8125rem; color: var(--text-secondary);">' + ELIPS.escapeHtml(meta.join(' • ')) + '</p>';
+                }
+            }
+
+            let completionNotice = '';
+            if (isPreviewMode) {
+                completionNotice = '<div style="padding: 1rem; background: #eff6ff; color: #1e40af; border-radius: var(--radius); margin-top: 1.5rem;"><i class="bi bi-eye"></i> Mode pratinjau: materi tambahan kelas ditampilkan tanpa mengubah progres peserta.</div>';
+            } else if (approvalRequired && !completed) {
+                completionNotice = '<div style="padding: 1rem; background: #fef3c7; color: #92400e; border-radius: var(--radius); margin-top: 1.5rem;"><i class="bi bi-hourglass-split"></i> Penyelesaian materi ini perlu dikonfirmasi instruktur.</div>';
+            }
+
+            let completionButton = '';
+            if (isPreviewMode) {
+                completionButton = '<span class="badge badge-primary" style="padding: 0.5rem 0.75rem;"><i class="bi bi-eye"></i> Mode Pratinjau</span>';
+            } else if (completed) {
+                completionButton = '<button class="btn btn-primary" disabled style="background: var(--success);"><i class="bi bi-check-circle-fill"></i> Selesai</button>';
+            } else if (approvalRequired) {
+                completionButton = '<button class="btn btn-outline" disabled title="Menunggu konfirmasi instruktur"><i class="bi bi-hourglass-split"></i> Menunggu Konfirmasi Instruktur</button>';
+            } else {
+                completionButton = '<button class="btn btn-primary" onclick="markMaterialComplete()"><i class="bi bi-check-circle"></i> Tandai Selesai</button>';
+            }
+
+            const accessLabel = item.accessLevel === 'required' ? 'Wajib'
+                : item.accessLevel === 'reference' ? 'Referensi' : 'Opsional';
+            const relation = item.lessonTitle ? 'Terkait pelajaran: ' + item.lessonTitle
+                : (item.sessionTitle ? 'Terkait sesi: ' + item.sessionTitle : 'Materi tambahan kelas');
+
+            container.innerHTML =
+                '<article class="learning-article">' +
+                '<header class="learning-article-header">' +
+                '<div class="learning-article-meta"><span class="learning-article-breadcrumb">' + ELIPS.escapeHtml(relation) + '</span></div>' +
+                '<h1 class="learning-article-title">' + ELIPS.escapeHtml(item.title) + '</h1>' +
+                '<div style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.75rem;">' +
+                '<span class="badge badge-primary">' + typeLabel(item.type) + '</span>' +
+                '<span class="badge">' + ELIPS.escapeHtml(accessLabel) + '</span>' +
+                (item.availableFrom ? '<span class="badge">Tersedia ' + ELIPS.escapeHtml(item.availableFrom) + '</span>' : '') +
+                '</div>' +
+                '</header>' +
+                '<div class="learning-article-body">' +
+                (item.description ? '<p style="color: var(--text-secondary); margin-bottom: 1rem;">' + ELIPS.escapeHtml(item.description) + '</p>' : '') +
+                body +
+                completionNotice +
+                '</div>' +
+                '<div class="learning-actions">' +
+                '<div class="learning-nav">' +
+                (flatLessons.length > 0 ? '<button class="btn btn-ghost" onclick="selectLesson(' + flatLessons[0].lesson.id + ', event)"><i class="bi bi-arrow-left"></i> Kembali ke Pelajaran</button>' : '') +
+                '</div>' +
+                completionButton +
                 '</div>' +
                 '</article>';
         }
@@ -347,19 +653,52 @@
                 ELIPS.toast('Mode pratinjau: progres peserta tidak diubah.');
                 return;
             }
-            const enabled = lessonUnlocked(activeLessonId);
-            if (!enabled) {
-                ELIPS.toast('Materi ini masih terkunci.');
+            if (!lessonUnlocked(activeLessonId)) {
+                const item = classroomLesson(activeLessonId);
+                ELIPS.toast(item && item.reason ? item.reason : 'Materi ini masih terkunci.');
                 return;
             }
+
+            if (classroom) {
+                const result = ELIPS.setMaterialProgress({ classId: activeClassId, lessonId: activeLessonId });
+                ELIPS.toast(result.message);
+                if (!result.ok) return;
+                classroom = result.data;
+                buildFlatLessonsFromClassroom();
+                const index = flatLessons.findIndex(function (e) { return e.lesson.id === activeLessonId; });
+                const next = index >= 0 && index < flatLessons.length - 1 ? flatLessons[index + 1] : null;
+                if (next && lessonUnlocked(next.lesson.id)) activeLessonId = next.lesson.id;
+                renderAll();
+                return;
+            }
+
             ELIPS.markLessonCompleted(activeStudent.id, activeCourse.id, activeLessonId);
             ELIPS.toast('Pelajaran ditandai selesai!');
 
             const index = flatLessons.findIndex(function (e) { return e.lesson.id === activeLessonId; });
             const next = index < flatLessons.length - 1 ? flatLessons[index + 1] : null;
-            if (next) {
+            if (next && lessonUnlocked(next.lesson.id)) {
                 activeLessonId = next.lesson.id;
             }
+            renderAll();
+        }
+
+        function markMaterialComplete() {
+            if (!activeMaterialId || !classroom) return;
+            if (isPreviewMode) {
+                ELIPS.toast('Mode pratinjau: progres peserta tidak diubah.');
+                return;
+            }
+            const item = classroomMaterial(activeMaterialId);
+            if (item && item.locked) {
+                ELIPS.toast(item.reason || 'Materi ini masih terkunci.');
+                return;
+            }
+            const result = ELIPS.setMaterialProgress({ classId: activeClassId, materialId: activeMaterialId });
+            ELIPS.toast(result.message);
+            if (!result.ok) return;
+            classroom = result.data;
+            buildFlatLessonsFromClassroom();
             renderAll();
         }
 

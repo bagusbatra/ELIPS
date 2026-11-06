@@ -2,7 +2,7 @@
 
 **Versi:** 4.0  
 **Tanggal:** 2026-11-06
-**Status:** Implemented Phase 1–3 (Dual-mode - PHP 8/MySQL 8 + fallback `localStorage`). v3.0 tetap menjadi baseline alur kursus; v4.0 menambahkan versi kurikulum, angkatan/kelas, penguncian kurikulum per kelas, histori tentor, enrollment berbasis kelas, jadwal pertemuan dan presensi offline, serta **cabang** dengan halaman kalender/jadwal admin.
+**Status:** Implemented Phase 1–4 (Dual-mode - PHP 8/MySQL 8 + fallback `localStorage`). v3.0 tetap menjadi baseline alur kursus; v4.0 menambahkan versi kurikulum, angkatan/kelas, penguncian kurikulum per kelas, histori tentor, enrollment berbasis kelas, jadwal pertemuan dan presensi offline, **cabang** dengan halaman kalender/jadwal admin, serta **materi tambahan kelas dan mode akses materi**.
 **Baseline v4.0 lengkap:** `ELIPS-LMS-PRD-v4.0.md`  
 **Log pengembangan:** `log.md`
 **ERD:** `erd.md`
@@ -14,7 +14,7 @@
 
 Membangun sistem Learning Management System (LMS) berbasis web untuk pelatihan dan kursus. Aplikasi memakai vanilla HTML, CSS, dan JavaScript di sisi client, dengan backend PHP 8 + MySQL 8 sebagai penyimpanan utama dan `localStorage` sebagai fallback demo saat API tidak tersedia.
 
-### 1.1 Cakupan v4.0 Phase 1–3
+### 1.1 Cakupan v4.0 Phase 1–4
 
 Model akademik v4.0 memisahkan **Kursus** dari penyelenggaraannya:
 
@@ -26,7 +26,8 @@ Kursus
         └── Sesi Pertemuan (jadwal, JP rencana/aktual, status)
               └── Presensi peserta
         └── Enrollment peserta
-              └── Nilai → Sertifikat
+              └── Progres materi → Nilai → Sertifikat
+        └── Materi Tambahan Kelas (di luar kurikulum)
 ```
 
 Aturan inti yang sudah diterapkan:
@@ -39,6 +40,9 @@ Aturan inti yang sudah diterapkan:
 - Jadwal pertemuan dibuat per kelas (single atau berulang), dengan JP rencana dan JP aktual; sesi yang dibatalkan/rescheduled tidak dihitung sebagai JP aktual.
 - Setiap kelas dan sesi dapat dikaitkan ke **cabang**; cabang aktif wajib dipilih bila pengguna menetapkan cabang, dan cabang yang masih dipakai kelas tidak dapat dihapus.
 - Admin memiliki halaman **Kalender & Jadwal** yang memfilter kalender bulanan, agenda harian, ringkasan JP, dan daftar sesi berdasarkan cabang dan kelas.
+- Setiap kelas memiliki **mode akses materi** (`open`, `sequential`, `scheduled`, `conditional`) yang dapat diatur Admin atau tentor pengampu.
+- Materi kurikulum dapat ditambah **materi tambahan kelas** tanpa mengubah versi kurikulum; materi tambahan mendukung status wajib/opsional/referensi, tanggal tersedia, dan file privat.
+- Progres belajar dapat dicatat per kelas/enrollment (`class_lesson_progress`, `class_material_progress`), dan kelas dapat mewajibkan **konfirmasi instruktur** sebelum peserta menandai materi selesai.
 - Presensi dicatat per sesi dan per enrollment; koreksi presensi wajib menyimpan alasan, aktor, nilai lama, dan nilai baru.
 - Rekap kehadiran dihitung dari JP sesi yang dihitung dibagi JP wajib sesuai kebijakan kehadiran.
 - Nilai dan sertifikat unik per enrollment, sehingga peserta dapat mengikuti kursus yang sama pada angkatan berbeda.
@@ -50,9 +54,9 @@ Aturan inti yang sudah diterapkan:
 
 | Role | Deskripsi | Kebutuhan Utama |
 |---|---|---|
-| **Admin** | Pengelola sistem | Menambah kursus (Draft), mengelola versi kurikulum, mengelola cabang, membuat angkatan/kelas, menugaskan 1 tentor per kelas, menyusun jadwal sesi, memantau kalender/presensi/rekap, menambah pengguna, mendaftarkan siswa ke kelas, menyetujui sertifikat Draft → Publish |
-| **Instruktur/Trainer** | Pengajar kursus/kelas | Login, melihat kelas yang diampu, mengelola modul/materi pada versi kurikulum yang masih dapat diubah, menyusun jadwal, mencatat presensi dan koreksi, memantau progres, memberi nilai akhir |
-| **Peserta/Student** | Peserta pelatihan | Mengakses materi dari kelas yang diikuti, menandai pelajaran selesai, melihat rekap kehadiran sendiri, melihat sertifikat yang sudah Publish |
+| **Admin** | Pengelola sistem | Menambah kursus (Draft), mengelola versi kurikulum, mengelola cabang, membuat angkatan/kelas, menugaskan 1 tentor per kelas, menyusun jadwal sesi, memantau kalender/presensi/rekap, mengatur mode akses materi dan override dengan alasan, menambah pengguna, mendaftarkan siswa ke kelas, menyetujui sertifikat Draft → Publish |
+| **Instruktur/Trainer** | Pengajar kursus/kelas | Login, melihat kelas yang diampu, mengelola modul/materi pada versi kurikulum yang masih dapat diubah, mengatur akses dan materi tambahan kelas, mengonfirmasi penyelesaian materi, menyusun jadwal, mencatat presensi dan koreksi, memantau progres, memberi nilai akhir |
+| **Peserta/Student** | Peserta pelatihan | Mengakses materi dari kelas yang diikuti sesuai mode akses, menandai pelajaran/materi selesai bila diizinkan, melihat status persetujuan instruktur, melihat rekap kehadiran sendiri, melihat sertifikat yang sudah Publish |
 
 ---
 
@@ -234,7 +238,11 @@ Catatan: status kelas `ready`/`ongoing` memerlukan tentor aktif. Kelas dengan st
 | Melihat kelas/kursus yang diampu | ✅ (semua) | ✅ (miliknya) | ❌ |
 | Membuat modul & materi | ❌ | ✅ (kursus sendiri, versi Draft/Published) | ❌ |
 | Memberi nilai | ❌ | ✅ (kelas yang diampu) | ❌ |
-| Melihat materi kelas | ✅ (pratinjau) | ✅ (pratinjau) | ✅ (kelas diikuti & kursus Published) |
+| Melihat materi kelas | ✅ (pratinjau) | ✅ (pratinjau) | ✅ (kelas diikuti & kursus Published, sesuai mode akses) |
+| Mengatur mode akses materi kelas | ✅ (semua kelas, override wajib alasan) | ✅ (kelas diampu) | ❌ |
+| Mengelola materi tambahan kelas | ✅ (semua kelas) | ✅ (kelas diampu) | ❌ |
+| Mengonfirmasi penyelesaian materi peserta | ✅ (semua kelas) | ✅ (kelas diampu) | ❌ |
+| Menandai materi selesai | ❌ | ✅ (atas nama peserta di kelas diampu) | ✅ (bila kelas tidak mewajibkan persetujuan) |
 | Melihat sertifikat Draft | ✅ | ✅ (kelas yang diampu) | ❌ |
 | Menyetujui sertifikat | ✅ | ❌ | ❌ |
 | Melihat sertifikat Publish | ✅ | ✅ | ✅ (milik sendiri) |
@@ -269,6 +277,13 @@ Seluruh aturan di atas ditegakkan **di server** (`api/actions.php` + `api/helper
 | Rekap kehadiran per kebijakan | ✅ Selesai | `attendance.recap`/`attendance.myRecap`; persentase = JP hadir ÷ JP wajib × 100 |
 | UI jadwal & presensi admin/instruktur | ✅ Selesai | Tabel sesi, modal single/berulang, modal presensi dengan alasan koreksi, dan modal rekap |
 | Peserta melihat rekap sendiri | ✅ Selesai | `student/dashboard.html` menampilkan statistik, kebijakan, dan detail sesi milik peserta |
+| Mode akses materi per kelas | ✅ Selesai | `class_material_settings`; `material.settings`/`material.updateSettings`; mode `open`, `sequential`, `scheduled`, `conditional` |
+| Override pengaturan akses oleh Admin | ✅ Selesai | `admin/academic.html` menyediakan modal per kelas; perubahan pada baris yang sudah ada wajib alasan dan dicatat ke audit |
+| Materi tambahan kelas | ✅ Selesai | `class_materials`; `material.create/update/status/delete`; tipe teks/dokumen/video/link/file, status wajib/opsional/referensi |
+| Progress materi sebagai data pendukung | ✅ Selesai | `class_lesson_progress` dan `class_material_progress`; `material.progress`; snapshot menyertakan koleksi progres |
+| File privat & kontrol unduh | ✅ Selesai | `file_path` tidak pernah masuk snapshot; konten materi yang terkunci tidak dikirim ke peserta; unduhan mengikuti status akses |
+| Persetujuan instruktur penyelesaian materi | ✅ Selesai | `class_material_settings.require_instructor_approval`; peserta tidak dapat menandai selesai sampai instruktur/Admin mengonfirmasi |
+| UI materi Admin, Instruktur, Peserta | ✅ Selesai | Modal akses di `admin/academic.html`, panel materi di `instructor/manage-course.html`, sidebar & konten kelas di `learning.html` |
 | Nilai & sertifikat per enrollment | ✅ Selesai | Unique per `enrollment_id`, sehingga angkatan berbeda punya nilai/sertifikat terpisah |
 | Admin menambah akun siswa | ✅ Selesai | `admin/users.html` dan `register.html` |
 | 1 siswa dapat dikaitkan ke beberapa kelas | ✅ Selesai | `admin/enrollment.html` dan modal roster `admin/academic.html` |
@@ -411,7 +426,7 @@ Backend berada di folder `api/` dan terdiri dari front controller, konfigurasi, 
 | `api/helpers.php` | ✅ Selesai | Sesi, otorisasi, serializer (termasuk cabang, sesi/presensi/koreksi), kebijakan kehadiran, rekap, sanitasi HTML, audit, dan notifikasi |
 | `api/snapshot.php` | ✅ Selesai | Snapshot koleksi untuk cache client, termasuk `branches`, `classSessions`, `attendances`, dan `attendanceCorrections` |
 | `api/actions.php` | ✅ Selesai | Aksi bisnis dan validasi role/kepemilikan di server, termasuk aksi `branch.*`, `session.*`, dan `attendance.*` |
-| `api/schema.sql` | ✅ Selesai | Skema MySQL 8 (18 tabel), foreign key, dan index |
+| `api/schema.sql` | ✅ Selesai | Skema MySQL 8 (22 tabel), foreign key, dan index |
 | `api/install.php` | ✅ Selesai | Installer/seeder data demo (`--fresh` untuk reset), termasuk cabang, sesi, dan presensi; migrasi `branch_id` untuk database lama |
 
 ---
@@ -470,6 +485,22 @@ Backend berada di folder `api/` dan terdiri dari front controller, konfigurasi, 
 | Kebijakan kehadiran | ✅ Selesai | `attendance_present_statuses` = `present`+`late`; `attendance_counted_statuses` = `confirmed`+`completed`; dapat diubah di `api/config.php` |
 | Akses peserta | ✅ Selesai | Peserta hanya membaca presensi/rekap miliknya; akses lintas peserta ditolak server |
 
+### 6.2c Materi Kelas & Mode Akses
+
+| Fitur | Status | Keterangan |
+|---|---|---|
+| Materi versi kurikulum | ✅ Selesai | Modul/materi tetap terikat `curriculum_version_id`; kelas memakai versi yang dikunci saat kelas dibuat |
+| Pengaturan akses per kelas | ✅ Selesai | `class_material_settings` satu baris per kelas; kelas tanpa baris memakai default implisit `open` |
+| Mode `open` | ✅ Selesai | Semua materi aktif dapat dibuka peserta |
+| Mode `sequential` | ✅ Selesai | Pelajaran berikutnya terbuka setelah seluruh pelajaran sebelumnya selesai dikonfirmasi |
+| Mode `scheduled` | ✅ Selesai | Pelajaran terbuka saat modulnya memiliki sesi non-cancelled/no-show/rescheduled yang tanggalnya sudah tiba |
+| Mode `conditional` | ✅ Selesai | Menggabungkan prasyarat urutan dan tanggal sesi modul |
+| Materi tambahan kelas | ✅ Selesai | `class_materials`; tidak mengubah kurikulum, dapat ditautkan ke pelajaran/sesi, memiliki `available_from` dan urutan |
+| Status materi tambahan | ✅ Selesai | `active`/`hidden`; perubahan status wajib alasan dan dicatat audit |
+| Persetujuan instruktur | ✅ Selesai | Bila aktif, peserta tidak dapat menandai selesai; instruktur/Admin dapat mengonfirmasi progres untuk enrollment |
+| Pratinjau staf | ✅ Selesai | Admin/instruktur pengampu dapat melihat materi terkunci tanpa mengubah progres peserta |
+| Snapshot aman | ✅ Selesai | Snapshot hanya menyimpan metadata materi; `content` dan `file_path` tidak dikirim |
+
 ### 6.3 Enrolment & Progres Belajar
 | Fitur | Status | Keterangan |
 |---|---|---|
@@ -477,9 +508,9 @@ Backend berada di folder `api/` dan terdiri dari front controller, konfigurasi, 
 | Satu siswa ke beberapa kelas/kursus | ✅ Selesai | Form pendaftaran mendukung pilihan kelas dari beberapa kursus |
 | Akses kursus oleh siswa | ✅ Selesai | Siswa hanya dapat membuka materi kelas yang diikuti dan kursus berstatus Published |
 | Status enrolment dinamis | ✅ Selesai | Tombol di `course-detail.html` berubah menjadi "Lanjutkan Belajar" bila sudah terdaftar |
-| Halaman belajar | ✅ Selesai | `learning.html` dengan sidebar modul/lesson dan penguncian materi berurutan |
-| Tandai pelajaran selesai | ✅ Selesai | Mode server: tabel `completed_lessons`; mode lokal: `localStorage` (`elips_completedLessons`) |
-| Tracking progres | ✅ Selesai | Progres dihitung berdasarkan pelajaran selesai |
+| Halaman belajar | ✅ Selesai | `learning.html` dengan sidebar modul/lesson, penguncian sesuai mode akses kelas, dan modul **Materi Tambahan Kelas** |
+| Tandai pelajaran selesai | ✅ Selesai | Mode server: `class_lesson_progress` (dan `completed_lessons` legacy); mode lokal: key `elips_classLessonProgress`/`elips_completedLessons` |
+| Tracking progres | ✅ Selesai | Progres dihitung dari pelajaran selesai per enrollment; `ELIPS.isLessonCompleted()` membaca progres kelas dan data legacy |
 | Kelola enrolment (Admin) | ✅ Selesai | `admin/enrollment.html` dan `admin/academic.html` - tambah pendaftaran, filter, ubah status, hapus |
 | Kuota kelas | ✅ Selesai | Pendaftaran melebihi kuota ditolak; kuota tidak boleh diturunkan di bawah peserta aktif |
 | Status enrollment | ✅ Selesai | `active`, `completed`, `withdrawn`, `cancelled`; status `withdrawn` mencabut akses tanpa menghapus riwayat |
@@ -602,6 +633,26 @@ else                            -> student/dashboard.html
   - tautan cepat ke `admin/academic.html` (kelola sesi/kelas) dan `admin/settings.html` (kelola cabang).
 - Navigasi admin menampilkan tautan **Kalender & Jadwal** pada seluruh halaman admin, setelah menu **Kurikulum & Kelas**.
 
+### Materi dan Akses Kelas
+- Pengaturan akses disimpan di tabel `class_material_settings` (mode server) atau key `elips_classMaterialSettings` (mode lokal), satu baris per kelas.
+- Bila kelas belum memiliki baris pengaturan, sistem memakai default implisit: `accessMode: 'open'`, `requireInstructorApproval: false`, `id: null`. Default ini **tidak** dibuatkan baris sampai pengguna menyimpan pengaturan.
+- Mode akses:
+  - `open`: semua materi kurikulum aktif dapat dibuka.
+  - `sequential`: pelajaran ke-n terbuka hanya bila seluruh pelajaran sebelumnya sudah selesai.
+  - `scheduled`: pelajaran terbuka bila modulnya memiliki sesi dengan status dihitung dan tanggal sesi sudah lewat/hari ini.
+  - `conditional`: prasyarat urutan **dan** tanggal sesi modul (bila modul memiliki sesi) harus terpenuhi.
+- Materi tambahan disimpan di `class_materials` dan tidak mengubah versi kurikulum. Materi dapat ditautkan ke `lesson_id` dan/atau `session_id`, memiliki `access_level` (`required`/`optional`/`reference`), `available_from`, `status` (`active`/`hidden`), dan `sort_order`.
+- Materi tambahan terkunci bila:
+  - statusnya `hidden` (bagi peserta);
+  - `available_from` belum tiba;
+  - pelajaran tertaut belum selesai;
+  - sesi tertaut dibatalkan/rescheduled/no-show atau tanggalnya belum tiba.
+- Peserta hanya menerima `content` untuk materi yang tidak terkunci. Staf (Admin/instruktur pengampu) dapat melihat pratinjau tanpa mengubah progres peserta.
+- Bila `require_instructor_approval` aktif, peserta tidak dapat menandai pelajaran/materi selesai. Instruktur pengampu atau Admin dapat mengonfirmasi progres untuk enrollment tersebut.
+- Perubahan pengaturan yang sudah tersimpan oleh Admin wajib menyertakan alasan; audit mencatat mode dan status persetujuan sebelum/sesudah.
+- Perubahan status materi (`active`/`hidden`) wajib menyertakan alasan dan dicatat audit.
+- Snapshot hanya memuat metadata materi (`classMaterials`), tanpa `content` dan tanpa `file_path`; file privat tidak pernah diekspos melalui snapshot.
+
 ### Enrolment
 - Data disimpan di tabel `enrollments` (mode server) atau `localStorage` key `elips_enrollments` (mode lokal), berupa array of objects.
 - Pendaftaran siswa ke kelas hanya dilakukan oleh Admin melalui `admin/enrollment.html` atau roster `admin/academic.html`.
@@ -640,9 +691,12 @@ else                            -> student/dashboard.html
 - Peserta tidak dapat membaca presensi peserta lain; percobaan lintas peserta/kelas ditolak server.
 
 ### Progres Belajar
-- Pelajaran selesai disimpan di tabel `completed_lessons` (mode server) atau `localStorage` key `elips_completedLessons` (mode lokal)
-- Progres dihitung berdasarkan jumlah pelajaran selesai vs total pelajaran
-- Materi terkunci sampai pelajaran sebelumnya selesai (instruktur/admin dapat melewati saat pratinjau)
+- Progres pelajaran disimpan per enrollment di tabel `class_lesson_progress` (mode server) atau key `elips_classLessonProgress` (mode lokal); tabel `completed_lessons`/key lama tetap dibaca untuk kompatibilitas.
+- Progres materi tambahan disimpan di tabel `class_material_progress` atau key `elips_classMaterialProgress`.
+- Unik per `(enrollment_id, lesson_id)` dan `(enrollment_id, material_id)`, sehingga peserta yang mengikuti beberapa kelas memperoleh progres terpisah.
+- Progres kelas dihitung dari jumlah pelajaran yang selesai dibagi total pelajaran pada versi kurikulum kelas.
+- Materi terkunci mengikuti mode akses kelas; instruktur/Admin dapat melewati kunci saat pratinjau tanpa mengubah progres peserta.
+- Penyelesaian oleh peserta ditolak bila kelas mewajibkan persetujuan instruktur; staf dapat mengonfirmasi progres untuk enrollment terkait.
 
 ### Penilaian & Sertifikat
 - Nilai disimpan di tabel `grades` (mode server) atau `localStorage` key `elips_grades` (mode lokal), dan hurufnya dihitung otomatis (A–E).
@@ -664,8 +718,8 @@ else                            -> student/dashboard.html
 - Entri audit menyimpan `action`, `entity`, `entityId`, `entityLabel`, `actorId`, `actorName`, `actorRole`, `detail`, dan `createdAt`.
 - Resolusi aktor: `actorId` eksplisit dari pemanggil → user sesi (`elips_session`) → "Sistem". Fallback `getCurrentUser()` tidak dipakai agar tidak salah atribusi saat tidak ada sesi.
 - Operasi yang gagal (validasi ditolak) tidak dicatat.
-- Aksi yang dicatat: `create`, `update`, `delete`, `publish`, `unpublish`, `grade`, `submit`, `approve`, `assign`, `status`, `attendance`, dan `correct`.
-- Entitas yang dicatat: `course`, `branch`, `curriculum`, `class`, `grade`, `certificate`, `user`, `enrollment`, `module`, `lesson`, `session`, dan `attendance`.
+- Aksi yang dicatat: `create`, `update`, `delete`, `publish`, `unpublish`, `grade`, `submit`, `approve`, `assign`, `status`, `attendance`, `correct`, dan `progress`.
+- Entitas yang dicatat: `course`, `branch`, `curriculum`, `class`, `grade`, `certificate`, `user`, `enrollment`, `module`, `lesson`, `session`, `attendance`, `class_material`, dan `class_material_settings`.
 - Log diurutkan terbaru lebih dulu, dibatasi 1000 entri, dan dapat difilter berdasarkan aktor, aksi, entitas, rentang tanggal, pencarian, serta limit.
 - Admin dapat mengekspor hasil filter ke CSV dan membersihkan seluruh log dari `admin/audit.html`.
 
@@ -732,6 +786,14 @@ else                            -> student/dashboard.html
 | Cabang pada kelas | ✅ Lulus uji | `api-v4-branches`/`local-v4-branches` memverifikasi create/update/status/delete, kode unik, cabang nonaktif ditolak, dan hapus cabang terpakai ditolak |
 | UI manajemen cabang | ✅ Lulus uji | `test-branch-pages` memverifikasi tabel cabang, modal tambah/edit, status, hapus, dan blokir hapus cabang seed |
 | Kalender & jadwal admin | ✅ Lulus uji | `test-branch-pages` memverifikasi 42 sel kalender, agenda harian, ringkasan JP, filter cabang/kelas/status, modal sesi, dan navigasi bulan |
+| Pengaturan akses materi kelas | ✅ Lulus uji | `api-v4-materials`/`local-v4-materials` memverifikasi default `open`, keempat mode, validasi mode, dan guard role |
+| Prasyarat sequential & scheduled | ✅ Lulus uji | Pelajaran kedua terkunci sampai pelajaran pertama selesai; mode scheduled memakai tanggal sesi modul |
+| Mode conditional | ✅ Lulus uji | Membutuhkan penyelesaian pelajaran sebelumnya dan tanggal sesi modul yang sudah tiba |
+| Materi tambahan kelas | ✅ Lulus uji | Create/update/status/delete, relasi pelajaran/sesi, `available_from`, dan penyembunyian dari peserta |
+| Persetujuan instruktur | ✅ Lulus uji | Peserta ditolak saat menandai selesai; staf dapat mengonfirmasi progres enrollment |
+| Keamanan snapshot & konten terkunci | ✅ Lulus uji | Snapshot hanya metadata; materi terkunci tidak mengirim `content` |
+| Audit materi | ✅ Lulus uji | Perubahan pengaturan, status materi, dan konfirmasi progres tercatat dengan alasan/aktor |
+| UI materi Admin/Instruktur/Peserta | ✅ Lulus uji | `test-v4-material-ui` 25/25: modal akses, panel materi, sidebar tambahan, konten, progres, dan status persetujuan |
 | Admin menambah siswa | ✅ Lulus uji | Akun peserta aktif dapat ditugaskan ke kursus |
 | Admin mengaitkan siswa ke beberapa kursus | ✅ Lulus uji | Multi-checkbox pada `admin/enrollment.html` |
 | Siswa hanya mengakses kursus yang ditugaskan | ✅ Lulus uji | `learning.html` menolak kursus tanpa enrollment aktif |
@@ -769,18 +831,18 @@ else                            -> student/dashboard.html
 - **Responsive:** Menggunakan CSS custom yang responsif.
 - **UI Konsisten:** Menggunakan komponen seragam (navbar, sidebar, cards, tables, badges).
 - **Keamanan:** Pada mode server password di-hash, sesi memakai cookie `HttpOnly`/`SameSite=Lax`, dan otorisasi role/kepemilikan ditegakkan di server. Mode lokal tetap bersifat demo dan tidak boleh dianggap aman untuk produksi.
-- **Cakupan v4.0:** Increment ini mencakup **Phase 1–3** (versi kurikulum + kelas/angkatan + enrollment berbasis kelas + jadwal sesi/presensi offline) serta **cabang + kalender/jadwal admin**. Materi per kelas, tugas/ujian, pembayaran, dan sertifikat PDF mengikuti phase berikutnya pada `ELIPS-LMS-PRD-v4.0.md`.
+- **Cakupan v4.0:** Increment ini mencakup **Phase 1–4** (versi kurikulum + kelas/angkatan + enrollment berbasis kelas + jadwal sesi/presensi offline + materi tambahan dan mode akses materi) serta **cabang + kalender/jadwal admin**. Tugas/ujian, pembayaran, dan sertifikat PDF mengikuti phase berikutnya pada `ELIPS-LMS-PRD-v4.0.md`.
 - **Kompatibilitas v3.0:** Struktur v3 tetap dipertahankan. Setiap kursus lama mendapat versi kurikulum `1.0`; enrollment lama dipetakan ke kelas migrasi (`legacy_import`) agar tidak ada data yang hilang.
 
 ---
 
 ## 10. Rencana Pengembangan Lanjutan (Opsional)
 
-Backend PHP/MySQL, autentikasi sesi, validasi role/kepemilikan, audit server-side, outbox notifikasi simulasi, serta Phase 1–3 v4.0 (kurikulum, kelas, enrollment, jadwal & presensi) sudah diimplementasikan. Untuk production dan phase v4 berikutnya, pengembangan berikut masih diperlukan:
+Backend PHP/MySQL, autentikasi sesi, validasi role/kepemilikan, audit server-side, outbox notifikasi simulasi, serta Phase 1–4 v4.0 (kurikulum, kelas, enrollment, jadwal & presensi, materi & akses kelas) sudah diimplementasikan. Untuk production dan phase v4 berikutnya, pengembangan berikut masih diperlukan:
 
 | Fitur | Prioritas | Keterangan |
 |---|---|---|
-| Phase 4–10 v4.0 | P1 | Materi per kelas, tugas/ujian, pembayaran, sertifikat lanjutan (lihat `ELIPS-LMS-PRD-v4.0.md`) |
+| Phase 5–10 v4.0 | P1 | Tugas/ujian, penilaian lanjutan, pembayaran, sertifikat PDF (lihat `ELIPS-LMS-PRD-v4.0.md`) |
 | Hardening API | P0 | Rate limiting login, CSRF token, HTTPS wajib, dan rotasi session ID |
 | Pembatasan baca snapshot | P0 | Snapshot publik saat ini memuat seluruh koleksi demo; produksi perlu proyeksi terbatas per role dan endpoint khusus verifikasi sertifikat |
 | Upload file materi | P0 | Upload PDF, video, gambar ke object storage |

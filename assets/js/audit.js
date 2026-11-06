@@ -27,7 +27,9 @@
         assign: 'Penugasan',
         status: 'Ubah Status',
         attendance: 'Presensi',
-        correct: 'Koreksi'
+        correct: 'Koreksi',
+        confirm: 'Konfirmasi',
+        unconfirm: 'Batal Konfirmasi'
     };
 
     const ENTITY_LABELS = {
@@ -40,7 +42,11 @@
         module: 'Modul',
         lesson: 'Materi',
         session: 'Sesi Pertemuan',
-        attendance: 'Presensi'
+        attendance: 'Presensi',
+        material_settings: 'Pengaturan Akses Materi',
+        class_material: 'Materi Tambahan Kelas',
+        class_lesson_progress: 'Progres Pelajaran',
+        class_material_progress: 'Progres Materi Tambahan'
     };
 
     function actionLabel(action) {

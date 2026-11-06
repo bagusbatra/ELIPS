@@ -105,6 +105,22 @@ function elips_dispatch(string $action, array $payload): array
             return elips_action_lesson_update($payload);
         case 'lesson.delete':
             return elips_action_lesson_delete($payload);
+        case 'material.settings':
+            return elips_action_material_settings($payload);
+        case 'material.updateSettings':
+            return elips_action_material_update_settings($payload);
+        case 'material.create':
+            return elips_action_material_create($payload);
+        case 'material.update':
+            return elips_action_material_update($payload);
+        case 'material.status':
+            return elips_action_material_status($payload);
+        case 'material.delete':
+            return elips_action_material_delete($payload);
+        case 'material.classroom':
+            return elips_action_material_classroom($payload);
+        case 'material.progress':
+            return elips_action_material_progress($payload);
         case 'grade.save':
             return elips_action_grade_save($payload);
         case 'certificate.draft':
@@ -2748,6 +2764,611 @@ function elips_action_lesson_delete(array $p): array
     );
 
     return elips_ok('Materi dihapus.', elips_lesson_public($id) ?: ['id' => $id]);
+}
+
+// ---------- Materi kelas (Phase 4) ----------
+
+function elips_class_lesson_row(int $classId, int $lessonId): ?array
+{
+    $stmt = elips_db()->prepare(
+        'SELECT l.* FROM lessons l
+         JOIN classes cl ON cl.id = ?
+            AND cl.course_id = l.course_id
+            AND cl.curriculum_version_id = l.curriculum_version_id
+         WHERE l.id = ? LIMIT 1'
+    );
+    $stmt->execute([$classId, $lessonId]);
+    $row = $stmt->fetch();
+    return $row ?: null;
+}
+
+function elips_class_session_row(int $classId, int $sessionId): ?array
+{
+    $stmt = elips_db()->prepare('SELECT * FROM class_sessions WHERE id = ? AND class_id = ? LIMIT 1');
+    $stmt->execute([$sessionId, $classId]);
+    $row = $stmt->fetch();
+    return $row ?: null;
+}
+
+function elips_material_enrollment_for(int $classId, int $studentId): ?array
+{
+    $stmt = elips_db()->prepare(
+        "SELECT * FROM enrollments
+         WHERE class_id = ? AND student_id = ? AND status IN ('active', 'completed')
+         ORDER BY id DESC LIMIT 1"
+    );
+    $stmt->execute([$classId, $studentId]);
+    $row = $stmt->fetch();
+    return $row ?: null;
+}
+
+function elips_material_enrollment_by_id(int $classId, int $enrollmentId): ?array
+{
+    $stmt = elips_db()->prepare('SELECT * FROM enrollments WHERE id = ? AND class_id = ? LIMIT 1');
+    $stmt->execute([$enrollmentId, $classId]);
+    $row = $stmt->fetch();
+    return $row ?: null;
+}
+
+function elips_material_valid_access_level(string $level): bool
+{
+    return in_array($level, ['required', 'optional', 'reference'], true);
+}
+
+function elips_material_valid_type(string $type): bool
+{
+    return in_array($type, ['text', 'document', 'video', 'link', 'file'], true);
+}
+
+function elips_material_normalize_file_size($value): ?int
+{
+    if ($value === null || $value === '') {
+        return null;
+    }
+    $size = (int) $value;
+    return $size >= 0 ? $size : null;
+}
+
+function elips_material_classroom_payload(array $class, ?array $enrollment, bool $preview): array
+{
+    $course = elips_course_row((int) $class['course_id']);
+    $state = elips_class_material_state($class, $enrollment, $preview);
+    return array_merge([
+        'class' => [
+            'id' => (int) $class['id'],
+            'code' => $class['code'],
+            'name' => $class['name'],
+            'courseId' => (int) $class['course_id'],
+            'courseTitle' => $course ? $course['title'] : '',
+            'curriculumVersionId' => (int) $class['curriculum_version_id'],
+            'instructorId' => $class['instructor_id'] === null ? null : (int) $class['instructor_id'],
+            'status' => $class['status'],
+            'periodStart' => elips_date_only($class['period_start']),
+            'periodEnd' => elips_date_only($class['period_end']),
+        ],
+        'enrollment' => $enrollment ? elips_enrollment_public((int) $enrollment['id']) : null,
+        'preview' => $preview,
+    ], $state);
+}
+
+function elips_action_material_settings(array $p): array
+{
+    $actor = elips_require_login();
+    $classId = (int) ($p['classId'] ?? 0);
+    $class = elips_class_row($classId);
+    if (!$class) return elips_fail('Kelas tidak ditemukan.');
+
+    if (!elips_can_manage_class($class, $actor)) {
+        if ($actor['role'] !== 'peserta'
+            || !elips_material_enrollment_for($classId, (int) $actor['id'])) {
+            return elips_fail('Anda tidak berhak melihat pengaturan materi kelas ini.');
+        }
+    }
+
+    return elips_ok('Pengaturan akses materi dimuat.', elips_class_material_settings_public($classId));
+}
+
+function elips_action_material_update_settings(array $p): array
+{
+    $actor = elips_require_login();
+    $classId = (int) ($p['classId'] ?? 0);
+    $class = elips_class_row($classId);
+    if (!$class) return elips_fail('Kelas tidak ditemukan.');
+    if (!elips_can_manage_class($class, $actor)) {
+        return elips_fail('Anda tidak berhak mengatur akses materi kelas ini.');
+    }
+
+    $data = elips_payload_array($p, 'data');
+    $current = elips_class_material_settings_public($classId);
+    $mode = trim((string) ($data['accessMode'] ?? $current['accessMode']));
+    if (!in_array($mode, ['open', 'sequential', 'scheduled', 'conditional'], true)) {
+        return elips_fail('Mode akses materi tidak valid.');
+    }
+    $approval = array_key_exists('requireInstructorApproval', $data)
+        ? (bool) $data['requireInstructorApproval']
+        : $current['requireInstructorApproval'];
+    $notes = array_key_exists('notes', $data)
+        ? trim((string) $data['notes'])
+        : $current['notes'];
+    $reason = trim((string) ($data['reason'] ?? ($p['reason'] ?? '')));
+
+    $changed = $mode !== $current['accessMode']
+        || $approval !== $current['requireInstructorApproval']
+        || $notes !== $current['notes'];
+    if ($actor['role'] === 'admin' && $current['id'] !== null && $changed && $reason === '') {
+        return elips_fail('Alasan override Admin wajib diisi.');
+    }
+
+    $db = elips_db();
+    if ($current['id'] === null) {
+        $stmt = $db->prepare(
+            'INSERT INTO class_material_settings
+             (class_id, access_mode, require_instructor_approval, notes, updated_by, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP())'
+        );
+        $stmt->execute([
+            $classId,
+            $mode,
+            $approval ? 1 : 0,
+            $notes,
+            (int) $actor['id'],
+        ]);
+    } else {
+        $stmt = $db->prepare(
+            'UPDATE class_material_settings
+             SET access_mode = ?, require_instructor_approval = ?, notes = ?, updated_by = ?, updated_at = UTC_TIMESTAMP()
+             WHERE class_id = ?'
+        );
+        $stmt->execute([
+            $mode,
+            $approval ? 1 : 0,
+            $notes,
+            (int) $actor['id'],
+            $classId,
+        ]);
+    }
+
+    $detail = 'Mengubah pengaturan akses materi kelas "' . $class['code'] . '" dari '
+        . $current['accessMode'] . ' menjadi ' . $mode
+        . '; persetujuan instruktur: ' . ($approval ? 'aktif' : 'nonaktif')
+        . ($reason !== '' ? '; alasan: ' . $reason : '');
+    elips_audit('update', 'material_settings', $classId, $class['code'], $detail . '.', $actor);
+
+    return elips_ok('Pengaturan akses materi diperbarui.', elips_class_material_settings_public($classId));
+}
+
+function elips_action_material_create(array $p): array
+{
+    $actor = elips_require_login();
+    $classId = (int) ($p['classId'] ?? 0);
+    $class = elips_class_row($classId);
+    if (!$class) return elips_fail('Kelas tidak ditemukan.');
+    if (!elips_can_manage_class($class, $actor)) {
+        return elips_fail('Anda tidak berhak menambahkan materi pada kelas ini.');
+    }
+
+    $data = elips_payload_array($p, 'data');
+    $title = trim((string) ($data['title'] ?? ''));
+    if ($title === '') return elips_fail('Judul materi wajib diisi.');
+
+    $type = trim((string) ($data['type'] ?? 'text'));
+    if (!elips_material_valid_type($type)) return elips_fail('Jenis materi tidak valid.');
+
+    $accessLevel = trim((string) ($data['accessLevel'] ?? 'optional'));
+    if (!elips_material_valid_access_level($accessLevel)) {
+        return elips_fail('Status materi tidak valid.');
+    }
+
+    $status = trim((string) ($data['status'] ?? 'active'));
+    if (!in_array($status, ['active', 'hidden'], true)) {
+        return elips_fail('Status publikasi materi tidak valid.');
+    }
+
+    $lessonId = null;
+    if (isset($data['lessonId']) && (int) $data['lessonId'] > 0) {
+        $lessonId = (int) $data['lessonId'];
+        if (!elips_class_lesson_row($classId, $lessonId)) {
+            return elips_fail('Materi kurikulum tidak valid untuk kelas ini.');
+        }
+    }
+
+    $sessionId = null;
+    if (isset($data['sessionId']) && (int) $data['sessionId'] > 0) {
+        $sessionId = (int) $data['sessionId'];
+        if (!elips_class_session_row($classId, $sessionId)) {
+            return elips_fail('Sesi kelas tidak valid untuk kelas ini.');
+        }
+    }
+
+    $availableFrom = elips_normalize_date($data['availableFrom'] ?? null);
+    if (!empty($data['availableFrom']) && $availableFrom === null) {
+        return elips_fail('Tanggal ketersediaan materi tidak valid.');
+    }
+
+    $content = (string) ($data['content'] ?? '');
+    $content = $type === 'text' ? elips_sanitize_html($content) : trim($content);
+
+    $order = (int) ($data['order'] ?? 0);
+    $db = elips_db();
+    if ($order <= 0) {
+        $stmt = $db->prepare('SELECT COALESCE(MAX(sort_order), 0) FROM class_materials WHERE class_id = ?');
+        $stmt->execute([$classId]);
+        $order = (int) $stmt->fetchColumn() + 1;
+    }
+
+    $stmt = $db->prepare(
+        'INSERT INTO class_materials
+         (class_id, lesson_id, session_id, title, description, type, content, file_name, file_path, file_size,
+          mime_type, access_level, available_from, status, reason, sort_order, created_by, updated_by, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, \'\', ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP())'
+    );
+    $stmt->execute([
+        $classId,
+        $lessonId,
+        $sessionId,
+        $title,
+        trim((string) ($data['description'] ?? '')),
+        $type,
+        $content,
+        trim((string) ($data['fileName'] ?? '')),
+        elips_material_normalize_file_size($data['fileSize'] ?? null),
+        trim((string) ($data['mimeType'] ?? '')),
+        $accessLevel,
+        $availableFrom,
+        $status,
+        trim((string) ($data['reason'] ?? '')),
+        $order,
+        (int) $actor['id'],
+        (int) $actor['id'],
+    ]);
+    $id = (int) $db->lastInsertId();
+
+    elips_audit(
+        'create',
+        'class_material',
+        $id,
+        $title,
+        'Menambahkan materi tambahan "' . $title . '" pada kelas "' . $class['code'] . '".',
+        $actor
+    );
+
+    $row = elips_class_material_row($id);
+    return elips_ok('Materi tambahan berhasil ditambahkan.', $row ? elips_class_material_public($row) : null);
+}
+
+function elips_action_material_update(array $p): array
+{
+    $actor = elips_require_login();
+    $id = (int) ($p['id'] ?? 0);
+    $material = elips_class_material_row($id);
+    if (!$material) return elips_fail('Materi tidak ditemukan.');
+
+    $class = elips_class_row((int) $material['class_id']);
+    if (!$class) return elips_fail('Kelas tidak ditemukan.');
+    if (!elips_can_manage_class($class, $actor)) {
+        return elips_fail('Anda tidak berhak mengubah materi pada kelas ini.');
+    }
+
+    $data = elips_payload_array($p, 'data');
+    $title = array_key_exists('title', $data) ? trim((string) $data['title']) : $material['title'];
+    if ($title === '') return elips_fail('Judul materi wajib diisi.');
+
+    $type = array_key_exists('type', $data) ? trim((string) $data['type']) : $material['type'];
+    if (!elips_material_valid_type($type)) return elips_fail('Jenis materi tidak valid.');
+
+    $accessLevel = array_key_exists('accessLevel', $data)
+        ? trim((string) $data['accessLevel'])
+        : $material['access_level'];
+    if (!elips_material_valid_access_level($accessLevel)) {
+        return elips_fail('Status materi tidak valid.');
+    }
+
+    $lessonId = $material['lesson_id'] === null ? null : (int) $material['lesson_id'];
+    if (array_key_exists('lessonId', $data)) {
+        $lessonId = (int) ($data['lessonId'] ?? 0);
+        if ($lessonId <= 0) {
+            $lessonId = null;
+        } elseif (!elips_class_lesson_row((int) $class['id'], $lessonId)) {
+            return elips_fail('Materi kurikulum tidak valid untuk kelas ini.');
+        }
+    }
+
+    $sessionId = $material['session_id'] === null ? null : (int) $material['session_id'];
+    if (array_key_exists('sessionId', $data)) {
+        $sessionId = (int) ($data['sessionId'] ?? 0);
+        if ($sessionId <= 0) {
+            $sessionId = null;
+        } elseif (!elips_class_session_row((int) $class['id'], $sessionId)) {
+            return elips_fail('Sesi kelas tidak valid untuk kelas ini.');
+        }
+    }
+
+    $availableFrom = elips_date_only($material['available_from']);
+    if (array_key_exists('availableFrom', $data)) {
+        $availableFrom = elips_normalize_date($data['availableFrom']);
+        if (!empty($data['availableFrom']) && $availableFrom === null) {
+            return elips_fail('Tanggal ketersediaan materi tidak valid.');
+        }
+    }
+
+    $content = array_key_exists('content', $data) ? (string) $data['content'] : $material['content'];
+    $content = $type === 'text' ? elips_sanitize_html($content) : trim($content);
+
+    $order = array_key_exists('order', $data) ? (int) $data['order'] : (int) $material['sort_order'];
+    if ($order <= 0) $order = 1;
+
+    $stmt = elips_db()->prepare(
+        'UPDATE class_materials
+         SET lesson_id = ?, session_id = ?, title = ?, description = ?, type = ?, content = ?,
+             file_name = ?, file_size = ?, mime_type = ?, access_level = ?, available_from = ?,
+             reason = ?, sort_order = ?, updated_by = ?, updated_at = UTC_TIMESTAMP()
+         WHERE id = ?'
+    );
+    $stmt->execute([
+        $lessonId,
+        $sessionId,
+        $title,
+        array_key_exists('description', $data) ? trim((string) $data['description']) : $material['description'],
+        $type,
+        $content,
+        array_key_exists('fileName', $data) ? trim((string) $data['fileName']) : $material['file_name'],
+        array_key_exists('fileSize', $data)
+            ? elips_material_normalize_file_size($data['fileSize'])
+            : elips_material_normalize_file_size($material['file_size']),
+        array_key_exists('mimeType', $data) ? trim((string) $data['mimeType']) : $material['mime_type'],
+        $accessLevel,
+        $availableFrom,
+        array_key_exists('reason', $data) ? trim((string) $data['reason']) : $material['reason'],
+        $order,
+        (int) $actor['id'],
+        $id,
+    ]);
+
+    elips_audit(
+        'update',
+        'class_material',
+        $id,
+        $title,
+        'Memperbarui materi tambahan "' . $title . '" pada kelas "' . $class['code'] . '".',
+        $actor
+    );
+
+    $row = elips_class_material_row($id);
+    return elips_ok('Materi tambahan berhasil diperbarui.', $row ? elips_class_material_public($row) : null);
+}
+
+function elips_action_material_status(array $p): array
+{
+    $actor = elips_require_login();
+    $id = (int) ($p['id'] ?? 0);
+    $material = elips_class_material_row($id);
+    if (!$material) return elips_fail('Materi tidak ditemukan.');
+
+    $class = elips_class_row((int) $material['class_id']);
+    if (!$class) return elips_fail('Kelas tidak ditemukan.');
+    if (!elips_can_manage_class($class, $actor)) {
+        return elips_fail('Anda tidak berhak mengubah status materi ini.');
+    }
+
+    $data = elips_payload_array($p, 'data');
+    $status = trim((string) ($data['status'] ?? ($p['status'] ?? '')));
+    if (!in_array($status, ['active', 'hidden'], true)) {
+        return elips_fail('Status materi tidak valid.');
+    }
+    $reason = trim((string) ($data['reason'] ?? ($p['reason'] ?? '')));
+    if ($reason === '') return elips_fail('Alasan perubahan status materi wajib diisi.');
+
+    $stmt = elips_db()->prepare(
+        'UPDATE class_materials SET status = ?, reason = ?, updated_by = ?, updated_at = UTC_TIMESTAMP() WHERE id = ?'
+    );
+    $stmt->execute([$status, $reason, (int) $actor['id'], $id]);
+
+    elips_audit(
+        'status',
+        'class_material',
+        $id,
+        $material['title'],
+        'Mengubah status materi "' . $material['title'] . '" pada kelas "' . $class['code'] . '" dari '
+            . $material['status'] . ' menjadi ' . $status . '; alasan: ' . $reason . '.',
+        $actor
+    );
+
+    $row = elips_class_material_row($id);
+    return elips_ok('Status materi diperbarui.', $row ? elips_class_material_public($row) : null);
+}
+
+function elips_action_material_delete(array $p): array
+{
+    $actor = elips_require_login();
+    $id = (int) ($p['id'] ?? 0);
+    $material = elips_class_material_row($id);
+    if (!$material) return elips_fail('Materi tidak ditemukan.');
+
+    $class = elips_class_row((int) $material['class_id']);
+    if (!$class) return elips_fail('Kelas tidak ditemukan.');
+    if (!elips_can_manage_class($class, $actor)) {
+        return elips_fail('Anda tidak berhak menghapus materi ini.');
+    }
+
+    $stmt = elips_db()->prepare('SELECT COUNT(*) FROM class_material_progress WHERE material_id = ?');
+    $stmt->execute([$id]);
+    $progressCount = (int) $stmt->fetchColumn();
+
+    $stmt = elips_db()->prepare('DELETE FROM class_materials WHERE id = ?');
+    $stmt->execute([$id]);
+
+    elips_audit(
+        'delete',
+        'class_material',
+        $id,
+        $material['title'],
+        'Menghapus materi tambahan "' . $material['title'] . '" dari kelas "' . $class['code']
+            . '" beserta ' . $progressCount . ' catatan progres.',
+        $actor
+    );
+
+    return elips_ok('Materi tambahan dihapus.', [
+        'id' => $id,
+        'removedProgress' => $progressCount,
+    ]);
+}
+
+function elips_action_material_classroom(array $p): array
+{
+    $actor = elips_require_login();
+    $classId = (int) ($p['classId'] ?? 0);
+    $class = elips_class_row($classId);
+    if (!$class) return elips_fail('Kelas tidak ditemukan.');
+
+    $preview = elips_can_manage_class($class, $actor);
+    $enrollment = null;
+
+    if ($preview) {
+        $enrollmentId = (int) ($p['enrollmentId'] ?? 0);
+        if ($enrollmentId > 0) {
+            $enrollment = elips_material_enrollment_by_id($classId, $enrollmentId);
+            if (!$enrollment) return elips_fail('Peserta tidak terdaftar pada kelas ini.');
+        }
+    } else {
+        if ($actor['role'] !== 'peserta') {
+            return elips_fail('Anda tidak berhak membuka materi kelas ini.');
+        }
+        $course = elips_course_row((int) $class['course_id']);
+        if (!$course || $course['status'] !== 'published') {
+            return elips_fail('Kursus belum dipublikasikan.');
+        }
+        $enrollment = elips_material_enrollment_for($classId, (int) $actor['id']);
+        if (!$enrollment) return elips_fail('Anda tidak terdaftar pada kelas ini.');
+    }
+
+    return elips_ok('Ruang belajar materi dimuat.', elips_material_classroom_payload($class, $enrollment, $preview));
+}
+
+function elips_action_material_progress(array $p): array
+{
+    $actor = elips_require_login();
+    $classId = (int) ($p['classId'] ?? 0);
+    $class = elips_class_row($classId);
+    if (!$class) return elips_fail('Kelas tidak ditemukan.');
+
+    $lessonId = (int) ($p['lessonId'] ?? 0);
+    $materialId = (int) ($p['materialId'] ?? 0);
+    if (($lessonId > 0) === ($materialId > 0)) {
+        return elips_fail('Pilih satu materi atau pelajaran yang akan ditandai.');
+    }
+
+    $completed = array_key_exists('completed', $p) ? (bool) $p['completed'] : true;
+    $staffMode = elips_can_manage_class($class, $actor);
+    $enrollment = null;
+
+    if ($staffMode) {
+        $enrollmentId = (int) ($p['enrollmentId'] ?? 0);
+        if ($enrollmentId <= 0 && !empty($p['studentId'])) {
+            $enrollment = elips_material_enrollment_for($classId, (int) $p['studentId']);
+        }
+        if ($enrollmentId > 0) {
+            $enrollment = elips_material_enrollment_by_id($classId, $enrollmentId);
+        }
+        if (!$enrollment) return elips_fail('Pilih peserta yang terdaftar pada kelas ini.');
+        if (!in_array($enrollment['status'], ['active', 'completed', 'pending'], true)) {
+            return elips_fail('Status penugasan peserta tidak memungkinkan pencatatan progres.');
+        }
+    } else {
+        if ($actor['role'] !== 'peserta') {
+            return elips_fail('Anda tidak berhak mencatat progres materi ini.');
+        }
+        $course = elips_course_row((int) $class['course_id']);
+        if (!$course || $course['status'] !== 'published') {
+            return elips_fail('Kursus belum dipublikasikan.');
+        }
+        $enrollment = elips_material_enrollment_for($classId, (int) $actor['id']);
+        if (!$enrollment) return elips_fail('Anda tidak terdaftar pada kelas ini.');
+
+        $settings = elips_class_material_settings_public($classId);
+        if ($settings['requireInstructorApproval']) {
+            return elips_fail('Penyelesaian materi perlu dikonfirmasi instruktur.');
+        }
+    }
+
+    $db = elips_db();
+    $enrollmentId = (int) $enrollment['id'];
+    $studentId = (int) $enrollment['student_id'];
+    $state = elips_class_material_state($class, $enrollment, $staffMode);
+    $label = '';
+    $kind = '';
+
+    if ($lessonId > 0) {
+        $item = null;
+        foreach ($state['lessons'] as $lesson) {
+            if ((int) $lesson['id'] === $lessonId) {
+                $item = $lesson;
+                break;
+            }
+        }
+        if (!$item) return elips_fail('Pelajaran tidak ditemukan pada kelas ini.');
+        if (!$staffMode && $completed && $item['locked']) {
+            return elips_fail($item['reason'] !== '' ? $item['reason'] : 'Materi masih terkunci.');
+        }
+        $kind = 'lesson';
+        $label = $item['title'];
+    } else {
+        $item = null;
+        foreach ($state['materials'] as $material) {
+            if ((int) $material['id'] === $materialId) {
+                $item = $material;
+                break;
+            }
+        }
+        if (!$item) return elips_fail('Materi tambahan tidak ditemukan pada kelas ini.');
+        if (!$staffMode && $completed && $item['locked']) {
+            return elips_fail($item['reason'] !== '' ? $item['reason'] : 'Materi masih terkunci.');
+        }
+        $kind = 'material';
+        $label = $item['title'];
+    }
+
+    if ($completed) {
+        if ($lessonId > 0) {
+            $stmt = $db->prepare(
+                'INSERT IGNORE INTO class_lesson_progress
+                 (class_id, enrollment_id, student_id, lesson_id, completed_by, completed_at, created_at)
+                 VALUES (?, ?, ?, ?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP())'
+            );
+            $stmt->execute([$classId, $enrollmentId, $studentId, $lessonId, (int) $actor['id']]);
+        } else {
+            $stmt = $db->prepare(
+                'INSERT IGNORE INTO class_material_progress
+                 (class_id, enrollment_id, student_id, material_id, completed_by, completed_at, created_at)
+                 VALUES (?, ?, ?, ?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP())'
+            );
+            $stmt->execute([$classId, $enrollmentId, $studentId, $materialId, (int) $actor['id']]);
+        }
+    } else {
+        if ($lessonId > 0) {
+            $stmt = $db->prepare('DELETE FROM class_lesson_progress WHERE enrollment_id = ? AND lesson_id = ?');
+            $stmt->execute([$enrollmentId, $lessonId]);
+        } else {
+            $stmt = $db->prepare('DELETE FROM class_material_progress WHERE enrollment_id = ? AND material_id = ?');
+            $stmt->execute([$enrollmentId, $materialId]);
+        }
+    }
+
+    if ($staffMode) {
+        elips_audit(
+            $completed ? 'confirm' : 'unconfirm',
+            'class_' . $kind . '_progress',
+            $lessonId > 0 ? $lessonId : $materialId,
+            $label,
+            ($completed ? 'Mengonfirmasi' : 'Membatalkan') . ' penyelesaian ' . $kind . ' "' . $label
+                . '" untuk peserta #' . $studentId . ' pada kelas "' . $class['code'] . '".',
+            $actor
+        );
+    }
+
+    return elips_ok(
+        $completed ? 'Progres materi ditandai selesai.' : 'Tanda selesai materi dibatalkan.',
+        elips_material_classroom_payload($class, $enrollment, $staffMode)
+    );
 }
 
 // ---------- Grades & certificates ----------

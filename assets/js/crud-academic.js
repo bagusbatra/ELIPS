@@ -1625,6 +1625,748 @@
         return success('Rekap kehadiran Anda dimuat.', { classes: classes });
     }
 
+    // ---------- Materi kelas & akses (Phase 4) ----------
+
+    const MATERIAL_TYPES = ['text', 'document', 'video', 'link', 'file'];
+    const MATERIAL_ACCESS_LEVELS = ['required', 'optional', 'reference'];
+    const MATERIAL_ACCESS_MODES = ['open', 'sequential', 'scheduled', 'conditional'];
+
+    function materialSettingsLocal(classId) {
+        const row = ELIPS.getClassMaterialSettingsRows().find(function (item) {
+            return Number(item.classId) === Number(classId);
+        });
+        if (!row) {
+            return {
+                id: null,
+                classId: Number(classId),
+                accessMode: 'open',
+                requireInstructorApproval: false,
+                notes: '',
+                updatedBy: null,
+                createdAt: null,
+                updatedAt: null
+            };
+        }
+        return {
+            id: Number(row.id),
+            classId: Number(row.classId),
+            accessMode: MATERIAL_ACCESS_MODES.indexOf(row.accessMode) === -1 ? 'open' : row.accessMode,
+            requireInstructorApproval: !!row.requireInstructorApproval,
+            notes: String(row.notes || ''),
+            updatedBy: row.updatedBy === null || row.updatedBy === undefined ? null : Number(row.updatedBy),
+            createdAt: row.createdAt || null,
+            updatedAt: row.updatedAt || null
+        };
+    }
+
+    function materialEnrollmentLocal(classId, studentId) {
+        return ELIPS.getEnrollments().find(function (item) {
+            return Number(item.classId) === Number(classId) &&
+                Number(item.studentId) === Number(studentId) &&
+                ['active', 'completed'].indexOf(item.status) !== -1;
+        }) || null;
+    }
+
+    function materialEnrollmentByIdLocal(classId, enrollmentId) {
+        const item = ELIPS.getEnrollments().find(function (row) {
+            return Number(row.id) === Number(enrollmentId) && Number(row.classId) === Number(classId);
+        });
+        return item || null;
+    }
+
+    function curriculumLessonsForClass(classItem) {
+        const modules = ELIPS.getModules()
+            .filter(function (module) {
+                return Number(module.courseId) === Number(classItem.courseId) &&
+                    Number(module.curriculumVersionId) === Number(classItem.curriculumVersionId);
+            })
+            .sort(function (a, b) {
+                const order = (Number(a.order) || 0) - (Number(b.order) || 0);
+                return order !== 0 ? order : Number(a.id) - Number(b.id);
+            });
+        const moduleMap = {};
+        modules.forEach(function (module, index) {
+            moduleMap[module.id] = { module: module, index: index };
+        });
+        return ELIPS.getLessons()
+            .filter(function (lesson) {
+                return Number(lesson.courseId) === Number(classItem.courseId) &&
+                    Number(lesson.curriculumVersionId) === Number(classItem.curriculumVersionId) &&
+                    moduleMap[lesson.moduleId] !== undefined;
+            })
+            .sort(function (a, b) {
+                const moduleA = moduleMap[a.moduleId];
+                const moduleB = moduleMap[b.moduleId];
+                if (moduleA.index !== moduleB.index) return moduleA.index - moduleB.index;
+                const order = (Number(a.order) || 0) - (Number(b.order) || 0);
+                return order !== 0 ? order : Number(a.id) - Number(b.id);
+            })
+            .map(function (lesson) {
+                return Object.assign({}, lesson, {
+                    moduleTitle: moduleMap[lesson.moduleId].module.title,
+                    moduleOrder: moduleMap[lesson.moduleId].module.order
+                });
+            });
+    }
+
+    function materialModuleSessionDates(classItem) {
+        const dates = {};
+        ELIPS.getSessionsByClass(classItem.id).forEach(function (session) {
+            if (!session.moduleId) return;
+            if (['cancelled', 'no_show', 'rescheduled'].indexOf(session.status) !== -1) return;
+            const moduleId = Number(session.moduleId);
+            const date = String(session.sessionDate || '');
+            if (!date) return;
+            if (!dates[moduleId] || date < dates[moduleId]) dates[moduleId] = date;
+        });
+        return dates;
+    }
+
+    function publicClassMaterialLocal(item, includeContent) {
+        const lesson = item.lessonId ? ELIPS.getLessons().find(function (row) {
+            return Number(row.id) === Number(item.lessonId);
+        }) : null;
+        const session = item.sessionId ? ELIPS.getClassSessionById(item.sessionId) : null;
+        const result = {
+            id: Number(item.id),
+            classId: Number(item.classId),
+            lessonId: item.lessonId === null || item.lessonId === undefined ? null : Number(item.lessonId),
+            lessonTitle: lesson ? lesson.title : '',
+            sessionId: item.sessionId === null || item.sessionId === undefined ? null : Number(item.sessionId),
+            sessionTitle: session ? session.title : '',
+            sessionDate: session ? session.sessionDate : null,
+            title: item.title,
+            description: item.description || '',
+            type: item.type || 'text',
+            fileName: item.fileName || '',
+            fileSize: item.fileSize === null || item.fileSize === undefined ? null : Number(item.fileSize),
+            mimeType: item.mimeType || '',
+            hasFile: !!item.filePath,
+            accessLevel: item.accessLevel || 'optional',
+            availableFrom: item.availableFrom || null,
+            status: item.status || 'active',
+            reason: item.reason || '',
+            order: Number(item.order) || 1,
+            createdBy: item.createdBy === null || item.createdBy === undefined ? null : Number(item.createdBy),
+            updatedBy: item.updatedBy === null || item.updatedBy === undefined ? null : Number(item.updatedBy),
+            createdAt: item.createdAt || null,
+            updatedAt: item.updatedAt || null
+        };
+        if (includeContent) result.content = String(item.content || '');
+        return result;
+    }
+
+    function materialClassroomState(classItem, enrollment, preview) {
+        const settings = materialSettingsLocal(classItem.id);
+        const lessonRows = curriculumLessonsForClass(classItem);
+        const moduleDates = materialModuleSessionDates(classItem);
+        const today = todayString();
+        const lessonProgressRows = enrollment ? ELIPS.getClassLessonProgressByEnrollment(enrollment.id) : [];
+        const materialProgressRows = enrollment ? ELIPS.getClassMaterialProgressByEnrollment(enrollment.id) : [];
+        const lessonProgress = {};
+        const materialProgress = {};
+        lessonProgressRows.forEach(function (row) { lessonProgress[Number(row.lessonId)] = row; });
+        materialProgressRows.forEach(function (row) { materialProgress[Number(row.materialId)] = row; });
+
+        const mode = settings.accessMode;
+        let previousComplete = true;
+        const lessons = lessonRows.map(function (lesson) {
+            const progress = lessonProgress[Number(lesson.id)] || null;
+            const completed = !!progress;
+            const availableAt = moduleDates[Number(lesson.moduleId)] || null;
+            let locked = false;
+            let reason = '';
+
+            if (!completed && !preview) {
+                if (mode === 'sequential' && !previousComplete) {
+                    locked = true;
+                    reason = 'Selesaikan materi sebelumnya terlebih dahulu.';
+                } else if (mode === 'scheduled') {
+                    if (!availableAt) {
+                        locked = true;
+                        reason = 'Jadwal sesi untuk modul ini belum tersedia.';
+                    } else if (availableAt > today) {
+                        locked = true;
+                        reason = 'Materi tersedia mulai ' + availableAt + '.';
+                    }
+                } else if (mode === 'conditional') {
+                    if (!previousComplete) {
+                        locked = true;
+                        reason = 'Selesaikan materi sebelumnya terlebih dahulu.';
+                    } else if (availableAt && availableAt > today) {
+                        locked = true;
+                        reason = 'Materi tersedia mulai ' + availableAt + '.';
+                    }
+                }
+            }
+
+            if (!completed) previousComplete = false;
+
+            return {
+                kind: 'lesson',
+                id: Number(lesson.id),
+                moduleId: Number(lesson.moduleId),
+                moduleTitle: lesson.moduleTitle || '',
+                moduleOrder: Number(lesson.moduleOrder) || 0,
+                title: lesson.title,
+                type: lesson.type,
+                order: Number(lesson.order) || 1,
+                content: locked ? '' : String(lesson.content || ''),
+                completed: completed,
+                completedAt: progress ? progress.completedAt : null,
+                completedBy: progress ? progress.completedBy : null,
+                locked: locked,
+                reason: reason,
+                availableAt: availableAt
+            };
+        });
+
+        const materials = ELIPS.getClassMaterialsByClass(classItem.id)
+            .filter(function (item) { return preview || item.status === 'active'; })
+            .map(function (item) {
+                const progress = materialProgress[Number(item.id)] || null;
+                const completed = !!progress;
+                const session = item.sessionId ? ELIPS.getClassSessionById(item.sessionId) : null;
+                const availableFrom = item.availableFrom || null;
+                const sessionDate = session && session.sessionDate ? session.sessionDate : null;
+                let availableAt = availableFrom;
+                if (sessionDate && (!availableAt || sessionDate > availableAt)) availableAt = sessionDate;
+
+                let locked = false;
+                let reason = '';
+                if (!completed && !preview) {
+                    if (item.status !== 'active') {
+                        locked = true;
+                        reason = 'Materi ini disembunyikan oleh pengajar.';
+                    } else if (item.lessonId && !lessonProgress[Number(item.lessonId)]) {
+                        locked = true;
+                        reason = 'Selesaikan materi terkait terlebih dahulu.';
+                    } else if (availableFrom && availableFrom > today) {
+                        locked = true;
+                        reason = 'Materi tersedia mulai ' + availableFrom + '.';
+                    } else if (session && ['cancelled', 'no_show', 'rescheduled'].indexOf(session.status) !== -1) {
+                        locked = true;
+                        reason = 'Sesi terkait tidak berlangsung.';
+                    } else if (sessionDate && sessionDate > today) {
+                        locked = true;
+                        reason = 'Materi tersedia setelah sesi ' + sessionDate + '.';
+                    }
+                }
+
+                const result = publicClassMaterialLocal(item, preview || !locked);
+                result.kind = 'material';
+                result.completed = completed;
+                result.completedAt = progress ? progress.completedAt : null;
+                result.completedBy = progress ? progress.completedBy : null;
+                result.locked = locked;
+                result.reason = reason;
+                result.availableAt = availableAt;
+                return result;
+            });
+
+        const lessonCompleted = lessons.filter(function (item) { return item.completed; }).length;
+        const materialCompleted = materials.filter(function (item) { return item.completed; }).length;
+        const required = lessons.concat(materials.filter(function (item) {
+            return item.accessLevel === 'required';
+        }));
+        const requiredCompleted = required.filter(function (item) { return item.completed; }).length;
+
+        return {
+            settings: settings,
+            lessons: lessons,
+            materials: materials,
+            stats: {
+                lessonTotal: lessons.length,
+                lessonCompleted: lessonCompleted,
+                materialTotal: materials.length,
+                materialCompleted: materialCompleted,
+                requiredTotal: required.length,
+                requiredCompleted: requiredCompleted
+            }
+        };
+    }
+
+    function materialClassroomPayload(classItem, enrollment, preview) {
+        const course = ELIPS.getCourseById(classItem.courseId);
+        const state = materialClassroomState(classItem, enrollment, preview);
+        return Object.assign({
+            class: {
+                id: Number(classItem.id),
+                code: classItem.code,
+                name: classItem.name,
+                courseId: Number(classItem.courseId),
+                courseTitle: course ? course.title : '',
+                curriculumVersionId: Number(classItem.curriculumVersionId),
+                instructorId: classItem.instructorId === null || classItem.instructorId === undefined
+                    ? null : Number(classItem.instructorId),
+                status: classItem.status,
+                periodStart: classItem.periodStart || null,
+                periodEnd: classItem.periodEnd || null
+            },
+            enrollment: enrollment ? {
+                id: Number(enrollment.id),
+                studentId: Number(enrollment.studentId),
+                courseId: Number(enrollment.courseId),
+                classId: Number(enrollment.classId),
+                status: enrollment.status
+            } : null,
+            preview: preview
+        }, state);
+    }
+
+    function getMaterialSettings(classId) {
+        if (ELIPS.api && ELIPS.api.enabled) return ELIPS.api.call('material.settings', { classId: classId });
+        const user = sessionActor();
+        if (!user) return failure('Anda harus masuk terlebih dahulu.');
+        const classItem = ELIPS.getClassById(classId);
+        if (!classItem) return failure('Kelas tidak ditemukan.');
+        if (!canManageClassLocal(classItem) &&
+            (user.role !== 'peserta' || !materialEnrollmentLocal(classItem.id, user.id))) {
+            return failure('Anda tidak berhak melihat pengaturan materi kelas ini.');
+        }
+        return success('Pengaturan akses materi dimuat.', materialSettingsLocal(classItem.id));
+    }
+
+    function updateMaterialSettings(classId, data) {
+        if (ELIPS.api && ELIPS.api.enabled) {
+            return ELIPS.api.call('material.updateSettings', { classId: classId, data: data || {} });
+        }
+        data = data || {};
+        const user = sessionActor();
+        if (!user) return failure('Anda harus masuk terlebih dahulu.');
+        const classItem = ELIPS.getClassById(classId);
+        if (!classItem) return failure('Kelas tidak ditemukan.');
+        if (!canManageClassLocal(classItem)) return failure('Anda tidak berhak mengatur akses materi kelas ini.');
+
+        const current = materialSettingsLocal(classItem.id);
+        const mode = String(data.accessMode || current.accessMode);
+        if (MATERIAL_ACCESS_MODES.indexOf(mode) === -1) return failure('Mode akses materi tidak valid.');
+        const approval = data.requireInstructorApproval === undefined
+            ? current.requireInstructorApproval
+            : !!data.requireInstructorApproval;
+        const notes = data.notes === undefined ? current.notes : String(data.notes || '').trim();
+        const reason = String(data.reason || '').trim();
+        const changed = mode !== current.accessMode || approval !== current.requireInstructorApproval ||
+            notes !== current.notes;
+        if (user.role === 'admin' && current.id !== null && changed && reason === '') {
+            return failure('Alasan override Admin wajib diisi.');
+        }
+
+        const rows = ELIPS.getClassMaterialSettingsRows();
+        let row = rows.find(function (item) { return Number(item.classId) === Number(classItem.id); });
+        if (!row) {
+            row = { id: ELIPS.nextId(rows), classId: Number(classItem.id), createdAt: new Date().toISOString() };
+            rows.push(row);
+        }
+        row.accessMode = mode;
+        row.requireInstructorApproval = approval;
+        row.notes = notes;
+        row.updatedBy = user.id;
+        row.updatedAt = new Date().toISOString();
+        ELIPS.setClassMaterialSettingsRows(rows);
+
+        recordAudit({
+            action: 'update',
+            entity: 'material_settings',
+            entityId: classItem.id,
+            entityLabel: classItem.code,
+            actorId: user.id,
+            detail: 'Mengubah pengaturan akses materi kelas "' + classItem.code + '" dari ' +
+                current.accessMode + ' menjadi ' + mode + '; persetujuan instruktur: ' +
+                (approval ? 'aktif' : 'nonaktif') + (reason ? '; alasan: ' + reason : '') + '.'
+        });
+
+        return success('Pengaturan akses materi diperbarui.', materialSettingsLocal(classItem.id));
+    }
+
+    function createClassMaterial(data) {
+        if (ELIPS.api && ELIPS.api.enabled) {
+            const payload = Object.assign({}, data || {});
+            const classId = payload.classId;
+            delete payload.classId;
+            return ELIPS.api.call('material.create', { classId: classId, data: payload });
+        }
+        data = data || {};
+        const user = sessionActor();
+        if (!user) return failure('Anda harus masuk terlebih dahulu.');
+        const classItem = ELIPS.getClassById(data.classId);
+        if (!classItem) return failure('Kelas tidak ditemukan.');
+        if (!canManageClassLocal(classItem)) {
+            return failure('Anda tidak berhak menambahkan materi pada kelas ini.');
+        }
+
+        const title = String(data.title || '').trim();
+        if (!title) return failure('Judul materi wajib diisi.');
+        const type = String(data.type || 'text');
+        if (MATERIAL_TYPES.indexOf(type) === -1) return failure('Jenis materi tidak valid.');
+        const accessLevel = String(data.accessLevel || 'optional');
+        if (MATERIAL_ACCESS_LEVELS.indexOf(accessLevel) === -1) return failure('Status materi tidak valid.');
+        const status = String(data.status || 'active');
+        if (['active', 'hidden'].indexOf(status) === -1) return failure('Status publikasi materi tidak valid.');
+
+        const lessonId = data.lessonId ? Number(data.lessonId) : null;
+        if (lessonId && !curriculumLessonsForClass(classItem).some(function (lesson) {
+            return Number(lesson.id) === lessonId;
+        })) {
+            return failure('Materi kurikulum tidak valid untuk kelas ini.');
+        }
+        const sessionId = data.sessionId ? Number(data.sessionId) : null;
+        if (sessionId && !ELIPS.getSessionsByClass(classItem.id).some(function (session) {
+            return Number(session.id) === sessionId;
+        })) {
+            return failure('Sesi kelas tidak valid untuk kelas ini.');
+        }
+        const availableFrom = data.availableFrom ? normalizeDate(data.availableFrom) : null;
+        if (data.availableFrom && !availableFrom) return failure('Tanggal ketersediaan materi tidak valid.');
+
+        let content = String(data.content || '');
+        content = type === 'text' ? ELIPS.sanitizeHtml(content) : content.trim();
+
+        const materials = ELIPS.getClassMaterials();
+        const order = Number(data.order) > 0 ? Number(data.order) : materials
+            .filter(function (item) { return Number(item.classId) === Number(classItem.id); })
+            .reduce(function (max, item) { return Math.max(max, Number(item.order) || 0); }, 0) + 1;
+
+        const item = {
+            id: ELIPS.nextId(materials),
+            classId: Number(classItem.id),
+            lessonId: lessonId,
+            sessionId: sessionId,
+            title: title,
+            description: String(data.description || '').trim(),
+            type: type,
+            content: content,
+            fileName: String(data.fileName || '').trim(),
+            filePath: '',
+            fileSize: data.fileSize === undefined || data.fileSize === null || data.fileSize === ''
+                ? null : Number(data.fileSize),
+            mimeType: String(data.mimeType || '').trim(),
+            accessLevel: accessLevel,
+            availableFrom: availableFrom,
+            status: status,
+            reason: String(data.reason || '').trim(),
+            order: order,
+            createdBy: user.id,
+            updatedBy: user.id,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+        };
+        materials.push(item);
+        ELIPS.setClassMaterials(materials);
+
+        recordAudit({
+            action: 'create',
+            entity: 'class_material',
+            entityId: item.id,
+            entityLabel: item.title,
+            actorId: user.id,
+            detail: 'Menambahkan materi tambahan "' + item.title + '" pada kelas "' + classItem.code + '".'
+        });
+        return success('Materi tambahan berhasil ditambahkan.', publicClassMaterialLocal(item, true));
+    }
+
+    function updateClassMaterial(id, data) {
+        if (ELIPS.api && ELIPS.api.enabled) {
+            return ELIPS.api.call('material.update', { id: id, data: data || {} });
+        }
+        data = data || {};
+        const user = sessionActor();
+        if (!user) return failure('Anda harus masuk terlebih dahulu.');
+        const materials = ELIPS.getClassMaterials();
+        const item = materials.find(function (row) { return Number(row.id) === Number(id); });
+        if (!item) return failure('Materi tidak ditemukan.');
+        const classItem = ELIPS.getClassById(item.classId);
+        if (!classItem) return failure('Kelas tidak ditemukan.');
+        if (!canManageClassLocal(classItem)) return failure('Anda tidak berhak mengubah materi pada kelas ini.');
+
+        const title = data.title === undefined ? item.title : String(data.title || '').trim();
+        if (!title) return failure('Judul materi wajib diisi.');
+        const type = data.type === undefined ? item.type : String(data.type);
+        if (MATERIAL_TYPES.indexOf(type) === -1) return failure('Jenis materi tidak valid.');
+        const accessLevel = data.accessLevel === undefined ? item.accessLevel : String(data.accessLevel);
+        if (MATERIAL_ACCESS_LEVELS.indexOf(accessLevel) === -1) return failure('Status materi tidak valid.');
+
+        let lessonId = item.lessonId;
+        if (data.lessonId !== undefined) {
+            lessonId = data.lessonId ? Number(data.lessonId) : null;
+            if (lessonId && !curriculumLessonsForClass(classItem).some(function (lesson) {
+                return Number(lesson.id) === lessonId;
+            })) {
+                return failure('Materi kurikulum tidak valid untuk kelas ini.');
+            }
+        }
+        let sessionId = item.sessionId;
+        if (data.sessionId !== undefined) {
+            sessionId = data.sessionId ? Number(data.sessionId) : null;
+            if (sessionId && !ELIPS.getSessionsByClass(classItem.id).some(function (session) {
+                return Number(session.id) === sessionId;
+            })) {
+                return failure('Sesi kelas tidak valid untuk kelas ini.');
+            }
+        }
+        let availableFrom = item.availableFrom || null;
+        if (data.availableFrom !== undefined) {
+            availableFrom = data.availableFrom ? normalizeDate(data.availableFrom) : null;
+            if (data.availableFrom && !availableFrom) return failure('Tanggal ketersediaan materi tidak valid.');
+        }
+
+        let content = data.content === undefined ? item.content : String(data.content || '');
+        content = type === 'text' ? ELIPS.sanitizeHtml(content) : content.trim();
+
+        item.lessonId = lessonId;
+        item.sessionId = sessionId;
+        item.title = title;
+        item.description = data.description === undefined ? item.description : String(data.description || '').trim();
+        item.type = type;
+        item.content = content;
+        item.fileName = data.fileName === undefined ? item.fileName : String(data.fileName || '').trim();
+        item.fileSize = data.fileSize === undefined ? item.fileSize : (data.fileSize === null || data.fileSize === ''
+            ? null : Number(data.fileSize));
+        item.mimeType = data.mimeType === undefined ? item.mimeType : String(data.mimeType || '').trim();
+        item.accessLevel = accessLevel;
+        item.availableFrom = availableFrom;
+        item.reason = data.reason === undefined ? item.reason : String(data.reason || '').trim();
+        item.order = data.order === undefined ? item.order : Math.max(1, Number(data.order) || 1);
+        item.updatedBy = user.id;
+        item.updatedAt = new Date().toISOString();
+        ELIPS.setClassMaterials(materials);
+
+        recordAudit({
+            action: 'update',
+            entity: 'class_material',
+            entityId: item.id,
+            entityLabel: item.title,
+            actorId: user.id,
+            detail: 'Memperbarui materi tambahan "' + item.title + '" pada kelas "' + classItem.code + '".'
+        });
+        return success('Materi tambahan berhasil diperbarui.', publicClassMaterialLocal(item, true));
+    }
+
+    function setClassMaterialStatus(id, data) {
+        if (ELIPS.api && ELIPS.api.enabled) {
+            return ELIPS.api.call('material.status', { id: id, data: data || {} });
+        }
+        data = data || {};
+        const user = sessionActor();
+        if (!user) return failure('Anda harus masuk terlebih dahulu.');
+        const materials = ELIPS.getClassMaterials();
+        const item = materials.find(function (row) { return Number(row.id) === Number(id); });
+        if (!item) return failure('Materi tidak ditemukan.');
+        const classItem = ELIPS.getClassById(item.classId);
+        if (!classItem) return failure('Kelas tidak ditemukan.');
+        if (!canManageClassLocal(classItem)) return failure('Anda tidak berhak mengubah status materi ini.');
+
+        const status = String(data.status || '');
+        if (['active', 'hidden'].indexOf(status) === -1) return failure('Status materi tidak valid.');
+        const reason = String(data.reason || '').trim();
+        if (!reason) return failure('Alasan perubahan status materi wajib diisi.');
+
+        const previous = item.status;
+        item.status = status;
+        item.reason = reason;
+        item.updatedBy = user.id;
+        item.updatedAt = new Date().toISOString();
+        ELIPS.setClassMaterials(materials);
+
+        recordAudit({
+            action: 'status',
+            entity: 'class_material',
+            entityId: item.id,
+            entityLabel: item.title,
+            actorId: user.id,
+            detail: 'Mengubah status materi "' + item.title + '" pada kelas "' + classItem.code +
+                '" dari ' + previous + ' menjadi ' + status + '; alasan: ' + reason + '.'
+        });
+        return success('Status materi diperbarui.', publicClassMaterialLocal(item, true));
+    }
+
+    function deleteClassMaterial(id) {
+        if (ELIPS.api && ELIPS.api.enabled) return ELIPS.api.call('material.delete', { id: id });
+        const user = sessionActor();
+        if (!user) return failure('Anda harus masuk terlebih dahulu.');
+        const materials = ELIPS.getClassMaterials();
+        const index = materials.findIndex(function (row) { return Number(row.id) === Number(id); });
+        if (index === -1) return failure('Materi tidak ditemukan.');
+        const item = materials[index];
+        const classItem = ELIPS.getClassById(item.classId);
+        if (!classItem) return failure('Kelas tidak ditemukan.');
+        if (!canManageClassLocal(classItem)) return failure('Anda tidak berhak menghapus materi ini.');
+
+        const progress = ELIPS.getClassMaterialProgress();
+        const removedProgress = progress.filter(function (row) {
+            return Number(row.materialId) === Number(id);
+        }).length;
+        ELIPS.setClassMaterialProgress(progress.filter(function (row) {
+            return Number(row.materialId) !== Number(id);
+        }));
+        materials.splice(index, 1);
+        ELIPS.setClassMaterials(materials);
+
+        recordAudit({
+            action: 'delete',
+            entity: 'class_material',
+            entityId: Number(id),
+            entityLabel: item.title,
+            actorId: user.id,
+            detail: 'Menghapus materi tambahan "' + item.title + '" dari kelas "' + classItem.code +
+                '" beserta ' + removedProgress + ' catatan progres.'
+        });
+        return success('Materi tambahan dihapus.', { id: Number(id), removedProgress: removedProgress });
+    }
+
+    function getMaterialClassroom(params) {
+        params = params || {};
+        if (ELIPS.api && ELIPS.api.enabled) return ELIPS.api.call('material.classroom', params);
+        const user = sessionActor();
+        if (!user) return failure('Anda harus masuk terlebih dahulu.');
+        const classItem = ELIPS.getClassById(params.classId);
+        if (!classItem) return failure('Kelas tidak ditemukan.');
+
+        const preview = canManageClassLocal(classItem);
+        let enrollment = null;
+        if (preview) {
+            if (params.enrollmentId) {
+                enrollment = materialEnrollmentByIdLocal(classItem.id, params.enrollmentId);
+                if (!enrollment) return failure('Peserta tidak terdaftar pada kelas ini.');
+            }
+        } else {
+            if (user.role !== 'peserta') return failure('Anda tidak berhak membuka materi kelas ini.');
+            const course = ELIPS.getCourseById(classItem.courseId);
+            if (!course || course.status !== 'published') return failure('Kursus belum dipublikasikan.');
+            enrollment = materialEnrollmentLocal(classItem.id, user.id);
+            if (!enrollment) return failure('Anda tidak terdaftar pada kelas ini.');
+        }
+        return success('Ruang belajar materi dimuat.', materialClassroomPayload(classItem, enrollment, preview));
+    }
+
+    function setMaterialProgress(params) {
+        params = params || {};
+        if (ELIPS.api && ELIPS.api.enabled) return ELIPS.api.call('material.progress', params);
+        const user = sessionActor();
+        if (!user) return failure('Anda harus masuk terlebih dahulu.');
+        const classItem = ELIPS.getClassById(params.classId);
+        if (!classItem) return failure('Kelas tidak ditemukan.');
+
+        const lessonId = Number(params.lessonId) || 0;
+        const materialId = Number(params.materialId) || 0;
+        if ((lessonId > 0) === (materialId > 0)) {
+            return failure('Pilih satu materi atau pelajaran yang akan ditandai.');
+        }
+        const completed = params.completed === undefined ? true : !!params.completed;
+        const staffMode = canManageClassLocal(classItem);
+        let enrollment = null;
+
+        if (staffMode) {
+            if (params.enrollmentId) {
+                enrollment = materialEnrollmentByIdLocal(classItem.id, params.enrollmentId);
+            } else if (params.studentId) {
+                enrollment = materialEnrollmentLocal(classItem.id, params.studentId);
+            }
+            if (!enrollment) return failure('Pilih peserta yang terdaftar pada kelas ini.');
+            if (['active', 'completed', 'pending'].indexOf(enrollment.status) === -1) {
+                return failure('Status penugasan peserta tidak memungkinkan pencatatan progres.');
+            }
+        } else {
+            if (user.role !== 'peserta') return failure('Anda tidak berhak mencatat progres materi ini.');
+            const course = ELIPS.getCourseById(classItem.courseId);
+            if (!course || course.status !== 'published') return failure('Kursus belum dipublikasikan.');
+            enrollment = materialEnrollmentLocal(classItem.id, user.id);
+            if (!enrollment) return failure('Anda tidak terdaftar pada kelas ini.');
+            if (materialSettingsLocal(classItem.id).requireInstructorApproval) {
+                return failure('Penyelesaian materi perlu dikonfirmasi instruktur.');
+            }
+        }
+
+        const state = materialClassroomState(classItem, enrollment, staffMode);
+        let label = '';
+        if (lessonId > 0) {
+            const item = state.lessons.find(function (row) { return row.id === lessonId; });
+            if (!item) return failure('Pelajaran tidak ditemukan pada kelas ini.');
+            if (!staffMode && completed && item.locked) {
+                return failure(item.reason || 'Materi masih terkunci.');
+            }
+            label = item.title;
+        } else {
+            const item = state.materials.find(function (row) { return row.id === materialId; });
+            if (!item) return failure('Materi tambahan tidak ditemukan pada kelas ini.');
+            if (!staffMode && completed && item.locked) {
+                return failure(item.reason || 'Materi masih terkunci.');
+            }
+            label = item.title;
+        }
+
+        const now = new Date().toISOString();
+        if (lessonId > 0) {
+            const rows = ELIPS.getClassLessonProgress();
+            if (completed) {
+                if (!rows.some(function (row) {
+                    return Number(row.enrollmentId) === Number(enrollment.id) &&
+                        Number(row.lessonId) === lessonId;
+                })) {
+                    rows.push({
+                        id: ELIPS.nextId(rows),
+                        classId: Number(classItem.id),
+                        enrollmentId: Number(enrollment.id),
+                        studentId: Number(enrollment.studentId),
+                        lessonId: lessonId,
+                        completedBy: user.id,
+                        completedAt: now,
+                        createdAt: now
+                    });
+                    ELIPS.setClassLessonProgress(rows);
+                }
+            } else {
+                ELIPS.setClassLessonProgress(rows.filter(function (row) {
+                    return !(Number(row.enrollmentId) === Number(enrollment.id) &&
+                        Number(row.lessonId) === lessonId);
+                }));
+            }
+        } else {
+            const rows = ELIPS.getClassMaterialProgress();
+            if (completed) {
+                if (!rows.some(function (row) {
+                    return Number(row.enrollmentId) === Number(enrollment.id) &&
+                        Number(row.materialId) === materialId;
+                })) {
+                    rows.push({
+                        id: ELIPS.nextId(rows),
+                        classId: Number(classItem.id),
+                        enrollmentId: Number(enrollment.id),
+                        studentId: Number(enrollment.studentId),
+                        materialId: materialId,
+                        completedBy: user.id,
+                        completedAt: now,
+                        createdAt: now
+                    });
+                    ELIPS.setClassMaterialProgress(rows);
+                }
+            } else {
+                ELIPS.setClassMaterialProgress(rows.filter(function (row) {
+                    return !(Number(row.enrollmentId) === Number(enrollment.id) &&
+                        Number(row.materialId) === materialId);
+                }));
+            }
+        }
+
+        if (staffMode) {
+            recordAudit({
+                action: completed ? 'confirm' : 'unconfirm',
+                entity: lessonId > 0 ? 'class_lesson_progress' : 'class_material_progress',
+                entityId: lessonId > 0 ? lessonId : materialId,
+                entityLabel: label,
+                actorId: user.id,
+                detail: (completed ? 'Mengonfirmasi' : 'Membatalkan') + ' penyelesaian ' +
+                    (lessonId > 0 ? 'lesson' : 'material') + ' "' + label + '" untuk peserta #' +
+                    enrollment.studentId + ' pada kelas "' + classItem.code + '".'
+            });
+        }
+
+        return success(
+            completed ? 'Progres materi ditandai selesai.' : 'Tanda selesai materi dibatalkan.',
+            materialClassroomPayload(classItem, enrollment, staffMode)
+        );
+    }
+
     Object.assign(ELIPS, {
         createBranch: createBranch,
         updateBranch: updateBranch,
@@ -1653,6 +2395,14 @@
         saveAttendanceBulk: saveAttendanceBulk,
         correctAttendance: correctAttendance,
         getAttendanceRecap: getAttendanceRecap,
-        getMyAttendanceRecap: getMyAttendanceRecap
+        getMyAttendanceRecap: getMyAttendanceRecap,
+        getMaterialSettings: getMaterialSettings,
+        updateMaterialSettings: updateMaterialSettings,
+        createClassMaterial: createClassMaterial,
+        updateClassMaterial: updateClassMaterial,
+        setClassMaterialStatus: setClassMaterialStatus,
+        deleteClassMaterial: deleteClassMaterial,
+        getMaterialClassroom: getMaterialClassroom,
+        setMaterialProgress: setMaterialProgress
     });
 })(window.ELIPS);

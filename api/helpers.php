@@ -743,6 +743,325 @@ function elips_enrollment_public(int $id): ?array
     ];
 }
 
+// ---------- Materi kelas (Phase 4) ----------
+
+function elips_class_material_settings_row(int $classId): ?array
+{
+    $stmt = elips_db()->prepare('SELECT * FROM class_material_settings WHERE class_id = ? LIMIT 1');
+    $stmt->execute([$classId]);
+    $row = $stmt->fetch();
+    return $row ?: null;
+}
+
+function elips_class_material_settings_public(int $classId): array
+{
+    $row = elips_class_material_settings_row($classId);
+    if (!$row) {
+        return [
+            'id' => null,
+            'classId' => $classId,
+            'accessMode' => 'open',
+            'requireInstructorApproval' => false,
+            'notes' => '',
+            'updatedBy' => null,
+            'createdAt' => null,
+            'updatedAt' => null,
+        ];
+    }
+    return [
+        'id' => (int) $row['id'],
+        'classId' => (int) $row['class_id'],
+        'accessMode' => $row['access_mode'],
+        'requireInstructorApproval' => (bool) $row['require_instructor_approval'],
+        'notes' => $row['notes'],
+        'updatedBy' => $row['updated_by'] === null ? null : (int) $row['updated_by'],
+        'createdAt' => elips_iso($row['created_at']),
+        'updatedAt' => elips_iso($row['updated_at']),
+    ];
+}
+
+function elips_class_material_public(array $row, bool $includeContent = true): array
+{
+    $result = [
+        'id' => (int) $row['id'],
+        'classId' => (int) $row['class_id'],
+        'lessonId' => $row['lesson_id'] === null ? null : (int) $row['lesson_id'],
+        'lessonTitle' => $row['lesson_title'] ?? '',
+        'sessionId' => $row['session_id'] === null ? null : (int) $row['session_id'],
+        'sessionTitle' => $row['session_title'] ?? '',
+        'sessionDate' => elips_date_only($row['session_date'] ?? null),
+        'title' => $row['title'],
+        'description' => $row['description'],
+        'type' => $row['type'],
+        'fileName' => $row['file_name'],
+        'fileSize' => $row['file_size'] === null ? null : (int) $row['file_size'],
+        'mimeType' => $row['mime_type'],
+        'hasFile' => $row['file_path'] !== '',
+        'accessLevel' => $row['access_level'],
+        'availableFrom' => elips_date_only($row['available_from']),
+        'status' => $row['status'],
+        'reason' => $row['reason'],
+        'order' => (int) $row['sort_order'],
+        'createdBy' => $row['created_by'] === null ? null : (int) $row['created_by'],
+        'updatedBy' => $row['updated_by'] === null ? null : (int) $row['updated_by'],
+        'createdAt' => elips_iso($row['created_at']),
+        'updatedAt' => elips_iso($row['updated_at']),
+    ];
+    if ($includeContent) {
+        $result['content'] = $row['content'];
+    }
+    return $result;
+}
+
+function elips_class_material_row(int $id): ?array
+{
+    $stmt = elips_db()->prepare(
+        'SELECT cm.*, l.title AS lesson_title,
+            s.title AS session_title, s.session_date, s.status AS session_status
+         FROM class_materials cm
+         LEFT JOIN lessons l ON l.id = cm.lesson_id
+         LEFT JOIN class_sessions s ON s.id = cm.session_id
+         WHERE cm.id = ? LIMIT 1'
+    );
+    $stmt->execute([$id]);
+    $row = $stmt->fetch();
+    return $row ?: null;
+}
+
+function elips_class_materials_for(int $classId, bool $includeHidden = false): array
+{
+    $sql = 'SELECT cm.*, l.title AS lesson_title,
+            s.title AS session_title, s.session_date, s.status AS session_status
+         FROM class_materials cm
+         LEFT JOIN lessons l ON l.id = cm.lesson_id
+         LEFT JOIN class_sessions s ON s.id = cm.session_id
+         WHERE cm.class_id = ?';
+    if (!$includeHidden) {
+        $sql .= " AND cm.status = 'active'";
+    }
+    $sql .= ' ORDER BY cm.sort_order ASC, cm.id ASC';
+    $stmt = elips_db()->prepare($sql);
+    $stmt->execute([$classId]);
+    return $stmt->fetchAll();
+}
+
+function elips_class_lesson_progress_public(array $row): array
+{
+    return [
+        'id' => (int) $row['id'],
+        'classId' => (int) $row['class_id'],
+        'enrollmentId' => (int) $row['enrollment_id'],
+        'studentId' => (int) $row['student_id'],
+        'lessonId' => (int) $row['lesson_id'],
+        'completedBy' => $row['completed_by'] === null ? null : (int) $row['completed_by'],
+        'completedAt' => elips_iso($row['completed_at']),
+        'createdAt' => elips_iso($row['created_at']),
+    ];
+}
+
+function elips_class_material_progress_public(array $row): array
+{
+    return [
+        'id' => (int) $row['id'],
+        'classId' => (int) $row['class_id'],
+        'enrollmentId' => (int) $row['enrollment_id'],
+        'studentId' => (int) $row['student_id'],
+        'materialId' => (int) $row['material_id'],
+        'completedBy' => $row['completed_by'] === null ? null : (int) $row['completed_by'],
+        'completedAt' => elips_iso($row['completed_at']),
+        'createdAt' => elips_iso($row['created_at']),
+    ];
+}
+
+function elips_class_curriculum_lessons(int $classId): array
+{
+    $stmt = elips_db()->prepare(
+        'SELECT l.*, m.title AS module_title, m.sort_order AS module_order
+         FROM lessons l
+         JOIN modules m ON m.id = l.module_id
+         JOIN classes cl ON cl.curriculum_version_id = l.curriculum_version_id
+             AND cl.course_id = l.course_id
+         WHERE cl.id = ?
+         ORDER BY m.sort_order ASC, m.id ASC, l.sort_order ASC, l.id ASC'
+    );
+    $stmt->execute([$classId]);
+    return $stmt->fetchAll();
+}
+
+function elips_class_module_session_dates(int $classId): array
+{
+    $stmt = elips_db()->prepare(
+        "SELECT module_id, MIN(session_date) AS session_date
+         FROM class_sessions
+         WHERE class_id = ? AND module_id IS NOT NULL
+           AND status NOT IN ('cancelled', 'no_show', 'rescheduled')
+         GROUP BY module_id"
+    );
+    $stmt->execute([$classId]);
+    $dates = [];
+    foreach ($stmt->fetchAll() as $row) {
+        $dates[(int) $row['module_id']] = elips_date_only($row['session_date']);
+    }
+    return $dates;
+}
+
+/**
+ * Menghitung status akses materi kelas untuk satu enrollment.
+ * $staffPreview = true membuka seluruh konten untuk pratinjau Admin/Instruktur.
+ */
+function elips_class_material_state(array $class, ?array $enrollment, bool $staffPreview = false): array
+{
+    $classId = (int) $class['id'];
+    $settings = elips_class_material_settings_public($classId);
+    $lessonRows = elips_class_curriculum_lessons($classId);
+    $materialRows = elips_class_materials_for($classId, $staffPreview);
+    $lessonProgress = [];
+    $materialProgress = [];
+
+    if ($enrollment) {
+        $enrollmentId = (int) $enrollment['id'];
+        $stmt = elips_db()->prepare('SELECT * FROM class_lesson_progress WHERE enrollment_id = ? ORDER BY id ASC');
+        $stmt->execute([$enrollmentId]);
+        foreach ($stmt->fetchAll() as $row) {
+            $lessonProgress[(int) $row['lesson_id']] = elips_class_lesson_progress_public($row);
+        }
+        $stmt = elips_db()->prepare('SELECT * FROM class_material_progress WHERE enrollment_id = ? ORDER BY id ASC');
+        $stmt->execute([$enrollmentId]);
+        foreach ($stmt->fetchAll() as $row) {
+            $materialProgress[(int) $row['material_id']] = elips_class_material_progress_public($row);
+        }
+    }
+
+    $moduleDates = elips_class_module_session_dates($classId);
+    $today = gmdate('Y-m-d');
+    $mode = $settings['accessMode'];
+    $previousComplete = true;
+    $lessons = [];
+    foreach ($lessonRows as $row) {
+        $lessonId = (int) $row['id'];
+        $progress = $lessonProgress[$lessonId] ?? null;
+        $completed = $progress !== null;
+        $availableAt = $moduleDates[(int) $row['module_id']] ?? null;
+        $locked = false;
+        $reason = '';
+
+        if (!$completed && !$staffPreview) {
+            if ($mode === 'sequential') {
+                if (!$previousComplete) {
+                    $locked = true;
+                    $reason = 'Selesaikan materi sebelumnya terlebih dahulu.';
+                }
+            } elseif ($mode === 'scheduled') {
+                if ($availableAt === null) {
+                    $locked = true;
+                    $reason = 'Jadwal sesi untuk modul ini belum tersedia.';
+                } elseif ($availableAt > $today) {
+                    $locked = true;
+                    $reason = 'Materi tersedia mulai ' . $availableAt . '.';
+                }
+            } elseif ($mode === 'conditional') {
+                if (!$previousComplete) {
+                    $locked = true;
+                    $reason = 'Selesaikan materi sebelumnya terlebih dahulu.';
+                } elseif ($availableAt !== null && $availableAt > $today) {
+                    $locked = true;
+                    $reason = 'Materi tersedia mulai ' . $availableAt . '.';
+                }
+            }
+        }
+
+        $lessons[] = [
+            'kind' => 'lesson',
+            'id' => $lessonId,
+            'moduleId' => (int) $row['module_id'],
+            'moduleTitle' => $row['module_title'] ?? '',
+            'moduleOrder' => (int) ($row['module_order'] ?? 0),
+            'title' => $row['title'],
+            'type' => $row['type'],
+            'order' => (int) $row['sort_order'],
+            'content' => $locked ? '' : $row['content'],
+            'completed' => $completed,
+            'completedAt' => $progress['completedAt'] ?? null,
+            'completedBy' => $progress['completedBy'] ?? null,
+            'locked' => $locked,
+            'reason' => $reason,
+            'availableAt' => $availableAt,
+        ];
+
+        if (!$completed) {
+            $previousComplete = false;
+        }
+    }
+
+    $materials = [];
+    foreach ($materialRows as $row) {
+        $materialId = (int) $row['id'];
+        $progress = $materialProgress[$materialId] ?? null;
+        $completed = $progress !== null;
+        $availableFrom = elips_date_only($row['available_from']);
+        $sessionDate = elips_date_only($row['session_date'] ?? null);
+        $availableAt = $availableFrom;
+        if ($sessionDate !== null && ($availableAt === null || $sessionDate > $availableAt)) {
+            $availableAt = $sessionDate;
+        }
+
+        $locked = false;
+        $reason = '';
+        if (!$completed && !$staffPreview) {
+            if ($row['status'] !== 'active') {
+                $locked = true;
+                $reason = 'Materi ini disembunyikan oleh pengajar.';
+            } elseif ($row['lesson_id'] !== null && !isset($lessonProgress[(int) $row['lesson_id']])) {
+                $locked = true;
+                $reason = 'Selesaikan materi terkait terlebih dahulu.';
+            } elseif ($availableFrom !== null && $availableFrom > $today) {
+                $locked = true;
+                $reason = 'Materi tersedia mulai ' . $availableFrom . '.';
+            } elseif ($sessionDate !== null
+                && in_array((string) ($row['session_status'] ?? ''), ['cancelled', 'no_show', 'rescheduled'], true)) {
+                $locked = true;
+                $reason = 'Sesi terkait tidak berlangsung.';
+            } elseif ($sessionDate !== null && $sessionDate > $today) {
+                $locked = true;
+                $reason = 'Materi tersedia setelah sesi ' . $sessionDate . '.';
+            }
+        }
+
+        $item = elips_class_material_public($row, $staffPreview || !$locked);
+        $item['kind'] = 'material';
+        $item['completed'] = $completed;
+        $item['completedAt'] = $progress['completedAt'] ?? null;
+        $item['completedBy'] = $progress['completedBy'] ?? null;
+        $item['locked'] = $locked;
+        $item['reason'] = $reason;
+        $item['availableAt'] = $availableAt;
+        $materials[] = $item;
+    }
+
+    $lessonCompleted = count(array_filter($lessons, fn ($item) => $item['completed']));
+    $materialCompleted = count(array_filter($materials, fn ($item) => $item['completed']));
+    $required = array_merge(
+        array_filter($lessons, fn ($item) => true),
+        array_filter($materials, fn ($item) => $item['accessLevel'] === 'required')
+    );
+    $requiredCompleted = count(array_filter($required, fn ($item) => $item['completed']));
+
+    return [
+        'settings' => $settings,
+        'lessons' => $lessons,
+        'materials' => $materials,
+        'stats' => [
+            'lessonTotal' => count($lessons),
+            'lessonCompleted' => $lessonCompleted,
+            'materialTotal' => count($materials),
+            'materialCompleted' => $materialCompleted,
+            'requiredTotal' => count($required),
+            'requiredCompleted' => $requiredCompleted,
+        ],
+    ];
+}
+
+
 function elips_time_short(?string $value): ?string
 {
     if ($value === null || $value === '') {

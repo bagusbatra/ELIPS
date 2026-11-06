@@ -30,6 +30,10 @@
         grades: 'elips_grades',
         certificates: 'elips_certificates',
         completedLessons: 'elips_completedLessons',
+        classMaterialSettings: 'elips_classMaterialSettings',
+        classMaterials: 'elips_classMaterials',
+        classLessonProgress: 'elips_classLessonProgress',
+        classMaterialProgress: 'elips_classMaterialProgress',
         auditLogs: 'elips_auditLogs',
         notifications: 'elips_notifications',
         session: 'elips_session'

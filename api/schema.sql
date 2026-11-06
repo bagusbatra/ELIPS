@@ -371,6 +371,97 @@ CREATE TABLE IF NOT EXISTS `attendance_corrections` (
     CONSTRAINT `fk_attendance_corrections_actor` FOREIGN KEY (`actor_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS `class_material_settings` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `class_id` INT UNSIGNED NOT NULL,
+    `access_mode` ENUM('open', 'sequential', 'scheduled', 'conditional') NOT NULL DEFAULT 'open',
+    `require_instructor_approval` TINYINT(1) NOT NULL DEFAULT 0,
+    `notes` TEXT NOT NULL,
+    `updated_by` INT UNSIGNED NULL,
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NULL,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uq_class_material_settings_class` (`class_id`),
+    CONSTRAINT `fk_class_material_settings_class` FOREIGN KEY (`class_id`) REFERENCES `classes` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_class_material_settings_updated_by` FOREIGN KEY (`updated_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `class_materials` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `class_id` INT UNSIGNED NOT NULL,
+    `lesson_id` INT UNSIGNED NULL,
+    `session_id` INT UNSIGNED NULL,
+    `title` VARCHAR(200) NOT NULL,
+    `description` TEXT NOT NULL,
+    `type` ENUM('text', 'document', 'video', 'link', 'file') NOT NULL DEFAULT 'text',
+    `content` LONGTEXT NOT NULL,
+    `file_name` VARCHAR(255) NOT NULL DEFAULT '',
+    `file_path` VARCHAR(500) NOT NULL DEFAULT '',
+    `file_size` BIGINT UNSIGNED NULL,
+    `mime_type` VARCHAR(120) NOT NULL DEFAULT '',
+    `access_level` ENUM('required', 'optional', 'reference') NOT NULL DEFAULT 'optional',
+    `available_from` DATE NULL,
+    `status` ENUM('active', 'hidden') NOT NULL DEFAULT 'active',
+    `reason` TEXT NOT NULL,
+    `sort_order` INT UNSIGNED NOT NULL DEFAULT 1,
+    `created_by` INT UNSIGNED NULL,
+    `updated_by` INT UNSIGNED NULL,
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NULL,
+    PRIMARY KEY (`id`),
+    KEY `idx_class_materials_class_status` (`class_id`, `status`, `sort_order`),
+    KEY `idx_class_materials_lesson` (`lesson_id`),
+    KEY `idx_class_materials_session` (`session_id`),
+    KEY `idx_class_materials_created_by` (`created_by`),
+    CONSTRAINT `fk_class_materials_class` FOREIGN KEY (`class_id`) REFERENCES `classes` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_class_materials_lesson` FOREIGN KEY (`lesson_id`) REFERENCES `lessons` (`id`) ON DELETE SET NULL,
+    CONSTRAINT `fk_class_materials_session` FOREIGN KEY (`session_id`) REFERENCES `class_sessions` (`id`) ON DELETE SET NULL,
+    CONSTRAINT `fk_class_materials_created_by` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+    CONSTRAINT `fk_class_materials_updated_by` FOREIGN KEY (`updated_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `class_lesson_progress` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `class_id` INT UNSIGNED NOT NULL,
+    `enrollment_id` INT UNSIGNED NOT NULL,
+    `student_id` INT UNSIGNED NOT NULL,
+    `lesson_id` INT UNSIGNED NOT NULL,
+    `completed_by` INT UNSIGNED NULL,
+    `completed_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uq_class_lesson_progress_enrollment_lesson` (`enrollment_id`, `lesson_id`),
+    KEY `idx_class_lesson_progress_class` (`class_id`),
+    KEY `idx_class_lesson_progress_student` (`student_id`),
+    KEY `idx_class_lesson_progress_lesson` (`lesson_id`),
+    CONSTRAINT `fk_class_lesson_progress_class` FOREIGN KEY (`class_id`) REFERENCES `classes` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_class_lesson_progress_enrollment` FOREIGN KEY (`enrollment_id`) REFERENCES `enrollments` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_class_lesson_progress_student` FOREIGN KEY (`student_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_class_lesson_progress_lesson` FOREIGN KEY (`lesson_id`) REFERENCES `lessons` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_class_lesson_progress_completed_by` FOREIGN KEY (`completed_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `class_material_progress` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `class_id` INT UNSIGNED NOT NULL,
+    `enrollment_id` INT UNSIGNED NOT NULL,
+    `student_id` INT UNSIGNED NOT NULL,
+    `material_id` INT UNSIGNED NOT NULL,
+    `completed_by` INT UNSIGNED NULL,
+    `completed_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uq_class_material_progress_enrollment_material` (`enrollment_id`, `material_id`),
+    KEY `idx_class_material_progress_class` (`class_id`),
+    KEY `idx_class_material_progress_student` (`student_id`),
+    KEY `idx_class_material_progress_material` (`material_id`),
+    CONSTRAINT `fk_class_material_progress_class` FOREIGN KEY (`class_id`) REFERENCES `classes` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_class_material_progress_enrollment` FOREIGN KEY (`enrollment_id`) REFERENCES `enrollments` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_class_material_progress_student` FOREIGN KEY (`student_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_class_material_progress_material` FOREIGN KEY (`material_id`) REFERENCES `class_materials` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_class_material_progress_completed_by` FOREIGN KEY (`completed_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS `notifications` (
     `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
     `type` VARCHAR(40) NOT NULL,

@@ -388,6 +388,50 @@
         </div>
     </div>
 
+    <!-- Modal Pengaturan Akses Materi -->
+    <div id="materialSettingsModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; padding: 1rem;">
+        <div style="background: white; border-radius: var(--radius-lg); max-width: 560px; width: 100%; max-height: 90vh; overflow-y: auto;">
+            <div style="padding: 1.5rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between;">
+                <h3 style="font-size: 1.25rem; font-weight: 600;">Akses Materi Kelas</h3>
+                <button onclick="closeMaterialSettingsModal()" aria-label="Tutup" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--text-secondary);">
+                    <i class="bi bi-x"></i>
+                </button>
+            </div>
+            <div style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem;">
+                <input type="hidden" id="materialSettingsClassId">
+                <div style="padding: 0.875rem 1rem; background: #eff6ff; border-radius: var(--radius); color: #1e40af; font-size: 0.875rem;" id="materialSettingsMeta"></div>
+                <div class="form-group">
+                    <label class="form-label" for="materialSettingsMode">Mode Akses *</label>
+                    <select id="materialSettingsMode" class="form-input">
+                        <option value="open">Open — semua materi tersedia dapat dibuka</option>
+                        <option value="sequential">Sequential — materi dibuka berurutan</option>
+                        <option value="scheduled">Scheduled — materi dibuka sesuai jadwal sesi</option>
+                        <option value="conditional">Conditional — urutan + jadwal sesi</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" style="display: flex; align-items: center; gap: 0.5rem; font-weight: 500;">
+                        <input type="checkbox" id="materialSettingsApproval" style="width: auto;">
+                        Wajib persetujuan instruktur sebelum peserta menandai selesai
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="materialSettingsNotes">Catatan Kebijakan</label>
+                    <textarea id="materialSettingsNotes" class="form-input" rows="2" placeholder="Opsional, misalnya alasan pengaturan khusus"></textarea>
+                </div>
+                <div class="form-group" id="materialSettingsReasonGroup">
+                    <label class="form-label" for="materialSettingsReason">Alasan Override Admin *</label>
+                    <textarea id="materialSettingsReason" class="form-input" rows="2" placeholder="Wajib diisi saat mengubah pengaturan yang sudah tersimpan"></textarea>
+                    <small class="form-hint" id="materialSettingsReasonHint">Perubahan oleh Admin pada pengaturan yang sudah ada wajib memiliki alasan dan akan dicatat pada audit log.</small>
+                </div>
+            </div>
+            <div style="padding: 1.5rem; border-top: 1px solid var(--border); display: flex; gap: 0.75rem; justify-content: flex-end;">
+                <button class="btn btn-ghost" onclick="closeMaterialSettingsModal()">Batal</button>
+                <button class="btn btn-primary" onclick="saveMaterialSettings()">Simpan Pengaturan</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Modal Tentor -->
     <div id="instructorModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; padding: 1rem;">
         <div style="background: white; border-radius: var(--radius-lg); max-width: 480px; width: 100%;">
@@ -852,6 +896,7 @@
                     '  <button class="btn btn-ghost" style="padding: 0.375rem 0.625rem; font-size: 0.8125rem;" title="Edit kelas" onclick="openClassModal(' + item.id + ')"><i class="bi bi-pencil"></i></button>' +
                     '  <button class="btn btn-ghost" style="padding: 0.375rem 0.625rem; font-size: 0.8125rem;" title="Peserta" onclick="openRosterModal(' + item.id + ')"><i class="bi bi-people"></i></button>' +
                     '  <button class="btn btn-ghost" style="padding: 0.375rem 0.625rem; font-size: 0.8125rem;" title="Tentor" onclick="openInstructorModal(' + item.id + ')"><i class="bi bi-person-badge"></i></button>' +
+                    '  <button class="btn btn-ghost" style="padding: 0.375rem 0.625rem; font-size: 0.8125rem;" title="Akses materi" onclick="openMaterialSettingsModal(' + item.id + ')"><i class="bi bi-journal-lock"></i></button>' +
                     ((item.status === 'draft' || item.status === 'cancelled')
                         ? '  <button class="btn btn-ghost" style="padding: 0.375rem 0.625rem; font-size: 0.8125rem; color: var(--danger);" title="Hapus" onclick="removeClass(' + item.id + ')"><i class="bi bi-trash"></i></button>'
                         : '') +
@@ -1213,6 +1258,84 @@
                 return '<option value="' + version.id + '">' + ELIPS.escapeHtml(version.code + ' — ' + version.name) + ' (' + version.status + ')</option>';
             }).join('');
             if (selectedVersionId) select.value = String(selectedVersionId);
+        }
+
+        // ---------- Pengaturan akses materi kelas (Phase 4) ----------
+        let materialSettingsClassId = null;
+        let materialSettingsOriginal = null;
+
+        const MATERIAL_MODE_LABELS = {
+            open: 'Open',
+            sequential: 'Sequential',
+            scheduled: 'Scheduled',
+            conditional: 'Conditional'
+        };
+
+        function openMaterialSettingsModal(classId) {
+            const classItem = ELIPS.getClassById(classId);
+            if (!classItem) return;
+            const result = ELIPS.getMaterialSettings(classId);
+            if (!result.ok) {
+                ELIPS.toast(result.message);
+                return;
+            }
+
+            materialSettingsClassId = Number(classId);
+            materialSettingsOriginal = result.data;
+            const settings = result.data;
+
+            document.getElementById('materialSettingsClassId').value = String(classId);
+            document.getElementById('materialSettingsMeta').innerHTML =
+                '<strong>' + ELIPS.escapeHtml(classItem.name) + '</strong> (' + ELIPS.escapeHtml(classItem.code) + ')<br>' +
+                'Mode saat ini: <strong>' + ELIPS.escapeHtml(MATERIAL_MODE_LABELS[settings.accessMode] || settings.accessMode) + '</strong>' +
+                (settings.id === null ? ' — pengaturan bawaan sistem (belum disimpan khusus untuk kelas ini).' : '');
+            document.getElementById('materialSettingsMode').value = settings.accessMode;
+            document.getElementById('materialSettingsApproval').checked = !!settings.requireInstructorApproval;
+            document.getElementById('materialSettingsNotes').value = settings.notes || '';
+            document.getElementById('materialSettingsReason').value = '';
+            document.getElementById('materialSettingsReasonGroup').style.display = settings.id === null ? 'none' : 'block';
+            document.getElementById('materialSettingsModal').style.display = 'flex';
+        }
+
+        function closeMaterialSettingsModal() {
+            document.getElementById('materialSettingsModal').style.display = 'none';
+            materialSettingsClassId = null;
+            materialSettingsOriginal = null;
+        }
+
+        function materialSettingsChanged() {
+            if (!materialSettingsOriginal) return false;
+            const mode = document.getElementById('materialSettingsMode').value;
+            const approval = document.getElementById('materialSettingsApproval').checked;
+            const notes = document.getElementById('materialSettingsNotes').value.trim();
+            return mode !== materialSettingsOriginal.accessMode ||
+                approval !== !!materialSettingsOriginal.requireInstructorApproval ||
+                notes !== String(materialSettingsOriginal.notes || '');
+        }
+
+        function saveMaterialSettings() {
+            if (!materialSettingsClassId) return;
+            if (!materialSettingsChanged()) {
+                ELIPS.toast('Tidak ada perubahan pengaturan.');
+                closeMaterialSettingsModal();
+                return;
+            }
+            const reason = document.getElementById('materialSettingsReason').value.trim();
+            if (materialSettingsOriginal && materialSettingsOriginal.id !== null && reason === '') {
+                ELIPS.toast('Alasan override Admin wajib diisi.');
+                return;
+            }
+            const result = ELIPS.updateMaterialSettings(materialSettingsClassId, {
+                accessMode: document.getElementById('materialSettingsMode').value,
+                requireInstructorApproval: document.getElementById('materialSettingsApproval').checked,
+                notes: document.getElementById('materialSettingsNotes').value,
+                reason: reason
+            });
+            ELIPS.toast(result.message);
+            if (result.ok) {
+                closeMaterialSettingsModal();
+                renderAll();
+            }
         }
 
         function openClassModal(id) {

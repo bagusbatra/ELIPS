@@ -209,10 +209,19 @@
     function getCompletedLessons() { return read(KEYS.completedLessons, []); }
     function setCompletedLessons(list) { return write(KEYS.completedLessons, list); }
     function isLessonCompleted(studentId, courseId, lessonId) {
-        return getCompletedLessons().some(function (c) {
+        const legacy = getCompletedLessons().some(function (c) {
             return c.studentId === Number(studentId) &&
                 c.courseId === Number(courseId) &&
                 c.lessonId === Number(lessonId);
+        });
+        if (legacy) return true;
+        // Phase 4: progres kelas disimpan per penugasan. Data ini menjadi
+        // sumber utama ketika peserta belajar melalui kelas.
+        return ELIPS.getEnrollmentsByStudent(studentId).some(function (enrollment) {
+            if (Number(enrollment.courseId) !== Number(courseId)) return false;
+            return ELIPS.getClassLessonProgressByEnrollment(enrollment.id).some(function (row) {
+                return Number(row.lessonId) === Number(lessonId);
+            });
         });
     }
     function markLessonCompleted(studentId, courseId, lessonId) {
@@ -233,6 +242,37 @@
             completedAt: new Date().toISOString()
         });
         return setCompletedLessons(list);
+    }
+
+    // ---------- Materi kelas (Phase 4) ----------
+    function getClassMaterialSettingsRows() { return read(KEYS.classMaterialSettings, []); }
+    function setClassMaterialSettingsRows(list) { return write(KEYS.classMaterialSettings, list); }
+    function getClassMaterials() { return read(KEYS.classMaterials, []); }
+    function setClassMaterials(list) { return write(KEYS.classMaterials, list); }
+    function getClassMaterialById(id) {
+        return getClassMaterials().find(function (m) { return m.id === Number(id); }) || null;
+    }
+    function getClassMaterialsByClass(classId) {
+        return getClassMaterials()
+            .filter(function (m) { return Number(m.classId) === Number(classId); })
+            .sort(function (a, b) {
+                const order = (Number(a.order) || 0) - (Number(b.order) || 0);
+                return order !== 0 ? order : Number(a.id) - Number(b.id);
+            });
+    }
+    function getClassLessonProgress() { return read(KEYS.classLessonProgress, []); }
+    function setClassLessonProgress(list) { return write(KEYS.classLessonProgress, list); }
+    function getClassLessonProgressByEnrollment(enrollmentId) {
+        return getClassLessonProgress().filter(function (p) {
+            return Number(p.enrollmentId) === Number(enrollmentId);
+        });
+    }
+    function getClassMaterialProgress() { return read(KEYS.classMaterialProgress, []); }
+    function setClassMaterialProgress(list) { return write(KEYS.classMaterialProgress, list); }
+    function getClassMaterialProgressByEnrollment(enrollmentId) {
+        return getClassMaterialProgress().filter(function (p) {
+            return Number(p.enrollmentId) === Number(enrollmentId);
+        });
     }
 
     Object.assign(ELIPS, {
@@ -304,6 +344,18 @@
         getCompletedLessons: getCompletedLessons,
         setCompletedLessons: setCompletedLessons,
         isLessonCompleted: isLessonCompleted,
-        markLessonCompleted: markLessonCompleted
+        markLessonCompleted: markLessonCompleted,
+        getClassMaterialSettingsRows: getClassMaterialSettingsRows,
+        setClassMaterialSettingsRows: setClassMaterialSettingsRows,
+        getClassMaterials: getClassMaterials,
+        setClassMaterials: setClassMaterials,
+        getClassMaterialById: getClassMaterialById,
+        getClassMaterialsByClass: getClassMaterialsByClass,
+        getClassLessonProgress: getClassLessonProgress,
+        setClassLessonProgress: setClassLessonProgress,
+        getClassLessonProgressByEnrollment: getClassLessonProgressByEnrollment,
+        getClassMaterialProgress: getClassMaterialProgress,
+        setClassMaterialProgress: setClassMaterialProgress,
+        getClassMaterialProgressByEnrollment: getClassMaterialProgressByEnrollment
     });
 })(window.ELIPS);

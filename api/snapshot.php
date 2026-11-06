@@ -274,6 +274,32 @@ function elips_snapshot(): array
         ];
     }
 
+    $classMaterialSettings = [];
+    foreach ($db->query('SELECT id FROM classes ORDER BY id ASC') as $row) {
+        $classMaterialSettings[] = elips_class_material_settings_public((int) $row['id']);
+    }
+
+    // Metadata materi tambahan saja: konten dan path file privat tidak
+    // pernah ikut snapshot. Konten hanya dikirim melalui material.classroom
+    // setelah aturan akses diverifikasi.
+    $classMaterials = [];
+    foreach ($db->query('SELECT id FROM class_materials ORDER BY class_id ASC, sort_order ASC, id ASC') as $row) {
+        $material = elips_class_material_row((int) $row['id']);
+        if ($material) {
+            $classMaterials[] = elips_class_material_public($material, false);
+        }
+    }
+
+    $classLessonProgress = [];
+    foreach ($db->query('SELECT * FROM class_lesson_progress ORDER BY id ASC') as $row) {
+        $classLessonProgress[] = elips_class_lesson_progress_public($row);
+    }
+
+    $classMaterialProgress = [];
+    foreach ($db->query('SELECT * FROM class_material_progress ORDER BY id ASC') as $row) {
+        $classMaterialProgress[] = elips_class_material_progress_public($row);
+    }
+
     $auditLimit = (int) elips_config()['audit_limit'];
     $auditLogs = [];
     foreach ($db->query('SELECT * FROM audit_logs ORDER BY id DESC LIMIT ' . $auditLimit) as $row) {
@@ -330,6 +356,10 @@ function elips_snapshot(): array
         'grades' => $grades,
         'certificates' => $certificates,
         'completedLessons' => $completedLessons,
+        'classMaterialSettings' => $classMaterialSettings,
+        'classMaterials' => $classMaterials,
+        'classLessonProgress' => $classLessonProgress,
+        'classMaterialProgress' => $classMaterialProgress,
         'auditLogs' => $auditLogs,
         'notifications' => $notifications,
     ];

@@ -117,6 +117,26 @@
                     <div class="modules-list" id="instructorModules"></div>
                 </div>
             </div>
+
+            <div class="dashboard-section" id="classMaterialSection">
+                <div class="dashboard-section-header" style="flex-wrap: wrap; gap: 1rem;">
+                    <div>
+                        <h2 class="dashboard-section-title">Materi Tambahan &amp; Akses Kelas</h2>
+                        <span style="color: var(--text-secondary); font-size: 0.875rem;" id="classMaterialLabel">Pilih kelas untuk mengelola materi tambahan</span>
+                    </div>
+                    <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                        <select id="classMaterialClassSelect" class="form-input" style="max-width: 300px;" onchange="selectMaterialClass(this.value)"></select>
+                        <button class="btn btn-primary" onclick="openMaterialModal()"><i class="bi bi-journal-plus"></i> Tambah Materi</button>
+                    </div>
+                </div>
+                <div class="dashboard-section-body">
+                    <div style="padding: 1rem; background: #eff6ff; border-radius: var(--radius); color: #1e40af; font-size: 0.875rem; margin-bottom: 1rem;">
+                        <i class="bi bi-info-circle"></i> Materi tambahan tidak mengubah versi kurikulum. Atur mode akses kelas dan tambahkan bahan pendukung untuk peserta.
+                    </div>
+                    <div id="classMaterialSettingsPanel" style="display: none; padding: 1rem; border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 1rem;"></div>
+                    <div id="classMaterialList"></div>
+                </div>
+            </div>
         </main>
     </div>
 
@@ -194,6 +214,116 @@
         </div>
     </div>
 
+    <!-- Modal Materi Tambahan Kelas -->
+    <div id="materialModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; padding: 1rem;">
+        <div style="background: white; border-radius: var(--radius-lg); max-width: 640px; width: 100%; max-height: 90vh; overflow-y: auto;">
+            <div style="padding: 1.5rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between;">
+                <h3 style="font-size: 1.25rem; font-weight: 600;" id="materialModalTitle">Tambah Materi Tambahan</h3>
+                <button onclick="closeMaterialModal()" aria-label="Tutup" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--text-secondary);">
+                    <i class="bi bi-x"></i>
+                </button>
+            </div>
+            <div style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem;">
+                <input type="hidden" id="materialId">
+                <div class="form-group">
+                    <label class="form-label" for="materialTitle">Judul Materi *</label>
+                    <input type="text" id="materialTitle" class="form-input" placeholder="Contoh: Ringkasan Pertemuan 1">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="materialDescription">Deskripsi</label>
+                    <textarea id="materialDescription" class="form-input" rows="2" placeholder="Penjelasan singkat materi tambahan"></textarea>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <div class="form-group">
+                        <label class="form-label" for="materialType">Jenis Materi *</label>
+                        <select id="materialType" class="form-input" onchange="refreshMaterialFields()">
+                            <option value="text">Teks</option>
+                            <option value="document">Dokumen</option>
+                            <option value="video">Video</option>
+                            <option value="link">Link</option>
+                            <option value="file">File</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="materialAccessLevel">Status Materi</label>
+                        <select id="materialAccessLevel" class="form-input">
+                            <option value="required">Wajib</option>
+                            <option value="optional">Opsional</option>
+                            <option value="reference">Referensi</option>
+                        </select>
+                    </div>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <div class="form-group">
+                        <label class="form-label" for="materialLesson">Terkait Pelajaran Kurikulum</label>
+                        <select id="materialLesson" class="form-input"></select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="materialSession">Terkait Sesi Kelas</label>
+                        <select id="materialSession" class="form-input"></select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="materialContent" id="materialContentLabel">Konten Teks</label>
+                    <textarea id="materialContent" class="form-input" rows="5" placeholder="Tulis materi atau tempel URL"></textarea>
+                </div>
+                <div id="materialFileFields" style="display: none; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <div class="form-group">
+                        <label class="form-label" for="materialFileName">Nama File</label>
+                        <input type="text" id="materialFileName" class="form-input" placeholder="modul-1.pdf">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="materialMimeType">MIME Type</label>
+                        <input type="text" id="materialMimeType" class="form-input" placeholder="application/pdf">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="materialFileSize">Ukuran File (byte)</label>
+                        <input type="number" id="materialFileSize" class="form-input" min="0" placeholder="0">
+                    </div>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <div class="form-group">
+                        <label class="form-label" for="materialAvailableFrom">Tersedia Mulai</label>
+                        <input type="date" id="materialAvailableFrom" class="form-input">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="materialOrder">Urutan</label>
+                        <input type="number" id="materialOrder" class="form-input" min="1" placeholder="Otomatis">
+                    </div>
+                </div>
+            </div>
+            <div style="padding: 1.5rem; border-top: 1px solid var(--border); display: flex; gap: 0.75rem; justify-content: flex-end;">
+                <button class="btn btn-ghost" onclick="closeMaterialModal()">Batal</button>
+                <button class="btn btn-primary" onclick="saveMaterial()">Simpan Materi</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Status Materi -->
+    <div id="materialStatusModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; padding: 1rem;">
+        <div style="background: white; border-radius: var(--radius-lg); max-width: 480px; width: 100%;">
+            <div style="padding: 1.5rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between;">
+                <h3 style="font-size: 1.25rem; font-weight: 600;" id="materialStatusTitle">Status Materi</h3>
+                <button onclick="closeMaterialStatusModal()" aria-label="Tutup" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--text-secondary);">
+                    <i class="bi bi-x"></i>
+                </button>
+            </div>
+            <div style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem;">
+                <input type="hidden" id="materialStatusId">
+                <input type="hidden" id="materialStatusValue">
+                <p style="font-size: 0.875rem; color: var(--text-secondary);" id="materialStatusText"></p>
+                <div class="form-group">
+                    <label class="form-label" for="materialStatusReason">Alasan *</label>
+                    <textarea id="materialStatusReason" class="form-input" rows="3" placeholder="Contoh: materi sedang direvisi"></textarea>
+                </div>
+            </div>
+            <div style="padding: 1.5rem; border-top: 1px solid var(--border); display: flex; gap: 0.75rem; justify-content: flex-end;">
+                <button class="btn btn-ghost" onclick="closeMaterialStatusModal()">Batal</button>
+                <button class="btn btn-primary" onclick="saveMaterialStatus()">Simpan Status</button>
+            </div>
+        </div>
+    </div>
+
     <script src="../assets/js/config.js"></script>
     <script src="../assets/js/core.js"></script>
     <script src="../assets/js/api.js"></script>
@@ -210,12 +340,34 @@
     <script src="../assets/js/crud-enrollments.js"></script>
     <script src="../assets/js/crud-content.js"></script>
     <script src="../assets/js/crud-grades.js"></script>
+    <script src="../assets/js/crud-academic.js"></script>
     <script src="../assets/js/ui.js"></script>
     <script>
         let currentInstructor = null;
         let selectedCourseId = null;
         let editingModuleId = null;
         let editingLessonId = null;
+        let selectedMaterialClassId = null;
+        let editingMaterialId = null;
+
+        const MATERIAL_TYPE_LABELS = {
+            text: 'Teks',
+            document: 'Dokumen',
+            video: 'Video',
+            link: 'Link',
+            file: 'File'
+        };
+        const MATERIAL_ACCESS_LABELS = {
+            required: 'Wajib',
+            optional: 'Opsional',
+            reference: 'Referensi'
+        };
+        const MATERIAL_MODE_LABELS = {
+            open: 'Open',
+            sequential: 'Sequential',
+            scheduled: 'Scheduled',
+            conditional: 'Conditional'
+        };
 
         function myCourses() {
             if (!currentInstructor) return [];
@@ -261,6 +413,7 @@
 
             renderInstructorCourses();
             renderStructure();
+            renderClassMaterials();
         }
 
         function renderInstructorCourses() {
@@ -322,6 +475,7 @@
             if (select) select.value = String(id);
             renderInstructorCourses();
             renderStructure();
+            renderClassMaterials();
             if (scrollToSection) {
                 document.getElementById('structureSection').scrollIntoView({ behavior: 'smooth', block: 'start' });
             }
@@ -397,6 +551,328 @@
                     '</div>'
                 ].join('');
             }).join('');
+        }
+
+        // ---------- Materi tambahan & akses kelas (Phase 4) ----------
+        function manageableClassesForCourse(courseId) {
+            if (!currentInstructor || !courseId) return [];
+            return ELIPS.getClassesByCourse(courseId).filter(function (item) {
+                return Number(item.instructorId) === Number(currentInstructor.id);
+            }).sort(function (a, b) {
+                return Number(b.id) - Number(a.id);
+            });
+        }
+
+        function classCurriculumLessons(classItem) {
+            if (!classItem) return [];
+            const moduleMap = {};
+            ELIPS.getModules()
+                .filter(function (module) {
+                    return Number(module.courseId) === Number(classItem.courseId) &&
+                        Number(module.curriculumVersionId) === Number(classItem.curriculumVersionId);
+                })
+                .sort(function (a, b) {
+                    return (Number(a.order) || 0) - (Number(b.order) || 0);
+                })
+                .forEach(function (module, index) {
+                    moduleMap[module.id] = { module: module, index: index };
+                });
+            return ELIPS.getLessons()
+                .filter(function (lesson) {
+                    return Number(lesson.courseId) === Number(classItem.courseId) &&
+                        Number(lesson.curriculumVersionId) === Number(classItem.curriculumVersionId) &&
+                        moduleMap[lesson.moduleId] !== undefined;
+                })
+                .sort(function (a, b) {
+                    const moduleA = moduleMap[a.moduleId];
+                    const moduleB = moduleMap[b.moduleId];
+                    if (moduleA.index !== moduleB.index) return moduleA.index - moduleB.index;
+                    return (Number(a.order) || 0) - (Number(b.order) || 0);
+                });
+        }
+
+        function materialStatusBadge(status) {
+            return status === 'hidden'
+                ? '<span class="badge badge-warning">Disembunyikan</span>'
+                : '<span class="badge badge-success">Aktif</span>';
+        }
+
+        function renderClassMaterials() {
+            const select = document.getElementById('classMaterialClassSelect');
+            const label = document.getElementById('classMaterialLabel');
+            const panel = document.getElementById('classMaterialSettingsPanel');
+            const list = document.getElementById('classMaterialList');
+            if (!select || !panel || !list) return;
+
+            const course = selectedCourseId ? ELIPS.getCourseById(selectedCourseId) : null;
+            if (!course) {
+                select.innerHTML = '<option value="">Pilih kursus terlebih dahulu</option>';
+                label.textContent = 'Pilih kursus untuk mengelola materi tambahan';
+                panel.style.display = 'none';
+                list.innerHTML = '<p style="color: var(--text-secondary);">Pilih kursus yang ditugaskan.</p>';
+                return;
+            }
+
+            const classes = manageableClassesForCourse(course.id);
+            if (classes.length === 0) {
+                select.innerHTML = '<option value="">Belum ada kelas yang Anda ampu</option>';
+                label.textContent = 'Belum ada kelas untuk kursus ini';
+                panel.style.display = 'none';
+                list.innerHTML = '<p style="color: var(--text-secondary);">Admin belum menugaskan Anda pada kelas untuk kursus ini.</p>';
+                return;
+            }
+
+            const selectedStillValid = selectedMaterialClassId && classes.some(function (item) {
+                return Number(item.id) === Number(selectedMaterialClassId);
+            });
+            if (!selectedStillValid) selectedMaterialClassId = Number(classes[0].id);
+
+            select.innerHTML = classes.map(function (item) {
+                return '<option value="' + item.id + '" ' + (Number(item.id) === Number(selectedMaterialClassId) ? 'selected' : '') + '>' +
+                    ELIPS.escapeHtml(item.name + ' (' + item.code + ')') + '</option>';
+            }).join('');
+
+            const classItem = classes.find(function (item) {
+                return Number(item.id) === Number(selectedMaterialClassId);
+            });
+            label.textContent = classItem.name + ' • ' + classItem.code;
+            renderClassMaterialSettings(classItem, panel);
+            renderClassMaterialList(classItem, list);
+        }
+
+        function renderClassMaterialSettings(classItem, panel) {
+            const result = ELIPS.getMaterialSettings(classItem.id);
+            if (!result.ok) {
+                panel.style.display = 'block';
+                panel.innerHTML = '<span style="color: var(--danger);">' + ELIPS.escapeHtml(result.message) + '</span>';
+                return;
+            }
+            const settings = result.data;
+            panel.style.display = 'block';
+            panel.innerHTML = [
+                '<div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-bottom: 0.75rem;">',
+                '  <strong style="font-size: 0.9375rem;">Pengaturan Akses Materi</strong>',
+                '  <span class="badge badge-primary">' + ELIPS.escapeHtml(MATERIAL_MODE_LABELS[settings.accessMode] || settings.accessMode) + '</span>',
+                '</div>',
+                '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem;">',
+                '  <div class="form-group" style="margin: 0;">',
+                '    <label class="form-label" for="classAccessMode">Mode Akses</label>',
+                '    <select id="classAccessMode" class="form-input">',
+                '      <option value="open">Open</option>',
+                '      <option value="sequential">Sequential</option>',
+                '      <option value="scheduled">Scheduled</option>',
+                '      <option value="conditional">Conditional</option>',
+                '    </select>',
+                '  </div>',
+                '  <div class="form-group" style="margin: 0;">',
+                '    <label class="form-label" for="classAccessNotes">Catatan</label>',
+                '    <input type="text" id="classAccessNotes" class="form-input" placeholder="Opsional">',
+                '  </div>',
+                '</div>',
+                '<label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; margin-top: 0.75rem;">',
+                '  <input type="checkbox" id="classAccessApproval" style="width: auto;"> Wajib persetujuan instruktur untuk menandai selesai',
+                '</label>',
+                '<div style="margin-top: 0.75rem;">',
+                '  <button class="btn btn-outline" onclick="saveClassMaterialSettings()"><i class="bi bi-save"></i> Simpan Pengaturan</button>',
+                '</div>'
+            ].join('');
+            document.getElementById('classAccessMode').value = settings.accessMode;
+            document.getElementById('classAccessNotes').value = settings.notes || '';
+            document.getElementById('classAccessApproval').checked = !!settings.requireInstructorApproval;
+        }
+
+        function saveClassMaterialSettings() {
+            if (!selectedMaterialClassId) return;
+            const result = ELIPS.updateMaterialSettings(selectedMaterialClassId, {
+                accessMode: document.getElementById('classAccessMode').value,
+                requireInstructorApproval: document.getElementById('classAccessApproval').checked,
+                notes: document.getElementById('classAccessNotes').value
+            });
+            ELIPS.toast(result.message);
+            if (result.ok) renderClassMaterials();
+        }
+
+        function renderClassMaterialList(classItem, container) {
+            const materials = ELIPS.getClassMaterialsByClass(classItem.id);
+            if (materials.length === 0) {
+                container.innerHTML = [
+                    '<div style="text-align: center; padding: 2rem 1rem; color: var(--text-secondary); border: 1px dashed var(--border); border-radius: var(--radius);">',
+                    '  <i class="bi bi-journal-plus" style="display: block; font-size: 2.25rem; opacity: .45; margin-bottom: .5rem;"></i>',
+                    '  <div style="font-weight: 600; color: var(--text-primary); margin-bottom: .25rem;">Belum ada materi tambahan</div>',
+                    '  <div style="font-size: .875rem;">Gunakan tombol "Tambah Materi" untuk menambahkan bahan pendukung kelas.</div>',
+                    '</div>'
+                ].join('');
+                return;
+            }
+
+            container.innerHTML = '<div style="display: flex; flex-direction: column; gap: 0.75rem;">' + materials.map(function (item) {
+                const lesson = item.lessonId ? ELIPS.getLessons().find(function (row) {
+                    return Number(row.id) === Number(item.lessonId);
+                }) : null;
+                const session = item.sessionId ? ELIPS.getClassSessionById(item.sessionId) : null;
+                const relation = lesson ? 'Pelajaran: ' + lesson.title : (session ? 'Sesi: ' + session.title : 'Tanpa relasi');
+                return [
+                    '<div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; padding: 0.875rem 1rem; border: 1px solid var(--border); border-radius: var(--radius); flex-wrap: wrap;">',
+                    '  <div style="min-width: 0; flex: 1;">',
+                    '    <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">',
+                    '      <strong>' + ELIPS.escapeHtml(item.title) + '</strong>',
+                    '      <span class="badge badge-primary">' + ELIPS.escapeHtml(MATERIAL_TYPE_LABELS[item.type] || item.type) + '</span>',
+                    '      <span class="badge">' + ELIPS.escapeHtml(MATERIAL_ACCESS_LABELS[item.accessLevel] || item.accessLevel) + '</span>',
+                    '      ' + materialStatusBadge(item.status),
+                    '    </div>',
+                    '    <div class="table-course-meta" style="margin-top: 0.25rem;">' + ELIPS.escapeHtml(relation) +
+                        (item.availableFrom ? ' &bull; Tersedia ' + ELIPS.escapeHtml(item.availableFrom) : '') + '</div>',
+                    item.description ? '    <div style="font-size: 0.8125rem; color: var(--text-secondary); margin-top: 0.25rem;">' + ELIPS.escapeHtml(item.description) + '</div>' : '',
+                    '  </div>',
+                    '  <div style="display: flex; gap: 0.25rem; flex-wrap: wrap;">',
+                    '    <button class="btn btn-ghost" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" onclick="openMaterialModal(' + item.id + ')" title="Edit materi"><i class="bi bi-pencil"></i></button>',
+                    '    <button class="btn btn-ghost" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" onclick="openMaterialStatusModal(' + item.id + ')" title="Ubah status"><i class="bi ' + (item.status === 'hidden' ? 'bi-eye' : 'bi-eye-slash') + '"></i></button>',
+                    '    <button class="btn btn-ghost" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; color: var(--danger);" onclick="deleteClassMaterialItem(' + item.id + ')" title="Hapus materi"><i class="bi bi-trash"></i></button>',
+                    '  </div>',
+                    '</div>'
+                ].join('');
+            }).join('') + '</div>';
+        }
+
+        function selectMaterialClass(classId) {
+            selectedMaterialClassId = Number(classId);
+            renderClassMaterials();
+        }
+
+        function refreshMaterialFields() {
+            const type = document.getElementById('materialType').value;
+            const label = document.getElementById('materialContentLabel');
+            const content = document.getElementById('materialContent');
+            const fileFields = document.getElementById('materialFileFields');
+            if (type === 'text') {
+                label.textContent = 'Konten Teks';
+                content.placeholder = 'Tulis materi pelajaran di sini...';
+            } else if (type === 'video') {
+                label.textContent = 'URL Video';
+                content.placeholder = 'https://youtube.com/watch?v=...';
+            } else if (type === 'link') {
+                label.textContent = 'URL Tujuan';
+                content.placeholder = 'https://example.com/materi';
+            } else {
+                label.textContent = 'URL / Lokasi File';
+                content.placeholder = 'https://... atau nama file';
+            }
+            fileFields.style.display = (type === 'file' || type === 'document') ? 'grid' : 'none';
+        }
+
+        function openMaterialModal(materialId) {
+            if (!selectedMaterialClassId) {
+                ELIPS.toast('Pilih kelas terlebih dahulu.');
+                return;
+            }
+            const classItem = ELIPS.getClassById(selectedMaterialClassId);
+            if (!classItem) return;
+            const item = materialId ? ELIPS.getClassMaterialById(materialId) : null;
+            editingMaterialId = item ? Number(item.id) : null;
+
+            document.getElementById('materialModalTitle').textContent = item ? 'Edit Materi Tambahan' : 'Tambah Materi Tambahan';
+            document.getElementById('materialId').value = item ? String(item.id) : '';
+            document.getElementById('materialTitle').value = item ? item.title : '';
+            document.getElementById('materialDescription').value = item ? (item.description || '') : '';
+            document.getElementById('materialType').value = item ? item.type : 'text';
+            document.getElementById('materialAccessLevel').value = item ? item.accessLevel : 'optional';
+            document.getElementById('materialContent').value = item ? (item.content || '') : '';
+            document.getElementById('materialFileName').value = item ? (item.fileName || '') : '';
+            document.getElementById('materialFileSize').value = item && item.fileSize !== null ? item.fileSize : '';
+            document.getElementById('materialMimeType').value = item ? (item.mimeType || '') : '';
+            document.getElementById('materialAvailableFrom').value = item ? (item.availableFrom || '') : '';
+            document.getElementById('materialOrder').value = item ? item.order : '';
+
+            const lessonSelect = document.getElementById('materialLesson');
+            lessonSelect.innerHTML = '<option value="">Tidak terkait pelajaran</option>' +
+                classCurriculumLessons(classItem).map(function (lesson) {
+                    return '<option value="' + lesson.id + '" ' + (item && Number(item.lessonId) === Number(lesson.id) ? 'selected' : '') + '>' +
+                        ELIPS.escapeHtml(lesson.title) + '</option>';
+                }).join('');
+
+            const sessionSelect = document.getElementById('materialSession');
+            sessionSelect.innerHTML = '<option value="">Tidak terkait sesi</option>' +
+                ELIPS.getSessionsByClass(classItem.id).map(function (session) {
+                    return '<option value="' + session.id + '" ' + (item && Number(item.sessionId) === Number(session.id) ? 'selected' : '') + '>' +
+                        ELIPS.escapeHtml('Pertemuan ' + session.sessionNumber + ' • ' + (session.sessionDate || '')) + '</option>';
+                }).join('');
+
+            refreshMaterialFields();
+            document.getElementById('materialModal').style.display = 'flex';
+        }
+
+        function closeMaterialModal() {
+            document.getElementById('materialModal').style.display = 'none';
+            editingMaterialId = null;
+        }
+
+        function saveMaterial() {
+            if (!selectedMaterialClassId) return;
+            const data = {
+                title: document.getElementById('materialTitle').value.trim(),
+                description: document.getElementById('materialDescription').value.trim(),
+                type: document.getElementById('materialType').value,
+                lessonId: document.getElementById('materialLesson').value || null,
+                sessionId: document.getElementById('materialSession').value || null,
+                content: document.getElementById('materialContent').value,
+                fileName: document.getElementById('materialFileName').value.trim(),
+                fileSize: document.getElementById('materialFileSize').value === '' ? null : Number(document.getElementById('materialFileSize').value),
+                mimeType: document.getElementById('materialMimeType').value.trim(),
+                accessLevel: document.getElementById('materialAccessLevel').value,
+                availableFrom: document.getElementById('materialAvailableFrom').value || null,
+                order: document.getElementById('materialOrder').value === '' ? 0 : Number(document.getElementById('materialOrder').value)
+            };
+            const result = editingMaterialId
+                ? ELIPS.updateClassMaterial(editingMaterialId, data)
+                : ELIPS.createClassMaterial(Object.assign({ classId: selectedMaterialClassId }, data));
+            ELIPS.toast(result.message);
+            if (result.ok) {
+                closeMaterialModal();
+                renderClassMaterials();
+            }
+        }
+
+        function openMaterialStatusModal(materialId) {
+            const item = ELIPS.getClassMaterialById(materialId);
+            if (!item) return;
+            const nextStatus = item.status === 'hidden' ? 'active' : 'hidden';
+            document.getElementById('materialStatusId').value = String(item.id);
+            document.getElementById('materialStatusValue').value = nextStatus;
+            document.getElementById('materialStatusTitle').textContent =
+                nextStatus === 'hidden' ? 'Sembunyikan Materi' : 'Aktifkan Materi';
+            document.getElementById('materialStatusText').textContent =
+                '"' + item.title + '" akan ' + (nextStatus === 'hidden' ? 'disembunyikan dari peserta' : 'ditampilkan kembali kepada peserta') + '. Alasan wajib diisi.';
+            document.getElementById('materialStatusReason').value = '';
+            document.getElementById('materialStatusModal').style.display = 'flex';
+        }
+
+        function closeMaterialStatusModal() {
+            document.getElementById('materialStatusModal').style.display = 'none';
+        }
+
+        function saveMaterialStatus() {
+            const materialId = Number(document.getElementById('materialStatusId').value);
+            const status = document.getElementById('materialStatusValue').value;
+            const reason = document.getElementById('materialStatusReason').value.trim();
+            if (!reason) {
+                ELIPS.toast('Alasan perubahan status materi wajib diisi.');
+                return;
+            }
+            const result = ELIPS.setClassMaterialStatus(materialId, { status: status, reason: reason });
+            ELIPS.toast(result.message);
+            if (result.ok) {
+                closeMaterialStatusModal();
+                renderClassMaterials();
+            }
+        }
+
+        function deleteClassMaterialItem(materialId) {
+            const item = ELIPS.getClassMaterialById(materialId);
+            if (!item) return;
+            if (!confirm('Hapus materi tambahan "' + item.title + '"?')) return;
+            const result = ELIPS.deleteClassMaterial(item.id);
+            ELIPS.toast(result.message);
+            if (result.ok) renderClassMaterials();
         }
 
         function fillCourseSelect(selectId, selectedId) {
