@@ -1,5 +1,5 @@
 -- ============================================================
--- ELIPS LMS - skema database MySQL 8 (v4.0 Phase 1-3)
+-- ELIPS LMS - skema database MySQL 8 (v4.0 Phase 1-3 + cabang)
 -- Jalankan melalui api/install.php agar data demo ikut terisi.
 -- ============================================================
 
@@ -34,6 +34,24 @@ CREATE TABLE IF NOT EXISTS `users` (
     PRIMARY KEY (`id`),
     UNIQUE KEY `uq_users_email` (`email`),
     KEY `idx_users_role` (`role`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `branches` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `code` VARCHAR(40) NOT NULL,
+    `name` VARCHAR(150) NOT NULL,
+    `address` VARCHAR(255) NOT NULL DEFAULT '',
+    `city` VARCHAR(100) NOT NULL DEFAULT '',
+    `phone` VARCHAR(40) NOT NULL DEFAULT '',
+    `manager` VARCHAR(150) NOT NULL DEFAULT '',
+    `status` ENUM('active', 'inactive') NOT NULL DEFAULT 'active',
+    `notes` TEXT NOT NULL,
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NULL,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uq_branches_code` (`code`),
+    KEY `idx_branches_status` (`status`),
+    KEY `idx_branches_city` (`city`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `courses` (
@@ -124,6 +142,7 @@ CREATE TABLE IF NOT EXISTS `classes` (
     `name` VARCHAR(150) NOT NULL,
     `course_id` INT UNSIGNED NOT NULL,
     `curriculum_version_id` INT UNSIGNED NOT NULL,
+    `branch_id` INT UNSIGNED NULL,
     `instructor_id` INT UNSIGNED NULL,
     `period_start` DATE NULL,
     `period_end` DATE NULL,
@@ -143,10 +162,12 @@ CREATE TABLE IF NOT EXISTS `classes` (
     UNIQUE KEY `uq_classes_code` (`code`),
     KEY `idx_classes_course` (`course_id`),
     KEY `idx_classes_version` (`curriculum_version_id`),
+    KEY `idx_classes_branch` (`branch_id`),
     KEY `idx_classes_instructor` (`instructor_id`),
     KEY `idx_classes_status` (`status`),
     CONSTRAINT `fk_classes_course` FOREIGN KEY (`course_id`) REFERENCES `courses` (`id`) ON DELETE RESTRICT,
     CONSTRAINT `fk_classes_version` FOREIGN KEY (`curriculum_version_id`) REFERENCES `curriculum_versions` (`id`) ON DELETE RESTRICT,
+    CONSTRAINT `fk_classes_branch` FOREIGN KEY (`branch_id`) REFERENCES `branches` (`id`) ON DELETE SET NULL,
     CONSTRAINT `fk_classes_instructor` FOREIGN KEY (`instructor_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
     CONSTRAINT `fk_classes_created_by` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL,
     CONSTRAINT `fk_classes_updated_by` FOREIGN KEY (`updated_by`) REFERENCES `users` (`id`) ON DELETE SET NULL

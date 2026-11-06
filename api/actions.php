@@ -15,6 +15,14 @@ function elips_dispatch(string $action, array $payload): array
             return elips_action_auth_login($payload);
         case 'auth.logout':
             return elips_action_auth_logout();
+        case 'branch.create':
+            return elips_action_branch_create($payload);
+        case 'branch.update':
+            return elips_action_branch_update($payload);
+        case 'branch.status':
+            return elips_action_branch_status($payload);
+        case 'branch.delete':
+            return elips_action_branch_delete($payload);
         case 'user.create':
             return elips_action_user_create($payload);
         case 'user.update':
@@ -147,6 +155,186 @@ function elips_action_auth_logout(): array
         session_destroy();
     }
     return elips_ok('Anda telah keluar.');
+}
+
+// ---------- Branches ----------
+
+function elips_generate_branch_code(string $name): string
+{
+    $clean = strtoupper(preg_replace('/[^A-Za-z0-9]+/', '', $name) ?? '');
+    $clean = substr($clean, 0, 4);
+    if ($clean === '') {
+        $clean = 'CBG';
+    }
+    $db = elips_db();
+    $base = 'CBG-' . $clean;
+    $code = $base;
+    $suffix = 2;
+    $stmt = $db->prepare('SELECT id FROM branches WHERE code = ? LIMIT 1');
+    while (true) {
+        $stmt->execute([$code]);
+        if (!$stmt->fetch()) {
+            return $code;
+        }
+        $code = $base . '-' . $suffix++;
+    }
+}
+
+function elips_action_branch_create(array $p): array
+{
+    $actor = elips_require_admin();
+    $name = trim((string) ($p['name'] ?? ''));
+    if ($name === '') return elips_fail('Nama cabang wajib diisi.');
+
+    $code = trim((string) ($p['code'] ?? ''));
+    if ($code === '') $code = elips_generate_branch_code($name);
+
+    $db = elips_db();
+    $stmt = $db->prepare('SELECT id FROM branches WHERE code = ? LIMIT 1');
+    $stmt->execute([$code]);
+    if ($stmt->fetch()) return elips_fail('Kode cabang sudah dipakai.');
+
+    $status = (string) ($p['status'] ?? 'active');
+    if (!in_array($status, ['active', 'inactive'], true)) {
+        return elips_fail('Status cabang tidak valid.');
+    }
+
+    $stmt = $db->prepare(
+        'INSERT INTO branches (code, name, address, city, phone, manager, status, notes)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+    );
+    $stmt->execute([
+        $code,
+        $name,
+        trim((string) ($p['address'] ?? '')),
+        trim((string) ($p['city'] ?? '')),
+        trim((string) ($p['phone'] ?? '')),
+        trim((string) ($p['manager'] ?? '')),
+        $status,
+        trim((string) ($p['notes'] ?? '')),
+    ]);
+    $id = (int) $db->lastInsertId();
+
+    elips_audit(
+        'create',
+        'branch',
+        $id,
+        $name,
+        'Membuat cabang "' . $name . '" (' . $code . ') di ' . (trim((string) ($p['city'] ?? '')) ?: 'lokasi belum diisi') . '.',
+        $actor
+    );
+
+    return elips_ok('Cabang berhasil dibuat.', elips_branch_public($id));
+}
+
+function elips_action_branch_update(array $p): array
+{
+    $actor = elips_require_admin();
+    $id = (int) ($p['id'] ?? 0);
+    $data = elips_payload_array($p, 'data');
+    $branch = elips_branch_row($id);
+    if (!$branch) return elips_fail('Cabang tidak ditemukan.');
+
+    $name = array_key_exists('name', $data) ? trim((string) $data['name']) : $branch['name'];
+    if ($name === '') return elips_fail('Nama cabang wajib diisi.');
+
+    $code = array_key_exists('code', $data) ? trim((string) $data['code']) : $branch['code'];
+    if ($code === '') return elips_fail('Kode cabang wajib diisi.');
+
+    $db = elips_db();
+    $stmt = $db->prepare('SELECT id FROM branches WHERE code = ? AND id <> ? LIMIT 1');
+    $stmt->execute([$code, $id]);
+    if ($stmt->fetch()) return elips_fail('Kode cabang sudah dipakai.');
+
+    $status = array_key_exists('status', $data) ? (string) $data['status'] : $branch['status'];
+    if (!in_array($status, ['active', 'inactive'], true)) {
+        return elips_fail('Status cabang tidak valid.');
+    }
+
+    $stmt = $db->prepare(
+        'UPDATE branches
+         SET code = ?, name = ?, address = ?, city = ?, phone = ?, manager = ?, status = ?, notes = ?,
+             updated_at = UTC_TIMESTAMP()
+         WHERE id = ?'
+    );
+    $stmt->execute([
+        $code,
+        $name,
+        array_key_exists('address', $data) ? trim((string) $data['address']) : $branch['address'],
+        array_key_exists('city', $data) ? trim((string) $data['city']) : $branch['city'],
+        array_key_exists('phone', $data) ? trim((string) $data['phone']) : $branch['phone'],
+        array_key_exists('manager', $data) ? trim((string) $data['manager']) : $branch['manager'],
+        $status,
+        array_key_exists('notes', $data) ? trim((string) $data['notes']) : $branch['notes'],
+        $id,
+    ]);
+
+    elips_audit(
+        'update',
+        'branch',
+        $id,
+        $name,
+        'Memperbarui cabang "' . $name . '" (' . $code . ').',
+        $actor
+    );
+
+    return elips_ok('Cabang berhasil diperbarui.', elips_branch_public($id));
+}
+
+function elips_action_branch_status(array $p): array
+{
+    $actor = elips_require_admin();
+    $id = (int) ($p['id'] ?? 0);
+    $status = (string) ($p['status'] ?? '');
+    if (!in_array($status, ['active', 'inactive'], true)) {
+        return elips_fail('Status cabang tidak valid.');
+    }
+
+    $branch = elips_branch_row($id);
+    if (!$branch) return elips_fail('Cabang tidak ditemukan.');
+
+    $stmt = elips_db()->prepare('UPDATE branches SET status = ?, updated_at = UTC_TIMESTAMP() WHERE id = ?');
+    $stmt->execute([$status, $id]);
+
+    elips_audit(
+        'status',
+        'branch',
+        $id,
+        $branch['name'],
+        'Mengubah status cabang "' . $branch['name'] . '" dari ' . $branch['status'] . ' menjadi ' . $status . '.',
+        $actor
+    );
+
+    return elips_ok('Status cabang diperbarui menjadi ' . ($status === 'active' ? 'aktif' : 'nonaktif') . '.', elips_branch_public($id));
+}
+
+function elips_action_branch_delete(array $p): array
+{
+    $actor = elips_require_admin();
+    $id = (int) ($p['id'] ?? 0);
+    $branch = elips_branch_row($id);
+    if (!$branch) return elips_fail('Cabang tidak ditemukan.');
+
+    $stmt = elips_db()->prepare('SELECT COUNT(*) FROM classes WHERE branch_id = ?');
+    $stmt->execute([$id]);
+    $classCount = (int) $stmt->fetchColumn();
+    if ($classCount > 0) {
+        return elips_fail('Cabang tidak dapat dihapus karena masih dipakai oleh ' . $classCount . ' kelas.');
+    }
+
+    $stmt = elips_db()->prepare('DELETE FROM branches WHERE id = ?');
+    $stmt->execute([$id]);
+
+    elips_audit(
+        'delete',
+        'branch',
+        $id,
+        $branch['name'],
+        'Menghapus cabang "' . $branch['name'] . '" (' . $branch['code'] . ').',
+        $actor
+    );
+
+    return elips_ok('Cabang berhasil dihapus.');
 }
 
 // ---------- Users ----------
@@ -965,6 +1153,13 @@ function elips_action_class_create(array $p): array
         return elips_fail('Tentor harus berstatus aktif.');
     }
 
+    $branchId = isset($p['branchId']) && $p['branchId'] !== '' ? (int) $p['branchId'] : 0;
+    if ($branchId > 0) {
+        $branch = elips_branch_row($branchId);
+        if (!$branch) return elips_fail('Cabang tidak ditemukan.');
+        if ($branch['status'] !== 'active') return elips_fail('Cabang harus berstatus aktif.');
+    }
+
     $periodStart = elips_normalize_date($p['periodStart'] ?? null);
     $periodEnd = elips_normalize_date($p['periodEnd'] ?? null);
     if (trim((string) ($p['periodStart'] ?? '')) !== '' && $periodStart === null) return elips_fail('Tanggal mulai tidak valid.');
@@ -984,15 +1179,16 @@ function elips_action_class_create(array $p): array
     try {
         $stmt = $db->prepare(
             "INSERT INTO classes
-             (code, name, course_id, curriculum_version_id, instructor_id, period_start, period_end, quota,
+             (code, name, course_id, curriculum_version_id, branch_id, instructor_id, period_start, period_end, quota,
               location, room, schedule_note, planned_jp, status, legacy_import, notes, created_by, updated_by)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)"
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)"
         );
         $stmt->execute([
             $code,
             $name,
             $courseId,
             $versionId,
+            $branchId > 0 ? $branchId : null,
             $instructorId > 0 ? $instructorId : null,
             $periodStart,
             $periodEnd,
@@ -1079,15 +1275,25 @@ function elips_action_class_update(array $p): array
         return elips_fail('Tentor harus berstatus aktif.');
     }
 
+    $branchId = array_key_exists('branchId', $data)
+        ? (int) $data['branchId']
+        : ($class['branch_id'] === null ? 0 : (int) $class['branch_id']);
+    if ($branchId > 0) {
+        $branch = elips_branch_row($branchId);
+        if (!$branch) return elips_fail('Cabang tidak ditemukan.');
+        if ($branch['status'] !== 'active') return elips_fail('Cabang harus berstatus aktif.');
+    }
+
     $db = elips_db();
     $stmt = $db->prepare(
         'UPDATE classes
-         SET name = ?, period_start = ?, period_end = ?, quota = ?, location = ?, room = ?,
+         SET name = ?, branch_id = ?, period_start = ?, period_end = ?, quota = ?, location = ?, room = ?,
              schedule_note = ?, planned_jp = ?, notes = ?, updated_by = ?, updated_at = UTC_TIMESTAMP()
          WHERE id = ?'
     );
     $stmt->execute([
         $name,
+        $branchId > 0 ? $branchId : null,
         $periodStart,
         $periodEnd,
         $quota,

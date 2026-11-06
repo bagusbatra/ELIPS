@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kalender &amp; Jadwal - ELIPS LMS</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../assets/css/style.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+</head>
+<body>
+    <header class="navbar">
+        <div class="container nav-container">
+            <div class="nav-brand">
+                <i class="bi bi-mortarboard-fill brand-icon"></i>
+                <span class="brand-text">ELIPS LMS</span>
+            </div>
+            <nav class="nav-menu" id="navMenu">
+                <a href="../index.html" class="nav-link">Beranda</a>
+                <a href="../index.html#courses" class="nav-link">Kursus</a>
+                <a href="../verify-certificate.html" class="nav-link">Verifikasi Sertifikat</a>
+            </nav>
+            <div class="nav-actions">
+                <a href="dashboard.html" class="btn btn-ghost">Dashboard</a>
+                <a href="../index.html" class="btn btn-outline">Keluar</a>
+            </div>
+            <button class="nav-toggle" id="navToggle">
+                <i class="bi bi-list"></i>
+            </button>
+        </div>
+    </header>
+
+    <div class="dashboard-layout">
+        <aside class="dashboard-sidebar">
+            <div class="dashboard-sidebar-header">
+                <div class="dashboard-user">
+                    <div class="dashboard-avatar">AD</div>
+                    <div class="dashboard-user-info">
+                        <div class="dashboard-user-name">Administrator</div>
+                        <div class="dashboard-user-role">Admin</div>
+                    </div>
+                </div>
+            </div>
+            <nav class="dashboard-nav">
+                <a href="dashboard.html" class="dashboard-nav-link">
+                    <i class="bi bi-speedometer2"></i>
+                    <span>Dashboard</span>
+                </a>
+                <a href="users.html" class="dashboard-nav-link">
+                    <i class="bi bi-people"></i>
+                    <span>Kelola Pengguna</span>
+                </a>
+                <a href="courses.html" class="dashboard-nav-link">
+                    <i class="bi bi-journal-bookmark"></i>
+                    <span>Kelola Kursus</span>
+                </a>
+                <a href="academic.html" class="dashboard-nav-link">
+                    <i class="bi bi-diagram-3"></i>
+                    <span>Kurikulum &amp; Kelas</span>
+                </a>
+                <a href="schedule.html" class="dashboard-nav-link active">
+                    <i class="bi bi-calendar-week"></i>
+                    <span>Kalender &amp; Jadwal</span>
+                </a>
+                <a href="enrollment.html" class="dashboard-nav-link">
+                    <i class="bi bi-person-check"></i>
+                    <span>Enrolment</span>
+                </a>
+                <a href="certificates.html" class="dashboard-nav-link">
+                    <i class="bi bi-award"></i>
+                    <span>Kelola Sertifikat</span>
+                </a>
+                <a href="reports.html" class="dashboard-nav-link">
+                    <i class="bi bi-file-earmark-bar-graph"></i>
+                    <span>Laporan</span>
+                </a>
+                <a href="notifications.html" class="dashboard-nav-link">
+                    <i class="bi bi-envelope"></i>
+                    <span>Notifikasi</span>
+                </a>
+                <a href="audit.html" class="dashboard-nav-link">
+                    <i class="bi bi-clock-history"></i>
+                    <span>Audit Trail</span>
+                </a>
+                <a href="settings.html" class="dashboard-nav-link">
+                    <i class="bi bi-gear"></i>
+                    <span>Pengaturan</span>
+                </a>
+            </nav>
+        </aside>
+
+        <main class="dashboard-main">
+            <div class="dashboard-header">
+                <div>
+                    <h1 class="dashboard-title">Kalender &amp; Jadwal</h1>
+                    <p class="dashboard-subtitle">Pantau jadwal kelas dan sesi pertemuan berdasarkan cabang.</p>
+                </div>
+                <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
+                    <a href="academic.html" class="btn btn-ghost">
+                        <i class="bi bi-diagram-3"></i>
+                        Kurikulum &amp; Kelas
+                    </a>
+                    <a href="settings.html" class="btn btn-primary">
+                        <i class="bi bi-gear"></i>
+                        Kelola Cabang
+                    </a>
+                </div>
+            </div>
+
+            <div class="dashboard-section">
+                <div class="dashboard-section-header" style="flex-wrap: wrap; gap: 1rem;">
+                    <h2 class="dashboard-section-title">Konteks Cabang</h2>
+                </div>
+                <div class="dashboard-section-body schedule-context">
+                    <div class="form-group" style="min-width: 240px;">
+                        <label class="form-label">Cabang</label>
+                        <select id="branchFilter" class="form-input" onchange="changeBranch()"></select>
+                    </div>
+                    <div class="form-group" style="min-width: 260px;">
+                        <label class="form-label">Kelas</label>
+                        <select id="classFilter" class="form-input" onchange="renderAllViews()"></select>
+                    </div>
+                    <div class="schedule-context-info" id="branchInfo"></div>
+                </div>
+            </div>
+
+            <div class="dashboard-stats">
+                <div class="stat-card">
+                    <div class="stat-card-icon blue"><i class="bi bi-calendar3"></i></div>
+                    <div class="stat-card-info">
+                        <div class="stat-card-value" id="statMonthSessions">0</div>
+                        <div class="stat-card-label">Sesi Bulan Ini</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-card-icon green"><i class="bi bi-check2-circle"></i></div>
+                    <div class="stat-card-info">
+                        <div class="stat-card-value" id="statCompleted">0</div>
+                        <div class="stat-card-label">Sesi Selesai</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-card-icon orange"><i class="bi bi-clock"></i></div>
+                    <div class="stat-card-info">
+                        <div class="stat-card-value" id="statUpcoming">0</div>
+                        <div class="stat-card-label">Sesi Terjadwal</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-card-icon purple"><i class="bi bi-people"></i></div>
+                    <div class="stat-card-info">
+                        <div class="stat-card-value" id="statClasses">0</div>
+                        <div class="stat-card-label">Kelas Aktif</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="dashboard-section">
+                <div class="dashboard-section-header" style="flex-wrap: wrap; gap: 1rem;">
+                    <h2 class="dashboard-section-title">Kalender Bulanan</h2>
+                    <div class="calendar-toolbar">
+                        <button class="btn btn-ghost" title="Bulan sebelumnya" onclick="shiftMonth(-1)"><i class="bi bi-chevron-left"></i></button>
+                        <span class="calendar-month-label" id="monthLabel">-</span>
+                        <button class="btn btn-ghost" title="Bulan berikutnya" onclick="shiftMonth(1)"><i class="bi bi-chevron-right"></i></button>
+                        <button class="btn btn-outline" onclick="goToday()">Hari Ini</button>
+                    </div>
+                </div>
+                <div class="dashboard-section-body">
+                    <div class="calendar-weekdays">
+                        <div>Sen</div><div>Sel</div><div>Rab</div><div>Kam</div><div>Jum</div><div>Sab</div><div>Min</div>
+                    </div>
+                    <div class="calendar-grid" id="calendarGrid"></div>
+                    <div class="calendar-legend">
+                        <span><span class="calendar-dot dot-scheduled"></span> Terjadwal</span>
+                        <span><span class="calendar-dot dot-confirmed"></span> Terkonfirmasi</span>
+                        <span><span class="calendar-dot dot-completed"></span> Selesai</span>
+                        <span><span class="calendar-dot dot-cancelled"></span> Batal / Tidak Hadir</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="schedule-detail-grid">
+                <div class="dashboard-section">
+                    <div class="dashboard-section-header">
+                        <h2 class="dashboard-section-title">Agenda <span id="selectedDateLabel" class="schedule-muted"></span></h2>
+                    </div>
+                    <div class="dashboard-section-body" id="dayPanel"></div>
+                </div>
+                <div class="dashboard-section">
+                    <div class="dashboard-section-header">
+                        <h2 class="dashboard-section-title">Ringkasan <span id="monthSummaryLabel" class="schedule-muted"></span></h2>
+                    </div>
+                    <div class="dashboard-section-body" id="monthSummary"></div>
+                </div>
+            </div>
+
+            <div class="dashboard-section">
+                <div class="dashboard-section-header" style="flex-wrap: wrap; gap: 1rem;">
+                    <h2 class="dashboard-section-title">Daftar Sesi</h2>
+                    <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center;">
+                        <select class="form-input" id="statusFilter" style="max-width: 200px;" onchange="renderScheduleTable()">
+                            <option value="all">Semua Status</option>
+                            <option value="scheduled">Terjadwal</option>
+                            <option value="confirmed">Terkonfirmasi</option>
+                            <option value="completed">Selesai</option>
+                            <option value="rescheduled">Dijadwalkan Ulang</option>
+                            <option value="cancelled">Dibatalkan</option>
+                            <option value="no_show">Tidak Hadir</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="dashboard-section-body" style="padding: 0; overflow-x: auto;">
+                    <table class="dashboard-table">
+                        <thead>
+                            <tr>
+                                <th>Tanggal</th>
+                                <th>Waktu</th>
+                                <th>Kelas</th>
+                                <th>Cabang</th>
+                                <th>Modul</th>
+                                <th>Tentor</th>
+                                <th>JP</th>
+                                <th>Presensi</th>
+                                <th>Status</th>
+                                <th>Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody id="scheduleTable"></tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modal Detail Sesi -->
+    <div id="sessionModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; padding: 1rem;">
+        <div style="background: white; border-radius: var(--radius-lg); max-width: 620px; width: 100%; max-height: 90vh; overflow-y: auto;">
+            <div style="padding: 1.5rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between;">
+                <h3 style="font-size: 1.25rem; font-weight: 600;" id="sessionModalTitle">Detail Sesi</h3>
+                <button onclick="closeSessionModal()" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--text-secondary);">
+                    <i class="bi bi-x"></i>
+                </button>
+            </div>
+            <div style="padding: 1.5rem;" id="sessionModalBody"></div>
+            <div style="padding: 1.5rem; border-top: 1px solid var(--border); display: flex; gap: 0.75rem; justify-content: flex-end;">
+                <a href="academic.html" class="btn btn-ghost"><i class="bi bi-diagram-3"></i> Kelola di Kurikulum</a>
+                <button class="btn btn-primary" onclick="closeSessionModal()">Tutup</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="../assets/js/config.js"></script>
+    <script src="../assets/js/core.js"></script>
+    <script src="../assets/js/api.js"></script>
+    <script src="../assets/js/utils.js"></script>
+    <script src="../assets/js/data.js"></script>
+    <script src="../assets/js/seed.js"></script>
+    <script src="../assets/js/sync.js"></script>
+    <script src="../assets/js/progress.js"></script>
+    <script src="../assets/js/auth.js"></script>
+    <script src="../assets/js/audit.js"></script>
+    <script src="../assets/js/notifications.js"></script>
+    <script src="../assets/js/crud-users.js"></script>
+    <script src="../assets/js/crud-courses.js"></script>
+    <script src="../assets/js/crud-enrollments.js"></script>
+    <script src="../assets/js/crud-content.js"></script>
+    <script src="../assets/js/crud-grades.js"></script>
+    <script src="../assets/js/crud-academic.js"></script>
+    <script src="../assets/js/ui.js"></script>
+    <script>
+        const MONTH_NAMES = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+        const DAY_NAMES = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+        const SESSION_STATUS_LABELS = {
+            scheduled: 'Terjadwal',
+            confirmed: 'Terkonfirmasi',
+            completed: 'Selesai',
+            rescheduled: 'Dijadwalkan Ulang',
+            cancelled: 'Dibatalkan',
+            no_show: 'Tidak Hadir'
+        };
+
+        let currentMonth = new Date();
+        currentMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
+        let selectedDate = dateKey(new Date());
+
+        function pad(value) {
+            return String(value).padStart(2, '0');
+        }
+
+        function dateKey(date) {
+            return date.getFullYear() + '-' + pad(date.getMonth() + 1) + '-' + pad(date.getDate());
+        }
+
+        function parseDateKey(value) {
+            const parts = String(value || '').split('-');
+            if (parts.length !== 3) return null;
+            return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+        }
+
+        function formatDate(value) {
+            const date = parseDateKey(value);
+            if (!date) return value || '-';
+            return DAY_NAMES[date.getDay()] + ', ' + date.getDate() + ' ' + MONTH_NAMES[date.getMonth()] + ' ' + date.getFullYear();
+        }
+
+        function formatTime(start, end) {
+            if (!start) return '-';
+            return String(start).slice(0, 5) + (end ? ' - ' + String(end).slice(0, 5) : '');
+        }
+
+        function sessionStatusBadge(status) {
+            const className = status === 'completed' ? 'badge-success'
+                : (status === 'scheduled' || status === 'confirmed') ? 'badge-primary'
+                : (status === 'cancelled' || status === 'no_show') ? 'badge-warning'
+                : 'badge';
+            return '<span class="badge ' + className + '">' + ELIPS.escapeHtml(SESSION_STATUS_LABELS[status] || status) + '</span>';
+        }
+
+        function sessionStatusColor(status) {
+            if (status === 'completed') return 'completed';
+            if (status === 'confirmed') return 'confirmed';
+            if (status === 'cancelled' || status === 'no_show') return 'cancelled';
+            return 'scheduled';
+        }
+
+        function getBranchId() {
+            const value = document.getElementById('branchFilter').value;
+            return value === 'all' || value === '' ? null : Number(value);
+        }
+
+        function getClassId() {
+            const value = document.getElementById('classFilter').value;
+            return value === 'all' || value === '' ? null : Number(value);
+        }
+
+        function classesInContext() {
+            const branchId = getBranchId();
+            return ELIPS.getClasses().filter(function (item) {
+                if (branchId !== null && Number(item.branchId) !== branchId) return false;
+                if (item.status === 'archived' || item.status === 'cancelled') return false;
+                return true;
+            });
+        }
+
+        function sessionsInContext() {
+            const classId = getClassId();
+            const classIds = {};
+            classesInContext().forEach(function (item) { classIds[item.id] = true; });
+            return ELIPS.getClassSessions().filter(function (session) {
+                if (classId !== null) return Number(session.classId) === classId;
+                return !!classIds[Number(session.classId)];
+            });
+        }
+
+        function sessionsForMonth() {
+            const year = currentMonth.getFullYear();
+            const month = currentMonth.getMonth();
+            return sessionsInContext().filter(function (session) {
+                const date = parseDateKey(session.sessionDate);
+                return date && date.getFullYear() === year && date.getMonth() === month;
+            }).sort(function (a, b) {
+                const dateCompare = String(a.sessionDate || '').localeCompare(String(b.sessionDate || ''));
+                if (dateCompare !== 0) return dateCompare;
+                return String(a.startTime || '').localeCompare(String(b.startTime || ''));
+            });
+        }
+
+        function changeBranch() {
+            fillClassFilter();
+            renderAllViews();
+        }
+
+        function fillBranchFilter() {
+            const select = document.getElementById('branchFilter');
+            const branches = ELIPS.getBranches().slice().sort(function (a, b) {
+                return String(a.name || '').localeCompare(String(b.name || ''));
+            });
+            select.innerHTML = '<option value="all">Semua Cabang</option>' + branches.map(function (branch) {
+                return '<option value="' + branch.id + '">' + ELIPS.escapeHtml(branch.name) + '</option>';
+            }).join('');
+            select.value = 'all';
+        }
+
+        function fillClassFilter() {
+            const select = document.getElementById('classFilter');
+            const classes = classesInContext().slice().sort(function (a, b) {
+                return String(a.name || '').localeCompare(String(b.name || ''));
+            });
+            select.innerHTML = '<option value="all">Semua Kelas</option>' + classes.map(function (item) {
+                return '<option value="' + item.id + '">' + ELIPS.escapeHtml(item.name) + '</option>';
+            }).join('');
+            select.value = 'all';
+        }
+
+        function renderBranchInfo() {
+            const branchId = getBranchId();
+            const classes = classesInContext();
+            const branch = branchId !== null ? ELIPS.getBranchById(branchId) : null;
+            if (branch) {
+                document.getElementById('branchInfo').innerHTML =
+                    '<div class="schedule-branch-name">' + ELIPS.escapeHtml(branch.name) + '</div>' +
+                    '<div class="schedule-branch-meta">' +
+                    '<span><i class="bi bi-geo-alt"></i> ' + ELIPS.escapeHtml(branch.city || 'Kota belum diisi') + '</span>' +
+                    '<span><i class="bi bi-person-badge"></i> ' + ELIPS.escapeHtml(branch.manager || 'Manajer belum diisi') + '</span>' +
+                    '<span><i class="bi bi-collection"></i> ' + classes.length + ' kelas</span>' +
+                    '</div>';
+            } else {
+                const activeBranches = ELIPS.getBranches().filter(function (item) { return item.status === 'active'; }).length;
+                document.getElementById('branchInfo').innerHTML =
+                    '<div class="schedule-branch-name">Semua Cabang</div>' +
+                    '<div class="schedule-branch-meta">' +
+                    '<span><i class="bi bi-building"></i> ' + activeBranches + ' cabang aktif</span>' +
+                    '<span><i class="bi bi-collection"></i> ' + classes.length + ' kelas</span>' +
+                    '</div>';
+            }
+        }
+
+        function renderStats() {
+            const monthSessions = sessionsForMonth();
+            document.getElementById('statMonthSessions').textContent = monthSessions.length;
+            document.getElementById('statCompleted').textContent = monthSessions.filter(function (s) { return s.status === 'completed'; }).length;
+            document.getElementById('statUpcoming').textContent = monthSessions.filter(function (s) {
+                return s.status === 'scheduled' || s.status === 'confirmed';
+            }).length;
+            document.getElementById('statClasses').textContent = classesInContext().filter(function (item) {
+                return item.status === 'ready' || item.status === 'ongoing' || item.status === 'open';
+            }).length;
+        }
+
+        function renderCalendar() {
+            const year = currentMonth.getFullYear();
+            const month = currentMonth.getMonth();
+            document.getElementById('monthLabel').textContent = MONTH_NAMES[month] + ' ' + year;
+
+            const firstDay = new Date(year, month, 1);
+            const offset = (firstDay.getDay() + 6) % 7;
+            const gridStart = new Date(year, month, 1 - offset);
+            const sessions = sessionsInContext();
+            const byDate = {};
+            sessions.forEach(function (session) {
+                const key = session.sessionDate;
+                if (!key) return;
+                if (!byDate[key]) byDate[key] = [];
+                byDate[key].push(session);
+            });
+            Object.keys(byDate).forEach(function (key) {
+                byDate[key].sort(function (a, b) {
+                    return String(a.startTime || '').localeCompare(String(b.startTime || ''));
+                });
+            });
+
+            const todayKey = dateKey(new Date());
+            const cells = [];
+            for (let index = 0; index < 42; index++) {
+                const date = new Date(gridStart.getFullYear(), gridStart.getMonth(), gridStart.getDate() + index);
+                const key = dateKey(date);
+                const daySessions = (byDate[key] || []).slice();
+                const chips = daySessions.slice(0, 3).map(function (session) {
+                    return '<button type="button" class="calendar-chip chip-' + sessionStatusColor(session.status) + '" onclick="event.stopPropagation(); openSessionModal(' + session.id + ')" title="' + ELIPS.escapeHtml(session.className + ' — ' + (SESSION_STATUS_LABELS[session.status] || session.status)) + '">' +
+                        '<span class="calendar-chip-time">' + ELIPS.escapeHtml(String(session.startTime || '').slice(0, 5)) + '</span>' +
+                        '<span class="calendar-chip-label">' + ELIPS.escapeHtml(session.classCode || session.className || '') + '</span>' +
+                        '</button>';
+                }).join('');
+                const more = daySessions.length > 3 ? '<div class="calendar-more">+' + (daySessions.length - 3) + ' sesi lain</div>' : '';
+                const classes = ['calendar-day'];
+                if (date.getMonth() !== month) classes.push('outside');
+                if (key === todayKey) classes.push('today');
+                if (key === selectedDate) classes.push('selected');
+                cells.push(
+                    '<div class="' + classes.join(' ') + '" onclick="selectDay(\'' + key + '\')">' +
+                    '<div class="calendar-day-header"><span class="calendar-day-number">' + date.getDate() + '</span>' +
+                    (daySessions.length ? '<span class="calendar-day-count">' + daySessions.length + '</span>' : '') +
+                    '</div>' + chips + more + '</div>'
+                );
+            }
+            document.getElementById('calendarGrid').innerHTML = cells.join('');
+        }
+
+        function selectDay(key) {
+            selectedDate = key;
+            const date = parseDateKey(key);
+            if (date && date.getMonth() !== currentMonth.getMonth()) {
+                currentMonth = new Date(date.getFullYear(), date.getMonth(), 1);
+            }
+            renderAllViews();
+        }
+
+        function sessionsOnSelectedDate() {
+            return sessionsInContext().filter(function (session) {
+                return session.sessionDate === selectedDate;
+            }).sort(function (a, b) {
+                return String(a.startTime || '').localeCompare(String(b.startTime || ''));
+            });
+        }
+
+        function renderDayPanel() {
+            const sessions = sessionsOnSelectedDate();
+            document.getElementById('selectedDateLabel').textContent = '— ' + formatDate(selectedDate);
+            const panel = document.getElementById('dayPanel');
+            if (sessions.length === 0) {
+                panel.innerHTML = '<div class="schedule-empty"><i class="bi bi-calendar-x"></i><p>Tidak ada sesi pada tanggal ini.</p></div>';
+                return;
+            }
+            panel.innerHTML = sessions.map(function (session) {
+                const classItem = ELIPS.getClassById(session.classId);
+                return '<div class="agenda-card" onclick="openSessionModal(' + session.id + ')">' +
+                    '<div class="agenda-time">' + ELIPS.escapeHtml(formatTime(session.startTime, session.endTime)) + '</div>' +
+                    '<div class="agenda-main">' +
+                    '<div class="agenda-title">' + ELIPS.escapeHtml(session.title || ('Pertemuan ' + session.sessionNumber)) + '</div>' +
+                    '<div class="agenda-meta">' + ELIPS.escapeHtml((classItem ? classItem.name : session.className || '') + (session.branchName ? ' • ' + session.branchName : '')) + '</div>' +
+                    '<div class="agenda-meta">' + ELIPS.escapeHtml(session.moduleTitle || 'Modul belum ditentukan') + ' • ' + ELIPS.escapeHtml(session.instructorName || 'Tentor belum ditetapkan') + '</div>' +
+                    '</div>' +
+                    '<div class="agenda-status">' + sessionStatusBadge(session.status) + '</div>' +
+                    '</div>';
+            }).join('');
+        }
+
+        function renderMonthSummary() {
+            const sessions = sessionsForMonth();
+            document.getElementById('monthSummaryLabel').textContent = '— ' + MONTH_NAMES[currentMonth.getMonth()] + ' ' + currentMonth.getFullYear();
+            const counts = {
+                scheduled: 0, confirmed: 0, completed: 0, rescheduled: 0, cancelled: 0, no_show: 0
+            };
+            let plannedJp = 0;
+            let actualJp = 0;
+            sessions.forEach(function (session) {
+                if (counts[session.status] !== undefined) counts[session.status]++;
+                if (['cancelled', 'no_show', 'rescheduled'].indexOf(session.status) === -1) {
+                    plannedJp += Number(session.plannedJp) || 0;
+                    actualJp += Number(session.actualJp) || 0;
+                }
+            });
+            const rows = Object.keys(counts).map(function (status) {
+                return '<div class="summary-row"><span>' + ELIPS.escapeHtml(SESSION_STATUS_LABELS[status]) + '</span><strong>' + counts[status] + '</strong></div>';
+            }).join('');
+            document.getElementById('monthSummary').innerHTML =
+                '<div class="summary-list">' + rows + '</div>' +
+                '<div class="summary-total"><span>Total JP rencana</span><strong>' + plannedJp + '</strong></div>' +
+                '<div class="summary-total"><span>Total JP aktual</span><strong>' + actualJp + '</strong></div>';
+        }
+
+        function renderScheduleTable() {
+            const status = document.getElementById('statusFilter').value;
+            const tbody = document.getElementById('scheduleTable');
+            const sessions = sessionsForMonth().filter(function (session) {
+                return status === 'all' || session.status === status;
+            });
+
+            if (sessions.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="10" style="text-align: center; color: var(--text-secondary);">Belum ada sesi pada bulan ini.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = sessions.map(function (session) {
+                const present = (Number(session.presentCount) || 0) + (Number(session.lateCount) || 0);
+                const attended = present + ' / ' + (Number(session.attendanceCount) || 0);
+                return '<tr>' +
+                    '<td><div class="table-course-title" style="font-size: 0.875rem;">' + ELIPS.escapeHtml(formatDate(session.sessionDate)) + '</div><div class="table-course-meta">Pertemuan ' + (Number(session.sessionNumber) || '-') + '</div></td>' +
+                    '<td>' + ELIPS.escapeHtml(formatTime(session.startTime, session.endTime)) + '</td>' +
+                    '<td><div class="table-course-title" style="font-size: 0.875rem;">' + ELIPS.escapeHtml(session.className || '-') + '</div><div class="table-course-meta">' + ELIPS.escapeHtml(session.classCode || '') + '</div></td>' +
+                    '<td>' + ELIPS.escapeHtml(session.branchName || 'Tanpa cabang') + '</td>' +
+                    '<td>' + ELIPS.escapeHtml(session.moduleTitle || '-') + '</td>' +
+                    '<td>' + ELIPS.escapeHtml(session.instructorName || '-') + '</td>' +
+                    '<td>' + (Number(session.plannedJp) || 0) + ' / ' + (Number(session.actualJp) || 0) + '</td>' +
+                    '<td>' + attended + '</td>' +
+                    '<td>' + sessionStatusBadge(session.status) + '</td>' +
+                    '<td><button class="btn btn-ghost" style="padding: 0.375rem 0.625rem; font-size: 0.8125rem;" title="Lihat detail" onclick="openSessionModal(' + session.id + ')"><i class="bi bi-eye"></i></button></td>' +
+                    '</tr>';
+            }).join('');
+        }
+
+        function renderAllViews() {
+            renderBranchInfo();
+            renderStats();
+            renderCalendar();
+            renderDayPanel();
+            renderMonthSummary();
+            renderScheduleTable();
+        }
+
+        function shiftMonth(delta) {
+            currentMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + delta, 1);
+            selectedDate = dateKey(currentMonth);
+            renderAllViews();
+        }
+
+        function goToday() {
+            const today = new Date();
+            currentMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+            selectedDate = dateKey(today);
+            renderAllViews();
+        }
+
+        function openSessionModal(id) {
+            const session = ELIPS.getClassSessionById(id);
+            if (!session) return;
+            const classItem = ELIPS.getClassById(session.classId);
+            const attendanceRows = [
+                ['Hadir', session.presentCount, 'badge-success'],
+                ['Terlambat', session.lateCount, 'badge-warning'],
+                ['Izin', session.permissionCount, 'badge-warning'],
+                ['Sakit', session.sickCount, 'badge-warning'],
+                ['Alpa', session.absentCount, 'badge'],
+                ['Dispensasi', session.excusedCount, 'badge']
+            ].map(function (row) {
+                return '<div class="detail-stat"><span>' + row[0] + '</span><strong>' + (Number(row[1]) || 0) + '</strong></div>';
+            }).join('');
+
+            document.getElementById('sessionModalTitle').textContent = session.title || ('Pertemuan ' + session.sessionNumber);
+            document.getElementById('sessionModalBody').innerHTML =
+                '<div class="detail-grid">' +
+                '<div class="detail-item"><span>Kelas</span><strong>' + ELIPS.escapeHtml(classItem ? classItem.name : session.className || '-') + '</strong></div>' +
+                '<div class="detail-item"><span>Kode Kelas</span><strong>' + ELIPS.escapeHtml(session.classCode || '-') + '</strong></div>' +
+                '<div class="detail-item"><span>Cabang</span><strong>' + ELIPS.escapeHtml(session.branchName || 'Tanpa cabang') + (session.branchCity ? ' — ' + ELIPS.escapeHtml(session.branchCity) : '') + '</strong></div>' +
+                '<div class="detail-item"><span>Kursus</span><strong>' + ELIPS.escapeHtml(session.courseTitle || '-') + '</strong></div>' +
+                '<div class="detail-item"><span>Tanggal</span><strong>' + ELIPS.escapeHtml(formatDate(session.sessionDate)) + '</strong></div>' +
+                '<div class="detail-item"><span>Waktu</span><strong>' + ELIPS.escapeHtml(formatTime(session.startTime, session.endTime)) + '</strong></div>' +
+                '<div class="detail-item"><span>Modul</span><strong>' + ELIPS.escapeHtml(session.moduleTitle || '-') + '</strong></div>' +
+                '<div class="detail-item"><span>Tentor</span><strong>' + ELIPS.escapeHtml(session.instructorName || '-') + '</strong></div>' +
+                '<div class="detail-item"><span>JP Rencana / Aktual</span><strong>' + (Number(session.plannedJp) || 0) + ' / ' + (Number(session.actualJp) || 0) + '</strong></div>' +
+                '<div class="detail-item"><span>Status</span><strong>' + sessionStatusBadge(session.status) + '</strong></div>' +
+                '<div class="detail-item"><span>Lokasi</span><strong>' + ELIPS.escapeHtml((session.location || '-') + (session.room ? ' • ' + session.room : '')) + '</strong></div>' +
+                '<div class="detail-item"><span>Presensi tercatat</span><strong>' + (Number(session.attendanceCount) || 0) + ' peserta</strong></div>' +
+                '</div>' +
+                '<div class="detail-attendance">' + attendanceRows + '</div>' +
+                (session.notes ? '<div class="detail-note"><strong>Catatan</strong><p>' + ELIPS.escapeHtml(session.notes) + '</p></div>' : '');
+            document.getElementById('sessionModal').style.display = 'flex';
+        }
+
+        function closeSessionModal() {
+            document.getElementById('sessionModal').style.display = 'none';
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            if (!ELIPS.requireRole('admin')) return;
+            fillBranchFilter();
+            fillClassFilter();
+            renderAllViews();
+        });
+    </script>
+</body>
+</html>

@@ -60,6 +60,10 @@
                     <i class="bi bi-diagram-3"></i>
                     <span>Kurikulum &amp; Kelas</span>
                 </a>
+                <a href="schedule.html" class="dashboard-nav-link">
+                    <i class="bi bi-calendar-week"></i>
+                    <span>Kalender &amp; Jadwal</span>
+                </a>
                 <a href="enrollment.html" class="dashboard-nav-link">
                     <i class="bi bi-person-check"></i>
                     <span>Enrolment</span>
@@ -122,6 +126,35 @@
                             Simpan Pengaturan
                         </button>
                     </div>
+                </div>
+            </div>
+
+            <div class="dashboard-section">
+                <div class="dashboard-section-header" style="flex-wrap: wrap; gap: 1rem;">
+                    <div>
+                        <h2 class="dashboard-section-title">Manajemen Cabang</h2>
+                        <p style="margin: 0.25rem 0 0; font-size: 0.875rem; color: var(--text-secondary);">Cabang dipakai sebagai konteks kelas, jadwal, dan kalender akademik.</p>
+                    </div>
+                    <button class="btn btn-primary" onclick="openBranchModal()">
+                        <i class="bi bi-plus-lg"></i>
+                        Tambah Cabang
+                    </button>
+                </div>
+                <div class="dashboard-section-body" style="padding: 0; overflow-x: auto;">
+                    <table class="dashboard-table">
+                        <thead>
+                            <tr>
+                                <th>Cabang</th>
+                                <th>Kota</th>
+                                <th>Manajer</th>
+                                <th>Telepon</th>
+                                <th>Kelas</th>
+                                <th>Status</th>
+                                <th>Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody id="branchTable"></tbody>
+                    </table>
                 </div>
             </div>
 
@@ -197,6 +230,64 @@
         </main>
     </div>
 
+    <!-- Modal Cabang -->
+    <div id="branchModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; padding: 1rem;">
+        <div style="background: white; border-radius: var(--radius-lg); max-width: 600px; width: 100%; max-height: 90vh; overflow-y: auto;">
+            <div style="padding: 1.5rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between;">
+                <h3 style="font-size: 1.25rem; font-weight: 600;" id="branchModalTitle">Tambah Cabang</h3>
+                <button onclick="closeBranchModal()" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--text-secondary);">
+                    <i class="bi bi-x"></i>
+                </button>
+            </div>
+            <div style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem;">
+                <input type="hidden" id="branchId">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <div class="form-group">
+                        <label class="form-label">Kode Cabang</label>
+                        <input type="text" id="branchCode" class="form-input" placeholder="CBG-JKT (otomatis bila kosong)">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Status</label>
+                        <select id="branchStatus" class="form-input">
+                            <option value="active">Aktif</option>
+                            <option value="inactive">Nonaktif</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Nama Cabang *</label>
+                    <input type="text" id="branchName" class="form-input" placeholder="Cabang Jakarta">
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <div class="form-group">
+                        <label class="form-label">Kota</label>
+                        <input type="text" id="branchCity" class="form-input" placeholder="Jakarta">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Telepon</label>
+                        <input type="text" id="branchPhone" class="form-input" placeholder="021-5550101">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Alamat</label>
+                    <input type="text" id="branchAddress" class="form-input" placeholder="Jl. Jenderal Sudirman No. 21">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Manajer Cabang</label>
+                    <input type="text" id="branchManager" class="form-input" placeholder="Nama penanggung jawab">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Catatan</label>
+                    <textarea id="branchNotes" class="form-input" rows="2"></textarea>
+                </div>
+            </div>
+            <div style="padding: 1.5rem; border-top: 1px solid var(--border); display: flex; gap: 0.75rem; justify-content: flex-end;">
+                <button class="btn btn-ghost" onclick="closeBranchModal()">Batal</button>
+                <button class="btn btn-primary" onclick="saveBranch()">Simpan</button>
+            </div>
+        </div>
+    </div>
+
     <script src="../assets/js/config.js"></script>
     <script src="../assets/js/core.js"></script>
     <script src="../assets/js/api.js"></script>
@@ -213,10 +304,130 @@
     <script src="../assets/js/crud-enrollments.js"></script>
     <script src="../assets/js/crud-content.js"></script>
     <script src="../assets/js/crud-grades.js"></script>
+    <script src="../assets/js/crud-academic.js"></script>
     <script src="../assets/js/ui.js"></script>
     <script>
+        let editingBranchId = null;
+
+        function currentActorId() {
+            const user = ELIPS.getCurrentUser();
+            return user ? user.id : null;
+        }
+
+        function branchClassCount(id) {
+            return ELIPS.getClasses().filter(function (c) {
+                return Number(c.branchId) === Number(id);
+            }).length;
+        }
+
+        function branchStatusBadge(status) {
+            if (status === 'active') return '<span class="badge badge-success">Aktif</span>';
+            return '<span class="badge" style="background:#e5e7eb;color:#374151;">Nonaktif</span>';
+        }
+
+        function renderBranches() {
+            const tbody = document.getElementById('branchTable');
+            const branches = ELIPS.getBranches().slice().sort(function (a, b) {
+                return Number(a.id) - Number(b.id);
+            });
+
+            if (branches.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--text-secondary);">Belum ada cabang.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = branches.map(function (item) {
+                const nextStatus = item.status === 'active' ? 'inactive' : 'active';
+                const statusLabel = nextStatus === 'active' ? 'Aktifkan' : 'Nonaktifkan';
+                const statusIcon = nextStatus === 'active' ? 'bi-toggle-on' : 'bi-toggle-off';
+                return '<tr>' +
+                    '<td><div class="table-course-title">' + ELIPS.escapeHtml(item.name) + '</div><div class="table-course-meta">' + ELIPS.escapeHtml(item.code) + '</div></td>' +
+                    '<td>' + ELIPS.escapeHtml(item.city || '-') + '</td>' +
+                    '<td>' + ELIPS.escapeHtml(item.manager || '-') + '</td>' +
+                    '<td>' + ELIPS.escapeHtml(item.phone || '-') + '</td>' +
+                    '<td>' + branchClassCount(item.id) + '</td>' +
+                    '<td>' + branchStatusBadge(item.status) + '</td>' +
+                    '<td><div style="display: flex; gap: 0.25rem; flex-wrap: wrap;">' +
+                    '  <button class="btn btn-ghost" style="padding: 0.375rem 0.625rem; font-size: 0.8125rem;" title="Edit cabang" onclick="openBranchModal(' + item.id + ')"><i class="bi bi-pencil"></i></button>' +
+                    '  <button class="btn btn-ghost" style="padding: 0.375rem 0.625rem; font-size: 0.8125rem;" title="' + statusLabel + '" onclick="changeBranchStatus(' + item.id + ', \'' + nextStatus + '\')"><i class="bi ' + statusIcon + '"></i></button>' +
+                    '  <button class="btn btn-ghost" style="padding: 0.375rem 0.625rem; font-size: 0.8125rem; color: var(--danger);" title="Hapus cabang" onclick="removeBranch(' + item.id + ')"><i class="bi bi-trash"></i></button>' +
+                    '</div></td>' +
+                    '</tr>';
+            }).join('');
+        }
+
+        function openBranchModal(id) {
+            editingBranchId = id ? Number(id) : null;
+            const item = id ? ELIPS.getBranchById(id) : null;
+            document.getElementById('branchModalTitle').textContent = item ? 'Edit Cabang' : 'Tambah Cabang';
+            document.getElementById('branchId').value = item ? item.id : '';
+            document.getElementById('branchCode').value = item ? item.code : '';
+            document.getElementById('branchName').value = item ? item.name : '';
+            document.getElementById('branchCity').value = item ? item.city : '';
+            document.getElementById('branchAddress').value = item ? item.address : '';
+            document.getElementById('branchPhone').value = item ? item.phone : '';
+            document.getElementById('branchManager').value = item ? item.manager : '';
+            document.getElementById('branchStatus').value = item ? item.status : 'active';
+            document.getElementById('branchNotes').value = item ? item.notes : '';
+            document.getElementById('branchModal').style.display = 'flex';
+        }
+
+        function closeBranchModal() {
+            document.getElementById('branchModal').style.display = 'none';
+        }
+
+        function saveBranch() {
+            const data = {
+                name: document.getElementById('branchName').value.trim(),
+                code: document.getElementById('branchCode').value.trim(),
+                city: document.getElementById('branchCity').value.trim(),
+                address: document.getElementById('branchAddress').value.trim(),
+                phone: document.getElementById('branchPhone').value.trim(),
+                manager: document.getElementById('branchManager').value.trim(),
+                status: document.getElementById('branchStatus').value,
+                notes: document.getElementById('branchNotes').value.trim(),
+                actorId: currentActorId()
+            };
+            if (!data.name) {
+                alert('Nama cabang wajib diisi.');
+                return;
+            }
+            const result = editingBranchId
+                ? ELIPS.updateBranch(editingBranchId, data)
+                : ELIPS.createBranch(data);
+            if (!result.ok) {
+                alert(result.message);
+                return;
+            }
+            closeBranchModal();
+            renderBranches();
+            ELIPS.toast(result.message);
+        }
+
+        function changeBranchStatus(id, status) {
+            const result = ELIPS.setBranchStatus(id, status);
+            if (!result.ok) {
+                alert(result.message);
+                return;
+            }
+            renderBranches();
+            ELIPS.toast(result.message);
+        }
+
+        function removeBranch(id) {
+            if (!confirm('Hapus cabang ini? Cabang yang masih dipakai kelas tidak dapat dihapus.')) return;
+            const result = ELIPS.deleteBranch(id);
+            if (!result.ok) {
+                alert(result.message);
+                return;
+            }
+            renderBranches();
+            ELIPS.toast(result.message);
+        }
+
         document.addEventListener('DOMContentLoaded', function () {
             ELIPS.requireRole('admin');
+            renderBranches();
         });
     </script>
 </body>

@@ -15,6 +15,7 @@
 
     const KEYS = {
         users: 'elips_users',
+        branches: 'elips_branches',
         categories: 'elips_categories',
         courses: 'elips_courses',
         curriculumVersions: 'elips_curriculumVersions',

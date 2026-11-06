@@ -1,8 +1,8 @@
 # Log Pengembangan ELIPS LMS
 
 **Versi dokumen:** 4.0  
-**Terakhir diperbarui:** 2026-11-05  
-**Status proyek:** Dual-mode — PHP 8/MySQL 8 + fallback `localStorage`; v4.0 Phase 1–3 (kurikulum, kelas/angkatan, enrollment berbasis kelas, jadwal & presensi offline)  
+**Terakhir diperbarui:** 2026-11-06
+**Status proyek:** Dual-mode — PHP 8/MySQL 8 + fallback `localStorage`; v4.0 Phase 1–3 (kurikulum, kelas/angkatan, enrollment berbasis kelas, jadwal & presensi offline) plus cabang dan kalender jadwal Admin
 **Dokumen terkait:** `prd.md`, `erd.md`, `ELIPS-LMS-PRD-v4.0.md`
 
 ---
@@ -65,6 +65,7 @@ ELIPS/
 │   ├── dashboard.html
 │   ├── courses.html
 │   ├── academic.html
+│   ├── schedule.html
 │   ├── users.html
 │   ├── enrollment.html
 │   ├── certificates.html
@@ -122,7 +123,7 @@ config → core → api → utils → data → seed → sync → progress → au
 | `core.js` | Namespace `window.ELIPS`, daftar key storage, helper baca/tulis, `nextId`, objek hasil `{ ok, message, data }`, validasi dasar, password demo | `ELIPS.read`, `ELIPS.write`, `ELIPS.nextId`, `ELIPS.DEFAULT_PASSWORD`, `ELIPS._` |
 | `api.js` | Jembatan dual-mode: bootstrap snapshot, cache sinkron, panggilan aksi tulis, fallback lokal | `ELIPS.api.enabled`, `ELIPS.api.call`, `ELIPS.api.refresh` |
 | `utils.js` | Konversi nilai ke huruf, nomor sertifikat, escape HTML, sanitasi HTML materi, format tanggal, toast | `gradeLetter`, `generateCertificateNumber`, `escapeHtml`, `sanitizeHtml`, `formatDate`, `toast` |
-| `data.js` | Getter/setter seluruh koleksi data; tidak berisi aturan bisnis | `getUsers`, `getCourses`, `getCurriculumVersions`, `getClasses`, `getClassInstructorHistories`, `getEnrollments`, `getClassSessions`, `getSessionsByClass`, `getAttendances`, `getSessionAttendances`, `getAttendanceCorrections`, `getModules`, `getLessons`, `getGrades`, `getCertificates`, `getCompletedLessons`, `getPublishedCertificatesByStudent` |
+| `data.js` | Getter/setter seluruh koleksi data; tidak berisi aturan bisnis | `getUsers`, `getBranches`, `getCourses`, `getCurriculumVersions`, `getClasses`, `getClassInstructorHistories`, `getEnrollments`, `getClassSessions`, `getSessionsByClass`, `getAttendances`, `getSessionAttendances`, `getAttendanceCorrections`, `getModules`, `getLessons`, `getGrades`, `getCertificates`, `getCompletedLessons`, `getPublishedCertificatesByStudent` |
 | `seed.js` | Data demo awal (termasuk sesi & presensi) dan migrasi/normalisasi data lama; dilewati pada mode server | dijalankan otomatis saat modul dimuat (kecuali mode server) |
 | `sync.js` | Sinkronisasi data turunan: nama instruktur, kepemilikan konten, counter modul/materi, pelepasan kursus | `syncCourseCounters` dan helper internal `syncAllContentOwners`, `releaseInstructorCourses` |
 | `progress.js` | Struktur kursus, progres belajar, overview siswa dan instruktur | `getCourseStructure`, `getCourseProgress`, `isLessonUnlocked`, `getStudentCourseOverview`, `getInstructorCourses`, `getInstructorSummary` |
@@ -133,7 +134,7 @@ config → core → api → utils → data → seed → sync → progress → au
 | `crud-courses.js` | CRUD kursus dan aturan Draft/Publish | `createCourse`, `updateCourse`, `deleteCourse`, `setCourseStatus`, `toggleCourseStatus` |
 | `crud-enrollments.js` | CRUD pendaftaran peserta ke kelas | `assignStudentToCourses`, `assignStudentsToClass`, `setEnrollmentClassStatus`, `setEnrollmentStatus`, `deleteEnrollment` |
 | `crud-content.js` | CRUD modul dan materi dengan validasi kepemilikan dan versi kurikulum | `createModule`, `updateModule`, `deleteModule`, `createLesson`, `updateLesson`, `deleteLesson` |
-| `crud-academic.js` | CRUD versi kurikulum, kelas/angkatan, histori tentor, roster, validasi kuota, jadwal sesi (tunggal/berulang), presensi, koreksi beralasan, dan rekap kehadiran | `createCurriculumVersion`, `updateCurriculumVersion`, `publishCurriculumVersion`, `cloneCurriculumVersion`, `retireCurriculumVersion`, `deleteCurriculumVersion`, `getCurriculumDetail`, `createClass`, `updateClass`, `setClassStatus`, `assignClassInstructor`, `deleteClass`, `assignStudentsToClass`, `setEnrollmentClassStatus`, `getAttendancePolicy`, `createSession`, `createBulkSessions`, `updateSession`, `setSessionStatus`, `deleteSession`, `getSessionDetail`, `saveAttendanceBulk`, `correctAttendance`, `getAttendanceRecap`, `getMyAttendanceRecap` |
+| `crud-academic.js` | CRUD cabang, versi kurikulum, kelas/angkatan dengan penugasan cabang, histori tentor, roster, validasi kuota, jadwal sesi (tunggal/berulang), presensi, koreksi beralasan, dan rekap kehadiran | `createBranch`, `updateBranch`, `setBranchStatus`, `deleteBranch`, `createCurriculumVersion`, `updateCurriculumVersion`, `publishCurriculumVersion`, `cloneCurriculumVersion`, `retireCurriculumVersion`, `deleteCurriculumVersion`, `getCurriculumDetail`, `createClass`, `updateClass`, `setClassStatus`, `assignClassInstructor`, `deleteClass`, `assignStudentsToClass`, `setEnrollmentClassStatus`, `getAttendancePolicy`, `createSession`, `createBulkSessions`, `updateSession`, `setSessionStatus`, `deleteSession`, `getSessionDetail`, `saveAttendanceBulk`, `correctAttendance`, `getAttendanceRecap`, `getMyAttendanceRecap` |
 | `crud-grades.js` | Input nilai dan alur sertifikat Draft → Publish | `saveGrade`, `createDraftCertificateForEnrollment`, `approveCertificate` |
 | `ui.js` | Perilaku UI bersama: navigasi mobile, sidebar dashboard, katalog beranda, login (email + password), logout, style toast | dijalankan pada `DOMContentLoaded` |
 
@@ -148,6 +149,52 @@ Prinsip yang dipakai:
 ---
 
 ## 3. Riwayat Perubahan
+
+### v4.0 - 2026-11-06 - Cabang, pengaturan cabang, dan kalender jadwal Admin
+
+**Tujuan:** menambahkan cabang sebagai konteks penyelenggaraan kelas dan jadwal, lengkap dengan pengelolaan cabang di halaman pengaturan Admin serta halaman kalender/jadwal yang dapat difilter per cabang, tanpa mengubah perilaku akademik yang sudah ada.
+
+Perubahan backend:
+
+- `api/schema.sql`:
+  - tabel baru `branches` (`code` unik, nama, alamat, kota, telepon, manajer, status, catatan);
+  - kolom nullable `classes.branch_id` dengan index `idx_classes_branch` dan FK `fk_classes_branch` (`ON DELETE SET NULL`) agar data lama tetap kompatibel.
+- `api/helpers.php`: serializer cabang; field cabang pada kelas dan sesi; query sesi mem-JOIN kelas/cabang sehingga snapshot sesi memuat `branchId`, `branchCode`, `branchName`, dan `branchCity`.
+- `api/actions.php`: aksi `branch.create`, `branch.update`, `branch.status`, dan `branch.delete`; `class.create`/`class.update` memvalidasi cabang harus ada dan berstatus `active`, lalu menyimpan `branch_id`. Total aksi API menjadi **53**.
+- `api/snapshot.php`: koleksi `branches`; snapshot kelas memuat field cabang hasil JOIN.
+- `api/install.php`: migrasi aditif untuk database lama (`branch_id`, index, FK) dan seed 3 cabang (`CBG-JKT` Jakarta, `CBG-BDG` Bandung, `CBG-SBY` Surabaya); kelas migrasi memakai cabang Jakarta.
+
+Perubahan client:
+
+- `assets/js/core.js`: key `elips_branches`.
+- `assets/js/data.js`: accessor cabang dan ekspor koleksi.
+- `assets/js/seed.js`: seed cabang, normalisasi `branchId` kelas lama menjadi `null`, serta propagasi field cabang ke kelas dan sesi.
+- `assets/js/crud-academic.js`: `createBranch`, `updateBranch`, `setBranchStatus`, `deleteBranch`, validasi/penyimpanan cabang pada kelas, dan dekorasi cabang pada sesi.
+- `assets/js/audit.js`: label entitas `branch: 'Cabang'`.
+- `admin/settings.html`: tabel pengelolaan cabang beserta modal tambah/ubah/status/hapus.
+- `admin/academic.html`: filter cabang, kolom cabang pada tabel kelas, dan pilihan cabang pada modal kelas.
+- `admin/schedule.html`: halaman kalender/jadwal Admin dengan filter cabang dan kelas, kalender bulanan, agenda harian, ringkasan bulan, tabel jadwal, serta modal detail sesi.
+- Tautan navigasi **Kalender & Jadwal** ditambahkan ke seluruh halaman Admin.
+
+Aturan bisnis utama:
+
+- Kode cabang unik; kode kosong dibuat otomatis dengan prefiks `CBG-`.
+- Cabang `inactive` tidak dapat dipilih saat membuat atau mengubah kelas.
+- Penghapusan cabang ditolak aplikasi bila masih dirujuk kelas; di level database FK memakai `SET NULL`.
+- Cabang opsional pada kelas lama; data v3 tanpa cabang tetap valid.
+- Kalender hanya membaca data sesi yang sudah ada dan mengikuti filter cabang/kelas; perubahan jadwal tetap dilakukan dari halaman akademik.
+
+Pengujian:
+
+- `php api/install.php --fresh` berhasil dengan 3 cabang dan kelas bercabang Jakarta.
+- `php -l` lulus untuk seluruh file PHP yang berubah.
+- `api-v4.js` 39/39 dan `api-v4-sessions.js` 37/37 setelah reset seed.
+- `api-v4-branches.js` 17/17 dan `local-v4-branches.js` 18/18.
+- `local-v4.js` 36/36 dan `local-v4-sessions.js` 47/47.
+- `test-branch-pages.js` lulus untuk pengaturan cabang, akademik, dan halaman kalender.
+- Regresi lama tetap lulus: `test-academic-page.js`, `test-render.js`, `test-instructor.js`, dan `test-server-mode.js` 18/18.
+
+---
 
 ### v4.0 - 2026-11-05 - Phase 3: jadwal pertemuan dan presensi offline
 
@@ -577,7 +624,7 @@ Perubahan sentralisasi:
 
 ### 5.1 MySQL (mode server)
 
-Tabel: `users`, `categories`, `courses`, `curriculum_versions`, `classes`, `class_instructor_histories`, `modules`, `lessons`, `enrollments`, `class_sessions`, `attendances`, `attendance_corrections`, `grades`, `certificates`, `completed_lessons`, `audit_logs`, dan `notifications` (17 tabel). Detail kolom, relasi, dan foreign key ada di `erd.md` §16. Sesi login disimpan di sesi PHP native, bukan tabel database.
+Tabel: `users`, `categories`, `branches`, `courses`, `curriculum_versions`, `classes`, `class_instructor_histories`, `modules`, `lessons`, `enrollments`, `class_sessions`, `attendances`, `attendance_corrections`, `grades`, `certificates`, `completed_lessons`, `audit_logs`, dan `notifications` (18 tabel). Detail kolom, relasi, dan foreign key ada di `erd.md` §16. Sesi login disimpan di sesi PHP native, bukan tabel database.
 
 ### 5.2 `localStorage` (mode fallback)
 
@@ -585,6 +632,7 @@ Tabel: `users`, `categories`, `courses`, `curriculum_versions`, `classes`, `clas
 |---|---|
 | `elips_users` | Pengguna: admin, instruktur, peserta |
 | `elips_categories` | Kategori kursus |
+| `elips_branches` | Cabang/unit penyelenggara (kode, kota, manajer, status) |
 | `elips_courses` | Kursus, instruktur pengampu, status, counter modul/materi |
 | `elips_curriculumVersions` | Versi kurikulum per kursus (draft/published/locked/retired) |
 | `elips_classes` | Kelas/angkatan, versi terkunci, tentor, kuota, periode |
@@ -620,11 +668,11 @@ Akun lama tanpa password otomatis dimigrasikan ke password demo `elips123` saat 
 
 ## 6. Hasil Pengujian Terakhir
 
-Pengujian dijalankan setelah backend PHP/MySQL, client dual-mode (v3.0), dan increment v4.0 Phase 1–3:
+Pengujian dijalankan setelah backend PHP/MySQL, client dual-mode (v3.0), increment v4.0 Phase 1–3, dan penambahan cabang/kalender jadwal:
 
 | Pemeriksaan | Hasil |
 |---|---|
-| Syntax 26 HTML + 18 JS + 7 PHP | ✅ Lulus |
+| Syntax 27 HTML + 18 JS + 7 PHP | ✅ Lulus |
 | Guard sesi, password, sanitasi (`test-p0`) | ✅ Lulus |
 | Notifikasi email (`test-notifications`) | ✅ Lulus |
 | Audit trail (`test-audit`) | ✅ Lulus |
@@ -641,9 +689,12 @@ Pengujian dijalankan setelah backend PHP/MySQL, client dual-mode (v3.0), dan inc
 | Integrasi API PHP/MySQL (55 pemeriksaan) | ✅ Lulus |
 | API v4 Phase 1–2 (`api-v4`) | ✅ 39/39 |
 | API v4 Phase 3 (`api-v4-sessions`) | ✅ 37/37 |
+| API cabang (`api-v4-branches`) | ✅ 17/17 |
 | Mode lokal v4 Phase 1–2 (`local-v4`) | ✅ 36/36 |
 | Mode lokal v4 Phase 3 (`local-v4-sessions`) | ✅ 47/47 |
+| Mode lokal cabang (`local-v4-branches`) | ✅ 18/18 |
 | UI akademik admin (`test-academic-page`) | ✅ Lulus |
+| UI cabang & kalender admin (`test-branch-pages`) | ✅ Lulus |
 | UI jadwal/presensi lokal (`test-sessions-page`) | ✅ 47/47 |
 | UI jadwal/presensi server (`test-sessions-server`) | ✅ 20/20 |
 | Smoke test server-mode JSDOM (18 pemeriksaan) | ✅ Lulus |
@@ -680,6 +731,10 @@ Catatan penting yang diuji:
 - Presensi unik per sesi + enrollment; koreksi tanpa alasan ditolak, koreksi beralasan menghasilkan baris audit.
 - Rekap kehadiran memakai JP hadir ÷ JP wajib dan mengabaikan sesi `cancelled`/`no_show`/`rescheduled`.
 - Peserta hanya dapat membaca rekap miliknya; akses lintas peserta ditolak server.
+- Cabang dengan kode duplikat ditolak; kode kosong dibuat otomatis.
+- Kelas tidak dapat diarahkan ke cabang `inactive`; penghapusan cabang yang masih dipakai kelas ditolak.
+- Snapshot kelas dan sesi memuat field cabang yang konsisten pada mode server dan lokal.
+- Halaman kalender Admin menampilkan sesi sesuai filter cabang/kelas dan berpindah bulan tanpa kehilangan ringkasan.
 
 ---
 

@@ -328,6 +328,175 @@
         return success('Detail kurikulum dimuat.', Object.assign({}, version, { modules: modules }));
     }
 
+    // ---------- Branches / cabang ----------
+
+    function generateBranchCode(name) {
+        const clean = String(name || '').replace(/[^a-zA-Z0-9]+/g, '').toUpperCase().slice(0, 4) || 'CBG';
+        const base = 'CBG-' + clean;
+        let code = base;
+        let suffix = 2;
+        while (ELIPS.getBranches().some(function (b) { return b.code === code; })) {
+            code = base + '-' + suffix++;
+        }
+        return code;
+    }
+
+    function createBranch(data) {
+        if (ELIPS.api && ELIPS.api.enabled) return ELIPS.api.call('branch.create', data || {});
+        data = data || {};
+        const name = String(data.name || '').trim();
+        if (!name) return failure('Nama cabang wajib diisi.');
+
+        const code = String(data.code || '').trim() || generateBranchCode(name);
+        if (ELIPS.getBranches().some(function (b) { return b.code === code; })) {
+            return failure('Kode cabang sudah dipakai.');
+        }
+
+        const status = data.status === 'inactive' ? 'inactive' : 'active';
+        const branches = ELIPS.getBranches();
+        const item = {
+            id: ELIPS.nextId(branches),
+            code: code,
+            name: name,
+            address: String(data.address || '').trim(),
+            city: String(data.city || '').trim(),
+            phone: String(data.phone || '').trim(),
+            manager: String(data.manager || '').trim(),
+            status: status,
+            notes: String(data.notes || '').trim(),
+            createdAt: new Date().toISOString(),
+            updatedAt: null
+        };
+        branches.push(item);
+        ELIPS.setBranches(branches);
+
+        recordAudit({
+            action: 'create',
+            entity: 'branch',
+            entityId: item.id,
+            entityLabel: item.name,
+            actorId: data.actorId,
+            detail: 'Membuat cabang "' + item.name + '" (' + item.code + ') di ' + (item.city || 'lokasi belum diisi') + '.'
+        });
+        return success('Cabang berhasil dibuat.', item);
+    }
+
+    function updateBranch(id, data) {
+        if (ELIPS.api && ELIPS.api.enabled) return ELIPS.api.call('branch.update', { id: id, data: data || {} });
+        data = data || {};
+        const branches = ELIPS.getBranches();
+        const item = branches.find(function (b) { return b.id === Number(id); });
+        if (!item) return failure('Cabang tidak ditemukan.');
+
+        const name = data.name !== undefined ? String(data.name).trim() : item.name;
+        if (!name) return failure('Nama cabang wajib diisi.');
+
+        const code = data.code !== undefined ? String(data.code).trim() : item.code;
+        if (!code) return failure('Kode cabang wajib diisi.');
+        if (branches.some(function (b) { return b.code === code && b.id !== item.id; })) {
+            return failure('Kode cabang sudah dipakai.');
+        }
+
+        let status = item.status;
+        if (data.status !== undefined) {
+            if (['active', 'inactive'].indexOf(data.status) === -1) {
+                return failure('Status cabang tidak valid.');
+            }
+            status = data.status;
+        }
+
+        item.code = code;
+        item.name = name;
+        if (data.address !== undefined) item.address = String(data.address).trim();
+        if (data.city !== undefined) item.city = String(data.city).trim();
+        if (data.phone !== undefined) item.phone = String(data.phone).trim();
+        if (data.manager !== undefined) item.manager = String(data.manager).trim();
+        item.status = status;
+        if (data.notes !== undefined) item.notes = String(data.notes).trim();
+        item.updatedAt = new Date().toISOString();
+        ELIPS.setBranches(branches);
+
+        // Nama/kode cabang tersimpan denormalisasi pada kelas dan sesi.
+        const classes = ELIPS.getClasses();
+        let classesChanged = false;
+        classes.forEach(function (c) {
+            if (Number(c.branchId) === item.id) {
+                c.branchCode = item.code;
+                c.branchName = item.name;
+                c.branchCity = item.city;
+                classesChanged = true;
+            }
+        });
+        if (classesChanged) ELIPS.setClasses(classes);
+        const sessions = ELIPS.getClassSessions();
+        let sessionsChanged = false;
+        sessions.forEach(function (s) {
+            if (Number(s.branchId) === item.id) {
+                s.branchCode = item.code;
+                s.branchName = item.name;
+                s.branchCity = item.city;
+                sessionsChanged = true;
+            }
+        });
+        if (sessionsChanged) ELIPS.setClassSessions(sessions);
+
+        recordAudit({
+            action: 'update',
+            entity: 'branch',
+            entityId: item.id,
+            entityLabel: item.name,
+            actorId: data.actorId,
+            detail: 'Memperbarui cabang "' + item.name + '" (' + item.code + ').'
+        });
+        return success('Cabang berhasil diperbarui.', item);
+    }
+
+    function setBranchStatus(id, status) {
+        if (ELIPS.api && ELIPS.api.enabled) return ELIPS.api.call('branch.status', { id: id, status: status });
+        if (['active', 'inactive'].indexOf(status) === -1) return failure('Status cabang tidak valid.');
+        const branches = ELIPS.getBranches();
+        const item = branches.find(function (b) { return b.id === Number(id); });
+        if (!item) return failure('Cabang tidak ditemukan.');
+
+        const previous = item.status;
+        item.status = status;
+        item.updatedAt = new Date().toISOString();
+        ELIPS.setBranches(branches);
+
+        recordAudit({
+            action: 'status',
+            entity: 'branch',
+            entityId: item.id,
+            entityLabel: item.name,
+            detail: 'Mengubah status cabang "' + item.name + '" dari ' + previous + ' menjadi ' + status + '.'
+        });
+        return success('Status cabang diperbarui menjadi ' + (status === 'active' ? 'aktif' : 'nonaktif') + '.', item);
+    }
+
+    function deleteBranch(id) {
+        if (ELIPS.api && ELIPS.api.enabled) return ELIPS.api.call('branch.delete', { id: id });
+        const branches = ELIPS.getBranches();
+        const item = branches.find(function (b) { return b.id === Number(id); });
+        if (!item) return failure('Cabang tidak ditemukan.');
+
+        const classCount = ELIPS.getClasses().filter(function (c) {
+            return Number(c.branchId) === Number(id);
+        }).length;
+        if (classCount > 0) {
+            return failure('Cabang tidak dapat dihapus karena masih dipakai oleh ' + classCount + ' kelas.');
+        }
+
+        ELIPS.setBranches(branches.filter(function (b) { return b.id !== item.id; }));
+        recordAudit({
+            action: 'delete',
+            entity: 'branch',
+            entityId: item.id,
+            entityLabel: item.name,
+            detail: 'Menghapus cabang "' + item.name + '" (' + item.code + ').'
+        });
+        return success('Cabang berhasil dihapus.');
+    }
+
     // ---------- Classes / cohorts ----------
 
     function activeClassEnrollmentCount(classId) {
@@ -378,6 +547,14 @@
             return failure('Tentor harus berstatus aktif.');
         }
 
+        const branchId = data.branchId ? Number(data.branchId) : 0;
+        let branch = null;
+        if (branchId > 0) {
+            branch = ELIPS.getBranchById(branchId);
+            if (!branch) return failure('Cabang tidak ditemukan.');
+            if (branch.status !== 'active') return failure('Cabang harus berstatus aktif.');
+        }
+
         const periodStart = normalizeDate(data.periodStart);
         const periodEnd = normalizeDate(data.periodEnd);
         if (data.periodStart && !periodStart) return failure('Tanggal mulai tidak valid.');
@@ -402,6 +579,10 @@
             curriculumVersionId: version.id,
             curriculumVersionCode: version.code,
             curriculumVersionName: version.name,
+            branchId: branch ? branch.id : null,
+            branchCode: branch ? branch.code : '',
+            branchName: branch ? branch.name : '',
+            branchCity: branch ? branch.city : '',
             instructorId: instructorId > 0 ? instructorId : null,
             instructorName: instructor ? instructor.name : '',
             periodStart: periodStart,
@@ -532,7 +713,22 @@
             return failure('Tentor harus berstatus aktif.');
         }
 
+        let nextBranch = item.branchId ? ELIPS.getBranchById(item.branchId) : null;
+        if (data.branchId !== undefined) {
+            const branchId = data.branchId ? Number(data.branchId) : 0;
+            nextBranch = null;
+            if (branchId > 0) {
+                nextBranch = ELIPS.getBranchById(branchId);
+                if (!nextBranch) return failure('Cabang tidak ditemukan.');
+                if (nextBranch.status !== 'active') return failure('Cabang harus berstatus aktif.');
+            }
+        }
+
         item.name = name;
+        item.branchId = nextBranch ? nextBranch.id : null;
+        item.branchCode = nextBranch ? nextBranch.code : '';
+        item.branchName = nextBranch ? nextBranch.name : '';
+        item.branchCity = nextBranch ? nextBranch.city : '';
         item.periodStart = periodStart;
         item.periodEnd = periodEnd;
         item.quota = quota;
@@ -775,6 +971,10 @@
             className: classItem.name,
             courseId: Number(classItem.courseId),
             courseTitle: classItem.courseTitle,
+            branchId: classItem.branchId || null,
+            branchCode: classItem.branchCode || '',
+            branchName: classItem.branchName || '',
+            branchCity: classItem.branchCity || '',
             sessionNumber: sessionNumber,
             moduleTitle: module ? module.title : '',
             instructorName: instructor ? instructor.name : '',
@@ -1426,6 +1626,10 @@
     }
 
     Object.assign(ELIPS, {
+        createBranch: createBranch,
+        updateBranch: updateBranch,
+        setBranchStatus: setBranchStatus,
+        deleteBranch: deleteBranch,
         createCurriculumVersion: createCurriculumVersion,
         updateCurriculumVersion: updateCurriculumVersion,
         publishCurriculumVersion: publishCurriculumVersion,

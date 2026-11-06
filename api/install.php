@@ -42,6 +42,48 @@ try {
     echo "Skema database siap.\n";
 
     $db = elips_db();
+
+    // ---------- Migrasi v4.0: cabang ----------
+    // Skema baru membuat kolom branch_id langsung; database lama perlu
+    // ditambahkan agar tetap kompatibel tanpa menghapus data.
+    $hasBranchColumn = (bool) $db->query("SHOW COLUMNS FROM classes LIKE 'branch_id'")->fetch();
+    if (!$hasBranchColumn) {
+        $db->exec('ALTER TABLE classes ADD COLUMN branch_id INT UNSIGNED NULL AFTER curriculum_version_id');
+    }
+    $hasBranchIndex = (bool) $db->query("SHOW INDEX FROM classes WHERE Key_name = 'idx_classes_branch'")->fetch();
+    if (!$hasBranchIndex) {
+        $db->exec('ALTER TABLE classes ADD KEY idx_classes_branch (branch_id)');
+    }
+    $fkStmt = $db->prepare(
+        "SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS
+         WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'classes'
+           AND CONSTRAINT_NAME = 'fk_classes_branch'"
+    );
+    $fkStmt->execute();
+    if ((int) $fkStmt->fetchColumn() === 0) {
+        $db->exec(
+            'ALTER TABLE classes ADD CONSTRAINT fk_classes_branch
+             FOREIGN KEY (branch_id) REFERENCES branches (id) ON DELETE SET NULL'
+        );
+    }
+
+    $branchCount = (int) $db->query('SELECT COUNT(*) FROM branches')->fetchColumn();
+    if ($branchCount === 0) {
+        $branchStmt = $db->prepare(
+            "INSERT INTO branches (id, code, name, address, city, phone, manager, status, notes)
+             VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?)"
+        );
+        $branches = [
+            [1, 'CBG-JKT', 'Cabang Jakarta', 'Jl. Jenderal Sudirman No. 21', 'Jakarta', '021-5550101', 'Dewi Lestari', 'Kantor pusat dan kelas reguler wilayah Jabodetabek.'],
+            [2, 'CBG-BDG', 'Cabang Bandung', 'Jl. Asia Afrika No. 88', 'Bandung', '022-5550202', 'Rangga Pratama', 'Cabang wilayah Bandung dan sekitarnya.'],
+            [3, 'CBG-SBY', 'Cabang Surabaya', 'Jl. Basuki Rahmat No. 45', 'Surabaya', '031-5550303', 'Maya Kusuma', 'Cabang wilayah Jawa Timur.'],
+        ];
+        foreach ($branches as $branch) {
+            $branchStmt->execute($branch);
+        }
+        echo "Cabang awal ditambahkan.\n";
+    }
+
     $userCount = (int) $db->query('SELECT COUNT(*) FROM users')->fetchColumn();
     if ($userCount > 0) {
         echo "Data sudah ada (" . $userCount . " pengguna). Seed dilewati.\n";
@@ -212,13 +254,13 @@ try {
     // Hanya kelas migrasi yang di-seed. Kelas contoh lain sengaja tidak dibuat
     // agar setiap kelas pasti merujuk versi yang sudah Published dan terkunci.
     $classes = [
-        [1, 'ANG-2026-MNJ-01', 'Angkatan 2026 — Pelatihan Manajemen Dasar', 1, 1, 2, '2026-10-01', '2026-12-31', 30, 'Kampus Pusat', 'R-101', 'Senin & Rabu, 09.00-11.00', 32, 'ongoing', 1, 'Kelas migrasi dari enrollment kursus v3.0.'],
+        [1, 'ANG-2026-MNJ-01', 'Angkatan 2026 — Pelatihan Manajemen Dasar', 1, 1, 1, 2, '2026-10-01', '2026-12-31', 30, 'Kampus Pusat', 'R-101', 'Senin & Rabu, 09.00-11.00', 32, 'ongoing', 1, 'Kelas migrasi dari enrollment kursus v3.0.'],
     ];
     $classStmt = $db->prepare(
         "INSERT INTO classes
-         (id, code, name, course_id, curriculum_version_id, instructor_id, period_start, period_end, quota,
+         (id, code, name, course_id, curriculum_version_id, branch_id, instructor_id, period_start, period_end, quota,
           location, room, schedule_note, planned_jp, status, legacy_import, notes, created_by, updated_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1)"
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1)"
     );
     foreach ($classes as $class) {
         $classStmt->execute($class);
@@ -231,8 +273,8 @@ try {
     foreach ($classes as $class) {
         $historyStmt->execute([
             (int) $class[0],
-            (int) $class[5],
-            (string) $class[6],
+            (int) $class[6],
+            (string) $class[7],
             'Penetapan tentor awal saat kelas dibuat.',
         ]);
     }

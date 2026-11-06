@@ -60,6 +60,10 @@
                     <i class="bi bi-diagram-3"></i>
                     <span>Kurikulum &amp; Kelas</span>
                 </a>
+                <a href="schedule.html" class="dashboard-nav-link">
+                    <i class="bi bi-calendar-week"></i>
+                    <span>Kalender &amp; Jadwal</span>
+                </a>
                 <a href="enrollment.html" class="dashboard-nav-link">
                     <i class="bi bi-person-check"></i>
                     <span>Penugasan Siswa</span>
@@ -174,9 +178,18 @@
             <div class="dashboard-section">
                 <div class="dashboard-section-header" style="flex-wrap: wrap; gap: 1rem;">
                     <h2 class="dashboard-section-title">Kelas / Angkatan</h2>
-                    <select class="form-input" id="classCourseFilter" style="max-width: 280px;" onchange="renderClasses()">
-                        <option value="all">Semua Kursus</option>
-                    </select>
+                    <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center;">
+                        <select class="form-input" id="classBranchFilter" style="max-width: 220px;" onchange="renderClasses()">
+                            <option value="all">Semua Cabang</option>
+                        </select>
+                        <select class="form-input" id="classCourseFilter" style="max-width: 280px;" onchange="renderClasses()">
+                            <option value="all">Semua Kursus</option>
+                        </select>
+                        <a href="settings.html" class="btn btn-ghost">
+                            <i class="bi bi-gear"></i>
+                            Kelola Cabang
+                        </a>
+                    </div>
                 </div>
                 <div class="dashboard-section-body" style="padding: 0; overflow-x: auto;">
                     <table class="dashboard-table">
@@ -185,6 +198,7 @@
                                 <th>Kelas</th>
                                 <th>Kursus</th>
                                 <th>Kurikulum</th>
+                                <th>Cabang</th>
                                 <th>Tentor</th>
                                 <th>Periode</th>
                                 <th>Kuota</th>
@@ -302,6 +316,11 @@
                     <label class="form-label">Versi Kurikulum *</label>
                     <select id="classVersion" class="form-input"></select>
                     <small class="form-hint">Hanya versi Published yang dapat dipakai. Versi akan dikunci setelah kelas dibuat.</small>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Cabang</label>
+                    <select id="classBranch" class="form-input"></select>
+                    <small class="form-hint">Kosongkan bila kelas belum ditetapkan ke cabang.</small>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Nama Kelas / Angkatan *</label>
@@ -729,6 +748,16 @@
                 }).join('');
                 select.value = current || 'all';
             });
+
+            const branchSelect = document.getElementById('classBranchFilter');
+            const currentBranch = branchSelect.value;
+            const branches = ELIPS.getBranches().slice().sort(function (a, b) {
+                return String(a.name || '').localeCompare(String(b.name || ''));
+            });
+            branchSelect.innerHTML = '<option value="all">Semua Cabang</option>' + branches.map(function (branch) {
+                return '<option value="' + branch.id + '">' + ELIPS.escapeHtml(branch.name) + '</option>';
+            }).join('');
+            branchSelect.value = currentBranch || 'all';
         }
 
         function renderVersions() {
@@ -778,15 +807,18 @@
 
         function renderClasses() {
             const filter = document.getElementById('classCourseFilter').value;
+            const branchFilter = document.getElementById('classBranchFilter').value;
             const tbody = document.getElementById('classTable');
             const classes = ELIPS.getClasses().slice().sort(function (a, b) {
                 return Number(b.id) - Number(a.id);
             }).filter(function (item) {
-                return filter === 'all' || Number(item.courseId) === Number(filter);
+                const matchCourse = filter === 'all' || Number(item.courseId) === Number(filter);
+                const matchBranch = branchFilter === 'all' || Number(item.branchId) === Number(branchFilter);
+                return matchCourse && matchBranch;
             });
 
             if (classes.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: var(--text-secondary);">Belum ada kelas/angkatan.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; color: var(--text-secondary);">Belum ada kelas/angkatan.</td></tr>';
                 return;
             }
 
@@ -804,6 +836,9 @@
                     '<td><div class="table-course-title">' + ELIPS.escapeHtml(item.name) + '</div><div class="table-course-meta">' + ELIPS.escapeHtml(item.code) + '</div></td>' +
                     '<td><span>' + ELIPS.escapeHtml(course ? course.title : 'Kursus #' + item.courseId) + '</span></td>' +
                     '<td><span class="badge badge-primary">' + ELIPS.escapeHtml(version ? version.code : item.curriculumVersionCode || '-') + '</span></td>' +
+                    '<td>' + (item.branchName
+                        ? '<div class="table-course-title" style="font-size: 0.875rem;">' + ELIPS.escapeHtml(item.branchName) + '</div><div class="table-course-meta">' + ELIPS.escapeHtml(item.branchCode || '') + '</div>'
+                        : '<span style="color: var(--text-secondary);">Tanpa cabang</span>') + '</td>' +
                     '<td><span>' + ELIPS.escapeHtml(item.instructorName || 'Belum ditetapkan') + '</span></td>' +
                     '<td><span style="color: var(--text-secondary);">' + ELIPS.escapeHtml(item.periodStart || '-') + ' s.d. ' + ELIPS.escapeHtml(item.periodEnd || '-') + '</span></td>' +
                     '<td><span>' + quotaLabel + '</span></td>' +
@@ -1157,6 +1192,17 @@
             if (selectedId) select.value = String(selectedId);
         }
 
+        function fillBranchSelect(select, selectedId) {
+            const branches = ELIPS.getBranches().slice().sort(function (a, b) {
+                return String(a.name || '').localeCompare(String(b.name || ''));
+            });
+            select.innerHTML = '<option value="">-- Tanpa Cabang --</option>' + branches.map(function (branch) {
+                const label = branch.name + (branch.city ? ' — ' + branch.city : '') + (branch.status === 'inactive' ? ' (nonaktif)' : '');
+                return '<option value="' + branch.id + '">' + ELIPS.escapeHtml(label) + '</option>';
+            }).join('');
+            if (selectedId) select.value = String(selectedId);
+        }
+
         function refreshClassVersions(selectedVersionId) {
             const courseId = Number(document.getElementById('classCourse').value);
             const select = document.getElementById('classVersion');
@@ -1178,6 +1224,7 @@
             document.getElementById('classId').value = item ? item.id : '';
             refreshClassVersions(item ? item.curriculumVersionId : null);
             document.getElementById('classVersion').disabled = !!item;
+            fillBranchSelect(document.getElementById('classBranch'), item ? item.branchId : null);
             document.getElementById('className').value = item ? item.name : '';
             document.getElementById('classCode').value = item ? item.code : '';
             document.getElementById('classCode').disabled = !!item;
@@ -1209,6 +1256,7 @@
             const data = {
                 courseId: courseId,
                 curriculumVersionId: versionId,
+                branchId: document.getElementById('classBranch').value || null,
                 name: document.getElementById('className').value.trim(),
                 code: document.getElementById('classCode').value.trim(),
                 instructorId: document.getElementById('classInstructor').value || null,

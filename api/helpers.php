@@ -122,6 +122,14 @@ function elips_enrollment_row(int $id): ?array
     return $row ?: null;
 }
 
+function elips_branch_row(int $id): ?array
+{
+    $stmt = elips_db()->prepare('SELECT * FROM branches WHERE id = ? LIMIT 1');
+    $stmt->execute([$id]);
+    $row = $stmt->fetch();
+    return $row ?: null;
+}
+
 function elips_class_row(int $id): ?array
 {
     $stmt = elips_db()->prepare('SELECT * FROM classes WHERE id = ? LIMIT 1');
@@ -570,17 +578,40 @@ function elips_curriculum_public(int $id): ?array
     ];
 }
 
+function elips_branch_public(int $id): ?array
+{
+    $row = elips_branch_row($id);
+    if (!$row) {
+        return null;
+    }
+    return [
+        'id' => (int) $row['id'],
+        'code' => $row['code'],
+        'name' => $row['name'],
+        'address' => $row['address'],
+        'city' => $row['city'],
+        'phone' => $row['phone'],
+        'manager' => $row['manager'],
+        'status' => $row['status'],
+        'notes' => $row['notes'],
+        'createdAt' => elips_iso($row['created_at']),
+        'updatedAt' => elips_iso($row['updated_at']),
+    ];
+}
+
 function elips_class_public(int $id): ?array
 {
     $stmt = elips_db()->prepare(
         "SELECT cl.*, c.title AS course_title, u.name AS instructor_name,
             cv.code AS version_code, cv.name AS version_name,
+            b.code AS branch_code, b.name AS branch_name, b.city AS branch_city,
             (SELECT COUNT(*) FROM enrollments e WHERE e.class_id = cl.id AND e.status IN ('active', 'pending')) AS active_count,
             (SELECT COUNT(*) FROM enrollments e WHERE e.class_id = cl.id) AS enrollment_count
          FROM classes cl
          JOIN courses c ON c.id = cl.course_id
          LEFT JOIN users u ON u.id = cl.instructor_id
          LEFT JOIN curriculum_versions cv ON cv.id = cl.curriculum_version_id
+         LEFT JOIN branches b ON b.id = cl.branch_id
          WHERE cl.id = ? LIMIT 1"
     );
     $stmt->execute([$id]);
@@ -597,6 +628,10 @@ function elips_class_public(int $id): ?array
         'curriculumVersionId' => (int) $row['curriculum_version_id'],
         'curriculumVersionCode' => $row['version_code'],
         'curriculumVersionName' => $row['version_name'],
+        'branchId' => $row['branch_id'] === null ? null : (int) $row['branch_id'],
+        'branchCode' => $row['branch_code'] ?? '',
+        'branchName' => $row['branch_name'] ?? '',
+        'branchCity' => $row['branch_city'] ?? '',
         'instructorId' => $row['instructor_id'] === null ? null : (int) $row['instructor_id'],
         'instructorName' => $row['instructor_name'] ?? '',
         'periodStart' => elips_date_only($row['period_start']),
@@ -789,8 +824,9 @@ function elips_session_recap_weight(array $session): float
 function elips_session_public(int $id): ?array
 {
     $stmt = elips_db()->prepare(
-        "SELECT s.*, cl.code AS class_code, cl.name AS class_name, cl.course_id, cl.instructor_id AS class_instructor_id,
+        "SELECT s.*, cl.code AS class_code, cl.name AS class_name, cl.course_id, cl.branch_id AS branch_id, cl.instructor_id AS class_instructor_id,
             c.title AS course_title, u.name AS instructor_name, m.title AS module_title,
+            b.code AS branch_code, b.name AS branch_name, b.city AS branch_city,
             (SELECT COUNT(*) FROM attendances a WHERE a.session_id = s.id AND a.status = 'present') AS present_count,
             (SELECT COUNT(*) FROM attendances a WHERE a.session_id = s.id AND a.status = 'late') AS late_count,
             (SELECT COUNT(*) FROM attendances a WHERE a.session_id = s.id AND a.status = 'permission') AS permission_count,
@@ -803,6 +839,7 @@ function elips_session_public(int $id): ?array
          JOIN courses c ON c.id = cl.course_id
          LEFT JOIN users u ON u.id = s.instructor_id
          LEFT JOIN modules m ON m.id = s.module_id
+         LEFT JOIN branches b ON b.id = cl.branch_id
          WHERE s.id = ? LIMIT 1"
     );
     $stmt->execute([$id]);
@@ -825,6 +862,10 @@ function elips_session_public(int $id): ?array
         'className' => $row['class_name'],
         'courseId' => (int) $row['course_id'],
         'courseTitle' => $row['course_title'],
+        'branchId' => $row['branch_id'] === null ? null : (int) $row['branch_id'],
+        'branchCode' => $row['branch_code'] ?? '',
+        'branchName' => $row['branch_name'] ?? '',
+        'branchCity' => $row['branch_city'] ?? '',
         'sessionNumber' => (int) $row['session_number'],
         'title' => $row['title'],
         'moduleId' => $row['module_id'] === null ? null : (int) $row['module_id'],

@@ -22,6 +22,22 @@
     function setCourses(list) { return write(KEYS.courses, list); }
     function getCourseById(id) { return getCourses().find(function (c) { return c.id === Number(id); }) || null; }
 
+    // ---------- Branches / cabang ----------
+    function getBranches() { return read(KEYS.branches, []); }
+    function setBranches(list) { return write(KEYS.branches, list); }
+    function getBranchById(id) {
+        return getBranches().find(function (b) { return b.id === Number(id); }) || null;
+    }
+    function getActiveBranches() {
+        return getBranches().filter(function (b) { return b.status === 'active'; });
+    }
+    function getBranchByCode(code) {
+        const target = String(code || '').trim().toUpperCase();
+        return getBranches().find(function (b) {
+            return String(b.code || '').toUpperCase() === target;
+        }) || null;
+    }
+
     // ---------- Categories ----------
     function getCategories() { return read(KEYS.categories, []); }
     function setCategories(list) { return write(KEYS.categories, list); }
@@ -227,6 +243,11 @@
         getCourses: getCourses,
         setCourses: setCourses,
         getCourseById: getCourseById,
+        getBranches: getBranches,
+        setBranches: setBranches,
+        getBranchById: getBranchById,
+        getActiveBranches: getActiveBranches,
+        getBranchByCode: getBranchByCode,
         getCategories: getCategories,
         setCategories: setCategories,
         getCurriculumVersions: getCurriculumVersions,

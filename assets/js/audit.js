@@ -32,6 +32,7 @@
 
     const ENTITY_LABELS = {
         course: 'Kursus',
+        branch: 'Cabang',
         grade: 'Nilai',
         certificate: 'Sertifikat',
         user: 'Pengguna',

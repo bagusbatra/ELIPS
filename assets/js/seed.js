@@ -110,6 +110,14 @@
         ];
     }
 
+    function seedBranches() {
+        return [
+            { id: 1, code: 'CBG-JKT', name: 'Cabang Jakarta', address: 'Jl. Jenderal Sudirman No. 21', city: 'Jakarta', phone: '021-5550101', manager: 'Dewi Lestari', status: 'active', notes: 'Kantor pusat dan kelas reguler wilayah Jabodetabek.' },
+            { id: 2, code: 'CBG-BDG', name: 'Cabang Bandung', address: 'Jl. Asia Afrika No. 88', city: 'Bandung', phone: '022-5550202', manager: 'Rangga Pratama', status: 'active', notes: 'Cabang wilayah Bandung dan sekitarnya.' },
+            { id: 3, code: 'CBG-SBY', name: 'Cabang Surabaya', address: 'Jl. Basuki Rahmat No. 45', city: 'Surabaya', phone: '031-5550303', manager: 'Maya Kusuma', status: 'active', notes: 'Cabang wilayah Jawa Timur.' }
+        ];
+    }
+
     function seedEnrollments() {
         return [
             { id: 1, studentId: 5, courseId: 1, classId: 1, enrolledBy: 'admin', enrolledAt: '2026-10-01', status: 'active' },
@@ -139,6 +147,10 @@
             className: 'Angkatan 2026 — Pelatihan Manajemen Dasar',
             courseId: 1,
             courseTitle: 'Pelatihan Manajemen Dasar',
+            branchId: 1,
+            branchCode: 'CBG-JKT',
+            branchName: 'Cabang Jakarta',
+            branchCity: 'Jakarta',
             location: 'Kampus Pusat',
             room: 'R-101',
             instructorId: 2,
@@ -204,7 +216,7 @@
         // Hanya kelas migrasi. Setiap kelas di aplikasi selalu merujuk versi
         // kurikulum Published yang langsung dikunci saat kelas dibuat.
         return [
-            { id: 1, code: 'ANG-2026-MNJ-01', name: 'Angkatan 2026 — Pelatihan Manajemen Dasar', courseId: 1, courseTitle: 'Pelatihan Manajemen Dasar', curriculumVersionId: 1, curriculumVersionCode: '1.0', curriculumVersionName: 'Kurikulum 1.0 — Pelatihan Manajemen Dasar', instructorId: 2, instructorName: 'Ahmad Fauzi, M.M.', periodStart: '2026-10-01', periodEnd: '2026-12-31', quota: 30, location: 'Kampus Pusat', room: 'R-101', scheduleNote: 'Senin & Rabu, 09.00-11.00', plannedJp: 32, status: 'ongoing', legacyImport: true, notes: 'Kelas migrasi dari enrollment kursus v3.0.' }
+            { id: 1, code: 'ANG-2026-MNJ-01', name: 'Angkatan 2026 — Pelatihan Manajemen Dasar', courseId: 1, courseTitle: 'Pelatihan Manajemen Dasar', curriculumVersionId: 1, curriculumVersionCode: '1.0', curriculumVersionName: 'Kurikulum 1.0 — Pelatihan Manajemen Dasar', branchId: 1, branchCode: 'CBG-JKT', branchName: 'Cabang Jakarta', branchCity: 'Jakarta', instructorId: 2, instructorName: 'Ahmad Fauzi, M.M.', periodStart: '2026-10-01', periodEnd: '2026-12-31', quota: 30, location: 'Kampus Pusat', room: 'R-101', scheduleNote: 'Senin & Rabu, 09.00-11.00', plannedJp: 32, status: 'ongoing', legacyImport: true, notes: 'Kelas migrasi dari enrollment kursus v3.0.' }
         ];
     }
 
@@ -326,6 +338,41 @@
         if (!Array.isArray(read(KEYS.categories, null)) || read(KEYS.categories, []).length === 0) {
             write(KEYS.categories, seedCategoryList);
         }
+        if (!Array.isArray(read(KEYS.branches, null)) || read(KEYS.branches, []).length === 0) {
+            write(KEYS.branches, seedBranches());
+        }
+        // Normalisasi cabang: field wajib selalu tersedia untuk UI.
+        const branchList = read(KEYS.branches, []);
+        branchList.forEach(function (branch) {
+            branch.id = Number(branch.id);
+            if (!branch.code) branch.code = 'CBG-' + String(branch.id || 1);
+            if (!branch.status) branch.status = 'active';
+            if (!branch.city) branch.city = '';
+            if (!branch.address) branch.address = '';
+            if (!branch.phone) branch.phone = '';
+            if (!branch.manager) branch.manager = '';
+            if (!branch.notes) branch.notes = '';
+        });
+        write(KEYS.branches, branchList);
+        // Kelas lama tanpa cabang dibiarkan null agar tetap kompatibel.
+        const classList = read(KEYS.classes, []);
+        let classBranchChanged = false;
+        classList.forEach(function (item) {
+            if (item.branchId === undefined) {
+                item.branchId = null;
+                classBranchChanged = true;
+            }
+            if (item.branchId !== null && item.branchId !== '' && !item.branchCode) {
+                const branch = branchList.find(function (b) { return b.id === Number(item.branchId); });
+                if (branch) {
+                    item.branchCode = branch.code;
+                    item.branchName = branch.name;
+                    item.branchCity = branch.city;
+                    classBranchChanged = true;
+                }
+            }
+        });
+        if (classBranchChanged) write(KEYS.classes, classList);
         if (!Array.isArray(read(KEYS.curriculumVersions, null)) || read(KEYS.curriculumVersions, []).length === 0) {
             write(KEYS.curriculumVersions, seedCurriculumVersions());
         }

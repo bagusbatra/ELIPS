@@ -29,6 +29,12 @@ function elips_snapshot(): array
         ];
     }
 
+    $branches = [];
+    foreach ($db->query('SELECT id FROM branches ORDER BY id ASC') as $row) {
+        $branch = elips_branch_public((int) $row['id']);
+        if ($branch) $branches[] = $branch;
+    }
+
     $courses = [];
     foreach ($db->query('SELECT id FROM courses ORDER BY id ASC') as $row) {
         $courses[] = elips_course_public((int) $row['id']);
@@ -122,12 +128,14 @@ function elips_snapshot(): array
     $classRows = $db->query(
         "SELECT cl.*, c.title AS course_title, u.name AS instructor_name,
             cv.code AS version_code, cv.name AS version_name,
+            b.code AS branch_code, b.name AS branch_name, b.city AS branch_city,
             (SELECT COUNT(*) FROM enrollments e WHERE e.class_id = cl.id AND e.status IN ('active', 'pending')) AS active_count,
             (SELECT COUNT(*) FROM enrollments e WHERE e.class_id = cl.id) AS enrollment_count
          FROM classes cl
          JOIN courses c ON c.id = cl.course_id
          LEFT JOIN users u ON u.id = cl.instructor_id
          LEFT JOIN curriculum_versions cv ON cv.id = cl.curriculum_version_id
+         LEFT JOIN branches b ON b.id = cl.branch_id
          ORDER BY cl.id ASC"
     );
     foreach ($classRows as $row) {
@@ -140,6 +148,10 @@ function elips_snapshot(): array
             'curriculumVersionId' => (int) $row['curriculum_version_id'],
             'curriculumVersionCode' => $row['version_code'],
             'curriculumVersionName' => $row['version_name'],
+            'branchId' => $row['branch_id'] === null ? null : (int) $row['branch_id'],
+            'branchCode' => $row['branch_code'] ?? '',
+            'branchName' => $row['branch_name'] ?? '',
+            'branchCity' => $row['branch_city'] ?? '',
             'instructorId' => $row['instructor_id'] === null ? null : (int) $row['instructor_id'],
             'instructorName' => $row['instructor_name'] ?? '',
             'periodStart' => elips_date_only($row['period_start']),
@@ -303,6 +315,7 @@ function elips_snapshot(): array
 
     return [
         'users' => $users,
+        'branches' => $branches,
         'categories' => $categories,
         'courses' => $courses,
         'curriculumVersions' => $curriculumVersions,
