@@ -64,6 +64,7 @@
     <script src="assets/js/crud-content.js"></script>
     <script src="assets/js/crud-grades.js"></script>
     <script src="assets/js/crud-academic.js"></script>
+    <script src="assets/js/crud-tasks.js"></script>
     <script src="assets/js/ui.js"></script>
     <script>
         let activeCourse = null;
@@ -76,6 +77,46 @@
         let activeMaterialId = null;
         let canBypassLock = false;
         let isPreviewMode = false;
+        let taskClassroom = null;
+        let activeAssignmentId = null;
+        let activeExamId = null;
+        let assignmentDetail = null;
+        let examDetail = null;
+        let pendingSubmissionFiles = [];
+
+        const TASK_ASSIGNMENT_TYPE_LABELS = {
+            file_upload: 'Unggah File',
+            text_submission: 'Jawaban Teks',
+            in_class_practice: 'Praktik Kelas',
+            external_reference: 'Referensi Eksternal'
+        };
+        const TASK_STATUS_LABELS = {
+            draft: 'Draft',
+            published: 'Published',
+            closed: 'Closed',
+            archived: 'Archived'
+        };
+        const TASK_SUBMISSION_LABELS = {
+            submitted: 'Dikumpulkan',
+            late: 'Terlambat',
+            reviewed: 'Dinilai',
+            revision_requested: 'Minta Revisi',
+            resubmitted: 'Dikumpulkan Ulang',
+            accepted: 'Diterima'
+        };
+        const TASK_EXAM_TYPE_LABELS = {
+            written: 'Tertulis',
+            practical: 'Praktik',
+            oral: 'Lisan',
+            project: 'Proyek',
+            other: 'Lainnya'
+        };
+        const TASK_RESULT_LABELS = {
+            not_assessed: 'Belum Dinilai',
+            excused: 'Izin',
+            missing: 'Tidak Ada Nilai',
+            graded: 'Dinilai'
+        };
 
         document.addEventListener('DOMContentLoaded', initLearning);
 
@@ -159,6 +200,7 @@
             if (activeClassId) {
                 if (!loadClassroom()) return;
                 buildFlatLessonsFromClassroom();
+                loadTaskClassroom();
             } else {
                 flatLessons = [];
                 ELIPS.getCourseStructure(courseId).forEach(function (item) {
@@ -168,7 +210,8 @@
                 });
             }
 
-            const hasContent = flatLessons.length > 0 || (classroom && classroom.materials.length > 0);
+            const hasContent = flatLessons.length > 0 || (classroom && classroom.materials.length > 0) ||
+                (taskClassroom && (taskClassroom.assignments.length > 0 || taskClassroom.exams.length > 0));
             if (!hasContent) {
                 renderBlocked('Materi Belum Tersedia', 'Instruktur belum menambahkan modul atau materi untuk kursus ini.');
                 return;
@@ -200,6 +243,24 @@
                 }
             }
 
+            const requestedAssignment = parseInt(params.get('assignment'), 10);
+            if (requestedAssignment && taskClassroom && taskClassroom.assignments.some(function (item) { return Number(item.id) === requestedAssignment; })) {
+                if (loadAssignmentDetail(requestedAssignment)) {
+                    activeAssignmentId = requestedAssignment;
+                    activeLessonId = null;
+                    activeMaterialId = null;
+                }
+            }
+
+            const requestedExam = parseInt(params.get('exam'), 10);
+            if (requestedExam && taskClassroom && taskClassroom.exams.some(function (item) { return Number(item.id) === requestedExam; })) {
+                if (loadExamDetail(requestedExam)) {
+                    activeExamId = requestedExam;
+                    activeLessonId = null;
+                    activeMaterialId = null;
+                }
+            }
+
             renderAll();
         }
 
@@ -210,6 +271,18 @@
                 return false;
             }
             classroom = result.data;
+            return true;
+        }
+
+        function loadTaskClassroom() {
+            taskClassroom = null;
+            if (!activeClassId) return false;
+            const result = ELIPS.getAssignmentClassroom({ classId: activeClassId });
+            if (!result.ok) {
+                taskClassroom = null;
+                return false;
+            }
+            taskClassroom = result.data;
             return true;
         }
 
@@ -276,12 +349,14 @@
         }
 
         function renderAll() {
-            if (!activeLessonId && !activeMaterialId && classroom && classroom.materials.length > 0) {
+            if (!activeLessonId && !activeMaterialId && !activeAssignmentId && !activeExamId && classroom && classroom.materials.length > 0) {
                 activeMaterialId = Number(classroom.materials[0].id);
             }
             renderSidebar();
             renderProgress();
-            if (activeMaterialId) renderMaterial(activeMaterialId);
+            if (activeAssignmentId) renderAssignment();
+            else if (activeExamId) renderExam();
+            else if (activeMaterialId) renderMaterial(activeMaterialId);
             else renderLesson(activeLessonId);
         }
 
@@ -416,6 +491,15 @@
                         !!activeMaterialId
                     );
                 }
+
+                if (taskClassroom && (taskClassroom.assignments.length > 0 || taskClassroom.exams.length > 0)) {
+                    appendSidebarModule(
+                        container,
+                        'Tugas & Ujian',
+                        renderTaskSidebarItems(),
+                        !!activeAssignmentId || !!activeExamId
+                    );
+                }
                 return;
             }
 
@@ -467,9 +551,385 @@
             }
             activeMaterialId = Number(materialId);
             activeLessonId = null;
+            activeAssignmentId = null;
+            activeExamId = null;
             renderAll();
             const main = document.querySelector('.learning-main');
             if (main) main.scrollTop = 0;
+        }
+
+        // ---------- Tugas & ujian (Phase 5) ----------
+        function taskFormatDateTime(value) {
+            if (!value) return '-';
+            const date = new Date(value);
+            if (isNaN(date.getTime())) return ELIPS.escapeHtml(String(value));
+            return date.toLocaleString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+        }
+
+        function taskFormatDate(value) {
+            if (!value) return '-';
+            const date = new Date(value);
+            if (isNaN(date.getTime())) return ELIPS.escapeHtml(String(value));
+            return date.toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' });
+        }
+
+        function taskFileSize(size) {
+            const value = Number(size);
+            if (!value || value < 0) return '';
+            if (value >= 1048576) return (value / 1048576).toFixed(1) + ' MB';
+            if (value >= 1024) return Math.round(value / 1024) + ' KB';
+            return value + ' B';
+        }
+
+        function taskStatusBadge(status) {
+            const map = { draft: 'badge-warning', published: 'badge-success', closed: 'badge-primary', archived: 'badge' };
+            return '<span class="badge ' + (map[status] || 'badge') + '">' + ELIPS.escapeHtml(TASK_STATUS_LABELS[status] || status) + '</span>';
+        }
+
+        function taskSubmissionBadge(status) {
+            const map = {
+                submitted: 'badge-primary', late: 'badge-warning', reviewed: 'badge-success',
+                revision_requested: 'badge-warning', resubmitted: 'badge-primary', accepted: 'badge-success'
+            };
+            return '<span class="badge ' + (map[status] || 'badge') + '">' + ELIPS.escapeHtml(TASK_SUBMISSION_LABELS[status] || status) + '</span>';
+        }
+
+        function renderTaskSidebarItems() {
+            const items = [];
+            taskClassroom.assignments.forEach(function (item) {
+                const submission = item.submission;
+                const done = submission && ['reviewed', 'accepted'].indexOf(submission.status) !== -1;
+                const isActive = Number(item.id) === Number(activeAssignmentId);
+                items.push('<a href="#" class="learning-lesson ' + (isActive ? 'active ' : '') + '" onclick="selectAssignment(' + item.id + ', event)">' +
+                    '<div class="learning-lesson-left">' +
+                    '<i class="bi ' + (done ? 'bi-check-circle-fill lesson-completed' : 'bi-clipboard') + '"></i>' +
+                    '<span class="learning-lesson-title">' + ELIPS.escapeHtml(item.title) + '</span>' +
+                    '</div>' +
+                    '<span class="learning-lesson-type">Tugas</span>' +
+                    '</a>');
+            });
+            taskClassroom.exams.forEach(function (item) {
+                const result = item.result;
+                const done = result && result.status === 'graded';
+                const isActive = Number(item.id) === Number(activeExamId);
+                items.push('<a href="#" class="learning-lesson ' + (isActive ? 'active ' : '') + '" onclick="selectExam(' + item.id + ', event)">' +
+                    '<div class="learning-lesson-left">' +
+                    '<i class="bi ' + (done ? 'bi-check-circle-fill lesson-completed' : 'bi-journal-check') + '"></i>' +
+                    '<span class="learning-lesson-title">' + ELIPS.escapeHtml(item.title) + '</span>' +
+                    '</div>' +
+                    '<span class="learning-lesson-type">Ujian</span>' +
+                    '</a>');
+            });
+            return items.join('');
+        }
+
+        function loadAssignmentDetail(assignmentId) {
+            const result = ELIPS.getAssignmentDetail({ id: assignmentId });
+            if (!result.ok) {
+                ELIPS.toast(result.message);
+                return false;
+            }
+            assignmentDetail = result.data;
+            return true;
+        }
+
+        function loadExamDetail(examId) {
+            const result = ELIPS.getExamDetail({ id: examId });
+            if (!result.ok) {
+                ELIPS.toast(result.message);
+                return false;
+            }
+            examDetail = result.data;
+            return true;
+        }
+
+        function selectAssignment(assignmentId, event) {
+            if (event) event.preventDefault();
+            if (!loadAssignmentDetail(assignmentId)) return;
+            activeAssignmentId = Number(assignmentId);
+            activeExamId = null;
+            activeLessonId = null;
+            activeMaterialId = null;
+            pendingSubmissionFiles = [];
+            renderAll();
+            const main = document.querySelector('.learning-main');
+            if (main) main.scrollTop = 0;
+        }
+
+        function selectExam(examId, event) {
+            if (event) event.preventDefault();
+            if (!loadExamDetail(examId)) return;
+            activeExamId = Number(examId);
+            activeAssignmentId = null;
+            activeLessonId = null;
+            activeMaterialId = null;
+            renderAll();
+            const main = document.querySelector('.learning-main');
+            if (main) main.scrollTop = 0;
+        }
+
+        function taskClassroomItem(kind, id) {
+            if (!taskClassroom) return null;
+            const list = kind === 'exam' ? taskClassroom.exams : taskClassroom.assignments;
+            return list.find(function (item) { return Number(item.id) === Number(id); }) || null;
+        }
+
+        function renderAssignment() {
+            const container = document.getElementById('learningContent');
+            const item = assignmentDetail;
+            if (!item) {
+                container.innerHTML = '<p style="color: var(--text-secondary);">Tugas tidak ditemukan.</p>';
+                return;
+            }
+            const classroomItem = taskClassroomItem('assignment', item.id);
+            const dueText = item.dueAt ? 'Tenggat ' + taskFormatDateTime(item.dueAt) : 'Tanpa tenggat';
+            const openText = item.openAt ? 'Dibuka ' + taskFormatDateTime(item.openAt) : 'Langsung tersedia';
+            const relation = item.moduleTitle
+                ? item.moduleTitle + (item.lessonTitle ? ' • ' + item.lessonTitle : '')
+                : 'Tugas kelas';
+
+            const files = (item.files || []).map(function (file) {
+                const label = ELIPS.escapeHtml(file.fileName) + (file.fileSize ? ' (' + taskFileSize(file.fileSize) + ')' : '');
+                return '<li>' + (file.filePath
+                    ? '<a href="' + ELIPS.escapeHtml(file.filePath) + '" target="_blank" rel="noopener">' + label + '</a>'
+                    : label) + '</li>';
+            }).join('');
+
+            const rubrics = (item.rubrics || []).length > 0
+                ? '<div style="margin-top: 1.25rem;"><h3 style="font-size: 1rem; margin-bottom: 0.5rem;">Rubrik Penilaian</h3>' +
+                    '<div style="overflow-x: auto;"><table class="dashboard-table"><thead><tr><th>Kriteria</th><th>Deskripsi</th><th>Nilai Maks</th></tr></thead><tbody>' +
+                    item.rubrics.map(function (rubric) {
+                        return '<tr><td>' + ELIPS.escapeHtml(rubric.criterion) + '</td><td>' + ELIPS.escapeHtml(rubric.description || '-') +
+                            '</td><td>' + (Number(rubric.maxScore) || 0) + '</td></tr>';
+                    }).join('') + '</tbody></table></div></div>'
+                : '';
+
+            container.innerHTML =
+                '<article class="learning-article">' +
+                '<header class="learning-article-header">' +
+                '<div class="learning-article-meta"><span class="learning-article-breadcrumb">' + ELIPS.escapeHtml(relation) + '</span></div>' +
+                '<h1 class="learning-article-title">' + ELIPS.escapeHtml(item.title) + '</h1>' +
+                '<div style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.75rem;">' +
+                '<span class="badge badge-primary">' + ELIPS.escapeHtml(TASK_ASSIGNMENT_TYPE_LABELS[item.type] || item.type) + '</span>' +
+                taskStatusBadge(item.status) +
+                '<span class="badge">Nilai Maks ' + (Number(item.maxScore) || 0) + '</span>' +
+                '<span class="badge">Bobot ' + (Number(item.weight) || 0) + '%</span>' +
+                '</div>' +
+                '</header>' +
+                '<div class="learning-article-body">' +
+                '<div style="display: flex; gap: 1rem; flex-wrap: wrap; color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 1rem;">' +
+                '<span><i class="bi bi-calendar-event"></i> ' + ELIPS.escapeHtml(openText) + '</span>' +
+                '<span><i class="bi bi-alarm"></i> ' + ELIPS.escapeHtml(dueText) + '</span>' +
+                '</div>' +
+                (item.instructions ? '<div style="white-space: pre-wrap;">' + ELIPS.escapeHtml(item.instructions) + '</div>' : '<p>Tidak ada instruksi khusus.</p>') +
+                (files ? '<div style="margin-top: 1.25rem;"><h3 style="font-size: 1rem; margin-bottom: 0.5rem;">Lampiran</h3><ul style="margin-left: 1.25rem;">' + files + '</ul></div>' : '') +
+                rubrics +
+                renderSubmissionPanel(item, classroomItem) +
+                '</div>' +
+                '<div class="learning-actions">' +
+                '<div class="learning-nav">' +
+                (flatLessons.length > 0 ? '<button class="btn btn-ghost" onclick="selectLesson(' + flatLessons[0].lesson.id + ', event)"><i class="bi bi-arrow-left"></i> Kembali ke Pelajaran</button>' : '') +
+                '</div>' +
+                '</div>' +
+                '</article>';
+        }
+
+        function renderSubmissionPanel(item, classroomItem) {
+            if (isPreviewMode) {
+                return '<div style="padding: 1rem; background: #eff6ff; color: #1e40af; border-radius: var(--radius); margin-top: 1.5rem;">' +
+                    '<i class="bi bi-eye"></i> Mode pratinjau: pengumpulan tugas dilakukan oleh peserta.</div>';
+            }
+
+            const submission = item.submission;
+            if (!submission) {
+                if (item.type === 'in_class_practice') {
+                    return '<div style="padding: 1rem; background: #eff6ff; color: #1e40af; border-radius: var(--radius); margin-top: 1.5rem;">' +
+                        '<i class="bi bi-info-circle"></i> Tugas praktik kelas dicatat langsung oleh instruktur.</div>';
+                }
+                if (classroomItem && classroomItem.canSubmit) {
+                    return renderSubmissionForm(item, false);
+                }
+                return '<div style="padding: 1rem; background: #fef3c7; color: #92400e; border-radius: var(--radius); margin-top: 1.5rem;">' +
+                    '<i class="bi bi-lock"></i> Tugas ini belum dibuka atau sudah ditutup untuk pengumpulan.</div>';
+            }
+
+            const files = (submission.files || []).map(function (file) {
+                const label = ELIPS.escapeHtml(file.fileName) + (file.fileSize ? ' (' + taskFileSize(file.fileSize) + ')' : '');
+                return '<li>' + (file.filePath
+                    ? '<a href="' + ELIPS.escapeHtml(file.filePath) + '" target="_blank" rel="noopener">' + label + '</a>'
+                    : label) + '</li>';
+            }).join('');
+            const reviews = (submission.reviews || []).map(function (review) {
+                return '<li><strong>' + ELIPS.escapeHtml(review.action) + '</strong>' +
+                    (review.score !== null && review.score !== undefined ? ' • nilai ' + review.score : '') +
+                    (review.note ? ' — ' + ELIPS.escapeHtml(review.note) : '') +
+                    ' <span style="color: var(--text-secondary);">(' + taskFormatDateTime(review.createdAt) + ')</span></li>';
+            }).join('');
+
+            const canResubmit = submission.status === 'revision_requested' && classroomItem && classroomItem.canSubmit;
+            return [
+                '<div style="padding: 1rem; border: 1px solid var(--border); border-radius: var(--radius); margin-top: 1.5rem;">',
+                '  <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.75rem;">',
+                '    <h3 style="font-size: 1rem; margin: 0;">Pengumpulan Anda</h3>',
+                taskSubmissionBadge(submission.status),
+                '  </div>',
+                '  <div style="display: flex; gap: 1rem; flex-wrap: wrap; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.75rem;">',
+                '    <span><i class="bi bi-send"></i> ' + taskFormatDateTime(submission.submittedAt) + '</span>',
+                submission.isLate ? '    <span style="color: var(--warning);"><i class="bi bi-exclamation-triangle"></i> Terlambat</span>' : '',
+                '    <span><i class="bi bi-star"></i> Nilai: ' + (submission.score !== null && submission.score !== undefined ? submission.score + ' / ' + (Number(item.maxScore) || 0) : 'Belum dinilai') + '</span>',
+                '  </div>',
+                submission.textAnswer
+                    ? '  <div style="white-space: pre-wrap; background: var(--background); padding: 0.75rem; border-radius: var(--radius); font-size: 0.875rem; margin-bottom: 0.75rem;">' + ELIPS.escapeHtml(submission.textAnswer) + '</div>'
+                    : '',
+                files ? '  <div style="font-size: 0.875rem; margin-bottom: 0.75rem;"><strong>File terkumpul:</strong><ul style="margin: 0.25rem 0 0 1rem;">' + files + '</ul></div>' : '',
+                submission.feedback
+                    ? '  <div style="font-size: 0.875rem; margin-bottom: 0.75rem;"><strong>Umpan balik instruktur:</strong> ' + ELIPS.escapeHtml(submission.feedback) + '</div>'
+                    : '',
+                reviews ? '  <div style="font-size: 0.875rem;"><strong>Riwayat:</strong><ul style="margin: 0.25rem 0 0 1rem;">' + reviews + '</ul></div>' : '',
+                '</div>',
+                canResubmit
+                    ? renderSubmissionForm(item, true)
+                    : (submission.status === 'revision_requested'
+                        ? '<div style="padding: 1rem; background: #fef3c7; color: #92400e; border-radius: var(--radius); margin-top: 1rem;"><i class="bi bi-lock"></i> Revisi diminta, tetapi tugas sudah ditutup. Hubungi instruktur.</div>'
+                        : '')
+            ].join('');
+        }
+
+        function renderSubmissionForm(item, isResubmission) {
+            const requireFile = !!item.requireFile || item.type === 'file_upload';
+            return [
+                '<div style="padding: 1rem; border: 1px solid var(--border); border-radius: var(--radius); margin-top: 1.5rem;">',
+                '  <h3 style="font-size: 1rem; margin: 0 0 0.75rem;">' + (isResubmission ? 'Kumpulkan Ulang Tugas' : 'Kumpulkan Tugas') + '</h3>',
+                '  <div class="form-group">',
+                '    <label class="form-label" for="submissionTextAnswer">Jawaban Teks' + (item.type === 'text_submission' ? ' *' : '') + '</label>',
+                '    <textarea id="submissionTextAnswer" class="form-input" rows="5" placeholder="Tulis jawaban atau catatan pengumpulan..."></textarea>',
+                '  </div>',
+                '  <div class="form-group">',
+                '    <label class="form-label" for="submissionFileInput">Lampiran File' + (requireFile ? ' *' : '') + '</label>',
+                '    <input type="file" id="submissionFileInput" class="form-input" multiple onchange="addSubmissionFiles(this)">',
+                '    <small class="form-hint">' + (item.allowedTypes ? 'Tipe diizinkan: ' + ELIPS.escapeHtml(item.allowedTypes) + '. ' : '') +
+                    (item.maxFileSize ? 'Maksimum ' + taskFileSize(item.maxFileSize) + ' per file.' : '') + '</small>',
+                '  </div>',
+                '  <div id="submissionFileList" style="font-size: 0.875rem; margin-bottom: 0.75rem;"></div>',
+                '  <button class="btn btn-primary" onclick="submitAssignmentForm(' + item.id + ')"><i class="bi bi-send"></i> ' +
+                    (isResubmission ? 'Kumpulkan Ulang' : 'Kumpulkan Tugas') + '</button>',
+                '</div>'
+            ].join('');
+        }
+
+        function renderPendingSubmissionFiles() {
+            const list = document.getElementById('submissionFileList');
+            if (!list) return;
+            if (pendingSubmissionFiles.length === 0) {
+                list.innerHTML = '';
+                return;
+            }
+            list.innerHTML = '<strong>File dipilih:</strong><ul style="margin: 0.25rem 0 0 1rem;">' +
+                pendingSubmissionFiles.map(function (file, index) {
+                    return '<li>' + ELIPS.escapeHtml(file.fileName) + (file.fileSize ? ' (' + taskFileSize(file.fileSize) + ')' : '') +
+                        ' <button type="button" class="btn btn-ghost" style="padding: 0 0.25rem; font-size: 0.75rem; color: var(--danger);" onclick="removeSubmissionFile(' + index + ')"><i class="bi bi-x"></i></button></li>';
+                }).join('') + '</ul>';
+        }
+
+        function addSubmissionFiles(input) {
+            const files = input.files ? Array.prototype.slice.call(input.files) : [];
+            files.forEach(function (file) {
+                pendingSubmissionFiles.push({
+                    fileName: file.name,
+                    fileSize: file.size,
+                    mimeType: file.type || '',
+                    filePath: ''
+                });
+            });
+            input.value = '';
+            renderPendingSubmissionFiles();
+        }
+
+        function removeSubmissionFile(index) {
+            pendingSubmissionFiles.splice(index, 1);
+            renderPendingSubmissionFiles();
+        }
+
+        function submitAssignmentForm(assignmentId) {
+            if (isPreviewMode) {
+                ELIPS.toast('Mode pratinjau: pengumpulan tugas dilakukan oleh peserta.');
+                return;
+            }
+            const textField = document.getElementById('submissionTextAnswer');
+            const payload = { textAnswer: textField ? textField.value.trim() : '' };
+            if (pendingSubmissionFiles.length > 0) payload.files = pendingSubmissionFiles.slice();
+            const result = ELIPS.submitAssignment(assignmentId, payload);
+            ELIPS.toast(result.message);
+            if (!result.ok) return;
+            pendingSubmissionFiles = [];
+            loadTaskClassroom();
+            loadAssignmentDetail(assignmentId);
+            renderAll();
+        }
+
+        function renderExam() {
+            const container = document.getElementById('learningContent');
+            const item = examDetail;
+            if (!item) {
+                container.innerHTML = '<p style="color: var(--text-secondary);">Ujian tidak ditemukan.</p>';
+                return;
+            }
+            const schedule = item.examDate
+                ? taskFormatDate(item.examDate) + (item.startTime ? ' • ' + item.startTime : '')
+                : 'Belum dijadwalkan';
+            const result = item.result;
+
+            let resultPanel = '';
+            if (isPreviewMode) {
+                resultPanel = '<div style="padding: 1rem; background: #eff6ff; color: #1e40af; border-radius: var(--radius); margin-top: 1.5rem;">' +
+                    '<i class="bi bi-eye"></i> Mode pratinjau: hasil ujian milik peserta tidak ditampilkan.</div>';
+            } else if (result) {
+                const graded = result.status === 'graded';
+                resultPanel = [
+                    '<div style="padding: 1rem; border: 1px solid var(--border); border-radius: var(--radius); margin-top: 1.5rem;">',
+                    '  <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.75rem;">',
+                    '    <h3 style="font-size: 1rem; margin: 0;">Hasil Ujian Anda</h3>',
+                    '    <span class="badge ' + (graded ? 'badge-success' : 'badge-warning') + '">' + ELIPS.escapeHtml(TASK_RESULT_LABELS[result.status] || result.status) + '</span>',
+                    '  </div>',
+                    '  <div style="display: flex; gap: 1rem; flex-wrap: wrap; font-size: 0.875rem;">',
+                    '    <span><i class="bi bi-star"></i> Nilai: ' + (graded ? result.score + ' / ' + (Number(item.maxScore) || 0) : 'Belum ada nilai') + '</span>',
+                    result.gradedAt ? '    <span style="color: var(--text-secondary);"><i class="bi bi-clock"></i> Dinilai ' + taskFormatDateTime(result.gradedAt) + '</span>' : '',
+                    '  </div>',
+                    result.note ? '  <div style="font-size: 0.875rem; margin-top: 0.5rem;"><strong>Catatan:</strong> ' + ELIPS.escapeHtml(result.note) + '</div>' : '',
+                    '</div>'
+                ].join('');
+            } else {
+                resultPanel = '<div style="padding: 1rem; background: #eff6ff; color: #1e40af; border-radius: var(--radius); margin-top: 1.5rem;">' +
+                    '<i class="bi bi-info-circle"></i> Hasil ujian belum tersedia. Instruktur akan mencatat nilai setelah ujian dilaksanakan.</div>';
+            }
+
+            container.innerHTML =
+                '<article class="learning-article">' +
+                '<header class="learning-article-header">' +
+                '<div class="learning-article-meta"><span class="learning-article-breadcrumb">Ujian Kelas</span></div>' +
+                '<h1 class="learning-article-title">' + ELIPS.escapeHtml(item.title) + '</h1>' +
+                '<div style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.75rem;">' +
+                '<span class="badge badge-primary">' + ELIPS.escapeHtml(TASK_EXAM_TYPE_LABELS[item.type] || item.type) + '</span>' +
+                taskStatusBadge(item.status) +
+                '<span class="badge">Nilai Maks ' + (Number(item.maxScore) || 0) + '</span>' +
+                '<span class="badge">Bobot ' + (Number(item.weight) || 0) + '%</span>' +
+                '</div>' +
+                '</header>' +
+                '<div class="learning-article-body">' +
+                '<div style="display: flex; gap: 1rem; flex-wrap: wrap; color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 1rem;">' +
+                '<span><i class="bi bi-calendar-event"></i> ' + ELIPS.escapeHtml(schedule) + '</span>' +
+                (item.durationMinutes ? '<span><i class="bi bi-hourglass-split"></i> ' + item.durationMinutes + ' menit</span>' : '') +
+                '</div>' +
+                (item.description ? '<p style="color: var(--text-secondary); margin-bottom: 1rem;">' + ELIPS.escapeHtml(item.description) + '</p>' : '') +
+                (item.instructions ? '<div style="white-space: pre-wrap;">' + ELIPS.escapeHtml(item.instructions) + '</div>' : '<p>Tidak ada instruksi khusus.</p>') +
+                resultPanel +
+                '</div>' +
+                '<div class="learning-actions">' +
+                '<div class="learning-nav">' +
+                (flatLessons.length > 0 ? '<button class="btn btn-ghost" onclick="selectLesson(' + flatLessons[0].lesson.id + ', event)"><i class="bi bi-arrow-left"></i> Kembali ke Pelajaran</button>' : '') +
+                '</div>' +
+                '</div>' +
+                '</article>';
         }
 
         function renderLesson(lessonId) {

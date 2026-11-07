@@ -462,6 +462,188 @@ CREATE TABLE IF NOT EXISTS `class_material_progress` (
     CONSTRAINT `fk_class_material_progress_completed_by` FOREIGN KEY (`completed_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS `assignments` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `class_id` INT UNSIGNED NOT NULL,
+    `curriculum_version_id` INT UNSIGNED NOT NULL,
+    `module_id` INT UNSIGNED NULL,
+    `lesson_id` INT UNSIGNED NULL,
+    `title` VARCHAR(200) NOT NULL,
+    `instructions` LONGTEXT NOT NULL,
+    `type` ENUM('file_upload', 'text_submission', 'in_class_practice', 'external_reference') NOT NULL DEFAULT 'text_submission',
+    `open_at` DATETIME NULL,
+    `due_at` DATETIME NULL,
+    `max_score` DECIMAL(6,2) NOT NULL DEFAULT 100.00,
+    `weight` DECIMAL(5,2) NOT NULL DEFAULT 0.00,
+    `require_file` TINYINT(1) NOT NULL DEFAULT 0,
+    `allowed_types` VARCHAR(255) NOT NULL DEFAULT '',
+    `max_file_size` INT UNSIGNED NULL,
+    `status` ENUM('draft', 'published', 'closed', 'archived') NOT NULL DEFAULT 'draft',
+    `created_by` INT UNSIGNED NULL,
+    `updated_by` INT UNSIGNED NULL,
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NULL,
+    PRIMARY KEY (`id`),
+    KEY `idx_assignments_class_status` (`class_id`, `status`),
+    KEY `idx_assignments_version` (`curriculum_version_id`),
+    KEY `idx_assignments_module` (`module_id`),
+    KEY `idx_assignments_lesson` (`lesson_id`),
+    KEY `idx_assignments_created_by` (`created_by`),
+    CONSTRAINT `fk_assignments_class` FOREIGN KEY (`class_id`) REFERENCES `classes` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_assignments_version` FOREIGN KEY (`curriculum_version_id`) REFERENCES `curriculum_versions` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_assignments_module` FOREIGN KEY (`module_id`) REFERENCES `modules` (`id`) ON DELETE SET NULL,
+    CONSTRAINT `fk_assignments_lesson` FOREIGN KEY (`lesson_id`) REFERENCES `lessons` (`id`) ON DELETE SET NULL,
+    CONSTRAINT `fk_assignments_created_by` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+    CONSTRAINT `fk_assignments_updated_by` FOREIGN KEY (`updated_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `assignment_files` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `assignment_id` INT UNSIGNED NOT NULL,
+    `file_name` VARCHAR(255) NOT NULL DEFAULT '',
+    `file_path` VARCHAR(500) NOT NULL DEFAULT '',
+    `file_size` BIGINT UNSIGNED NULL,
+    `mime_type` VARCHAR(120) NOT NULL DEFAULT '',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_assignment_files_assignment` (`assignment_id`),
+    CONSTRAINT `fk_assignment_files_assignment` FOREIGN KEY (`assignment_id`) REFERENCES `assignments` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `assignment_rubrics` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `assignment_id` INT UNSIGNED NOT NULL,
+    `criterion` VARCHAR(200) NOT NULL,
+    `description` TEXT NOT NULL,
+    `max_score` DECIMAL(6,2) NOT NULL DEFAULT 100.00,
+    `sort_order` INT UNSIGNED NOT NULL DEFAULT 1,
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NULL,
+    PRIMARY KEY (`id`),
+    KEY `idx_assignment_rubrics_assignment` (`assignment_id`, `sort_order`),
+    CONSTRAINT `fk_assignment_rubrics_assignment` FOREIGN KEY (`assignment_id`) REFERENCES `assignments` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `submissions` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `assignment_id` INT UNSIGNED NOT NULL,
+    `enrollment_id` INT UNSIGNED NOT NULL,
+    `student_id` INT UNSIGNED NOT NULL,
+    `status` ENUM('submitted', 'late', 'reviewed', 'revision_requested', 'resubmitted', 'accepted') NOT NULL DEFAULT 'submitted',
+    `text_answer` LONGTEXT NOT NULL,
+    `submitted_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `is_late` TINYINT(1) NOT NULL DEFAULT 0,
+    `score` DECIMAL(6,2) NULL,
+    `feedback` TEXT NOT NULL,
+    `reviewed_by` INT UNSIGNED NULL,
+    `reviewed_at` DATETIME NULL,
+    `revision_count` INT UNSIGNED NOT NULL DEFAULT 0,
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NULL,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uq_submissions_assignment_enrollment` (`assignment_id`, `enrollment_id`),
+    KEY `idx_submissions_student` (`student_id`),
+    KEY `idx_submissions_status` (`status`),
+    CONSTRAINT `fk_submissions_assignment` FOREIGN KEY (`assignment_id`) REFERENCES `assignments` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_submissions_enrollment` FOREIGN KEY (`enrollment_id`) REFERENCES `enrollments` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_submissions_student` FOREIGN KEY (`student_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_submissions_reviewed_by` FOREIGN KEY (`reviewed_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `submission_files` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `submission_id` INT UNSIGNED NOT NULL,
+    `file_name` VARCHAR(255) NOT NULL DEFAULT '',
+    `file_path` VARCHAR(500) NOT NULL DEFAULT '',
+    `file_size` BIGINT UNSIGNED NULL,
+    `mime_type` VARCHAR(120) NOT NULL DEFAULT '',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_submission_files_submission` (`submission_id`),
+    CONSTRAINT `fk_submission_files_submission` FOREIGN KEY (`submission_id`) REFERENCES `submissions` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `submission_reviews` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `submission_id` INT UNSIGNED NOT NULL,
+    `reviewer_id` INT UNSIGNED NULL,
+    `action` ENUM('submit', 'score', 'revision', 'accept') NOT NULL DEFAULT 'submit',
+    `score` DECIMAL(6,2) NULL,
+    `note` TEXT NOT NULL,
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_submission_reviews_submission` (`submission_id`, `created_at`),
+    CONSTRAINT `fk_submission_reviews_submission` FOREIGN KEY (`submission_id`) REFERENCES `submissions` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_submission_reviews_reviewer` FOREIGN KEY (`reviewer_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `exams` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `class_id` INT UNSIGNED NOT NULL,
+    `curriculum_version_id` INT UNSIGNED NOT NULL,
+    `title` VARCHAR(200) NOT NULL,
+    `description` TEXT NOT NULL,
+    `type` ENUM('written', 'practical', 'oral', 'project', 'other') NOT NULL DEFAULT 'written',
+    `exam_date` DATE NULL,
+    `start_time` TIME NULL,
+    `duration_minutes` INT UNSIGNED NULL,
+    `max_score` DECIMAL(6,2) NOT NULL DEFAULT 100.00,
+    `weight` DECIMAL(5,2) NOT NULL DEFAULT 0.00,
+    `instructions` LONGTEXT NOT NULL,
+    `status` ENUM('draft', 'published', 'closed', 'archived') NOT NULL DEFAULT 'draft',
+    `created_by` INT UNSIGNED NULL,
+    `updated_by` INT UNSIGNED NULL,
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NULL,
+    PRIMARY KEY (`id`),
+    KEY `idx_exams_class_status` (`class_id`, `status`),
+    KEY `idx_exams_version` (`curriculum_version_id`),
+    KEY `idx_exams_date` (`exam_date`),
+    CONSTRAINT `fk_exams_class` FOREIGN KEY (`class_id`) REFERENCES `classes` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_exams_version` FOREIGN KEY (`curriculum_version_id`) REFERENCES `curriculum_versions` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_exams_created_by` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+    CONSTRAINT `fk_exams_updated_by` FOREIGN KEY (`updated_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `exam_participants` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `exam_id` INT UNSIGNED NOT NULL,
+    `enrollment_id` INT UNSIGNED NOT NULL,
+    `student_id` INT UNSIGNED NOT NULL,
+    `status` ENUM('registered', 'attended', 'absent', 'excused') NOT NULL DEFAULT 'registered',
+    `note` TEXT NOT NULL,
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NULL,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uq_exam_participants_exam_enrollment` (`exam_id`, `enrollment_id`),
+    KEY `idx_exam_participants_student` (`student_id`),
+    CONSTRAINT `fk_exam_participants_exam` FOREIGN KEY (`exam_id`) REFERENCES `exams` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_exam_participants_enrollment` FOREIGN KEY (`enrollment_id`) REFERENCES `enrollments` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_exam_participants_student` FOREIGN KEY (`student_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `exam_results` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `exam_id` INT UNSIGNED NOT NULL,
+    `enrollment_id` INT UNSIGNED NOT NULL,
+    `student_id` INT UNSIGNED NOT NULL,
+    `score` DECIMAL(6,2) NULL,
+    `status` ENUM('not_assessed', 'excused', 'missing', 'graded') NOT NULL DEFAULT 'not_assessed',
+    `graded_by` INT UNSIGNED NULL,
+    `graded_at` DATETIME NULL,
+    `note` TEXT NOT NULL,
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NULL,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uq_exam_results_exam_enrollment` (`exam_id`, `enrollment_id`),
+    KEY `idx_exam_results_student` (`student_id`),
+    KEY `idx_exam_results_status` (`status`),
+    CONSTRAINT `fk_exam_results_exam` FOREIGN KEY (`exam_id`) REFERENCES `exams` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_exam_results_enrollment` FOREIGN KEY (`enrollment_id`) REFERENCES `enrollments` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_exam_results_student` FOREIGN KEY (`student_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_exam_results_graded_by` FOREIGN KEY (`graded_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS `notifications` (
     `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
     `type` VARCHAR(40) NOT NULL,

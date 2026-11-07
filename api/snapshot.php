@@ -300,6 +300,82 @@ function elips_snapshot(): array
         $classMaterialProgress[] = elips_class_material_progress_public($row);
     }
 
+    // Tugas, pengumpulan, dan ujian. Snapshot hanya memuat metadata dan
+    // status/nilai. Jawaban teks, umpan balik, dan path file privat tidak
+    // pernah ikut; konten lengkap hanya lewat aksi yang memeriksa akses.
+    $assignments = [];
+    foreach ($db->query('SELECT id FROM assignments ORDER BY id ASC') as $row) {
+        $assignment = elips_assignment_row((int) $row['id']);
+        if ($assignment) {
+            $assignments[] = elips_assignment_public($assignment, false);
+        }
+    }
+
+    $assignmentFiles = [];
+    foreach ($db->query('SELECT * FROM assignment_files ORDER BY assignment_id ASC, id ASC') as $row) {
+        $assignmentFiles[] = elips_assignment_file_public($row, false);
+    }
+
+    $assignmentRubrics = [];
+    foreach ($db->query('SELECT * FROM assignment_rubrics ORDER BY assignment_id ASC, sort_order ASC, id ASC') as $row) {
+        $assignmentRubrics[] = elips_assignment_rubric_public($row);
+    }
+
+    $submissions = [];
+    foreach ($db->query('SELECT id FROM submissions ORDER BY id ASC') as $row) {
+        $submission = elips_submission_row((int) $row['id']);
+        if ($submission) {
+            $submissions[] = elips_submission_public($submission, false);
+        }
+    }
+
+    $submissionFiles = [];
+    foreach ($db->query('SELECT * FROM submission_files ORDER BY submission_id ASC, id ASC') as $row) {
+        $submissionFiles[] = elips_submission_file_public($row, false);
+    }
+
+    $submissionReviews = [];
+    $reviewRows = $db->query(
+        'SELECT r.*, u.name AS reviewer_name
+         FROM submission_reviews r
+         LEFT JOIN users u ON u.id = r.reviewer_id
+         ORDER BY r.submission_id ASC, r.id ASC'
+    );
+    foreach ($reviewRows as $row) {
+        $submissionReviews[] = elips_submission_review_public($row);
+    }
+
+    $exams = [];
+    foreach ($db->query('SELECT id FROM exams ORDER BY id ASC') as $row) {
+        $exam = elips_exam_row((int) $row['id']);
+        if ($exam) {
+            $exams[] = elips_exam_public($exam, false);
+        }
+    }
+
+    $examParticipants = [];
+    $participantRows = $db->query(
+        'SELECT p.*, u.name AS student_name
+         FROM exam_participants p
+         JOIN users u ON u.id = p.student_id
+         ORDER BY p.exam_id ASC, u.name ASC, p.id ASC'
+    );
+    foreach ($participantRows as $row) {
+        $examParticipants[] = elips_exam_participant_public($row);
+    }
+
+    $examResults = [];
+    $resultRows = $db->query(
+        'SELECT r.*, u.name AS student_name, g.name AS graded_by_name
+         FROM exam_results r
+         JOIN users u ON u.id = r.student_id
+         LEFT JOIN users g ON g.id = r.graded_by
+         ORDER BY r.exam_id ASC, u.name ASC, r.id ASC'
+    );
+    foreach ($resultRows as $row) {
+        $examResults[] = elips_exam_result_public($row);
+    }
+
     $auditLimit = (int) elips_config()['audit_limit'];
     $auditLogs = [];
     foreach ($db->query('SELECT * FROM audit_logs ORDER BY id DESC LIMIT ' . $auditLimit) as $row) {
@@ -360,6 +436,15 @@ function elips_snapshot(): array
         'classMaterials' => $classMaterials,
         'classLessonProgress' => $classLessonProgress,
         'classMaterialProgress' => $classMaterialProgress,
+        'assignments' => $assignments,
+        'assignmentFiles' => $assignmentFiles,
+        'assignmentRubrics' => $assignmentRubrics,
+        'submissions' => $submissions,
+        'submissionFiles' => $submissionFiles,
+        'submissionReviews' => $submissionReviews,
+        'exams' => $exams,
+        'examParticipants' => $examParticipants,
+        'examResults' => $examResults,
         'auditLogs' => $auditLogs,
         'notifications' => $notifications,
     ];

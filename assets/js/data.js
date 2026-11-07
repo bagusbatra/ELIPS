@@ -275,6 +275,119 @@
         });
     }
 
+    // ---------- Tugas, pengumpulan, dan ujian (Phase 5) ----------
+    function getAssignments() { return read(KEYS.assignments, []); }
+    function setAssignments(list) { return write(KEYS.assignments, list); }
+    function getAssignmentById(id) {
+        return getAssignments().find(function (a) { return a.id === Number(id); }) || null;
+    }
+    function getAssignmentsByClass(classId) {
+        return getAssignments()
+            .filter(function (a) { return Number(a.classId) === Number(classId); })
+            .sort(function (a, b) { return Number(a.id) - Number(b.id); });
+    }
+    function getAssignmentsByCourse(courseId) {
+        return getAssignments().filter(function (a) { return Number(a.courseId) === Number(courseId); });
+    }
+
+    function getAssignmentFiles() { return read(KEYS.assignmentFiles, []); }
+    function setAssignmentFiles(list) { return write(KEYS.assignmentFiles, list); }
+    function getAssignmentFilesByAssignment(assignmentId) {
+        return getAssignmentFiles().filter(function (f) {
+            return Number(f.assignmentId) === Number(assignmentId);
+        });
+    }
+
+    function getAssignmentRubrics() { return read(KEYS.assignmentRubrics, []); }
+    function setAssignmentRubrics(list) { return write(KEYS.assignmentRubrics, list); }
+    function getAssignmentRubricsByAssignment(assignmentId) {
+        return getAssignmentRubrics()
+            .filter(function (r) { return Number(r.assignmentId) === Number(assignmentId); })
+            .sort(function (a, b) {
+                const order = (Number(a.order) || 0) - (Number(b.order) || 0);
+                return order !== 0 ? order : Number(a.id) - Number(b.id);
+            });
+    }
+
+    function getSubmissions() { return read(KEYS.submissions, []); }
+    function setSubmissions(list) { return write(KEYS.submissions, list); }
+    function getSubmissionById(id) {
+        return getSubmissions().find(function (s) { return s.id === Number(id); }) || null;
+    }
+    function getSubmissionsByAssignment(assignmentId) {
+        return getSubmissions().filter(function (s) {
+            return Number(s.assignmentId) === Number(assignmentId);
+        });
+    }
+    function getSubmissionsByStudent(studentId) {
+        return getSubmissions().filter(function (s) { return Number(s.studentId) === Number(studentId); });
+    }
+    function getSubmissionByEnrollment(assignmentId, enrollmentId) {
+        return getSubmissions().find(function (s) {
+            return Number(s.assignmentId) === Number(assignmentId) &&
+                Number(s.enrollmentId) === Number(enrollmentId);
+        }) || null;
+    }
+
+    function getSubmissionFiles() { return read(KEYS.submissionFiles, []); }
+    function setSubmissionFiles(list) { return write(KEYS.submissionFiles, list); }
+    function getSubmissionFilesBySubmission(submissionId) {
+        return getSubmissionFiles().filter(function (f) {
+            return Number(f.submissionId) === Number(submissionId);
+        });
+    }
+
+    function getSubmissionReviews() { return read(KEYS.submissionReviews, []); }
+    function setSubmissionReviews(list) { return write(KEYS.submissionReviews, list); }
+    function getSubmissionReviewsBySubmission(submissionId) {
+        return getSubmissionReviews()
+            .filter(function (r) { return Number(r.submissionId) === Number(submissionId); })
+            .sort(function (a, b) { return Number(a.id) - Number(b.id); });
+    }
+
+    function getExams() { return read(KEYS.exams, []); }
+    function setExams(list) { return write(KEYS.exams, list); }
+    function getExamById(id) {
+        return getExams().find(function (e) { return e.id === Number(id); }) || null;
+    }
+    function getExamsByClass(classId) {
+        return getExams()
+            .filter(function (e) { return Number(e.classId) === Number(classId); })
+            .sort(function (a, b) {
+                const dateCompare = String(a.examDate || '').localeCompare(String(b.examDate || ''));
+                return dateCompare !== 0 ? dateCompare : Number(a.id) - Number(b.id);
+            });
+    }
+
+    function getExamParticipants() { return read(KEYS.examParticipants, []); }
+    function setExamParticipants(list) { return write(KEYS.examParticipants, list); }
+    function getExamParticipantsByExam(examId) {
+        return getExamParticipants().filter(function (p) {
+            return Number(p.examId) === Number(examId);
+        });
+    }
+    function getExamParticipant(examId, enrollmentId) {
+        return getExamParticipants().find(function (p) {
+            return Number(p.examId) === Number(examId) &&
+                Number(p.enrollmentId) === Number(enrollmentId);
+        }) || null;
+    }
+
+    function getExamResults() { return read(KEYS.examResults, []); }
+    function setExamResults(list) { return write(KEYS.examResults, list); }
+    function getExamResultsByExam(examId) {
+        return getExamResults().filter(function (r) { return Number(r.examId) === Number(examId); });
+    }
+    function getExamResultsByStudent(studentId) {
+        return getExamResults().filter(function (r) { return Number(r.studentId) === Number(studentId); });
+    }
+    function getExamResultByEnrollment(examId, enrollmentId) {
+        return getExamResults().find(function (r) {
+            return Number(r.examId) === Number(examId) &&
+                Number(r.enrollmentId) === Number(enrollmentId);
+        }) || null;
+    }
+
     Object.assign(ELIPS, {
         getUsers: getUsers,
         setUsers: setUsers,
@@ -356,6 +469,42 @@
         getClassLessonProgressByEnrollment: getClassLessonProgressByEnrollment,
         getClassMaterialProgress: getClassMaterialProgress,
         setClassMaterialProgress: setClassMaterialProgress,
-        getClassMaterialProgressByEnrollment: getClassMaterialProgressByEnrollment
+        getClassMaterialProgressByEnrollment: getClassMaterialProgressByEnrollment,
+        getAssignments: getAssignments,
+        setAssignments: setAssignments,
+        getAssignmentById: getAssignmentById,
+        getAssignmentsByClass: getAssignmentsByClass,
+        getAssignmentsByCourse: getAssignmentsByCourse,
+        getAssignmentFiles: getAssignmentFiles,
+        setAssignmentFiles: setAssignmentFiles,
+        getAssignmentFilesByAssignment: getAssignmentFilesByAssignment,
+        getAssignmentRubrics: getAssignmentRubrics,
+        setAssignmentRubrics: setAssignmentRubrics,
+        getAssignmentRubricsByAssignment: getAssignmentRubricsByAssignment,
+        getSubmissions: getSubmissions,
+        setSubmissions: setSubmissions,
+        getSubmissionById: getSubmissionById,
+        getSubmissionsByAssignment: getSubmissionsByAssignment,
+        getSubmissionsByStudent: getSubmissionsByStudent,
+        getSubmissionByEnrollment: getSubmissionByEnrollment,
+        getSubmissionFiles: getSubmissionFiles,
+        setSubmissionFiles: setSubmissionFiles,
+        getSubmissionFilesBySubmission: getSubmissionFilesBySubmission,
+        getSubmissionReviews: getSubmissionReviews,
+        setSubmissionReviews: setSubmissionReviews,
+        getSubmissionReviewsBySubmission: getSubmissionReviewsBySubmission,
+        getExams: getExams,
+        setExams: setExams,
+        getExamById: getExamById,
+        getExamsByClass: getExamsByClass,
+        getExamParticipants: getExamParticipants,
+        setExamParticipants: setExamParticipants,
+        getExamParticipantsByExam: getExamParticipantsByExam,
+        getExamParticipant: getExamParticipant,
+        getExamResults: getExamResults,
+        setExamResults: setExamResults,
+        getExamResultsByExam: getExamResultsByExam,
+        getExamResultsByStudent: getExamResultsByStudent,
+        getExamResultByEnrollment: getExamResultByEnrollment
     });
 })(window.ELIPS);

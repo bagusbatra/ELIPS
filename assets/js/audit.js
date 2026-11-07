@@ -29,7 +29,8 @@
         attendance: 'Presensi',
         correct: 'Koreksi',
         confirm: 'Konfirmasi',
-        unconfirm: 'Batal Konfirmasi'
+        unconfirm: 'Batal Konfirmasi',
+        revision: 'Minta Revisi'
     };
 
     const ENTITY_LABELS = {
@@ -46,7 +47,12 @@
         material_settings: 'Pengaturan Akses Materi',
         class_material: 'Materi Tambahan Kelas',
         class_lesson_progress: 'Progres Pelajaran',
-        class_material_progress: 'Progres Materi Tambahan'
+        class_material_progress: 'Progres Materi Tambahan',
+        assignment: 'Tugas',
+        submission: 'Pengumpulan Tugas',
+        exam: 'Ujian',
+        exam_participant: 'Peserta Ujian',
+        exam_result: 'Hasil Ujian'
     };
 
     function actionLabel(action) {

@@ -121,6 +121,38 @@ function elips_dispatch(string $action, array $payload): array
             return elips_action_material_classroom($payload);
         case 'material.progress':
             return elips_action_material_progress($payload);
+        case 'assignment.classroom':
+            return elips_action_assignment_classroom($payload);
+        case 'assignment.detail':
+            return elips_action_assignment_detail($payload);
+        case 'assignment.create':
+            return elips_action_assignment_create($payload);
+        case 'assignment.update':
+            return elips_action_assignment_update($payload);
+        case 'assignment.status':
+            return elips_action_assignment_status($payload);
+        case 'assignment.delete':
+            return elips_action_assignment_delete($payload);
+        case 'assignment.submit':
+            return elips_action_assignment_submit($payload);
+        case 'assignment.review':
+            return elips_action_assignment_review($payload);
+        case 'assignment.submissions':
+            return elips_action_assignment_submissions($payload);
+        case 'exam.classroom':
+            return elips_action_exam_classroom($payload);
+        case 'exam.detail':
+            return elips_action_exam_detail($payload);
+        case 'exam.create':
+            return elips_action_exam_create($payload);
+        case 'exam.update':
+            return elips_action_exam_update($payload);
+        case 'exam.status':
+            return elips_action_exam_status($payload);
+        case 'exam.delete':
+            return elips_action_exam_delete($payload);
+        case 'exam.result':
+            return elips_action_exam_result($payload);
         case 'grade.save':
             return elips_action_grade_save($payload);
         case 'certificate.draft':
@@ -3369,6 +3401,1337 @@ function elips_action_material_progress(array $p): array
         $completed ? 'Progres materi ditandai selesai.' : 'Tanda selesai materi dibatalkan.',
         elips_material_classroom_payload($class, $enrollment, $staffMode)
     );
+}
+
+// ---------- Tugas, submission, dan ujian (Phase 5) ----------
+
+function elips_task_classroom_context(array $p, array $actor): array
+{
+    $classId = (int) ($p['classId'] ?? 0);
+    $class = elips_class_row($classId);
+    if (!$class) return ['error' => 'Kelas tidak ditemukan.'];
+
+    $preview = elips_can_manage_class($class, $actor);
+    $enrollment = null;
+    if ($preview) {
+        $enrollmentId = (int) ($p['enrollmentId'] ?? 0);
+        if ($enrollmentId > 0) {
+            $enrollment = elips_class_enrollment_by_id($classId, $enrollmentId);
+            if (!$enrollment) return ['error' => 'Peserta tidak terdaftar pada kelas ini.'];
+        }
+    } else {
+        if ($actor['role'] !== 'peserta') {
+            return ['error' => 'Anda tidak berhak membuka ruang tugas kelas ini.'];
+        }
+        $course = elips_course_row((int) $class['course_id']);
+        if (!$course || $course['status'] !== 'published') {
+            return ['error' => 'Kursus belum dipublikasikan.'];
+        }
+        $enrollment = elips_class_enrollment_for($classId, (int) $actor['id']);
+        if (!$enrollment) return ['error' => 'Anda tidak terdaftar pada kelas ini.'];
+    }
+
+    return [
+        'class' => $class,
+        'enrollment' => $enrollment,
+        'preview' => $preview,
+    ];
+}
+
+function elips_task_assignment_context(int $id, array $actor, bool $staffOnly = false): array
+{
+    $assignment = elips_assignment_row($id);
+    if (!$assignment) return ['error' => 'Tugas tidak ditemukan.'];
+    $class = elips_class_row((int) $assignment['class_id']);
+    if (!$class) return ['error' => 'Kelas tidak ditemukan.'];
+
+    $staff = elips_can_manage_class($class, $actor);
+    if ($staff) {
+        return [
+            'assignment' => $assignment,
+            'class' => $class,
+            'staff' => true,
+            'enrollment' => null,
+        ];
+    }
+    if ($staffOnly) return ['error' => 'Anda tidak berhak mengelola tugas pada kelas ini.'];
+    if ($actor['role'] !== 'peserta') {
+        return ['error' => 'Anda tidak berhak membuka tugas kelas ini.'];
+    }
+    $course = elips_course_row((int) $class['course_id']);
+    if (!$course || $course['status'] !== 'published') {
+        return ['error' => 'Kursus belum dipublikasikan.'];
+    }
+    $enrollment = elips_class_enrollment_for((int) $class['id'], (int) $actor['id']);
+    if (!$enrollment) return ['error' => 'Anda tidak terdaftar pada kelas ini.'];
+    if (!in_array($assignment['status'], ['published', 'closed'], true)) {
+        return ['error' => 'Tugas belum dipublikasikan.'];
+    }
+    return [
+        'assignment' => $assignment,
+        'class' => $class,
+        'staff' => false,
+        'enrollment' => $enrollment,
+    ];
+}
+
+function elips_task_exam_context(int $id, array $actor, bool $staffOnly = false): array
+{
+    $exam = elips_exam_row($id);
+    if (!$exam) return ['error' => 'Ujian tidak ditemukan.'];
+    $class = elips_class_row((int) $exam['class_id']);
+    if (!$class) return ['error' => 'Kelas tidak ditemukan.'];
+
+    $staff = elips_can_manage_class($class, $actor);
+    if ($staff) {
+        return [
+            'exam' => $exam,
+            'class' => $class,
+            'staff' => true,
+            'enrollment' => null,
+        ];
+    }
+    if ($staffOnly) return ['error' => 'Anda tidak berhak mengelola ujian pada kelas ini.'];
+    if ($actor['role'] !== 'peserta') {
+        return ['error' => 'Anda tidak berhak membuka ujian kelas ini.'];
+    }
+    $course = elips_course_row((int) $class['course_id']);
+    if (!$course || $course['status'] !== 'published') {
+        return ['error' => 'Kursus belum dipublikasikan.'];
+    }
+    $enrollment = elips_class_enrollment_for((int) $class['id'], (int) $actor['id']);
+    if (!$enrollment) return ['error' => 'Anda tidak terdaftar pada kelas ini.'];
+    if (!in_array($exam['status'], ['published', 'closed'], true)) {
+        return ['error' => 'Ujian belum dipublikasikan.'];
+    }
+    return [
+        'exam' => $exam,
+        'class' => $class,
+        'staff' => false,
+        'enrollment' => $enrollment,
+    ];
+}
+
+function elips_task_curriculum_refs(array $class, int $moduleId, int $lessonId): array
+{
+    $courseId = (int) $class['course_id'];
+    $versionId = (int) $class['curriculum_version_id'];
+    $result = ['moduleId' => $moduleId > 0 ? $moduleId : null, 'lessonId' => $lessonId > 0 ? $lessonId : null];
+
+    if ($lessonId > 0) {
+        $stmt = elips_db()->prepare(
+            'SELECT * FROM lessons WHERE id = ? AND course_id = ? AND curriculum_version_id = ? LIMIT 1'
+        );
+        $stmt->execute([$lessonId, $courseId, $versionId]);
+        $lesson = $stmt->fetch();
+        if (!$lesson) {
+            return ['error' => 'Materi kurikulum tidak valid untuk kelas ini.'];
+        }
+        if ($moduleId > 0 && (int) $lesson['module_id'] !== $moduleId) {
+            return ['error' => 'Materi tidak berada pada modul yang dipilih.'];
+        }
+        $result['moduleId'] = (int) $lesson['module_id'];
+        $result['lessonId'] = (int) $lesson['id'];
+        return $result;
+    }
+
+    if ($moduleId > 0) {
+        $stmt = elips_db()->prepare(
+            'SELECT * FROM modules WHERE id = ? AND course_id = ? AND curriculum_version_id = ? LIMIT 1'
+        );
+        $stmt->execute([$moduleId, $courseId, $versionId]);
+        if (!$stmt->fetch()) {
+            return ['error' => 'Modul kurikulum tidak valid untuk kelas ini.'];
+        }
+    }
+
+    return $result;
+}
+
+function elips_task_normalize_files($value): array
+{
+    if (!is_array($value)) return ['files' => [], 'error' => null];
+    $files = [];
+    foreach ($value as $item) {
+        if (!is_array($item)) continue;
+        $fileName = trim((string) ($item['fileName'] ?? $item['file_name'] ?? ''));
+        if ($fileName === '') continue;
+        if (count($files) >= 20) {
+            return ['files' => [], 'error' => 'Maksimal 20 file per pengumpulan.'];
+        }
+        $fileSize = $item['fileSize'] ?? $item['file_size'] ?? null;
+        $fileSize = ($fileSize === null || $fileSize === '') ? null : max(0, (int) $fileSize);
+        $files[] = [
+            'fileName' => mb_substr($fileName, 0, 255),
+            'filePath' => trim((string) ($item['filePath'] ?? $item['file_path'] ?? '')),
+            'fileSize' => $fileSize,
+            'mimeType' => mb_substr(trim((string) ($item['mimeType'] ?? $item['mime_type'] ?? '')), 0, 120),
+        ];
+    }
+    return ['files' => $files, 'error' => null];
+}
+
+function elips_task_allowed_file_error(string $fileName, array $assignment): ?string
+{
+    $allowed = array_values(array_filter(array_map(
+        'trim',
+        explode(',', strtolower((string) $assignment['allowed_types']))
+    )));
+    if ($allowed && !in_array(strtolower(pathinfo($fileName, PATHINFO_EXTENSION)), $allowed, true)) {
+        return 'Tipe file tidak diizinkan. Gunakan: ' . implode(', ', $allowed) . '.';
+    }
+    return null;
+}
+
+function elips_task_save_assignment_files(int $assignmentId, array $files): void
+{
+    $db = elips_db();
+    $stmt = $db->prepare('DELETE FROM assignment_files WHERE assignment_id = ?');
+    $stmt->execute([$assignmentId]);
+    $stmt = $db->prepare(
+        'INSERT INTO assignment_files (assignment_id, file_name, file_path, file_size, mime_type, created_at)
+         VALUES (?, ?, ?, ?, ?, UTC_TIMESTAMP())'
+    );
+    foreach ($files as $file) {
+        $stmt->execute([
+            $assignmentId,
+            $file['fileName'],
+            $file['filePath'],
+            $file['fileSize'],
+            $file['mimeType'],
+        ]);
+    }
+}
+
+function elips_task_save_rubrics(int $assignmentId, array $rubrics): ?string
+{
+    $normalized = [];
+    foreach ($rubrics as $index => $item) {
+        if (!is_array($item)) continue;
+        $criterion = trim((string) ($item['criterion'] ?? ''));
+        if ($criterion === '') return 'Kriteria rubrik wajib diisi.';
+        $maxScore = (float) ($item['maxScore'] ?? $item['max_score'] ?? 0);
+        if ($maxScore <= 0) return 'Nilai maksimum rubrik harus lebih dari 0.';
+        $normalized[] = [
+            'criterion' => mb_substr($criterion, 0, 200),
+            'description' => trim((string) ($item['description'] ?? '')),
+            'maxScore' => $maxScore,
+            'order' => (int) ($item['order'] ?? $item['sort_order'] ?? ($index + 1)),
+        ];
+    }
+
+    $db = elips_db();
+    $stmt = $db->prepare('DELETE FROM assignment_rubrics WHERE assignment_id = ?');
+    $stmt->execute([$assignmentId]);
+    $stmt = $db->prepare(
+        'INSERT INTO assignment_rubrics (assignment_id, criterion, description, max_score, sort_order, created_at)
+         VALUES (?, ?, ?, ?, ?, UTC_TIMESTAMP())'
+    );
+    foreach ($normalized as $item) {
+        $stmt->execute([
+            $assignmentId,
+            $item['criterion'],
+            $item['description'],
+            $item['maxScore'],
+            max(1, $item['order']),
+        ]);
+    }
+    return null;
+}
+
+function elips_task_save_submission_files(int $submissionId, array $files): void
+{
+    $db = elips_db();
+    $stmt = $db->prepare('DELETE FROM submission_files WHERE submission_id = ?');
+    $stmt->execute([$submissionId]);
+    $stmt = $db->prepare(
+        'INSERT INTO submission_files (submission_id, file_name, file_path, file_size, mime_type, created_at)
+         VALUES (?, ?, ?, ?, ?, UTC_TIMESTAMP())'
+    );
+    foreach ($files as $file) {
+        $stmt->execute([
+            $submissionId,
+            $file['fileName'],
+            $file['filePath'],
+            $file['fileSize'],
+            $file['mimeType'],
+        ]);
+    }
+}
+
+function elips_task_assignment_detail_payload(array $assignment, ?int $enrollmentId): array
+{
+    $id = (int) $assignment['id'];
+    $item = elips_assignment_public($assignment, true);
+    $item['files'] = elips_assignment_files_for($id, true);
+    $item['rubrics'] = elips_assignment_rubrics_for($id);
+    $item['stats'] = elips_assignment_stats($id);
+    $item['submission'] = null;
+
+    if ($enrollmentId) {
+        $submissionRow = elips_assignment_submission_for($id, $enrollmentId);
+        if ($submissionRow) {
+            $submission = elips_submission_public($submissionRow, true);
+            $submission['files'] = elips_submission_files_for((int) $submissionRow['id'], true);
+            $submission['reviews'] = elips_submission_reviews_for((int) $submissionRow['id']);
+            $item['submission'] = $submission;
+        }
+    }
+
+    return $item;
+}
+
+function elips_task_exam_detail_payload(array $exam, bool $staff, ?int $enrollmentId): array
+{
+    $id = (int) $exam['id'];
+    $item = elips_exam_public($exam, true);
+    if ($staff) {
+        elips_exam_ensure_roster($id, (int) $exam['class_id']);
+    }
+    $item['stats'] = elips_exam_stats($id);
+    $item['participants'] = $staff ? elips_exam_participants_for($id) : [];
+    $item['results'] = $staff ? elips_exam_results_for($id) : [];
+    $item['result'] = null;
+    if ($enrollmentId) {
+        $resultRow = elips_exam_result_for($id, $enrollmentId);
+        if ($resultRow) $item['result'] = elips_exam_result_public($resultRow);
+    }
+    return $item;
+}
+
+function elips_action_assignment_classroom(array $p): array
+{
+    $actor = elips_require_login();
+    $context = elips_task_classroom_context($p, $actor);
+    if (isset($context['error'])) return elips_fail($context['error']);
+    return elips_ok(
+        'Ruang tugas dan ujian dimuat.',
+        elips_assignment_classroom_payload($context['class'], $context['enrollment'], $context['preview'])
+    );
+}
+
+function elips_action_assignment_detail(array $p): array
+{
+    $actor = elips_require_login();
+    $id = (int) ($p['id'] ?? 0);
+    $context = elips_task_assignment_context($id, $actor);
+    if (isset($context['error'])) return elips_fail($context['error']);
+
+    $enrollmentId = 0;
+    if ($context['staff']) {
+        $enrollmentId = (int) ($p['enrollmentId'] ?? 0);
+        if ($enrollmentId > 0
+            && !elips_class_enrollment_by_id((int) $context['class']['id'], $enrollmentId)) {
+            return elips_fail('Peserta tidak terdaftar pada kelas ini.');
+        }
+        if ($enrollmentId <= 0 && !empty($p['studentId'])) {
+            $enrollment = elips_class_enrollment_for(
+                (int) $context['class']['id'],
+                (int) $p['studentId']
+            );
+            $enrollmentId = $enrollment ? (int) $enrollment['id'] : 0;
+        }
+    } else {
+        $enrollmentId = (int) $context['enrollment']['id'];
+    }
+
+    return elips_ok(
+        'Detail tugas dimuat.',
+        elips_task_assignment_detail_payload($context['assignment'], $enrollmentId)
+    );
+}
+
+function elips_action_assignment_create(array $p): array
+{
+    $actor = elips_require_login();
+    $classId = (int) ($p['classId'] ?? 0);
+    $class = elips_class_row($classId);
+    if (!$class) return elips_fail('Kelas tidak ditemukan.');
+    if (!elips_can_manage_class($class, $actor)) {
+        return elips_fail('Anda tidak berhak menambahkan tugas pada kelas ini.');
+    }
+
+    $data = elips_payload_array($p, 'data');
+    $title = trim((string) ($data['title'] ?? ''));
+    if ($title === '') return elips_fail('Judul tugas wajib diisi.');
+
+    $type = trim((string) ($data['type'] ?? 'text_submission'));
+    if (!elips_assignment_type_valid($type)) return elips_fail('Jenis tugas tidak valid.');
+
+    $status = trim((string) ($data['status'] ?? 'draft'));
+    if (!elips_assignment_status_valid($status)) return elips_fail('Status tugas tidak valid.');
+
+    $refs = elips_task_curriculum_refs(
+        $class,
+        (int) ($data['moduleId'] ?? 0),
+        (int) ($data['lessonId'] ?? 0)
+    );
+    if (isset($refs['error'])) return elips_fail($refs['error']);
+
+    $openAt = elips_normalize_datetime($data['openAt'] ?? null);
+    if (!empty($data['openAt']) && $openAt === null) return elips_fail('Tanggal dibuka tidak valid.');
+    $dueAt = elips_normalize_datetime($data['dueAt'] ?? null);
+    if (!empty($data['dueAt']) && $dueAt === null) return elips_fail('Tenggat tugas tidak valid.');
+    if ($openAt !== null && $dueAt !== null && $dueAt < $openAt) {
+        return elips_fail('Tenggat harus setelah tanggal dibuka.');
+    }
+
+    $maxScore = (float) ($data['maxScore'] ?? 100);
+    if ($maxScore <= 0) return elips_fail('Nilai maksimum tugas harus lebih dari 0.');
+    $weight = (float) ($data['weight'] ?? 0);
+    if ($weight < 0) return elips_fail('Bobot tugas tidak valid.');
+    $requireFile = !empty($data['requireFile']);
+    $allowedTypes = trim((string) ($data['allowedTypes'] ?? ''));
+    $maxFileSize = $data['maxFileSize'] ?? null;
+    $maxFileSize = ($maxFileSize === null || $maxFileSize === '') ? null : max(0, (int) $maxFileSize);
+
+    $filesResult = elips_task_normalize_files($data['files'] ?? []);
+    if (!empty($filesResult['error'])) return elips_fail($filesResult['error']);
+
+    $db = elips_db();
+    $db->beginTransaction();
+    try {
+        $stmt = $db->prepare(
+            'INSERT INTO assignments
+             (class_id, curriculum_version_id, module_id, lesson_id, title, instructions, type,
+              open_at, due_at, max_score, weight, require_file, allowed_types, max_file_size,
+              status, created_by, updated_by, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP())'
+        );
+        $stmt->execute([
+            $classId,
+            (int) $class['curriculum_version_id'],
+            $refs['moduleId'],
+            $refs['lessonId'],
+            $title,
+            trim((string) ($data['instructions'] ?? '')),
+            $type,
+            $openAt,
+            $dueAt,
+            $maxScore,
+            $weight,
+            $requireFile ? 1 : 0,
+            $allowedTypes,
+            $maxFileSize,
+            $status,
+            (int) $actor['id'],
+            (int) $actor['id'],
+        ]);
+        $id = (int) $db->lastInsertId();
+
+        elips_task_save_assignment_files($id, $filesResult['files']);
+        if (array_key_exists('rubrics', $data)) {
+            $rubricError = elips_task_save_rubrics($id, is_array($data['rubrics']) ? $data['rubrics'] : []);
+            if ($rubricError !== null) {
+                $db->rollBack();
+                return elips_fail($rubricError);
+            }
+        }
+        $db->commit();
+    } catch (Throwable $e) {
+        if ($db->inTransaction()) $db->rollBack();
+        return elips_fail('Tugas gagal disimpan: ' . $e->getMessage());
+    }
+
+    elips_audit(
+        'create',
+        'assignment',
+        $id,
+        $title,
+        'Menambahkan tugas "' . $title . '" pada kelas "' . $class['code'] . '".',
+        $actor
+    );
+
+    $row = elips_assignment_row($id);
+    return elips_ok(
+        'Tugas berhasil ditambahkan.',
+        $row ? elips_task_assignment_detail_payload($row, 0) : null
+    );
+}
+
+function elips_action_assignment_update(array $p): array
+{
+    $actor = elips_require_login();
+    $id = (int) ($p['id'] ?? 0);
+    $context = elips_task_assignment_context($id, $actor, true);
+    if (isset($context['error'])) return elips_fail($context['error']);
+
+    $assignment = $context['assignment'];
+    $class = $context['class'];
+    $data = elips_payload_array($p, 'data');
+
+    $title = array_key_exists('title', $data) ? trim((string) $data['title']) : $assignment['title'];
+    if ($title === '') return elips_fail('Judul tugas wajib diisi.');
+
+    $type = array_key_exists('type', $data) ? trim((string) $data['type']) : $assignment['type'];
+    if (!elips_assignment_type_valid($type)) return elips_fail('Jenis tugas tidak valid.');
+
+    $status = array_key_exists('status', $data) ? trim((string) $data['status']) : $assignment['status'];
+    if (!elips_assignment_status_valid($status)) return elips_fail('Status tugas tidak valid.');
+
+    $moduleId = array_key_exists('moduleId', $data)
+        ? (int) ($data['moduleId'] ?? 0)
+        : (int) ($assignment['module_id'] ?? 0);
+    $lessonId = array_key_exists('lessonId', $data)
+        ? (int) ($data['lessonId'] ?? 0)
+        : (int) ($assignment['lesson_id'] ?? 0);
+    $refs = elips_task_curriculum_refs($class, $moduleId, $lessonId);
+    if (isset($refs['error'])) return elips_fail($refs['error']);
+
+    $openAt = elips_normalize_datetime(
+        array_key_exists('openAt', $data) ? $data['openAt'] : $assignment['open_at']
+    );
+    if (array_key_exists('openAt', $data) && !empty($data['openAt']) && $openAt === null) {
+        return elips_fail('Tanggal dibuka tidak valid.');
+    }
+    $dueAt = elips_normalize_datetime(
+        array_key_exists('dueAt', $data) ? $data['dueAt'] : $assignment['due_at']
+    );
+    if (array_key_exists('dueAt', $data) && !empty($data['dueAt']) && $dueAt === null) {
+        return elips_fail('Tenggat tugas tidak valid.');
+    }
+    if ($openAt !== null && $dueAt !== null && $dueAt < $openAt) {
+        return elips_fail('Tenggat harus setelah tanggal dibuka.');
+    }
+
+    $maxScore = array_key_exists('maxScore', $data)
+        ? (float) $data['maxScore']
+        : (float) $assignment['max_score'];
+    if ($maxScore <= 0) return elips_fail('Nilai maksimum tugas harus lebih dari 0.');
+
+    $weight = array_key_exists('weight', $data)
+        ? (float) $data['weight']
+        : (float) $assignment['weight'];
+    if ($weight < 0) return elips_fail('Bobot tugas tidak valid.');
+
+    $requireFile = array_key_exists('requireFile', $data)
+        ? !empty($data['requireFile'])
+        : (bool) $assignment['require_file'];
+    $allowedTypes = array_key_exists('allowedTypes', $data)
+        ? trim((string) $data['allowedTypes'])
+        : $assignment['allowed_types'];
+    $maxFileSize = array_key_exists('maxFileSize', $data)
+        ? (($data['maxFileSize'] === null || $data['maxFileSize'] === '') ? null : max(0, (int) $data['maxFileSize']))
+        : ($assignment['max_file_size'] === null ? null : (int) $assignment['max_file_size']);
+
+    $filesResult = elips_task_normalize_files($data['files'] ?? []);
+    if (!empty($filesResult['error'])) return elips_fail($filesResult['error']);
+
+    $db = elips_db();
+    $db->beginTransaction();
+    try {
+        $stmt = $db->prepare(
+            'UPDATE assignments
+             SET module_id = ?, lesson_id = ?, title = ?, instructions = ?, type = ?,
+                 open_at = ?, due_at = ?, max_score = ?, weight = ?, require_file = ?,
+                 allowed_types = ?, max_file_size = ?, status = ?, updated_by = ?, updated_at = UTC_TIMESTAMP()
+             WHERE id = ?'
+        );
+        $stmt->execute([
+            $refs['moduleId'],
+            $refs['lessonId'],
+            $title,
+            array_key_exists('instructions', $data)
+                ? trim((string) $data['instructions'])
+                : $assignment['instructions'],
+            $type,
+            $openAt,
+            $dueAt,
+            $maxScore,
+            $weight,
+            $requireFile ? 1 : 0,
+            $allowedTypes,
+            $maxFileSize,
+            $status,
+            (int) $actor['id'],
+            $id,
+        ]);
+
+        if (array_key_exists('files', $data)) {
+            elips_task_save_assignment_files($id, $filesResult['files']);
+        }
+        if (array_key_exists('rubrics', $data)) {
+            $rubricError = elips_task_save_rubrics($id, is_array($data['rubrics']) ? $data['rubrics'] : []);
+            if ($rubricError !== null) {
+                $db->rollBack();
+                return elips_fail($rubricError);
+            }
+        }
+        $db->commit();
+    } catch (Throwable $e) {
+        if ($db->inTransaction()) $db->rollBack();
+        return elips_fail('Tugas gagal diperbarui: ' . $e->getMessage());
+    }
+
+    elips_audit(
+        'update',
+        'assignment',
+        $id,
+        $title,
+        'Memperbarui tugas "' . $title . '" pada kelas "' . $class['code'] . '".',
+        $actor
+    );
+
+    $row = elips_assignment_row($id);
+    return elips_ok(
+        'Tugas berhasil diperbarui.',
+        $row ? elips_task_assignment_detail_payload($row, 0) : null
+    );
+}
+
+function elips_action_assignment_status(array $p): array
+{
+    $actor = elips_require_login();
+    $id = (int) ($p['id'] ?? 0);
+    $context = elips_task_assignment_context($id, $actor, true);
+    if (isset($context['error'])) return elips_fail($context['error']);
+
+    $assignment = $context['assignment'];
+    $class = $context['class'];
+    $data = elips_payload_array($p, 'data');
+    $status = trim((string) ($data['status'] ?? ($p['status'] ?? '')));
+    if (!elips_assignment_status_valid($status)) return elips_fail('Status tugas tidak valid.');
+    $reason = trim((string) ($data['reason'] ?? ($p['reason'] ?? '')));
+
+    $stmt = elips_db()->prepare(
+        'UPDATE assignments SET status = ?, updated_by = ?, updated_at = UTC_TIMESTAMP() WHERE id = ?'
+    );
+    $stmt->execute([$status, (int) $actor['id'], $id]);
+
+    elips_audit(
+        'status',
+        'assignment',
+        $id,
+        $assignment['title'],
+        'Mengubah status tugas "' . $assignment['title'] . '" pada kelas "' . $class['code']
+            . '" dari ' . $assignment['status'] . ' menjadi ' . $status
+            . ($reason !== '' ? '; alasan: ' . $reason : '') . '.',
+        $actor
+    );
+
+    $row = elips_assignment_row($id);
+    return elips_ok(
+        'Status tugas diperbarui.',
+        $row ? elips_task_assignment_detail_payload($row, 0) : null
+    );
+}
+
+function elips_action_assignment_delete(array $p): array
+{
+    $actor = elips_require_login();
+    $id = (int) ($p['id'] ?? 0);
+    $context = elips_task_assignment_context($id, $actor, true);
+    if (isset($context['error'])) return elips_fail($context['error']);
+
+    $assignment = $context['assignment'];
+    $class = $context['class'];
+
+    $stmt = elips_db()->prepare('SELECT COUNT(*) FROM submissions WHERE assignment_id = ?');
+    $stmt->execute([$id]);
+    $submissionCount = (int) $stmt->fetchColumn();
+
+    $stmt = elips_db()->prepare('DELETE FROM assignments WHERE id = ?');
+    $stmt->execute([$id]);
+
+    elips_audit(
+        'delete',
+        'assignment',
+        $id,
+        $assignment['title'],
+        'Menghapus tugas "' . $assignment['title'] . '" dari kelas "' . $class['code']
+            . '" beserta ' . $submissionCount . ' pengumpulan.',
+        $actor
+    );
+
+    return elips_ok('Tugas dihapus.', [
+        'id' => $id,
+        'removedSubmissions' => $submissionCount,
+    ]);
+}
+
+function elips_action_assignment_submissions(array $p): array
+{
+    $actor = elips_require_login();
+    $id = (int) ($p['id'] ?? 0);
+    $context = elips_task_assignment_context($id, $actor, true);
+    if (isset($context['error'])) return elips_fail($context['error']);
+
+    $assignment = $context['assignment'];
+    $class = $context['class'];
+
+    $stmt = elips_db()->prepare(
+        "SELECT e.id, e.student_id, e.status, u.name AS student_name
+         FROM enrollments e
+         JOIN users u ON u.id = e.student_id
+         WHERE e.class_id = ? AND e.status IN ('active', 'completed')
+         ORDER BY u.name ASC, e.id ASC"
+    );
+    $stmt->execute([(int) $class['id']]);
+
+    $students = [];
+    foreach ($stmt->fetchAll() as $enrollment) {
+        $submissionRow = elips_assignment_submission_for($id, (int) $enrollment['id']);
+        $submission = null;
+        if ($submissionRow) {
+            $public = elips_submission_row((int) $submissionRow['id']);
+            if ($public) $submission = elips_submission_public($public, false);
+        }
+        $students[] = [
+            'enrollmentId' => (int) $enrollment['id'],
+            'studentId' => (int) $enrollment['student_id'],
+            'studentName' => $enrollment['student_name'],
+            'enrollmentStatus' => $enrollment['status'],
+            'submission' => $submission,
+        ];
+    }
+
+    return elips_ok('Daftar pengumpulan tugas dimuat.', [
+        'assignment' => elips_assignment_public($assignment, true),
+        'students' => $students,
+        'stats' => elips_assignment_stats($id),
+    ]);
+}
+
+function elips_action_assignment_submit(array $p): array
+{
+    $actor = elips_require_login();
+    $assignmentId = (int) ($p['assignmentId'] ?? 0);
+    $context = elips_task_assignment_context($assignmentId, $actor);
+    if (isset($context['error'])) return elips_fail($context['error']);
+    if ($context['staff']) return elips_fail('Pengumpulan tugas dilakukan oleh peserta.');
+
+    $assignment = $context['assignment'];
+    $class = $context['class'];
+    $enrollment = $context['enrollment'];
+    $now = gmdate('Y-m-d H:i:s');
+
+    if ($assignment['status'] !== 'published') {
+        return elips_fail('Tugas ini sudah ditutup untuk pengumpulan.');
+    }
+    if ($assignment['open_at'] !== null && $assignment['open_at'] > $now) {
+        return elips_fail('Tugas belum dibuka.');
+    }
+    if ($assignment['type'] === 'in_class_practice') {
+        return elips_fail('Tugas praktik kelas dicatat langsung oleh instruktur.');
+    }
+
+    $data = elips_payload_array($p, 'data');
+    $textAnswer = trim((string) ($data['textAnswer'] ?? ''));
+    $filesResult = elips_task_normalize_files($data['files'] ?? []);
+    if (!empty($filesResult['error'])) return elips_fail($filesResult['error']);
+    $files = $filesResult['files'];
+
+    $existingRow = elips_assignment_submission_for($assignmentId, (int) $enrollment['id']);
+    if ($existingRow && in_array($existingRow['status'], ['reviewed', 'accepted'], true)) {
+        return elips_fail('Pengumpulan ini sudah dinilai. Tunggu instruktur membuka revisi.');
+    }
+
+    $existingFiles = $existingRow ? elips_submission_files_for((int) $existingRow['id'], true) : [];
+    $willHaveFiles = array_key_exists('files', $data) ? count($files) > 0 : count($existingFiles) > 0;
+    if ($textAnswer === '' && !$willHaveFiles) {
+        return elips_fail('Jawaban teks atau file tugas wajib diisi.');
+    }
+    if ($assignment['type'] === 'text_submission' && $textAnswer === '') {
+        return elips_fail('Jawaban teks tugas wajib diisi.');
+    }
+    if ($assignment['type'] === 'external_reference' && $textAnswer === '' && !$willHaveFiles) {
+        return elips_fail('Tautan atau bukti penyelesaian tugas wajib diisi.');
+    }
+    if (!empty($assignment['require_file']) && !$willHaveFiles) {
+        return elips_fail('File tugas wajib diunggah.');
+    }
+    foreach ($files as $file) {
+        $fileError = elips_task_allowed_file_error($file['fileName'], $assignment);
+        if ($fileError !== null) return elips_fail($fileError);
+        if ($assignment['max_file_size'] !== null
+            && $file['fileSize'] !== null
+            && $file['fileSize'] > (int) $assignment['max_file_size']) {
+            return elips_fail('Ukuran file melebihi batas yang diizinkan.');
+        }
+    }
+
+    $isLate = $assignment['due_at'] !== null && $assignment['due_at'] < $now;
+    $revisionRequested = $existingRow && $existingRow['status'] === 'revision_requested';
+    $status = $revisionRequested ? 'resubmitted' : ($isLate ? 'late' : 'submitted');
+    $revisionCount = $existingRow ? (int) $existingRow['revision_count'] : 0;
+    if ($revisionRequested) $revisionCount++;
+
+    $db = elips_db();
+    $db->beginTransaction();
+    try {
+        if ($existingRow) {
+            $stmt = $db->prepare(
+                'UPDATE submissions
+                 SET status = ?, text_answer = ?, submitted_at = UTC_TIMESTAMP(), is_late = ?,
+                     revision_count = ?, updated_at = UTC_TIMESTAMP()
+                 WHERE id = ?'
+            );
+            $stmt->execute([
+                $status,
+                $textAnswer,
+                $isLate ? 1 : 0,
+                $revisionCount,
+                (int) $existingRow['id'],
+            ]);
+            $submissionId = (int) $existingRow['id'];
+        } else {
+            $stmt = $db->prepare(
+                'INSERT INTO submissions
+                 (assignment_id, enrollment_id, student_id, status, text_answer, submitted_at, is_late,
+                  feedback, revision_count, created_at, updated_at)
+                 VALUES (?, ?, ?, ?, ?, UTC_TIMESTAMP(), ?, ?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP())'
+            );
+            $stmt->execute([
+                $assignmentId,
+                (int) $enrollment['id'],
+                (int) $enrollment['student_id'],
+                $status,
+                $textAnswer,
+                $isLate ? 1 : 0,
+                '',
+                $revisionCount,
+            ]);
+            $submissionId = (int) $db->lastInsertId();
+        }
+
+        if (array_key_exists('files', $data)) {
+            elips_task_save_submission_files($submissionId, $files);
+        }
+
+        $stmt = $db->prepare(
+            'INSERT INTO submission_reviews (submission_id, reviewer_id, action, score, note, created_at)
+             VALUES (?, ?, ?, NULL, ?, UTC_TIMESTAMP())'
+        );
+        $stmt->execute([
+            $submissionId,
+            (int) $actor['id'],
+            'submit',
+            $revisionRequested ? 'Mengumpulkan ulang tugas setelah revisi.' : 'Mengumpulkan tugas.',
+        ]);
+        $db->commit();
+    } catch (Throwable $e) {
+        if ($db->inTransaction()) $db->rollBack();
+        return elips_fail('Tugas gagal dikumpulkan: ' . $e->getMessage());
+    }
+
+    elips_audit(
+        $revisionRequested ? 'update' : 'submit',
+        'submission',
+        $submissionId,
+        $assignment['title'],
+        'Peserta #' . $enrollment['student_id'] . ' mengumpulkan tugas "' . $assignment['title']
+            . '" pada kelas "' . $class['code'] . '"' . ($isLate ? ' (terlambat)' : '') . '.',
+        $actor
+    );
+
+    $row = elips_submission_row($submissionId);
+    if (!$row) return elips_fail('Pengumpulan tugas tidak dapat dimuat.');
+    $submission = elips_submission_public($row, true);
+    $submission['files'] = elips_submission_files_for($submissionId, true);
+    $submission['reviews'] = elips_submission_reviews_for($submissionId);
+    return elips_ok(
+        $isLate ? 'Tugas dikumpulkan (terlambat).' : 'Tugas berhasil dikumpulkan.',
+        $submission
+    );
+}
+
+function elips_action_assignment_review(array $p): array
+{
+    $actor = elips_require_login();
+    $submissionId = (int) ($p['submissionId'] ?? 0);
+    $submissionRow = elips_submission_row($submissionId);
+    if (!$submissionRow) return elips_fail('Pengumpulan tugas tidak ditemukan.');
+
+    $context = elips_task_assignment_context((int) $submissionRow['assignment_id'], $actor, true);
+    if (isset($context['error'])) return elips_fail($context['error']);
+
+    $assignment = $context['assignment'];
+    $data = elips_payload_array($p, 'data');
+    $action = trim((string) ($data['action'] ?? 'score'));
+    if (!in_array($action, ['score', 'revision', 'accept'], true)) {
+        return elips_fail('Aksi penilaian tidak valid.');
+    }
+
+    $maxScore = (float) $submissionRow['max_score'];
+    $score = null;
+    if (array_key_exists('score', $data) && $data['score'] !== '' && $data['score'] !== null) {
+        $score = (float) $data['score'];
+        if ($score < 0 || $score > $maxScore) {
+            return elips_fail('Nilai harus antara 0 dan ' . $maxScore . '.');
+        }
+    }
+    if ($action === 'score' && $score === null) {
+        return elips_fail('Nilai wajib diisi untuk penilaian.');
+    }
+
+    $note = trim((string) ($data['note'] ?? $data['feedback'] ?? ''));
+    if ($action === 'revision' && $note === '') {
+        return elips_fail('Catatan revisi wajib diisi.');
+    }
+
+    $status = $action === 'revision' ? 'revision_requested' : ($action === 'accept' ? 'accepted' : 'reviewed');
+    $feedback = array_key_exists('feedback', $data)
+        ? trim((string) $data['feedback'])
+        : ($note !== '' ? $note : $submissionRow['feedback']);
+
+    $db = elips_db();
+    $db->beginTransaction();
+    try {
+        $stmt = $db->prepare(
+            'UPDATE submissions
+             SET status = ?, score = ?, feedback = ?, reviewed_by = ?, reviewed_at = UTC_TIMESTAMP(),
+                 updated_at = UTC_TIMESTAMP()
+             WHERE id = ?'
+        );
+        $stmt->execute([$status, $score, $feedback, (int) $actor['id'], $submissionId]);
+
+        $stmt = $db->prepare(
+            'INSERT INTO submission_reviews (submission_id, reviewer_id, action, score, note, created_at)
+             VALUES (?, ?, ?, ?, ?, UTC_TIMESTAMP())'
+        );
+        $stmt->execute([$submissionId, (int) $actor['id'], $action, $score, $note]);
+        $db->commit();
+    } catch (Throwable $e) {
+        if ($db->inTransaction()) $db->rollBack();
+        return elips_fail('Penilaian tugas gagal disimpan: ' . $e->getMessage());
+    }
+
+    elips_audit(
+        $action === 'revision' ? 'revision' : ($action === 'accept' ? 'approve' : 'grade'),
+        'submission',
+        $submissionId,
+        $assignment['title'],
+        'Memberi ' . ($action === 'revision' ? 'permintaan revisi' : ($action === 'accept' ? 'persetujuan' : 'nilai'))
+            . ' untuk pengumpulan tugas "' . $assignment['title'] . '" peserta #' . $submissionRow['student_id']
+            . ($score !== null ? ' dengan nilai ' . $score : '') . '.',
+        $actor
+    );
+
+    $row = elips_submission_row($submissionId);
+    if (!$row) return elips_fail('Pengumpulan tugas tidak dapat dimuat.');
+    $submission = elips_submission_public($row, true);
+    $submission['files'] = elips_submission_files_for($submissionId, true);
+    $submission['reviews'] = elips_submission_reviews_for($submissionId);
+    return elips_ok('Penilaian tugas disimpan.', $submission);
+}
+
+function elips_action_exam_classroom(array $p): array
+{
+    $actor = elips_require_login();
+    $context = elips_task_classroom_context($p, $actor);
+    if (isset($context['error'])) return elips_fail($context['error']);
+
+    $payload = elips_assignment_classroom_payload(
+        $context['class'],
+        $context['enrollment'],
+        $context['preview']
+    );
+    return elips_ok('Ruang ujian dimuat.', [
+        'class' => $payload['class'],
+        'enrollment' => $payload['enrollment'],
+        'preview' => $payload['preview'],
+        'exams' => $payload['exams'],
+        'stats' => [
+            'examTotal' => $payload['stats']['examTotal'],
+            'examGraded' => $payload['stats']['examGraded'],
+        ],
+    ]);
+}
+
+function elips_action_exam_detail(array $p): array
+{
+    $actor = elips_require_login();
+    $id = (int) ($p['id'] ?? 0);
+    $context = elips_task_exam_context($id, $actor);
+    if (isset($context['error'])) return elips_fail($context['error']);
+
+    $enrollmentId = 0;
+    if ($context['staff']) {
+        $enrollmentId = (int) ($p['enrollmentId'] ?? 0);
+        if ($enrollmentId > 0
+            && !elips_class_enrollment_by_id((int) $context['class']['id'], $enrollmentId)) {
+            return elips_fail('Peserta tidak terdaftar pada kelas ini.');
+        }
+        if ($enrollmentId <= 0 && !empty($p['studentId'])) {
+            $enrollment = elips_class_enrollment_for(
+                (int) $context['class']['id'],
+                (int) $p['studentId']
+            );
+            $enrollmentId = $enrollment ? (int) $enrollment['id'] : 0;
+        }
+    } else {
+        $enrollmentId = (int) $context['enrollment']['id'];
+    }
+
+    return elips_ok(
+        'Detail ujian dimuat.',
+        elips_task_exam_detail_payload($context['exam'], $context['staff'], $enrollmentId)
+    );
+}
+
+function elips_action_exam_create(array $p): array
+{
+    $actor = elips_require_login();
+    $classId = (int) ($p['classId'] ?? 0);
+    $class = elips_class_row($classId);
+    if (!$class) return elips_fail('Kelas tidak ditemukan.');
+    if (!elips_can_manage_class($class, $actor)) {
+        return elips_fail('Anda tidak berhak menambahkan ujian pada kelas ini.');
+    }
+
+    $data = elips_payload_array($p, 'data');
+    $title = trim((string) ($data['title'] ?? ''));
+    if ($title === '') return elips_fail('Judul ujian wajib diisi.');
+
+    $type = trim((string) ($data['type'] ?? 'written'));
+    if (!elips_exam_type_valid($type)) return elips_fail('Jenis ujian tidak valid.');
+
+    $status = trim((string) ($data['status'] ?? 'draft'));
+    if (!elips_exam_status_valid($status)) return elips_fail('Status ujian tidak valid.');
+
+    $examDate = elips_normalize_date($data['examDate'] ?? null);
+    if (!empty($data['examDate']) && $examDate === null) return elips_fail('Tanggal ujian tidak valid.');
+    $startTime = elips_time_normalized($data['startTime'] ?? null);
+    if (!empty($data['startTime']) && $startTime === null) return elips_fail('Waktu mulai ujian tidak valid.');
+    $duration = $data['durationMinutes'] ?? null;
+    $duration = ($duration === null || $duration === '') ? null : max(0, (int) $duration);
+    $maxScore = (float) ($data['maxScore'] ?? 100);
+    if ($maxScore <= 0) return elips_fail('Nilai maksimum ujian harus lebih dari 0.');
+    $weight = (float) ($data['weight'] ?? 0);
+    if ($weight < 0) return elips_fail('Bobot ujian tidak valid.');
+
+    $db = elips_db();
+    $stmt = $db->prepare(
+        'INSERT INTO exams
+         (class_id, curriculum_version_id, title, description, type, exam_date, start_time,
+          duration_minutes, max_score, weight, instructions, status, created_by, updated_by,
+          created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP())'
+    );
+    $stmt->execute([
+        $classId,
+        (int) $class['curriculum_version_id'],
+        $title,
+        trim((string) ($data['description'] ?? '')),
+        $type,
+        $examDate,
+        $startTime,
+        $duration,
+        $maxScore,
+        $weight,
+        trim((string) ($data['instructions'] ?? '')),
+        $status,
+        (int) $actor['id'],
+        (int) $actor['id'],
+    ]);
+    $id = (int) $db->lastInsertId();
+    elips_exam_ensure_roster($id, $classId);
+
+    elips_audit(
+        'create',
+        'exam',
+        $id,
+        $title,
+        'Menambahkan ujian "' . $title . '" pada kelas "' . $class['code'] . '".',
+        $actor
+    );
+
+    $row = elips_exam_row($id);
+    return elips_ok(
+        'Ujian berhasil ditambahkan.',
+        $row ? elips_task_exam_detail_payload($row, true, 0) : null
+    );
+}
+
+function elips_action_exam_update(array $p): array
+{
+    $actor = elips_require_login();
+    $id = (int) ($p['id'] ?? 0);
+    $context = elips_task_exam_context($id, $actor, true);
+    if (isset($context['error'])) return elips_fail($context['error']);
+
+    $exam = $context['exam'];
+    $class = $context['class'];
+    $data = elips_payload_array($p, 'data');
+
+    $title = array_key_exists('title', $data) ? trim((string) $data['title']) : $exam['title'];
+    if ($title === '') return elips_fail('Judul ujian wajib diisi.');
+    $type = array_key_exists('type', $data) ? trim((string) $data['type']) : $exam['type'];
+    if (!elips_exam_type_valid($type)) return elips_fail('Jenis ujian tidak valid.');
+    $status = array_key_exists('status', $data) ? trim((string) $data['status']) : $exam['status'];
+    if (!elips_exam_status_valid($status)) return elips_fail('Status ujian tidak valid.');
+
+    $examDate = elips_normalize_date(
+        array_key_exists('examDate', $data) ? $data['examDate'] : $exam['exam_date']
+    );
+    if (array_key_exists('examDate', $data) && !empty($data['examDate']) && $examDate === null) {
+        return elips_fail('Tanggal ujian tidak valid.');
+    }
+    $startTime = elips_time_normalized(
+        array_key_exists('startTime', $data) ? $data['startTime'] : $exam['start_time']
+    );
+    if (array_key_exists('startTime', $data) && !empty($data['startTime']) && $startTime === null) {
+        return elips_fail('Waktu mulai ujian tidak valid.');
+    }
+    $duration = array_key_exists('durationMinutes', $data)
+        ? (($data['durationMinutes'] === null || $data['durationMinutes'] === '')
+            ? null : max(0, (int) $data['durationMinutes']))
+        : ($exam['duration_minutes'] === null ? null : (int) $exam['duration_minutes']);
+    $maxScore = array_key_exists('maxScore', $data)
+        ? (float) $data['maxScore']
+        : (float) $exam['max_score'];
+    if ($maxScore <= 0) return elips_fail('Nilai maksimum ujian harus lebih dari 0.');
+    $weight = array_key_exists('weight', $data)
+        ? (float) $data['weight']
+        : (float) $exam['weight'];
+    if ($weight < 0) return elips_fail('Bobot ujian tidak valid.');
+
+    $stmt = elips_db()->prepare(
+        'UPDATE exams
+         SET title = ?, description = ?, type = ?, exam_date = ?, start_time = ?,
+             duration_minutes = ?, max_score = ?, weight = ?, instructions = ?, status = ?,
+             updated_by = ?, updated_at = UTC_TIMESTAMP()
+         WHERE id = ?'
+    );
+    $stmt->execute([
+        $title,
+        array_key_exists('description', $data)
+            ? trim((string) $data['description'])
+            : $exam['description'],
+        $type,
+        $examDate,
+        $startTime,
+        $duration,
+        $maxScore,
+        $weight,
+        array_key_exists('instructions', $data)
+            ? trim((string) $data['instructions'])
+            : $exam['instructions'],
+        $status,
+        (int) $actor['id'],
+        $id,
+    ]);
+    elips_exam_ensure_roster($id, (int) $class['id']);
+
+    elips_audit(
+        'update',
+        'exam',
+        $id,
+        $title,
+        'Memperbarui ujian "' . $title . '" pada kelas "' . $class['code'] . '".',
+        $actor
+    );
+
+    $row = elips_exam_row($id);
+    return elips_ok(
+        'Ujian berhasil diperbarui.',
+        $row ? elips_task_exam_detail_payload($row, true, 0) : null
+    );
+}
+
+function elips_action_exam_status(array $p): array
+{
+    $actor = elips_require_login();
+    $id = (int) ($p['id'] ?? 0);
+    $context = elips_task_exam_context($id, $actor, true);
+    if (isset($context['error'])) return elips_fail($context['error']);
+
+    $exam = $context['exam'];
+    $class = $context['class'];
+    $data = elips_payload_array($p, 'data');
+    $status = trim((string) ($data['status'] ?? ($p['status'] ?? '')));
+    if (!elips_exam_status_valid($status)) return elips_fail('Status ujian tidak valid.');
+    $reason = trim((string) ($data['reason'] ?? ($p['reason'] ?? '')));
+
+    $stmt = elips_db()->prepare(
+        'UPDATE exams SET status = ?, updated_by = ?, updated_at = UTC_TIMESTAMP() WHERE id = ?'
+    );
+    $stmt->execute([$status, (int) $actor['id'], $id]);
+
+    elips_audit(
+        'status',
+        'exam',
+        $id,
+        $exam['title'],
+        'Mengubah status ujian "' . $exam['title'] . '" pada kelas "' . $class['code']
+            . '" dari ' . $exam['status'] . ' menjadi ' . $status
+            . ($reason !== '' ? '; alasan: ' . $reason : '') . '.',
+        $actor
+    );
+
+    $row = elips_exam_row($id);
+    return elips_ok(
+        'Status ujian diperbarui.',
+        $row ? elips_task_exam_detail_payload($row, true, 0) : null
+    );
+}
+
+function elips_action_exam_delete(array $p): array
+{
+    $actor = elips_require_login();
+    $id = (int) ($p['id'] ?? 0);
+    $context = elips_task_exam_context($id, $actor, true);
+    if (isset($context['error'])) return elips_fail($context['error']);
+
+    $exam = $context['exam'];
+    $class = $context['class'];
+
+    $stmt = elips_db()->prepare("SELECT COUNT(*) FROM exam_results WHERE exam_id = ? AND status = 'graded'");
+    $stmt->execute([$id]);
+    $gradedCount = (int) $stmt->fetchColumn();
+
+    $stmt = elips_db()->prepare('DELETE FROM exams WHERE id = ?');
+    $stmt->execute([$id]);
+
+    elips_audit(
+        'delete',
+        'exam',
+        $id,
+        $exam['title'],
+        'Menghapus ujian "' . $exam['title'] . '" dari kelas "' . $class['code']
+            . '" beserta ' . $gradedCount . ' nilai peserta.',
+        $actor
+    );
+
+    return elips_ok('Ujian dihapus.', [
+        'id' => $id,
+        'removedResults' => $gradedCount,
+    ]);
+}
+
+function elips_action_exam_result(array $p): array
+{
+    $actor = elips_require_login();
+    $examId = (int) ($p['examId'] ?? 0);
+    $context = elips_task_exam_context($examId, $actor, true);
+    if (isset($context['error'])) return elips_fail($context['error']);
+
+    $exam = $context['exam'];
+    $class = $context['class'];
+    elips_exam_ensure_roster($examId, (int) $class['id']);
+
+    $enrollment = null;
+    $enrollmentId = (int) ($p['enrollmentId'] ?? 0);
+    if ($enrollmentId > 0) {
+        $enrollment = elips_class_enrollment_by_id((int) $class['id'], $enrollmentId);
+    } elseif (!empty($p['studentId'])) {
+        $enrollment = elips_class_enrollment_for((int) $class['id'], (int) $p['studentId']);
+    }
+    if (!$enrollment) return elips_fail('Peserta tidak terdaftar pada kelas ini.');
+
+    $data = elips_payload_array($p, 'data');
+    if (!$data) $data = $p;
+    $status = trim((string) ($data['status'] ?? 'graded'));
+    if (!in_array($status, ['not_assessed', 'excused', 'missing', 'graded'], true)) {
+        return elips_fail('Status hasil ujian tidak valid.');
+    }
+    $maxScore = (float) $exam['max_score'];
+    $score = null;
+    if (array_key_exists('score', $data) && $data['score'] !== null && $data['score'] !== '') {
+        $score = (float) $data['score'];
+        if ($score < 0 || $score > $maxScore) {
+            return elips_fail('Nilai ujian harus antara 0 dan ' . $maxScore . '.');
+        }
+    }
+    if ($status === 'graded' && $score === null) {
+        return elips_fail('Nilai wajib diisi untuk hasil yang dinilai.');
+    }
+    $note = trim((string) ($data['note'] ?? ''));
+
+    $participantStatus = trim((string) ($data['participantStatus'] ?? ''));
+    $validParticipantStatuses = ['registered', 'attended', 'absent', 'excused'];
+    if ($participantStatus !== '' && !in_array($participantStatus, $validParticipantStatuses, true)) {
+        return elips_fail('Status keikutsertaan ujian tidak valid.');
+    }
+    if ($participantStatus === '') {
+        if ($status === 'graded') $participantStatus = 'attended';
+        elseif ($status === 'missing') $participantStatus = 'absent';
+        elseif ($status === 'excused') $participantStatus = 'excused';
+        else $participantStatus = 'registered';
+    }
+
+    $db = elips_db();
+    $db->beginTransaction();
+    try {
+        $stmt = $db->prepare('SELECT * FROM exam_results WHERE exam_id = ? AND enrollment_id = ? LIMIT 1');
+        $stmt->execute([$examId, (int) $enrollment['id']]);
+        $existing = $stmt->fetch();
+
+        if ($existing) {
+            $stmt = $db->prepare(
+                'UPDATE exam_results
+                 SET score = ?, status = ?, graded_by = ?, graded_at = ?, note = ?, updated_at = UTC_TIMESTAMP()
+                 WHERE id = ?'
+            );
+            $stmt->execute([
+                $score,
+                $status,
+                $status === 'not_assessed' ? null : (int) $actor['id'],
+                $status === 'not_assessed' ? null : gmdate('Y-m-d H:i:s'),
+                $note,
+                (int) $existing['id'],
+            ]);
+            $resultId = (int) $existing['id'];
+        } else {
+            $stmt = $db->prepare(
+                'INSERT INTO exam_results
+                 (exam_id, enrollment_id, student_id, score, status, graded_by, graded_at, note, created_at, updated_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP())'
+            );
+            $stmt->execute([
+                $examId,
+                (int) $enrollment['id'],
+                (int) $enrollment['student_id'],
+                $score,
+                $status,
+                $status === 'not_assessed' ? null : (int) $actor['id'],
+                $status === 'not_assessed' ? null : gmdate('Y-m-d H:i:s'),
+                $note,
+            ]);
+            $resultId = (int) $db->lastInsertId();
+        }
+
+        $stmt = $db->prepare('SELECT * FROM exam_participants WHERE exam_id = ? AND enrollment_id = ? LIMIT 1');
+        $stmt->execute([$examId, (int) $enrollment['id']]);
+        $participant = $stmt->fetch();
+        if ($participant) {
+            $stmt = $db->prepare(
+                'UPDATE exam_participants SET status = ?, note = ?, updated_at = UTC_TIMESTAMP() WHERE id = ?'
+            );
+            $stmt->execute([$participantStatus, $note, (int) $participant['id']]);
+        } else {
+            $stmt = $db->prepare(
+                'INSERT INTO exam_participants
+                 (exam_id, enrollment_id, student_id, status, note, created_at, updated_at)
+                 VALUES (?, ?, ?, ?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP())'
+            );
+            $stmt->execute([
+                $examId,
+                (int) $enrollment['id'],
+                (int) $enrollment['student_id'],
+                $participantStatus,
+                $note,
+            ]);
+        }
+
+        $db->commit();
+    } catch (Throwable $e) {
+        if ($db->inTransaction()) $db->rollBack();
+        return elips_fail('Hasil ujian gagal disimpan: ' . $e->getMessage());
+    }
+
+    elips_audit(
+        'grade',
+        'exam_result',
+        $resultId,
+        $exam['title'],
+        'Menyimpan hasil ujian "' . $exam['title'] . '" untuk peserta #' . $enrollment['student_id']
+            . ' dengan status ' . $status . ($score !== null ? ' dan nilai ' . $score : '') . '.',
+        $actor
+    );
+
+    $row = elips_exam_result_for($examId, (int) $enrollment['id']);
+    return elips_ok('Hasil ujian disimpan.', $row ? elips_exam_result_public($row) : null);
 }
 
 // ---------- Grades & certificates ----------

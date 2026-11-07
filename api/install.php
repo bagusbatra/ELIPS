@@ -345,6 +345,142 @@ try {
         ]);
     }
 
+    // ---------- Tugas, pengumpulan, dan ujian (Phase 5) ----------
+    $assignmentStmt = $db->prepare(
+        "INSERT INTO assignments
+         (id, class_id, curriculum_version_id, module_id, lesson_id, title, instructions, type,
+          open_at, due_at, max_score, weight, require_file, allowed_types, max_file_size,
+          status, created_by, updated_by, created_at, updated_at)
+         VALUES (?, 1, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 2, 2, ?, ?)"
+    );
+    $assignments = [
+        [
+            1, 1, 1,
+            'Tugas 1: Analisis Fungsi Manajemen',
+            'Pilih satu organisasi yang Anda kenal, lalu analisis bagaimana fungsi perencanaan, pengorganisasian, kepemimpinan, dan pengendalian diterapkan di organisasi tersebut. Tulis dalam 400-600 kata.',
+            'text_submission',
+            '2026-10-05 09:00:00', '2026-10-12 23:59:59',
+            100, 20, 0, '', null,
+            'published', '2026-10-05 09:00:00', '2026-10-05 09:00:00',
+        ],
+        [
+            2, 2, 2,
+            'Tugas 2: Rencana Kerja Sederhana',
+            'Susun rencana kerja sederhana untuk satu kegiatan di tempat kerja Anda. Gunakan format 5W1H dan unggah dokumen dalam format PDF atau DOCX.',
+            'file_upload',
+            '2026-10-12 09:00:00', '2026-10-26 23:59:59',
+            100, 20, 1, 'pdf,doc,docx', 5242880,
+            'published', '2026-10-12 09:00:00', '2026-10-12 09:00:00',
+        ],
+    ];
+    foreach ($assignments as $assignment) {
+        $assignmentStmt->execute($assignment);
+    }
+
+    $rubricStmt = $db->prepare(
+        'INSERT INTO assignment_rubrics
+         (id, assignment_id, criterion, description, max_score, sort_order, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)'
+    );
+    $rubrics = [
+        [1, 1, 'Kejelasan analisis', 'Analisis fungsi manajemen dijelaskan dengan contoh konkret.', 40, 1, '2026-10-05 09:00:00'],
+        [2, 1, 'Keterkaitan teori', 'Mengaitkan praktik organisasi dengan konsep manajemen yang dipelajari.', 30, 2, '2026-10-05 09:00:00'],
+        [3, 1, 'Kerapian penulisan', 'Struktur tulisan runtut, ejaan benar, dan panjang sesuai ketentuan.', 30, 3, '2026-10-05 09:00:00'],
+    ];
+    foreach ($rubrics as $rubric) {
+        $rubricStmt->execute($rubric);
+    }
+
+    $submissionStmt = $db->prepare(
+        "INSERT INTO submissions
+         (id, assignment_id, enrollment_id, student_id, status, text_answer, submitted_at, is_late,
+          score, feedback, reviewed_by, reviewed_at, revision_count, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    );
+    $submissionStmt->execute([
+        1, 1, 1, 5, 'reviewed',
+        'Organisasi yang saya amati adalah kantor tempat saya bekerja. Fungsi perencanaan terlihat dari penyusunan target bulanan. Pengorganisasian dilakukan dengan pembagian tugas per divisi. Kepemimpinan tampak pada arahan harian kepala divisi. Pengendalian dilakukan melalui evaluasi mingguan.',
+        '2026-10-10 20:15:00', 0,
+        85,
+        'Analisis sudah baik dan contohnya relevan. Tambahkan data pendukung pada bagian pengendalian agar lebih kuat.',
+        2, '2026-10-13 10:00:00', 0,
+        '2026-10-10 20:15:00', '2026-10-13 10:00:00',
+    ]);
+
+    $reviewStmt = $db->prepare(
+        'INSERT INTO submission_reviews (id, submission_id, reviewer_id, action, score, note, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)'
+    );
+    $reviewStmt->execute([1, 1, 5, 'submit', null, 'Mengumpulkan tugas.', '2026-10-10 20:15:00']);
+    $reviewStmt->execute([
+        2, 1, 2, 'score', 85,
+        'Analisis sudah baik dan contohnya relevan. Tambahkan data pendukung pada bagian pengendalian agar lebih kuat.',
+        '2026-10-13 10:00:00',
+    ]);
+
+    $examStmt = $db->prepare(
+        "INSERT INTO exams
+         (id, class_id, curriculum_version_id, title, description, type, exam_date, start_time,
+          duration_minutes, max_score, weight, instructions, status, created_by, updated_by,
+          created_at, updated_at)
+         VALUES (?, 1, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 2, 2, ?, ?)"
+    );
+    $exams = [
+        [
+            1,
+            'Ujian Tengah Semester: Dasar Manajemen',
+            'Evaluasi pemahaman konsep dasar manajemen, perencanaan, dan pengorganisasian.',
+            'written', '2026-10-20', '09:00:00', 90, 100, 30,
+            'Kerjakan 30 soal pilihan ganda dan 2 soal esai. Buku tertutup.',
+            'published', '2026-10-01 08:00:00', '2026-10-01 08:00:00',
+        ],
+        [
+            2,
+            'Ujian Praktik: Studi Kasus Manajemen',
+            'Peserta menyelesaikan studi kasus dan mempresentasikan solusinya.',
+            'practical', '2026-12-15', '09:00:00', 120, 100, 30,
+            'Presentasikan solusi studi kasus dalam 10 menit dan jawab pertanyaan penguji.',
+            'draft', '2026-10-15 08:00:00', '2026-10-15 08:00:00',
+        ],
+    ];
+    foreach ($exams as $exam) {
+        $examStmt->execute($exam);
+    }
+
+    $participantStmt = $db->prepare(
+        "INSERT INTO exam_participants
+         (id, exam_id, enrollment_id, student_id, status, note, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+    );
+    $participants = [
+        [1, 1, 1, 5, 'attended', '', '2026-10-01 08:00:00', '2026-10-20 11:00:00'],
+        [2, 1, 2, 6, 'attended', '', '2026-10-01 08:00:00', '2026-10-20 11:00:00'],
+        [3, 1, 3, 7, 'absent', 'Tidak hadir tanpa keterangan.', '2026-10-01 08:00:00', '2026-10-20 11:00:00'],
+        [4, 2, 1, 5, 'registered', '', '2026-10-15 08:00:00', '2026-10-15 08:00:00'],
+        [5, 2, 2, 6, 'registered', '', '2026-10-15 08:00:00', '2026-10-15 08:00:00'],
+        [6, 2, 3, 7, 'registered', '', '2026-10-15 08:00:00', '2026-10-15 08:00:00'],
+    ];
+    foreach ($participants as $participant) {
+        $participantStmt->execute($participant);
+    }
+
+    $examResultStmt = $db->prepare(
+        "INSERT INTO exam_results
+         (id, exam_id, enrollment_id, student_id, score, status, graded_by, graded_at, note, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    );
+    $examResults = [
+        [1, 1, 1, 5, 88, 'graded', 2, '2026-10-25 10:00:00', 'Pemahaman konsep baik.', '2026-10-01 08:00:00', '2026-10-25 10:00:00'],
+        [2, 1, 2, 6, 80, 'graded', 2, '2026-10-25 10:05:00', 'Perlu memperdalam bagian pengendalian.', '2026-10-01 08:00:00', '2026-10-25 10:05:00'],
+        [3, 1, 3, 7, null, 'missing', null, null, 'Tidak hadir tanpa keterangan.', '2026-10-01 08:00:00', '2026-10-20 11:00:00'],
+        [4, 2, 1, 5, null, 'not_assessed', null, null, '', '2026-10-15 08:00:00', '2026-10-15 08:00:00'],
+        [5, 2, 2, 6, null, 'not_assessed', null, null, '', '2026-10-15 08:00:00', '2026-10-15 08:00:00'],
+        [6, 2, 3, 7, null, 'not_assessed', null, null, '', '2026-10-15 08:00:00', '2026-10-15 08:00:00'],
+    ];
+    foreach ($examResults as $examResult) {
+        $examResultStmt->execute($examResult);
+    }
+
     $db->commit();
 
     echo "Data demo berhasil dimasukkan.\n";

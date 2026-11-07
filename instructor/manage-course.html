@@ -137,6 +137,26 @@
                     <div id="classMaterialList"></div>
                 </div>
             </div>
+
+            <div class="dashboard-section" id="taskSection">
+                <div class="dashboard-section-header" style="flex-wrap: wrap; gap: 1rem;">
+                    <div>
+                        <h2 class="dashboard-section-title">Tugas &amp; Ujian</h2>
+                        <span style="color: var(--text-secondary); font-size: 0.875rem;" id="taskClassLabel">Pilih kelas untuk mengelola tugas dan ujian</span>
+                    </div>
+                    <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                        <select id="taskClassSelect" class="form-input" style="max-width: 300px;" onchange="selectTaskClass(this.value)"></select>
+                        <button class="btn btn-primary" onclick="openAssignmentTaskModal()"><i class="bi bi-clipboard-plus"></i> Tambah Tugas</button>
+                        <button class="btn btn-outline" onclick="openExamTaskModal()"><i class="bi bi-journal-check"></i> Tambah Ujian</button>
+                    </div>
+                </div>
+                <div class="dashboard-section-body">
+                    <div style="padding: 1rem; background: #eff6ff; border-radius: var(--radius); color: #1e40af; font-size: 0.875rem; margin-bottom: 1rem;">
+                        <i class="bi bi-info-circle"></i> Tugas dapat berupa unggah file, jawaban teks, praktik kelas, atau referensi eksternal. Nilai dan revisi pengumpulan tercatat pada audit trail.
+                    </div>
+                    <div id="taskPanel"></div>
+                </div>
+            </div>
         </main>
     </div>
 
@@ -324,6 +344,196 @@
         </div>
     </div>
 
+    <!-- Modal Tugas -->
+    <div id="assignmentTaskModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; padding: 1rem;">
+        <div style="background: white; border-radius: var(--radius-lg); max-width: 760px; width: 100%; max-height: 90vh; overflow-y: auto;">
+            <div style="padding: 1.5rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between;">
+                <h3 style="font-size: 1.25rem; font-weight: 600;" id="assignmentTaskModalTitle">Tambah Tugas</h3>
+                <button onclick="closeAssignmentTaskModal()" aria-label="Tutup" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--text-secondary);"><i class="bi bi-x"></i></button>
+            </div>
+            <div style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem;">
+                <input type="hidden" id="assignmentTaskId">
+                <div class="form-group">
+                    <label class="form-label" for="assignmentTaskTitle">Judul Tugas *</label>
+                    <input type="text" id="assignmentTaskTitle" class="form-input" placeholder="Contoh: Tugas 1: Analisis Fungsi Manajemen">
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <div class="form-group">
+                        <label class="form-label" for="assignmentTaskType">Jenis Tugas</label>
+                        <select id="assignmentTaskType" class="form-input">
+                            <option value="text_submission">Jawaban Teks</option>
+                            <option value="file_upload">Unggah File</option>
+                            <option value="in_class_practice">Praktik Kelas</option>
+                            <option value="external_reference">Referensi Eksternal</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="assignmentTaskStatus">Status</label>
+                        <select id="assignmentTaskStatus" class="form-input">
+                            <option value="draft">Draft</option>
+                            <option value="published">Published</option>
+                            <option value="closed">Closed</option>
+                            <option value="archived">Archived</option>
+                        </select>
+                    </div>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <div class="form-group">
+                        <label class="form-label" for="assignmentTaskModule">Modul</label>
+                        <select id="assignmentTaskModule" class="form-input" onchange="refreshAssignmentTaskLessons()"></select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="assignmentTaskLesson">Pelajaran</label>
+                        <select id="assignmentTaskLesson" class="form-input"></select>
+                    </div>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <div class="form-group">
+                        <label class="form-label" for="assignmentTaskOpenAt">Dibuka Pada</label>
+                        <input type="datetime-local" id="assignmentTaskOpenAt" class="form-input">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="assignmentTaskDueAt">Tenggat</label>
+                        <input type="datetime-local" id="assignmentTaskDueAt" class="form-input">
+                    </div>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem;">
+                    <div class="form-group">
+                        <label class="form-label" for="assignmentTaskMaxScore">Nilai Maksimum</label>
+                        <input type="number" id="assignmentTaskMaxScore" class="form-input" min="1" step="0.01" value="100">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="assignmentTaskWeight">Bobot (%)</label>
+                        <input type="number" id="assignmentTaskWeight" class="form-input" min="0" step="0.01" value="0">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="assignmentTaskMaxFileSize">Maks. File (byte)</label>
+                        <input type="number" id="assignmentTaskMaxFileSize" class="form-input" min="0" placeholder="Opsional">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="assignmentTaskAllowedTypes">Tipe File Diizinkan</label>
+                    <input type="text" id="assignmentTaskAllowedTypes" class="form-input" placeholder="pdf,doc,docx">
+                    <small class="form-hint">Pisahkan dengan koma. Kosongkan untuk semua tipe.</small>
+                </div>
+                <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem;">
+                    <input type="checkbox" id="assignmentTaskRequireFile" style="width: auto;"> Wajib mengunggah file
+                </label>
+                <div class="form-group">
+                    <label class="form-label" for="assignmentTaskInstructions">Instruksi</label>
+                    <textarea id="assignmentTaskInstructions" class="form-input" rows="4" placeholder="Petunjuk pengerjaan tugas..."></textarea>
+                </div>
+                <div class="form-group">
+                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 0.5rem;">
+                        <label class="form-label" style="margin: 0;">Rubrik Penilaian</label>
+                        <button type="button" class="btn btn-ghost" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" onclick="addAssignmentRubricRow()"><i class="bi bi-plus-lg"></i> Kriteria</button>
+                    </div>
+                    <div id="assignmentTaskRubrics" style="display: flex; flex-direction: column; gap: 0.5rem;"></div>
+                </div>
+            </div>
+            <div style="padding: 1.5rem; border-top: 1px solid var(--border); display: flex; gap: 0.75rem; justify-content: flex-end;">
+                <button class="btn btn-ghost" onclick="closeAssignmentTaskModal()">Batal</button>
+                <button class="btn btn-primary" onclick="saveAssignmentTask()">Simpan Tugas</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Pengumpulan Tugas -->
+    <div id="assignmentSubmissionsModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; padding: 1rem;">
+        <div style="background: white; border-radius: var(--radius-lg); max-width: 900px; width: 100%; max-height: 90vh; overflow-y: auto;">
+            <div style="padding: 1.5rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between;">
+                <h3 style="font-size: 1.25rem; font-weight: 600;" id="assignmentSubmissionsTitle">Pengumpulan Tugas</h3>
+                <button onclick="closeAssignmentSubmissionsModal()" aria-label="Tutup" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--text-secondary);"><i class="bi bi-x"></i></button>
+            </div>
+            <div style="padding: 1.5rem;" id="assignmentSubmissionsBody"></div>
+        </div>
+    </div>
+
+    <!-- Modal Ujian -->
+    <div id="examTaskModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; padding: 1rem;">
+        <div style="background: white; border-radius: var(--radius-lg); max-width: 720px; width: 100%; max-height: 90vh; overflow-y: auto;">
+            <div style="padding: 1.5rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between;">
+                <h3 style="font-size: 1.25rem; font-weight: 600;" id="examTaskModalTitle">Tambah Ujian</h3>
+                <button onclick="closeExamTaskModal()" aria-label="Tutup" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--text-secondary);"><i class="bi bi-x"></i></button>
+            </div>
+            <div style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem;">
+                <input type="hidden" id="examTaskId">
+                <div class="form-group">
+                    <label class="form-label" for="examTaskTitle">Judul Ujian *</label>
+                    <input type="text" id="examTaskTitle" class="form-input" placeholder="Contoh: Ujian Tengah Semester">
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <div class="form-group">
+                        <label class="form-label" for="examTaskType">Jenis Ujian</label>
+                        <select id="examTaskType" class="form-input">
+                            <option value="written">Tertulis</option>
+                            <option value="practical">Praktik</option>
+                            <option value="oral">Lisan</option>
+                            <option value="project">Proyek</option>
+                            <option value="other">Lainnya</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="examTaskStatus">Status</label>
+                        <select id="examTaskStatus" class="form-input">
+                            <option value="draft">Draft</option>
+                            <option value="published">Published</option>
+                            <option value="closed">Closed</option>
+                            <option value="archived">Archived</option>
+                        </select>
+                    </div>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem;">
+                    <div class="form-group">
+                        <label class="form-label" for="examTaskDate">Tanggal</label>
+                        <input type="date" id="examTaskDate" class="form-input">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="examTaskStartTime">Waktu Mulai</label>
+                        <input type="time" id="examTaskStartTime" class="form-input">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="examTaskDuration">Durasi (menit)</label>
+                        <input type="number" id="examTaskDuration" class="form-input" min="0" placeholder="90">
+                    </div>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <div class="form-group">
+                        <label class="form-label" for="examTaskMaxScore">Nilai Maksimum</label>
+                        <input type="number" id="examTaskMaxScore" class="form-input" min="1" step="0.01" value="100">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="examTaskWeight">Bobot (%)</label>
+                        <input type="number" id="examTaskWeight" class="form-input" min="0" step="0.01" value="0">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="examTaskDescription">Deskripsi</label>
+                    <textarea id="examTaskDescription" class="form-input" rows="2" placeholder="Ringkasan ujian..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="examTaskInstructions">Instruksi</label>
+                    <textarea id="examTaskInstructions" class="form-input" rows="3" placeholder="Petunjuk pengerjaan ujian..."></textarea>
+                </div>
+            </div>
+            <div style="padding: 1.5rem; border-top: 1px solid var(--border); display: flex; gap: 0.75rem; justify-content: flex-end;">
+                <button class="btn btn-ghost" onclick="closeExamTaskModal()">Batal</button>
+                <button class="btn btn-primary" onclick="saveExamTask()">Simpan Ujian</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Hasil Ujian -->
+    <div id="examResultsModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; padding: 1rem;">
+        <div style="background: white; border-radius: var(--radius-lg); max-width: 960px; width: 100%; max-height: 90vh; overflow-y: auto;">
+            <div style="padding: 1.5rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between;">
+                <h3 style="font-size: 1.25rem; font-weight: 600;" id="examResultsTitle">Hasil Ujian</h3>
+                <button onclick="closeExamResultsModal()" aria-label="Tutup" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--text-secondary);"><i class="bi bi-x"></i></button>
+            </div>
+            <div style="padding: 1.5rem; overflow-x: auto;" id="examResultsBody"></div>
+        </div>
+    </div>
+
     <script src="../assets/js/config.js"></script>
     <script src="../assets/js/core.js"></script>
     <script src="../assets/js/api.js"></script>
@@ -341,6 +551,7 @@
     <script src="../assets/js/crud-content.js"></script>
     <script src="../assets/js/crud-grades.js"></script>
     <script src="../assets/js/crud-academic.js"></script>
+    <script src="../assets/js/crud-tasks.js"></script>
     <script src="../assets/js/ui.js"></script>
     <script>
         let currentInstructor = null;
@@ -349,6 +560,53 @@
         let editingLessonId = null;
         let selectedMaterialClassId = null;
         let editingMaterialId = null;
+        let selectedTaskClassId = null;
+        let editingAssignmentTaskId = null;
+        let editingExamTaskId = null;
+        let openSubmissionsAssignmentId = null;
+        let submissionsCache = null;
+        let openExamResultsId = null;
+        let examResultsCache = null;
+
+        const ASSIGNMENT_TYPE_LABELS = {
+            file_upload: 'Unggah File',
+            text_submission: 'Jawaban Teks',
+            in_class_practice: 'Praktik Kelas',
+            external_reference: 'Referensi Eksternal'
+        };
+        const TASK_STATUS_LABELS = {
+            draft: 'Draft',
+            published: 'Published',
+            closed: 'Closed',
+            archived: 'Archived'
+        };
+        const SUBMISSION_STATUS_LABELS = {
+            submitted: 'Dikumpulkan',
+            late: 'Terlambat',
+            reviewed: 'Dinilai',
+            revision_requested: 'Minta Revisi',
+            resubmitted: 'Dikumpulkan Ulang',
+            accepted: 'Diterima'
+        };
+        const EXAM_TYPE_LABELS = {
+            written: 'Tertulis',
+            practical: 'Praktik',
+            oral: 'Lisan',
+            project: 'Proyek',
+            other: 'Lainnya'
+        };
+        const PARTICIPANT_STATUS_LABELS = {
+            registered: 'Terdaftar',
+            attended: 'Hadir',
+            absent: 'Tidak Hadir',
+            excused: 'Izin'
+        };
+        const RESULT_STATUS_LABELS = {
+            not_assessed: 'Belum Dinilai',
+            excused: 'Izin',
+            missing: 'Tidak Ada Nilai',
+            graded: 'Dinilai'
+        };
 
         const MATERIAL_TYPE_LABELS = {
             text: 'Teks',
@@ -414,6 +672,7 @@
             renderInstructorCourses();
             renderStructure();
             renderClassMaterials();
+            renderTasks();
         }
 
         function renderInstructorCourses() {
@@ -476,6 +735,7 @@
             renderInstructorCourses();
             renderStructure();
             renderClassMaterials();
+            renderTasks();
             if (scrollToSection) {
                 document.getElementById('structureSection').scrollIntoView({ behavior: 'smooth', block: 'start' });
             }
@@ -1085,6 +1345,714 @@
             const result = ELIPS.deleteLesson(lesson.id, currentInstructor.id);
             ELIPS.toast(result.message);
             if (result.ok) initInstructor(lesson.courseId);
+        }
+
+        // ---------- Tugas & ujian (Phase 5) ----------
+        function taskStatusBadge(status) {
+            const map = { draft: 'badge-warning', published: 'badge-success', closed: 'badge-primary', archived: 'badge' };
+            return '<span class="badge ' + (map[status] || 'badge') + '">' + ELIPS.escapeHtml(TASK_STATUS_LABELS[status] || status) + '</span>';
+        }
+
+        function submissionStatusBadge(status) {
+            const map = {
+                submitted: 'badge-primary', late: 'badge-warning', reviewed: 'badge-success',
+                revision_requested: 'badge-warning', resubmitted: 'badge-primary', accepted: 'badge-success'
+            };
+            return '<span class="badge ' + (map[status] || 'badge') + '">' + ELIPS.escapeHtml(SUBMISSION_STATUS_LABELS[status] || status) + '</span>';
+        }
+
+        function formatTaskDateTime(value) {
+            if (!value) return '-';
+            const date = new Date(value);
+            if (isNaN(date.getTime())) return ELIPS.escapeHtml(String(value));
+            return date.toLocaleString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+        }
+
+        function taskDateTimeInput(value) {
+            if (!value) return '';
+            const date = new Date(value);
+            if (isNaN(date.getTime())) return '';
+            const pad = function (n) { return String(n).padStart(2, '0'); };
+            return date.getFullYear() + '-' + pad(date.getMonth() + 1) + '-' + pad(date.getDate()) +
+                'T' + pad(date.getHours()) + ':' + pad(date.getMinutes());
+        }
+
+        function formatFileSize(size) {
+            const value = Number(size);
+            if (!value || value < 0) return '';
+            if (value >= 1048576) return (value / 1048576).toFixed(1) + ' MB';
+            if (value >= 1024) return Math.round(value / 1024) + ' KB';
+            return value + ' B';
+        }
+
+        function taskClassContext() {
+            const course = selectedCourseId ? ELIPS.getCourseById(selectedCourseId) : null;
+            if (!course) return null;
+            const classes = manageableClassesForCourse(course.id);
+            if (classes.length === 0) return { course: course, classes: [], classItem: null };
+            const valid = selectedTaskClassId && classes.some(function (item) {
+                return Number(item.id) === Number(selectedTaskClassId);
+            });
+            if (!valid) selectedTaskClassId = Number(classes[0].id);
+            const classItem = classes.find(function (item) {
+                return Number(item.id) === Number(selectedTaskClassId);
+            });
+            return { course: course, classes: classes, classItem: classItem };
+        }
+
+        function selectTaskClass(classId) {
+            selectedTaskClassId = Number(classId);
+            renderTasks();
+        }
+
+        function renderTasks() {
+            const select = document.getElementById('taskClassSelect');
+            const label = document.getElementById('taskClassLabel');
+            const panel = document.getElementById('taskPanel');
+            if (!select || !label || !panel) return;
+
+            const context = taskClassContext();
+            if (!context) {
+                select.innerHTML = '<option value="">Pilih kursus terlebih dahulu</option>';
+                label.textContent = 'Pilih kursus untuk mengelola tugas dan ujian';
+                panel.innerHTML = '<p style="color: var(--text-secondary);">Pilih kursus yang ditugaskan.</p>';
+                return;
+            }
+            if (!context.classItem) {
+                select.innerHTML = '<option value="">Belum ada kelas yang Anda ampu</option>';
+                label.textContent = 'Belum ada kelas untuk kursus ini';
+                panel.innerHTML = '<p style="color: var(--text-secondary);">Admin belum menugaskan Anda pada kelas untuk kursus ini.</p>';
+                return;
+            }
+
+            select.innerHTML = context.classes.map(function (item) {
+                return '<option value="' + item.id + '" ' + (Number(item.id) === Number(selectedTaskClassId) ? 'selected' : '') + '>' +
+                    ELIPS.escapeHtml(item.name + ' (' + item.code + ')') + '</option>';
+            }).join('');
+            label.textContent = context.classItem.name + ' • ' + context.classItem.code;
+
+            const result = ELIPS.getAssignmentClassroom({ classId: selectedTaskClassId });
+            if (!result.ok) {
+                panel.innerHTML = '<div style="padding: 1rem; border: 1px solid var(--danger); border-radius: var(--radius); color: var(--danger);">' +
+                    ELIPS.escapeHtml(result.message) + '</div>';
+                return;
+            }
+            const payload = result.data || {};
+            renderTaskPanel(payload.assignments || [], payload.exams || []);
+        }
+
+        function renderTaskPanel(assignments, exams) {
+            const panel = document.getElementById('taskPanel');
+            panel.innerHTML = [
+                '<div style="margin-bottom: 1.25rem;">',
+                '  <div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-bottom: 0.5rem;">',
+                '    <h3 style="font-size: 1rem; font-weight: 600; margin: 0;"><i class="bi bi-clipboard-check"></i> Tugas</h3>',
+                '    <span class="badge badge-primary">' + assignments.length + ' Tugas</span>',
+                '  </div>',
+                renderAssignmentTable(assignments),
+                '</div>',
+                '<div>',
+                '  <div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-bottom: 0.5rem;">',
+                '    <h3 style="font-size: 1rem; font-weight: 600; margin: 0;"><i class="bi bi-journal-check"></i> Ujian</h3>',
+                '    <span class="badge badge-primary">' + exams.length + ' Ujian</span>',
+                '  </div>',
+                renderExamTable(exams),
+                '</div>'
+            ].join('');
+        }
+
+        function renderAssignmentTable(assignments) {
+            if (assignments.length === 0) {
+                return [
+                    '<div style="text-align: center; padding: 1.75rem 1rem; color: var(--text-secondary); border: 1px dashed var(--border); border-radius: var(--radius);">',
+                    '  <i class="bi bi-clipboard-plus" style="display: block; font-size: 2rem; opacity: .45; margin-bottom: .5rem;"></i>',
+                    '  <div style="font-weight: 600; color: var(--text-primary); margin-bottom: .25rem;">Belum ada tugas</div>',
+                    '  <div style="font-size: .875rem;">Gunakan tombol "Tambah Tugas" untuk membuat tugas pertama.</div>',
+                    '</div>'
+                ].join('');
+            }
+            return '<div style="display: flex; flex-direction: column; gap: 0.75rem;">' + assignments.map(function (item) {
+                const stats = item.stats || {};
+                const dueText = item.dueAt ? 'Tenggat ' + formatTaskDateTime(item.dueAt) : 'Tanpa tenggat';
+                const statText = (stats.submissionCount || 0) + ' terkumpul • ' + (stats.pendingCount || 0) + ' menunggu' +
+                    (stats.averageScore !== null && stats.averageScore !== undefined ? ' • rata-rata ' + stats.averageScore : '');
+                return [
+                    '<div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; padding: 0.875rem 1rem; border: 1px solid var(--border); border-radius: var(--radius); flex-wrap: wrap;">',
+                    '  <div style="min-width: 0; flex: 1;">',
+                    '    <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">',
+                    '      <strong>' + ELIPS.escapeHtml(item.title) + '</strong>',
+                    '      <span class="badge">' + ELIPS.escapeHtml(ASSIGNMENT_TYPE_LABELS[item.type] || item.type) + '</span>',
+                    taskStatusBadge(item.status),
+                    '      <span class="badge">Bobot ' + (Number(item.weight) || 0) + '%</span>',
+                    '    </div>',
+                    '    <div class="table-course-meta" style="margin-top: 0.25rem;">' + ELIPS.escapeHtml(dueText) +
+                        (item.lessonTitle ? ' &bull; ' + ELIPS.escapeHtml(item.lessonTitle) : '') + '</div>',
+                    '    <div style="font-size: 0.8125rem; color: var(--text-secondary); margin-top: 0.25rem;">' + ELIPS.escapeHtml(statText) + '</div>',
+                    '  </div>',
+                    '  <div style="display: flex; gap: 0.25rem; flex-wrap: wrap;">',
+                    '    <button class="btn btn-ghost" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" onclick="openAssignmentTaskModal(' + item.id + ')" title="Edit tugas"><i class="bi bi-pencil"></i></button>',
+                    '    <button class="btn btn-ghost" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" onclick="openAssignmentSubmissions(' + item.id + ')" title="Pengumpulan"><i class="bi bi-inbox"></i></button>',
+                    assignmentStatusButton(item),
+                    '    <button class="btn btn-ghost" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; color: var(--danger);" onclick="deleteAssignmentTask(' + item.id + ')" title="Hapus tugas"><i class="bi bi-trash"></i></button>',
+                    '  </div>',
+                    '</div>'
+                ].join('');
+            }).join('') + '</div>';
+        }
+
+        function assignmentStatusButton(item) {
+            if (item.status === 'draft') {
+                return '<button class="btn btn-ghost" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" onclick="setAssignmentTaskStatus(' + item.id + ', \'published\')" title="Publikasikan"><i class="bi bi-eye"></i></button>';
+            }
+            if (item.status === 'published') {
+                return '<button class="btn btn-ghost" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" onclick="setAssignmentTaskStatus(' + item.id + ', \'closed\')" title="Tutup tugas"><i class="bi bi-lock"></i></button>';
+            }
+            if (item.status === 'closed') {
+                return '<button class="btn btn-ghost" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" onclick="setAssignmentTaskStatus(' + item.id + ', \'archived\')" title="Arsipkan"><i class="bi bi-archive"></i></button>';
+            }
+            return '<button class="btn btn-ghost" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" onclick="setAssignmentTaskStatus(' + item.id + ', \'draft\')" title="Kembalikan ke draft"><i class="bi bi-arrow-counterclockwise"></i></button>';
+        }
+
+        function renderExamTable(exams) {
+            if (exams.length === 0) {
+                return [
+                    '<div style="text-align: center; padding: 1.75rem 1rem; color: var(--text-secondary); border: 1px dashed var(--border); border-radius: var(--radius);">',
+                    '  <i class="bi bi-journal-plus" style="display: block; font-size: 2rem; opacity: .45; margin-bottom: .5rem;"></i>',
+                    '  <div style="font-weight: 600; color: var(--text-primary); margin-bottom: .25rem;">Belum ada ujian</div>',
+                    '  <div style="font-size: .875rem;">Gunakan tombol "Tambah Ujian" untuk menjadwalkan ujian.</div>',
+                    '</div>'
+                ].join('');
+            }
+            return '<div style="display: flex; flex-direction: column; gap: 0.75rem;">' + exams.map(function (item) {
+                const stats = item.stats || {};
+                const dateText = item.examDate
+                    ? formatTaskDateTime(item.examDate + 'T' + (item.startTime || '00:00') + ':00')
+                    : 'Belum dijadwalkan';
+                const statText = (stats.participantCount || 0) + ' peserta • ' + (stats.gradedCount || 0) + ' dinilai' +
+                    (stats.averageScore !== null && stats.averageScore !== undefined ? ' • rata-rata ' + stats.averageScore : '');
+                return [
+                    '<div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; padding: 0.875rem 1rem; border: 1px solid var(--border); border-radius: var(--radius); flex-wrap: wrap;">',
+                    '  <div style="min-width: 0; flex: 1;">',
+                    '    <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">',
+                    '      <strong>' + ELIPS.escapeHtml(item.title) + '</strong>',
+                    '      <span class="badge">' + ELIPS.escapeHtml(EXAM_TYPE_LABELS[item.type] || item.type) + '</span>',
+                    taskStatusBadge(item.status),
+                    '      <span class="badge">Bobot ' + (Number(item.weight) || 0) + '%</span>',
+                    '    </div>',
+                    '    <div class="table-course-meta" style="margin-top: 0.25rem;">' + ELIPS.escapeHtml(dateText) +
+                        (item.durationMinutes ? ' &bull; ' + item.durationMinutes + ' menit' : '') + '</div>',
+                    '    <div style="font-size: 0.8125rem; color: var(--text-secondary); margin-top: 0.25rem;">' + ELIPS.escapeHtml(statText) + '</div>',
+                    '  </div>',
+                    '  <div style="display: flex; gap: 0.25rem; flex-wrap: wrap;">',
+                    '    <button class="btn btn-ghost" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" onclick="openExamTaskModal(' + item.id + ')" title="Edit ujian"><i class="bi bi-pencil"></i></button>',
+                    '    <button class="btn btn-ghost" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" onclick="openExamResults(' + item.id + ')" title="Hasil ujian"><i class="bi bi-list-check"></i></button>',
+                    examStatusButton(item),
+                    '    <button class="btn btn-ghost" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; color: var(--danger);" onclick="deleteExamTask(' + item.id + ')" title="Hapus ujian"><i class="bi bi-trash"></i></button>',
+                    '  </div>',
+                    '</div>'
+                ].join('');
+            }).join('') + '</div>';
+        }
+
+        function examStatusButton(item) {
+            if (item.status === 'draft') {
+                return '<button class="btn btn-ghost" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" onclick="setExamTaskStatus(' + item.id + ', \'published\')" title="Publikasikan"><i class="bi bi-eye"></i></button>';
+            }
+            if (item.status === 'published') {
+                return '<button class="btn btn-ghost" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" onclick="setExamTaskStatus(' + item.id + ', \'closed\')" title="Tutup ujian"><i class="bi bi-lock"></i></button>';
+            }
+            if (item.status === 'closed') {
+                return '<button class="btn btn-ghost" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" onclick="setExamTaskStatus(' + item.id + ', \'archived\')" title="Arsipkan"><i class="bi bi-archive"></i></button>';
+            }
+            return '<button class="btn btn-ghost" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" onclick="setExamTaskStatus(' + item.id + ', \'draft\')" title="Kembalikan ke draft"><i class="bi bi-arrow-counterclockwise"></i></button>';
+        }
+
+        function setAssignmentTaskStatus(id, status) {
+            const result = ELIPS.updateAssignmentStatus(id, status, '');
+            ELIPS.toast(result.message);
+            if (result.ok) renderTasks();
+        }
+
+        function setExamTaskStatus(id, status) {
+            const result = ELIPS.updateExamStatus(id, status, '');
+            ELIPS.toast(result.message);
+            if (result.ok) renderTasks();
+        }
+
+        function deleteAssignmentTask(id) {
+            const item = ELIPS.getAssignmentById(id);
+            if (!item) return;
+            if (!confirm('Hapus tugas "' + item.title + '" beserta seluruh pengumpulannya?')) return;
+            const result = ELIPS.deleteAssignment(id);
+            ELIPS.toast(result.message);
+            if (result.ok) renderTasks();
+        }
+
+        function deleteExamTask(id) {
+            const item = ELIPS.getExamById(id);
+            if (!item) return;
+            if (!confirm('Hapus ujian "' + item.title + '" beserta hasil pesertanya?')) return;
+            const result = ELIPS.deleteExam(id);
+            ELIPS.toast(result.message);
+            if (result.ok) renderTasks();
+        }
+
+        function refreshAssignmentTaskModules(selectedModuleId) {
+            const select = document.getElementById('assignmentTaskModule');
+            if (!select) return;
+            const classItem = selectedTaskClassId ? ELIPS.getClassById(selectedTaskClassId) : null;
+            const modules = classItem ? ELIPS.getModules()
+                .filter(function (module) {
+                    return Number(module.courseId) === Number(classItem.courseId) &&
+                        Number(module.curriculumVersionId) === Number(classItem.curriculumVersionId);
+                })
+                .sort(function (a, b) { return (Number(a.order) || 0) - (Number(b.order) || 0); }) : [];
+            select.innerHTML = '<option value="">Tanpa modul</option>' + modules.map(function (module) {
+                return '<option value="' + module.id + '" ' +
+                    (selectedModuleId && Number(selectedModuleId) === Number(module.id) ? 'selected' : '') + '>' +
+                    ELIPS.escapeHtml(module.title) + '</option>';
+            }).join('');
+        }
+
+        function refreshAssignmentTaskLessons(selectedLessonId) {
+            const select = document.getElementById('assignmentTaskLesson');
+            if (!select) return;
+            const moduleId = document.getElementById('assignmentTaskModule').value;
+            const classItem = selectedTaskClassId ? ELIPS.getClassById(selectedTaskClassId) : null;
+            const lessons = classItem && moduleId ? ELIPS.getLessons()
+                .filter(function (lesson) {
+                    return Number(lesson.moduleId) === Number(moduleId) &&
+                        Number(lesson.courseId) === Number(classItem.courseId) &&
+                        Number(lesson.curriculumVersionId) === Number(classItem.curriculumVersionId);
+                })
+                .sort(function (a, b) { return (Number(a.order) || 0) - (Number(b.order) || 0); }) : [];
+            select.innerHTML = '<option value="">Tanpa pelajaran</option>' + lessons.map(function (lesson) {
+                return '<option value="' + lesson.id + '" ' +
+                    (selectedLessonId && Number(selectedLessonId) === Number(lesson.id) ? 'selected' : '') + '>' +
+                    ELIPS.escapeHtml(lesson.title) + '</option>';
+            }).join('');
+        }
+
+        function addAssignmentRubricRow(rubric) {
+            const container = document.getElementById('assignmentTaskRubrics');
+            if (!container) return;
+            const row = document.createElement('div');
+            row.className = 'assignment-rubric-row';
+            row.style.cssText = 'display: grid; grid-template-columns: 1.2fr 1.6fr 90px 36px; gap: 0.5rem; align-items: start;';
+            row.innerHTML = [
+                '<input type="text" class="form-input rubric-criterion" placeholder="Kriteria" value="' + ELIPS.escapeHtml(rubric ? rubric.criterion : '') + '">',
+                '<input type="text" class="form-input rubric-description" placeholder="Deskripsi" value="' + ELIPS.escapeHtml(rubric ? (rubric.description || '') : '') + '">',
+                '<input type="number" class="form-input rubric-max-score" min="1" step="0.01" placeholder="Nilai" value="' + (rubric ? Number(rubric.maxScore) || '' : '') + '">',
+                '<button type="button" class="btn btn-ghost" style="padding: 0.5rem; color: var(--danger);" title="Hapus kriteria" onclick="removeAssignmentRubricRow(this)"><i class="bi bi-x-lg"></i></button>'
+            ].join('');
+            container.appendChild(row);
+        }
+
+        function removeAssignmentRubricRow(button) {
+            const row = button.closest('.assignment-rubric-row');
+            if (row) row.remove();
+        }
+
+        function collectAssignmentRubrics() {
+            const rows = document.querySelectorAll('#assignmentTaskRubrics .assignment-rubric-row');
+            const rubrics = [];
+            Array.prototype.forEach.call(rows, function (row, index) {
+                const criterion = row.querySelector('.rubric-criterion').value.trim();
+                const description = row.querySelector('.rubric-description').value.trim();
+                const maxScore = Number(row.querySelector('.rubric-max-score').value);
+                if (criterion === '' && !maxScore) return;
+                rubrics.push({ criterion: criterion, description: description, maxScore: maxScore, order: index + 1 });
+            });
+            return rubrics;
+        }
+
+        function openAssignmentTaskModal(assignmentId) {
+            if (!selectedTaskClassId) {
+                ELIPS.toast('Pilih kelas terlebih dahulu.');
+                return;
+            }
+            if (!ELIPS.getClassById(selectedTaskClassId)) return;
+
+            const detail = assignmentId ? ELIPS.getAssignmentDetail({ id: assignmentId }) : null;
+            if (assignmentId && (!detail || !detail.ok)) {
+                ELIPS.toast(detail ? detail.message : 'Tugas tidak ditemukan.');
+                return;
+            }
+            const item = detail ? detail.data : null;
+            editingAssignmentTaskId = item ? Number(item.id) : null;
+
+            document.getElementById('assignmentTaskModalTitle').textContent = item ? 'Edit Tugas' : 'Tambah Tugas';
+            document.getElementById('assignmentTaskId').value = item ? String(item.id) : '';
+            document.getElementById('assignmentTaskTitle').value = item ? item.title : '';
+            document.getElementById('assignmentTaskType').value = item ? item.type : 'text_submission';
+            document.getElementById('assignmentTaskStatus').value = item ? item.status : 'draft';
+            document.getElementById('assignmentTaskOpenAt').value = item ? taskDateTimeInput(item.openAt) : '';
+            document.getElementById('assignmentTaskDueAt').value = item ? taskDateTimeInput(item.dueAt) : '';
+            document.getElementById('assignmentTaskMaxScore').value = item ? item.maxScore : 100;
+            document.getElementById('assignmentTaskWeight').value = item ? item.weight : 0;
+            document.getElementById('assignmentTaskMaxFileSize').value = item && item.maxFileSize !== null && item.maxFileSize !== undefined ? item.maxFileSize : '';
+            document.getElementById('assignmentTaskAllowedTypes').value = item ? (item.allowedTypes || '') : '';
+            document.getElementById('assignmentTaskRequireFile').checked = item ? !!item.requireFile : false;
+            document.getElementById('assignmentTaskInstructions').value = item ? (item.instructions || '') : '';
+
+            refreshAssignmentTaskModules(item ? item.moduleId : null);
+            refreshAssignmentTaskLessons(item ? item.lessonId : null);
+
+            const rubricContainer = document.getElementById('assignmentTaskRubrics');
+            rubricContainer.innerHTML = '';
+            (item && item.rubrics ? item.rubrics : []).forEach(function (rubric) {
+                addAssignmentRubricRow(rubric);
+            });
+
+            document.getElementById('assignmentTaskModal').style.display = 'flex';
+            document.getElementById('assignmentTaskTitle').focus();
+        }
+
+        function closeAssignmentTaskModal() {
+            document.getElementById('assignmentTaskModal').style.display = 'none';
+            editingAssignmentTaskId = null;
+        }
+
+        function saveAssignmentTask() {
+            if (!selectedTaskClassId) return;
+            const data = {
+                title: document.getElementById('assignmentTaskTitle').value.trim(),
+                type: document.getElementById('assignmentTaskType').value,
+                status: document.getElementById('assignmentTaskStatus').value,
+                moduleId: document.getElementById('assignmentTaskModule').value || null,
+                lessonId: document.getElementById('assignmentTaskLesson').value || null,
+                openAt: document.getElementById('assignmentTaskOpenAt').value || null,
+                dueAt: document.getElementById('assignmentTaskDueAt').value || null,
+                maxScore: Number(document.getElementById('assignmentTaskMaxScore').value),
+                weight: Number(document.getElementById('assignmentTaskWeight').value),
+                requireFile: document.getElementById('assignmentTaskRequireFile').checked,
+                allowedTypes: document.getElementById('assignmentTaskAllowedTypes').value.trim(),
+                maxFileSize: document.getElementById('assignmentTaskMaxFileSize').value === ''
+                    ? null : Number(document.getElementById('assignmentTaskMaxFileSize').value),
+                instructions: document.getElementById('assignmentTaskInstructions').value.trim(),
+                rubrics: collectAssignmentRubrics()
+            };
+            const result = editingAssignmentTaskId
+                ? ELIPS.updateAssignment(editingAssignmentTaskId, data)
+                : ELIPS.createAssignment(Object.assign({ classId: selectedTaskClassId }, data));
+            ELIPS.toast(result.message);
+            if (result.ok) {
+                closeAssignmentTaskModal();
+                renderTasks();
+            }
+        }
+
+        function openAssignmentSubmissions(assignmentId) {
+            const result = ELIPS.getAssignmentSubmissions(assignmentId);
+            if (!result.ok) {
+                ELIPS.toast(result.message);
+                return;
+            }
+            openSubmissionsAssignmentId = Number(assignmentId);
+            submissionsCache = result.data;
+            renderAssignmentSubmissionsModal();
+            document.getElementById('assignmentSubmissionsModal').style.display = 'flex';
+        }
+
+        function closeAssignmentSubmissionsModal() {
+            document.getElementById('assignmentSubmissionsModal').style.display = 'none';
+            openSubmissionsAssignmentId = null;
+            submissionsCache = null;
+        }
+
+        function refreshSubmissionsCache() {
+            if (!openSubmissionsAssignmentId) return;
+            const result = ELIPS.getAssignmentSubmissions(openSubmissionsAssignmentId);
+            if (result.ok) submissionsCache = result.data;
+            renderAssignmentSubmissionsModal();
+        }
+
+        function renderAssignmentSubmissionsModal() {
+            const body = document.getElementById('assignmentSubmissionsBody');
+            if (!submissionsCache) {
+                body.innerHTML = '';
+                return;
+            }
+            const assignment = submissionsCache.assignment || {};
+            const stats = submissionsCache.stats || {};
+            document.getElementById('assignmentSubmissionsTitle').textContent = 'Pengumpulan: ' + (assignment.title || '');
+            const students = submissionsCache.students || [];
+
+            body.innerHTML = [
+                '<div style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1rem;">',
+                '  <span class="badge badge-primary">' + (stats.submissionCount || 0) + ' Terkumpul</span>',
+                '  <span class="badge badge-warning">' + (stats.pendingCount || 0) + ' Menunggu</span>',
+                '  <span class="badge badge-success">' + (stats.reviewedCount || 0) + ' Dinilai</span>',
+                '  <span class="badge">' + (stats.lateCount || 0) + ' Terlambat</span>',
+                stats.averageScore !== null && stats.averageScore !== undefined
+                    ? '  <span class="badge">Rata-rata ' + stats.averageScore + '</span>' : '',
+                '</div>',
+                students.length === 0
+                    ? '<p style="color: var(--text-secondary);">Belum ada peserta aktif pada kelas ini.</p>'
+                    : '<div style="overflow-x: auto;"><table class="dashboard-table"><thead><tr>' +
+                        '<th>Peserta</th><th>Status</th><th>Dikumpulkan</th><th>Nilai</th><th>Aksi</th>' +
+                        '</tr></thead><tbody>' + students.map(function (row) {
+                            const submission = row.submission;
+                            return [
+                                '<tr>',
+                                '  <td>' + ELIPS.escapeHtml(row.studentName) + '</td>',
+                                '  <td>' + (submission ? submissionStatusBadge(submission.status) : '<span class="badge">Belum</span>') + '</td>',
+                                '  <td>' + (submission ? formatTaskDateTime(submission.submittedAt) + (submission.isLate ? ' <span class="badge badge-warning">Terlambat</span>' : '') : '-') + '</td>',
+                                '  <td>' + (submission && submission.score !== null && submission.score !== undefined ? submission.score : '-') + '</td>',
+                                '  <td>' + (submission
+                                    ? '<button class="btn btn-ghost" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" onclick="openSubmissionReview(' + row.enrollmentId + ')" title="Periksa"><i class="bi bi-search"></i> Periksa</button>'
+                                    : '<span style="color: var(--text-secondary); font-size: 0.75rem;">Belum mengumpulkan</span>') + '</td>',
+                                '</tr>'
+                            ].join('');
+                        }).join('') + '</tbody></table></div>',
+                '<div id="submissionReviewPanel" style="margin-top: 1rem;"></div>'
+            ].join('');
+        }
+
+        function openSubmissionReview(enrollmentId) {
+            if (!openSubmissionsAssignmentId) return;
+            const result = ELIPS.getAssignmentDetail({
+                id: openSubmissionsAssignmentId,
+                enrollmentId: enrollmentId
+            });
+            if (!result.ok) {
+                ELIPS.toast(result.message);
+                return;
+            }
+            const detail = result.data;
+            const submission = detail ? detail.submission : null;
+            const panel = document.getElementById('submissionReviewPanel');
+            if (!panel) return;
+            if (!submission) {
+                panel.innerHTML = '<p style="color: var(--text-secondary);">Peserta ini belum mengumpulkan tugas.</p>';
+                return;
+            }
+
+            const files = (submission.files || []).map(function (file) {
+                return '<li>' + ELIPS.escapeHtml(file.fileName) +
+                    (file.fileSize ? ' <span style="color: var(--text-secondary);">(' + formatFileSize(file.fileSize) + ')</span>' : '') + '</li>';
+            }).join('');
+            const reviews = (submission.reviews || []).map(function (review) {
+                return '<li><strong>' + ELIPS.escapeHtml(review.action) + '</strong>' +
+                    (review.score !== null && review.score !== undefined ? ' • nilai ' + review.score : '') +
+                    (review.note ? ' — ' + ELIPS.escapeHtml(review.note) : '') +
+                    ' <span style="color: var(--text-secondary);">(' + formatTaskDateTime(review.createdAt) + ')</span></li>';
+            }).join('');
+
+            panel.innerHTML = [
+                '<div style="padding: 1rem; border: 1px solid var(--border); border-radius: var(--radius);">',
+                '  <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.75rem;">',
+                '    <strong>' + ELIPS.escapeHtml(submission.studentName || 'Peserta') + '</strong>',
+                submissionStatusBadge(submission.status),
+                '  </div>',
+                submission.textAnswer
+                    ? '  <div style="white-space: pre-wrap; background: var(--background); padding: 0.75rem; border-radius: var(--radius); font-size: 0.875rem; margin-bottom: 0.75rem;">' + ELIPS.escapeHtml(submission.textAnswer) + '</div>'
+                    : '',
+                files ? '  <div style="font-size: 0.875rem; margin-bottom: 0.75rem;"><strong>File:</strong><ul style="margin: 0.25rem 0 0 1rem;">' + files + '</ul></div>' : '',
+                submission.feedback
+                    ? '  <div style="font-size: 0.875rem; margin-bottom: 0.75rem;"><strong>Umpan balik terakhir:</strong> ' + ELIPS.escapeHtml(submission.feedback) + '</div>'
+                    : '',
+                reviews ? '  <div style="font-size: 0.875rem; margin-bottom: 0.75rem;"><strong>Riwayat:</strong><ul style="margin: 0.25rem 0 0 1rem;">' + reviews + '</ul></div>' : '',
+                '  <div style="display: grid; grid-template-columns: 1fr 1fr 2fr; gap: 0.5rem; align-items: end;">',
+                '    <div class="form-group" style="margin: 0;">',
+                '      <label class="form-label" for="submissionReviewAction">Aksi</label>',
+                '      <select id="submissionReviewAction" class="form-input">',
+                '        <option value="score">Beri Nilai</option>',
+                '        <option value="revision">Minta Revisi</option>',
+                '        <option value="accept">Terima</option>',
+                '      </select>',
+                '    </div>',
+                '    <div class="form-group" style="margin: 0;">',
+                '      <label class="form-label" for="submissionReviewScore">Nilai (maks ' + (Number(submission.maxScore) || 0) + ')</label>',
+                '      <input type="number" id="submissionReviewScore" class="form-input" min="0" step="0.01" value="' +
+                    (submission.score !== null && submission.score !== undefined ? submission.score : '') + '">',
+                '    </div>',
+                '    <div class="form-group" style="margin: 0;">',
+                '      <label class="form-label" for="submissionReviewNote">Catatan / Umpan Balik</label>',
+                '      <input type="text" id="submissionReviewNote" class="form-input" value="' + ELIPS.escapeHtml(submission.feedback || '') + '">',
+                '    </div>',
+                '  </div>',
+                '  <div style="margin-top: 0.75rem; text-align: right;">',
+                '    <button class="btn btn-primary" onclick="saveSubmissionReview(' + submission.id + ')"><i class="bi bi-save"></i> Simpan Penilaian</button>',
+                '  </div>',
+                '</div>'
+            ].join('');
+        }
+
+        function saveSubmissionReview(submissionId) {
+            const action = document.getElementById('submissionReviewAction').value;
+            const scoreValue = document.getElementById('submissionReviewScore').value;
+            const note = document.getElementById('submissionReviewNote').value.trim();
+            const result = ELIPS.reviewSubmission(submissionId, {
+                action: action,
+                score: scoreValue === '' ? null : Number(scoreValue),
+                note: note,
+                feedback: note
+            });
+            ELIPS.toast(result.message);
+            if (result.ok) {
+                refreshSubmissionsCache();
+                renderTasks();
+            }
+        }
+
+        function openExamTaskModal(examId) {
+            if (!selectedTaskClassId) {
+                ELIPS.toast('Pilih kelas terlebih dahulu.');
+                return;
+            }
+            const detail = examId ? ELIPS.getExamDetail({ id: examId }) : null;
+            if (examId && (!detail || !detail.ok)) {
+                ELIPS.toast(detail ? detail.message : 'Ujian tidak ditemukan.');
+                return;
+            }
+            const item = detail ? detail.data : null;
+            editingExamTaskId = item ? Number(item.id) : null;
+
+            document.getElementById('examTaskModalTitle').textContent = item ? 'Edit Ujian' : 'Tambah Ujian';
+            document.getElementById('examTaskId').value = item ? String(item.id) : '';
+            document.getElementById('examTaskTitle').value = item ? item.title : '';
+            document.getElementById('examTaskType').value = item ? item.type : 'written';
+            document.getElementById('examTaskStatus').value = item ? item.status : 'draft';
+            document.getElementById('examTaskDate').value = item && item.examDate ? String(item.examDate).slice(0, 10) : '';
+            document.getElementById('examTaskStartTime').value = item && item.startTime ? String(item.startTime).slice(0, 5) : '';
+            document.getElementById('examTaskDuration').value = item && item.durationMinutes !== null && item.durationMinutes !== undefined ? item.durationMinutes : '';
+            document.getElementById('examTaskMaxScore').value = item ? item.maxScore : 100;
+            document.getElementById('examTaskWeight').value = item ? item.weight : 0;
+            document.getElementById('examTaskDescription').value = item ? (item.description || '') : '';
+            document.getElementById('examTaskInstructions').value = item ? (item.instructions || '') : '';
+
+            document.getElementById('examTaskModal').style.display = 'flex';
+            document.getElementById('examTaskTitle').focus();
+        }
+
+        function closeExamTaskModal() {
+            document.getElementById('examTaskModal').style.display = 'none';
+            editingExamTaskId = null;
+        }
+
+        function saveExamTask() {
+            if (!selectedTaskClassId) return;
+            const data = {
+                title: document.getElementById('examTaskTitle').value.trim(),
+                type: document.getElementById('examTaskType').value,
+                status: document.getElementById('examTaskStatus').value,
+                examDate: document.getElementById('examTaskDate').value || null,
+                startTime: document.getElementById('examTaskStartTime').value || null,
+                durationMinutes: document.getElementById('examTaskDuration').value === ''
+                    ? null : Number(document.getElementById('examTaskDuration').value),
+                maxScore: Number(document.getElementById('examTaskMaxScore').value),
+                weight: Number(document.getElementById('examTaskWeight').value),
+                description: document.getElementById('examTaskDescription').value.trim(),
+                instructions: document.getElementById('examTaskInstructions').value.trim()
+            };
+            const result = editingExamTaskId
+                ? ELIPS.updateExam(editingExamTaskId, data)
+                : ELIPS.createExam(Object.assign({ classId: selectedTaskClassId }, data));
+            ELIPS.toast(result.message);
+            if (result.ok) {
+                closeExamTaskModal();
+                renderTasks();
+            }
+        }
+
+        function openExamResults(examId) {
+            const result = ELIPS.getExamDetail({ id: examId });
+            if (!result.ok) {
+                ELIPS.toast(result.message);
+                return;
+            }
+            openExamResultsId = Number(examId);
+            examResultsCache = result.data;
+            renderExamResultsModal();
+            document.getElementById('examResultsModal').style.display = 'flex';
+        }
+
+        function closeExamResultsModal() {
+            document.getElementById('examResultsModal').style.display = 'none';
+            openExamResultsId = null;
+            examResultsCache = null;
+        }
+
+        function refreshExamResultsCache() {
+            if (!openExamResultsId) return;
+            const result = ELIPS.getExamDetail({ id: openExamResultsId });
+            if (result.ok) examResultsCache = result.data;
+            renderExamResultsModal();
+        }
+
+        function renderExamResultsModal() {
+            const body = document.getElementById('examResultsBody');
+            if (!examResultsCache) {
+                body.innerHTML = '';
+                return;
+            }
+            const exam = examResultsCache;
+            document.getElementById('examResultsTitle').textContent = 'Hasil Ujian: ' + (exam.title || '');
+            const results = exam.results || [];
+            const participants = exam.participants || [];
+            const stats = exam.stats || {};
+
+            body.innerHTML = [
+                '<div style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1rem;">',
+                '  <span class="badge badge-primary">' + (stats.participantCount || 0) + ' Peserta</span>',
+                '  <span class="badge badge-success">' + (stats.attendedCount || 0) + ' Hadir</span>',
+                '  <span class="badge badge-warning">' + (stats.absentCount || 0) + ' Tidak Hadir</span>',
+                '  <span class="badge">' + (stats.gradedCount || 0) + ' Dinilai</span>',
+                stats.averageScore !== null && stats.averageScore !== undefined
+                    ? '  <span class="badge">Rata-rata ' + stats.averageScore + '</span>' : '',
+                '</div>',
+                results.length === 0
+                    ? '<p style="color: var(--text-secondary);">Belum ada peserta ujian.</p>'
+                    : '<table class="dashboard-table"><thead><tr>' +
+                        '<th>Peserta</th><th>Keikutsertaan</th><th>Status Hasil</th><th>Nilai</th><th>Catatan</th><th></th>' +
+                        '</tr></thead><tbody>' + results.map(function (row) {
+                            const participant = participants.find(function (p) {
+                                return Number(p.enrollmentId) === Number(row.enrollmentId);
+                            });
+                            const participantStatus = participant ? participant.status : 'registered';
+                            return [
+                                '<tr>',
+                                '  <td>' + ELIPS.escapeHtml(row.studentName) + '</td>',
+                                '  <td><select id="examParticipantStatus_' + row.enrollmentId + '" class="form-input" style="min-width: 110px;">' +
+                                    Object.keys(PARTICIPANT_STATUS_LABELS).map(function (key) {
+                                        return '<option value="' + key + '" ' + (key === participantStatus ? 'selected' : '') + '>' +
+                                            PARTICIPANT_STATUS_LABELS[key] + '</option>';
+                                    }).join('') + '</select></td>',
+                                '  <td><select id="examResultStatus_' + row.enrollmentId + '" class="form-input" style="min-width: 130px;">' +
+                                    Object.keys(RESULT_STATUS_LABELS).map(function (key) {
+                                        return '<option value="' + key + '" ' + (key === row.status ? 'selected' : '') + '>' +
+                                            RESULT_STATUS_LABELS[key] + '</option>';
+                                    }).join('') + '</select></td>',
+                                '  <td><input type="number" id="examResultScore_' + row.enrollmentId + '" class="form-input" style="width: 90px;" min="0" max="' +
+                                    (Number(exam.maxScore) || 100) + '" step="0.01" value="' +
+                                    (row.score !== null && row.score !== undefined ? row.score : '') + '"></td>',
+                                '  <td><input type="text" id="examResultNote_' + row.enrollmentId + '" class="form-input" style="min-width: 160px;" value="' +
+                                    ELIPS.escapeHtml(row.note || '') + '"></td>',
+                                '  <td><button class="btn btn-primary" style="padding: 0.375rem 0.625rem; font-size: 0.75rem;" onclick="saveExamResultRow(' +
+                                    exam.id + ', ' + row.enrollmentId + ')"><i class="bi bi-save"></i></button></td>',
+                                '</tr>'
+                            ].join('');
+                        }).join('') + '</tbody></table>'
+            ].join('');
+        }
+
+        function saveExamResultRow(examId, enrollmentId) {
+            const scoreValue = document.getElementById('examResultScore_' + enrollmentId).value;
+            const result = ELIPS.saveExamResult(examId, {
+                enrollmentId: enrollmentId,
+                data: {
+                    score: scoreValue === '' ? null : Number(scoreValue),
+                    status: document.getElementById('examResultStatus_' + enrollmentId).value,
+                    note: document.getElementById('examResultNote_' + enrollmentId).value.trim(),
+                    participantStatus: document.getElementById('examParticipantStatus_' + enrollmentId).value
+                }
+            });
+            ELIPS.toast(result.message);
+            if (result.ok) {
+                refreshExamResultsCache();
+                renderTasks();
+            }
         }
     </script>
 </body>

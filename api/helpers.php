@@ -1409,6 +1409,638 @@ function elips_attendance_recap(int $classId, ?int $studentId = null): ?array
     ];
 }
 
+// ---------- Tugas, submission, dan ujian (Phase 5) ----------
+
+function elips_normalize_datetime($value): ?string
+{
+    $text = trim((string) ($value ?? ''));
+    if ($text === '') {
+        return null;
+    }
+    if (preg_match('/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?/', $text, $matches)) {
+        $year = (int) $matches[1];
+        $month = (int) $matches[2];
+        $day = (int) $matches[3];
+        $hour = (int) $matches[4];
+        $minute = (int) $matches[5];
+        $second = (int) ($matches[6] ?? 0);
+        if (!checkdate($month, $day, $year) || $hour > 23 || $minute > 59 || $second > 59) {
+            return null;
+        }
+        return sprintf('%04d-%02d-%02d %02d:%02d:%02d', $year, $month, $day, $hour, $minute, $second);
+    }
+    try {
+        $date = new DateTimeImmutable($text, new DateTimeZone('UTC'));
+        return $date->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s');
+    } catch (Exception $e) {
+        return null;
+    }
+}
+
+function elips_assignment_status_valid(string $status): bool
+{
+    return in_array($status, ['draft', 'published', 'closed', 'archived'], true);
+}
+
+function elips_assignment_type_valid(string $type): bool
+{
+    return in_array($type, ['file_upload', 'text_submission', 'in_class_practice', 'external_reference'], true);
+}
+
+function elips_exam_status_valid(string $status): bool
+{
+    return in_array($status, ['draft', 'published', 'closed', 'archived'], true);
+}
+
+function elips_exam_type_valid(string $type): bool
+{
+    return in_array($type, ['written', 'practical', 'oral', 'project', 'other'], true);
+}
+
+function elips_assignment_file_public(array $row, bool $includePath = false): array
+{
+    $result = [
+        'id' => (int) $row['id'],
+        'assignmentId' => (int) $row['assignment_id'],
+        'fileName' => $row['file_name'],
+        'fileSize' => $row['file_size'] === null ? null : (int) $row['file_size'],
+        'mimeType' => $row['mime_type'],
+        'createdAt' => elips_iso($row['created_at']),
+    ];
+    if ($includePath) {
+        $result['filePath'] = $row['file_path'];
+    }
+    return $result;
+}
+
+function elips_assignment_rubric_public(array $row): array
+{
+    return [
+        'id' => (int) $row['id'],
+        'assignmentId' => (int) $row['assignment_id'],
+        'criterion' => $row['criterion'],
+        'description' => $row['description'],
+        'maxScore' => (float) $row['max_score'],
+        'order' => (int) $row['sort_order'],
+        'createdAt' => elips_iso($row['created_at']),
+        'updatedAt' => elips_iso($row['updated_at']),
+    ];
+}
+
+function elips_submission_file_public(array $row, bool $includePath = false): array
+{
+    $result = [
+        'id' => (int) $row['id'],
+        'submissionId' => (int) $row['submission_id'],
+        'fileName' => $row['file_name'],
+        'fileSize' => $row['file_size'] === null ? null : (int) $row['file_size'],
+        'mimeType' => $row['mime_type'],
+        'createdAt' => elips_iso($row['created_at']),
+    ];
+    if ($includePath) {
+        $result['filePath'] = $row['file_path'];
+    }
+    return $result;
+}
+
+function elips_submission_review_public(array $row): array
+{
+    return [
+        'id' => (int) $row['id'],
+        'submissionId' => (int) $row['submission_id'],
+        'reviewerId' => $row['reviewer_id'] === null ? null : (int) $row['reviewer_id'],
+        'reviewerName' => $row['reviewer_name'] ?? '',
+        'action' => $row['action'],
+        'score' => $row['score'] === null ? null : (float) $row['score'],
+        'note' => $row['note'],
+        'createdAt' => elips_iso($row['created_at']),
+    ];
+}
+
+function elips_exam_participant_public(array $row): array
+{
+    return [
+        'id' => (int) $row['id'],
+        'examId' => (int) $row['exam_id'],
+        'enrollmentId' => (int) $row['enrollment_id'],
+        'studentId' => (int) $row['student_id'],
+        'studentName' => $row['student_name'] ?? '',
+        'status' => $row['status'],
+        'note' => $row['note'],
+        'createdAt' => elips_iso($row['created_at']),
+        'updatedAt' => elips_iso($row['updated_at']),
+    ];
+}
+
+function elips_exam_result_public(array $row): array
+{
+    return [
+        'id' => (int) $row['id'],
+        'examId' => (int) $row['exam_id'],
+        'enrollmentId' => (int) $row['enrollment_id'],
+        'studentId' => (int) $row['student_id'],
+        'studentName' => $row['student_name'] ?? '',
+        'score' => $row['score'] === null ? null : (float) $row['score'],
+        'status' => $row['status'],
+        'gradedBy' => $row['graded_by'] === null ? null : (int) $row['graded_by'],
+        'gradedByName' => $row['graded_by_name'] ?? '',
+        'gradedAt' => elips_iso($row['graded_at']),
+        'note' => $row['note'],
+        'createdAt' => elips_iso($row['created_at']),
+        'updatedAt' => elips_iso($row['updated_at']),
+    ];
+}
+
+function elips_assignment_row(int $id): ?array
+{
+    $stmt = elips_db()->prepare(
+        'SELECT a.*, cl.code AS class_code, cl.name AS class_name, cl.course_id,
+            cl.curriculum_version_id AS class_version_id, c.title AS course_title,
+            u.name AS creator_name, m.title AS module_title, l.title AS lesson_title
+         FROM assignments a
+         JOIN classes cl ON cl.id = a.class_id
+         JOIN courses c ON c.id = cl.course_id
+         LEFT JOIN users u ON u.id = a.created_by
+         LEFT JOIN modules m ON m.id = a.module_id
+         LEFT JOIN lessons l ON l.id = a.lesson_id
+         WHERE a.id = ? LIMIT 1'
+    );
+    $stmt->execute([$id]);
+    $row = $stmt->fetch();
+    return $row ?: null;
+}
+
+function elips_assignment_files_for(int $assignmentId, bool $includePath = false): array
+{
+    $stmt = elips_db()->prepare('SELECT * FROM assignment_files WHERE assignment_id = ? ORDER BY id ASC');
+    $stmt->execute([$assignmentId]);
+    $files = [];
+    foreach ($stmt->fetchAll() as $row) {
+        $files[] = elips_assignment_file_public($row, $includePath);
+    }
+    return $files;
+}
+
+function elips_assignment_rubrics_for(int $assignmentId): array
+{
+    $stmt = elips_db()->prepare(
+        'SELECT * FROM assignment_rubrics WHERE assignment_id = ? ORDER BY sort_order ASC, id ASC'
+    );
+    $stmt->execute([$assignmentId]);
+    $rubrics = [];
+    foreach ($stmt->fetchAll() as $row) {
+        $rubrics[] = elips_assignment_rubric_public($row);
+    }
+    return $rubrics;
+}
+
+function elips_assignment_stats(int $assignmentId): array
+{
+    $stmt = elips_db()->prepare(
+        "SELECT COUNT(*) AS total,
+            SUM(CASE WHEN status IN ('submitted', 'late', 'resubmitted') THEN 1 ELSE 0 END) AS pending_count,
+            SUM(CASE WHEN status IN ('reviewed', 'accepted') THEN 1 ELSE 0 END) AS reviewed_count,
+            SUM(CASE WHEN is_late = 1 THEN 1 ELSE 0 END) AS late_count,
+            AVG(CASE WHEN score IS NOT NULL THEN score END) AS average_score
+         FROM submissions WHERE assignment_id = ?"
+    );
+    $stmt->execute([$assignmentId]);
+    $row = $stmt->fetch() ?: [];
+    return [
+        'submissionCount' => (int) ($row['total'] ?? 0),
+        'pendingCount' => (int) ($row['pending_count'] ?? 0),
+        'reviewedCount' => (int) ($row['reviewed_count'] ?? 0),
+        'lateCount' => (int) ($row['late_count'] ?? 0),
+        'averageScore' => $row['average_score'] === null ? null : round((float) $row['average_score'], 2),
+    ];
+}
+
+function elips_assignment_public(array $row, bool $includeInstructions = true): array
+{
+    $result = [
+        'id' => (int) $row['id'],
+        'classId' => (int) $row['class_id'],
+        'classCode' => $row['class_code'] ?? '',
+        'className' => $row['class_name'] ?? '',
+        'courseId' => $row['course_id'] === null ? null : (int) $row['course_id'],
+        'courseTitle' => $row['course_title'] ?? '',
+        'curriculumVersionId' => (int) $row['curriculum_version_id'],
+        'moduleId' => $row['module_id'] === null ? null : (int) $row['module_id'],
+        'moduleTitle' => $row['module_title'] ?? '',
+        'lessonId' => $row['lesson_id'] === null ? null : (int) $row['lesson_id'],
+        'lessonTitle' => $row['lesson_title'] ?? '',
+        'title' => $row['title'],
+        'type' => $row['type'],
+        'openAt' => elips_iso($row['open_at']),
+        'dueAt' => elips_iso($row['due_at']),
+        'maxScore' => (float) $row['max_score'],
+        'weight' => (float) $row['weight'],
+        'requireFile' => (bool) $row['require_file'],
+        'allowedTypes' => $row['allowed_types'],
+        'maxFileSize' => $row['max_file_size'] === null ? null : (int) $row['max_file_size'],
+        'status' => $row['status'],
+        'createdBy' => $row['created_by'] === null ? null : (int) $row['created_by'],
+        'creatorName' => $row['creator_name'] ?? '',
+        'updatedBy' => $row['updated_by'] === null ? null : (int) $row['updated_by'],
+        'createdAt' => elips_iso($row['created_at']),
+        'updatedAt' => elips_iso($row['updated_at']),
+    ];
+    if ($includeInstructions) {
+        $result['instructions'] = $row['instructions'];
+    }
+    return $result;
+}
+
+function elips_submission_row(int $id): ?array
+{
+    $stmt = elips_db()->prepare(
+        'SELECT s.*, u.name AS student_name, a.title AS assignment_title, a.class_id,
+            a.max_score, a.due_at, a.type AS assignment_type, r.name AS reviewer_name
+         FROM submissions s
+         JOIN users u ON u.id = s.student_id
+         JOIN assignments a ON a.id = s.assignment_id
+         LEFT JOIN users r ON r.id = s.reviewed_by
+         WHERE s.id = ? LIMIT 1'
+    );
+    $stmt->execute([$id]);
+    $row = $stmt->fetch();
+    return $row ?: null;
+}
+
+function elips_submission_public(array $row, bool $includeContent = true): array
+{
+    $result = [
+        'id' => (int) $row['id'],
+        'assignmentId' => (int) $row['assignment_id'],
+        'assignmentTitle' => $row['assignment_title'] ?? '',
+        'classId' => $row['class_id'] === null ? null : (int) $row['class_id'],
+        'enrollmentId' => (int) $row['enrollment_id'],
+        'studentId' => (int) $row['student_id'],
+        'studentName' => $row['student_name'] ?? '',
+        'assignmentType' => $row['assignment_type'] ?? '',
+        'maxScore' => $row['max_score'] === null ? null : (float) $row['max_score'],
+        'status' => $row['status'],
+        'submittedAt' => elips_iso($row['submitted_at']),
+        'isLate' => (bool) $row['is_late'],
+        'score' => $row['score'] === null ? null : (float) $row['score'],
+        'reviewedBy' => $row['reviewed_by'] === null ? null : (int) $row['reviewed_by'],
+        'reviewerName' => $row['reviewer_name'] ?? '',
+        'reviewedAt' => elips_iso($row['reviewed_at']),
+        'revisionCount' => (int) $row['revision_count'],
+        'createdAt' => elips_iso($row['created_at']),
+        'updatedAt' => elips_iso($row['updated_at']),
+    ];
+    if ($includeContent) {
+        $result['textAnswer'] = $row['text_answer'];
+        $result['feedback'] = $row['feedback'];
+    }
+    return $result;
+}
+
+function elips_submission_files_for(int $submissionId, bool $includePath = false): array
+{
+    $stmt = elips_db()->prepare('SELECT * FROM submission_files WHERE submission_id = ? ORDER BY id ASC');
+    $stmt->execute([$submissionId]);
+    $files = [];
+    foreach ($stmt->fetchAll() as $row) {
+        $files[] = elips_submission_file_public($row, $includePath);
+    }
+    return $files;
+}
+
+function elips_submission_reviews_for(int $submissionId): array
+{
+    $stmt = elips_db()->prepare(
+        'SELECT r.*, u.name AS reviewer_name
+         FROM submission_reviews r
+         LEFT JOIN users u ON u.id = r.reviewer_id
+         WHERE r.submission_id = ? ORDER BY r.id ASC'
+    );
+    $stmt->execute([$submissionId]);
+    $reviews = [];
+    foreach ($stmt->fetchAll() as $row) {
+        $reviews[] = elips_submission_review_public($row);
+    }
+    return $reviews;
+}
+
+function elips_assignment_submission_for(int $assignmentId, int $enrollmentId): ?array
+{
+    $stmt = elips_db()->prepare(
+        'SELECT s.*, u.name AS student_name, a.title AS assignment_title, a.class_id,
+            a.max_score, a.due_at, a.type AS assignment_type, r.name AS reviewer_name
+         FROM submissions s
+         JOIN users u ON u.id = s.student_id
+         JOIN assignments a ON a.id = s.assignment_id
+         LEFT JOIN users r ON r.id = s.reviewed_by
+         WHERE s.assignment_id = ? AND s.enrollment_id = ? LIMIT 1'
+    );
+    $stmt->execute([$assignmentId, $enrollmentId]);
+    $row = $stmt->fetch();
+    return $row ?: null;
+}
+
+function elips_exam_row(int $id): ?array
+{
+    $stmt = elips_db()->prepare(
+        'SELECT e.*, cl.code AS class_code, cl.name AS class_name, cl.course_id,
+            cl.curriculum_version_id AS class_version_id, c.title AS course_title,
+            u.name AS creator_name
+         FROM exams e
+         JOIN classes cl ON cl.id = e.class_id
+         JOIN courses c ON c.id = cl.course_id
+         LEFT JOIN users u ON u.id = e.created_by
+         WHERE e.id = ? LIMIT 1'
+    );
+    $stmt->execute([$id]);
+    $row = $stmt->fetch();
+    return $row ?: null;
+}
+
+function elips_exam_stats(int $examId): array
+{
+    $participantStmt = elips_db()->prepare(
+        "SELECT COUNT(*) AS total,
+            SUM(CASE WHEN status = 'attended' THEN 1 ELSE 0 END) AS attended_count,
+            SUM(CASE WHEN status = 'absent' THEN 1 ELSE 0 END) AS absent_count,
+            SUM(CASE WHEN status = 'excused' THEN 1 ELSE 0 END) AS excused_count
+         FROM exam_participants WHERE exam_id = ?"
+    );
+    $participantStmt->execute([$examId]);
+    $participants = $participantStmt->fetch() ?: [];
+
+    $resultStmt = elips_db()->prepare(
+        "SELECT COUNT(*) AS total,
+            SUM(CASE WHEN status = 'graded' THEN 1 ELSE 0 END) AS graded_count,
+            AVG(CASE WHEN score IS NOT NULL THEN score END) AS average_score
+         FROM exam_results WHERE exam_id = ?"
+    );
+    $resultStmt->execute([$examId]);
+    $results = $resultStmt->fetch() ?: [];
+
+    return [
+        'participantCount' => (int) ($participants['total'] ?? 0),
+        'attendedCount' => (int) ($participants['attended_count'] ?? 0),
+        'absentCount' => (int) ($participants['absent_count'] ?? 0),
+        'excusedCount' => (int) ($participants['excused_count'] ?? 0),
+        'resultCount' => (int) ($results['total'] ?? 0),
+        'gradedCount' => (int) ($results['graded_count'] ?? 0),
+        'averageScore' => $results['average_score'] === null ? null : round((float) $results['average_score'], 2),
+    ];
+}
+
+function elips_exam_public(array $row, bool $includeInstructions = true): array
+{
+    $result = [
+        'id' => (int) $row['id'],
+        'classId' => (int) $row['class_id'],
+        'classCode' => $row['class_code'] ?? '',
+        'className' => $row['class_name'] ?? '',
+        'courseId' => $row['course_id'] === null ? null : (int) $row['course_id'],
+        'courseTitle' => $row['course_title'] ?? '',
+        'curriculumVersionId' => (int) $row['curriculum_version_id'],
+        'title' => $row['title'],
+        'description' => $row['description'],
+        'type' => $row['type'],
+        'examDate' => elips_date_only($row['exam_date']),
+        'startTime' => elips_time_short($row['start_time']),
+        'durationMinutes' => $row['duration_minutes'] === null ? null : (int) $row['duration_minutes'],
+        'maxScore' => (float) $row['max_score'],
+        'weight' => (float) $row['weight'],
+        'status' => $row['status'],
+        'createdBy' => $row['created_by'] === null ? null : (int) $row['created_by'],
+        'creatorName' => $row['creator_name'] ?? '',
+        'updatedBy' => $row['updated_by'] === null ? null : (int) $row['updated_by'],
+        'createdAt' => elips_iso($row['created_at']),
+        'updatedAt' => elips_iso($row['updated_at']),
+    ];
+    if ($includeInstructions) {
+        $result['instructions'] = $row['instructions'];
+    }
+    return $result;
+}
+
+function elips_exam_participants_for(int $examId): array
+{
+    $stmt = elips_db()->prepare(
+        'SELECT p.*, u.name AS student_name
+         FROM exam_participants p
+         JOIN users u ON u.id = p.student_id
+         WHERE p.exam_id = ? ORDER BY u.name ASC, p.id ASC'
+    );
+    $stmt->execute([$examId]);
+    $participants = [];
+    foreach ($stmt->fetchAll() as $row) {
+        $participants[] = elips_exam_participant_public($row);
+    }
+    return $participants;
+}
+
+function elips_exam_results_for(int $examId): array
+{
+    $stmt = elips_db()->prepare(
+        'SELECT r.*, u.name AS student_name, g.name AS graded_by_name
+         FROM exam_results r
+         JOIN users u ON u.id = r.student_id
+         LEFT JOIN users g ON g.id = r.graded_by
+         WHERE r.exam_id = ? ORDER BY u.name ASC, r.id ASC'
+    );
+    $stmt->execute([$examId]);
+    $results = [];
+    foreach ($stmt->fetchAll() as $row) {
+        $results[] = elips_exam_result_public($row);
+    }
+    return $results;
+}
+
+function elips_exam_result_for(int $examId, int $enrollmentId): ?array
+{
+    $stmt = elips_db()->prepare(
+        'SELECT r.*, u.name AS student_name, g.name AS graded_by_name
+         FROM exam_results r
+         JOIN users u ON u.id = r.student_id
+         LEFT JOIN users g ON g.id = r.graded_by
+         WHERE r.exam_id = ? AND r.enrollment_id = ? LIMIT 1'
+    );
+    $stmt->execute([$examId, $enrollmentId]);
+    $row = $stmt->fetch();
+    return $row ?: null;
+}
+
+/**
+ * Pastikan seluruh peserta aktif memiliki baris participant dan result.
+ * Enrollment baru yang masuk setelah ujian dibuat tetap dapat dinilai.
+ */
+function elips_exam_ensure_roster(int $examId, int $classId): void
+{
+    $db = elips_db();
+    $stmt = $db->prepare(
+        "INSERT IGNORE INTO exam_participants (exam_id, enrollment_id, student_id, status, note, created_at)
+         SELECT ?, e.id, e.student_id, 'registered', '', UTC_TIMESTAMP()
+         FROM enrollments e
+         WHERE e.class_id = ? AND e.status IN ('active', 'completed')"
+    );
+    $stmt->execute([$examId, $classId]);
+
+    $stmt = $db->prepare(
+        "INSERT IGNORE INTO exam_results (exam_id, enrollment_id, student_id, status, note, created_at)
+         SELECT ?, e.id, e.student_id, 'not_assessed', '', UTC_TIMESTAMP()
+         FROM enrollments e
+         WHERE e.class_id = ? AND e.status IN ('active', 'completed')"
+    );
+    $stmt->execute([$examId, $classId]);
+}
+
+function elips_class_enrollment_for(int $classId, int $studentId): ?array
+{
+    $stmt = elips_db()->prepare(
+        "SELECT * FROM enrollments
+         WHERE class_id = ? AND student_id = ? AND status IN ('active', 'completed')
+         ORDER BY id DESC LIMIT 1"
+    );
+    $stmt->execute([$classId, $studentId]);
+    $row = $stmt->fetch();
+    return $row ?: null;
+}
+
+function elips_class_enrollment_by_id(int $classId, int $enrollmentId): ?array
+{
+    $stmt = elips_db()->prepare('SELECT * FROM enrollments WHERE id = ? AND class_id = ? LIMIT 1');
+    $stmt->execute([$enrollmentId, $classId]);
+    $row = $stmt->fetch();
+    return $row ?: null;
+}
+
+function elips_assignment_classroom_payload(array $class, ?array $enrollment, bool $preview): array
+{
+    $classId = (int) $class['id'];
+    $course = elips_course_row((int) $class['course_id']);
+    $enrollmentId = $enrollment ? (int) $enrollment['id'] : 0;
+    $now = gmdate('Y-m-d H:i:s');
+
+    $stmt = elips_db()->prepare(
+        'SELECT a.*, cl.code AS class_code, cl.name AS class_name, cl.course_id,
+            c.title AS course_title, u.name AS creator_name, m.title AS module_title,
+            l.title AS lesson_title
+         FROM assignments a
+         JOIN classes cl ON cl.id = a.class_id
+         JOIN courses c ON c.id = cl.course_id
+         LEFT JOIN users u ON u.id = a.created_by
+         LEFT JOIN modules m ON m.id = a.module_id
+         LEFT JOIN lessons l ON l.id = a.lesson_id
+         WHERE a.class_id = ?'
+    );
+    $params = [$classId];
+    if (!$preview) {
+        $stmt = elips_db()->prepare(
+            'SELECT a.*, cl.code AS class_code, cl.name AS class_name, cl.course_id,
+                c.title AS course_title, u.name AS creator_name, m.title AS module_title,
+                l.title AS lesson_title
+             FROM assignments a
+             JOIN classes cl ON cl.id = a.class_id
+             JOIN courses c ON c.id = cl.course_id
+             LEFT JOIN users u ON u.id = a.created_by
+             LEFT JOIN modules m ON m.id = a.module_id
+             LEFT JOIN lessons l ON l.id = a.lesson_id
+             WHERE a.class_id = ? AND a.status IN (\'published\', \'closed\')'
+        );
+    }
+    $stmt->execute($params);
+    $assignmentRows = $stmt->fetchAll();
+
+    $assignments = [];
+    $assignmentSubmitted = 0;
+    $assignmentGraded = 0;
+    foreach ($assignmentRows as $row) {
+        $item = elips_assignment_public($row, true);
+        $item['stats'] = elips_assignment_stats((int) $row['id']);
+        $item['pastDue'] = $row['due_at'] !== null && $row['due_at'] < $now;
+        $item['canSubmit'] = !$preview
+            && $row['status'] === 'published'
+            && ($row['open_at'] === null || $row['open_at'] <= $now);
+        $submission = null;
+        if ($enrollmentId > 0) {
+            $submissionRow = elips_assignment_submission_for((int) $row['id'], $enrollmentId);
+            if ($submissionRow) {
+                $submission = elips_submission_public($submissionRow, false);
+                if (in_array($submissionRow['status'], ['submitted', 'late', 'reviewed', 'accepted', 'resubmitted'], true)) {
+                    $assignmentSubmitted++;
+                }
+                if (in_array($submissionRow['status'], ['reviewed', 'accepted'], true)) {
+                    $assignmentGraded++;
+                }
+            }
+        }
+        $item['submission'] = $submission;
+        $assignments[] = $item;
+    }
+
+    $examStmt = elips_db()->prepare(
+        'SELECT e.*, cl.code AS class_code, cl.name AS class_name, cl.course_id,
+            c.title AS course_title, u.name AS creator_name
+         FROM exams e
+         JOIN classes cl ON cl.id = e.class_id
+         JOIN courses c ON c.id = cl.course_id
+         LEFT JOIN users u ON u.id = e.created_by
+         WHERE e.class_id = ?'
+    );
+    if (!$preview) {
+        $examStmt = elips_db()->prepare(
+            'SELECT e.*, cl.code AS class_code, cl.name AS class_name, cl.course_id,
+                c.title AS course_title, u.name AS creator_name
+             FROM exams e
+             JOIN classes cl ON cl.id = e.class_id
+             JOIN courses c ON c.id = cl.course_id
+             LEFT JOIN users u ON u.id = e.created_by
+             WHERE e.class_id = ? AND e.status IN (\'published\', \'closed\')'
+        );
+    }
+    $examStmt->execute([$classId]);
+    $exams = [];
+    $examGraded = 0;
+    foreach ($examStmt->fetchAll() as $row) {
+        $item = elips_exam_public($row, true);
+        $item['stats'] = elips_exam_stats((int) $row['id']);
+        $item['pastExam'] = $row['exam_date'] !== null && $row['exam_date'] < gmdate('Y-m-d');
+        $result = null;
+        if ($enrollmentId > 0) {
+            $resultRow = elips_exam_result_for((int) $row['id'], $enrollmentId);
+            if ($resultRow) {
+                $result = elips_exam_result_public($resultRow);
+                if ($resultRow['status'] === 'graded') $examGraded++;
+            }
+        }
+        $item['result'] = $result;
+        $exams[] = $item;
+    }
+
+    return [
+        'class' => [
+            'id' => $classId,
+            'code' => $class['code'],
+            'name' => $class['name'],
+            'courseId' => (int) $class['course_id'],
+            'courseTitle' => $course ? $course['title'] : '',
+            'curriculumVersionId' => (int) $class['curriculum_version_id'],
+            'instructorId' => $class['instructor_id'] === null ? null : (int) $class['instructor_id'],
+            'status' => $class['status'],
+            'periodStart' => elips_date_only($class['period_start']),
+            'periodEnd' => elips_date_only($class['period_end']),
+        ],
+        'enrollment' => $enrollment ? elips_enrollment_public((int) $enrollment['id']) : null,
+        'preview' => $preview,
+        'assignments' => $assignments,
+        'exams' => $exams,
+        'stats' => [
+            'assignmentTotal' => count($assignments),
+            'assignmentSubmitted' => $assignmentSubmitted,
+            'assignmentGraded' => $assignmentGraded,
+            'examTotal' => count($exams),
+            'examGraded' => $examGraded,
+        ],
+    ];
+}
+
 function elips_grade_public(int $id): ?array
 {
     $stmt = elips_db()->prepare('SELECT * FROM grades WHERE id = ? LIMIT 1');

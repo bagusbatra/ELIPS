@@ -194,8 +194,120 @@
         ];
     }
 
-    function seedCategories() {
+    function seedAssignments() {
         return [
+            {
+                id: 1, classId: 1, classCode: 'ANG-2026-MNJ-01',
+                className: 'Angkatan 2026 — Pelatihan Manajemen Dasar',
+                courseId: 1, courseTitle: 'Pelatihan Manajemen Dasar',
+                curriculumVersionId: 1, moduleId: 1, moduleTitle: 'Modul 1: Pengantar Manajemen',
+                lessonId: 1, lessonTitle: '1.1 Pengantar Manajemen - Konsep Dasar',
+                title: 'Tugas 1: Analisis Fungsi Manajemen',
+                instructions: 'Pilih satu organisasi yang Anda kenal, lalu analisis bagaimana fungsi perencanaan, pengorganisasian, kepemimpinan, dan pengendalian diterapkan di organisasi tersebut. Tulis dalam 400-600 kata.',
+                type: 'text_submission', openAt: '2026-10-05T09:00:00.000Z', dueAt: '2026-10-12T23:59:59.000Z',
+                maxScore: 100, weight: 20, requireFile: false, allowedTypes: '', maxFileSize: null,
+                status: 'published', createdBy: 2, creatorName: 'Ahmad Fauzi, M.M.', updatedBy: 2,
+                createdAt: '2026-10-05T09:00:00.000Z', updatedAt: '2026-10-05T09:00:00.000Z'
+            },
+            {
+                id: 2, classId: 1, classCode: 'ANG-2026-MNJ-01',
+                className: 'Angkatan 2026 — Pelatihan Manajemen Dasar',
+                courseId: 1, courseTitle: 'Pelatihan Manajemen Dasar',
+                curriculumVersionId: 1, moduleId: 2, moduleTitle: 'Modul 2: Perencanaan (Planning)',
+                lessonId: 4, lessonTitle: '2.1 Perencanaan (Planning) - Konsep Dasar',
+                title: 'Tugas 2: Rencana Kerja Sederhana',
+                instructions: 'Susun rencana kerja sederhana untuk satu kegiatan di tempat kerja Anda. Gunakan format 5W1H dan unggah dokumen dalam format PDF atau DOCX.',
+                type: 'file_upload', openAt: '2026-10-12T09:00:00.000Z', dueAt: '2026-10-26T23:59:59.000Z',
+                maxScore: 100, weight: 20, requireFile: true, allowedTypes: 'pdf,doc,docx', maxFileSize: 5242880,
+                status: 'published', createdBy: 2, creatorName: 'Ahmad Fauzi, M.M.', updatedBy: 2,
+                createdAt: '2026-10-12T09:00:00.000Z', updatedAt: '2026-10-12T09:00:00.000Z'
+            }
+        ];
+    }
+
+    function seedAssignmentRubrics() {
+        return [
+            { id: 1, assignmentId: 1, criterion: 'Kejelasan analisis', description: 'Analisis fungsi manajemen dijelaskan dengan contoh konkret.', maxScore: 40, order: 1, createdAt: '2026-10-05T09:00:00.000Z', updatedAt: null },
+            { id: 2, assignmentId: 1, criterion: 'Keterkaitan teori', description: 'Mengaitkan praktik organisasi dengan konsep manajemen yang dipelajari.', maxScore: 30, order: 2, createdAt: '2026-10-05T09:00:00.000Z', updatedAt: null },
+            { id: 3, assignmentId: 1, criterion: 'Kerapian penulisan', description: 'Struktur tulisan runtut, ejaan benar, dan panjang sesuai ketentuan.', maxScore: 30, order: 3, createdAt: '2026-10-05T09:00:00.000Z', updatedAt: null }
+        ];
+    }
+
+    function seedSubmissions() {
+        return [
+            {
+                id: 1, assignmentId: 1, assignmentTitle: 'Tugas 1: Analisis Fungsi Manajemen',
+                classId: 1, enrollmentId: 1, studentId: 5, studentName: 'Budi Santoso',
+                assignmentType: 'text_submission', maxScore: 100, status: 'reviewed',
+                submittedAt: '2026-10-10T20:15:00.000Z', isLate: false, score: 85,
+                reviewedBy: 2, reviewerName: 'Ahmad Fauzi, M.M.', reviewedAt: '2026-10-13T10:00:00.000Z',
+                revisionCount: 0,
+                textAnswer: 'Organisasi yang saya amati adalah kantor tempat saya bekerja. Fungsi perencanaan terlihat dari penyusunan target bulanan. Pengorganisasian dilakukan dengan pembagian tugas per divisi. Kepemimpinan tampak pada arahan harian kepala divisi. Pengendalian dilakukan melalui evaluasi mingguan.',
+                feedback: 'Analisis sudah baik dan contohnya relevan. Tambahkan data pendukung pada bagian pengendalian agar lebih kuat.',
+                createdAt: '2026-10-10T20:15:00.000Z', updatedAt: '2026-10-13T10:00:00.000Z'
+            }
+        ];
+    }
+
+    function seedSubmissionReviews() {
+        return [
+            { id: 1, submissionId: 1, reviewerId: 5, reviewerName: 'Budi Santoso', action: 'submit', score: null, note: 'Mengumpulkan tugas.', createdAt: '2026-10-10T20:15:00.000Z' },
+            { id: 2, submissionId: 1, reviewerId: 2, reviewerName: 'Ahmad Fauzi, M.M.', action: 'score', score: 85, note: 'Analisis sudah baik dan contohnya relevan. Tambahkan data pendukung pada bagian pengendalian agar lebih kuat.', createdAt: '2026-10-13T10:00:00.000Z' }
+        ];
+    }
+
+    function seedExams() {
+        return [
+            {
+                id: 1, classId: 1, classCode: 'ANG-2026-MNJ-01',
+                className: 'Angkatan 2026 — Pelatihan Manajemen Dasar',
+                courseId: 1, courseTitle: 'Pelatihan Manajemen Dasar', curriculumVersionId: 1,
+                title: 'Ujian Tengah Semester: Dasar Manajemen',
+                description: 'Evaluasi pemahaman konsep dasar manajemen, perencanaan, dan pengorganisasian.',
+                type: 'written', examDate: '2026-10-20', startTime: '09:00', durationMinutes: 90,
+                maxScore: 100, weight: 30,
+                instructions: 'Kerjakan 30 soal pilihan ganda dan 2 soal esai. Buku tertutup.',
+                status: 'published', createdBy: 2, creatorName: 'Ahmad Fauzi, M.M.', updatedBy: 2,
+                createdAt: '2026-10-01T08:00:00.000Z', updatedAt: '2026-10-01T08:00:00.000Z'
+            },
+            {
+                id: 2, classId: 1, classCode: 'ANG-2026-MNJ-01',
+                className: 'Angkatan 2026 — Pelatihan Manajemen Dasar',
+                courseId: 1, courseTitle: 'Pelatihan Manajemen Dasar', curriculumVersionId: 1,
+                title: 'Ujian Praktik: Studi Kasus Manajemen',
+                description: 'Peserta menyelesaikan studi kasus dan mempresentasikan solusinya.',
+                type: 'practical', examDate: '2026-12-15', startTime: '09:00', durationMinutes: 120,
+                maxScore: 100, weight: 30,
+                instructions: 'Presentasikan solusi studi kasus dalam 10 menit dan jawab pertanyaan penguji.',
+                status: 'draft', createdBy: 2, creatorName: 'Ahmad Fauzi, M.M.', updatedBy: 2,
+                createdAt: '2026-10-15T08:00:00.000Z', updatedAt: '2026-10-15T08:00:00.000Z'
+            }
+        ];
+    }
+
+    function seedExamParticipants() {
+        return [
+            { id: 1, examId: 1, enrollmentId: 1, studentId: 5, studentName: 'Budi Santoso', status: 'attended', note: '', createdAt: '2026-10-01T08:00:00.000Z', updatedAt: '2026-10-20T11:00:00.000Z' },
+            { id: 2, examId: 1, enrollmentId: 2, studentId: 6, studentName: 'Ani Nurhayati', status: 'attended', note: '', createdAt: '2026-10-01T08:00:00.000Z', updatedAt: '2026-10-20T11:00:00.000Z' },
+            { id: 3, examId: 1, enrollmentId: 3, studentId: 7, studentName: 'Rina Setiawati', status: 'absent', note: 'Tidak hadir tanpa keterangan.', createdAt: '2026-10-01T08:00:00.000Z', updatedAt: '2026-10-20T11:00:00.000Z' },
+            { id: 4, examId: 2, enrollmentId: 1, studentId: 5, studentName: 'Budi Santoso', status: 'registered', note: '', createdAt: '2026-10-15T08:00:00.000Z', updatedAt: '2026-10-15T08:00:00.000Z' },
+            { id: 5, examId: 2, enrollmentId: 2, studentId: 6, studentName: 'Ani Nurhayati', status: 'registered', note: '', createdAt: '2026-10-15T08:00:00.000Z', updatedAt: '2026-10-15T08:00:00.000Z' },
+            { id: 6, examId: 2, enrollmentId: 3, studentId: 7, studentName: 'Rina Setiawati', status: 'registered', note: '', createdAt: '2026-10-15T08:00:00.000Z', updatedAt: '2026-10-15T08:00:00.000Z' }
+        ];
+    }
+
+    function seedExamResults() {
+        return [
+            { id: 1, examId: 1, enrollmentId: 1, studentId: 5, studentName: 'Budi Santoso', score: 88, status: 'graded', gradedBy: 2, gradedByName: 'Ahmad Fauzi, M.M.', gradedAt: '2026-10-25T10:00:00.000Z', note: 'Pemahaman konsep baik.', createdAt: '2026-10-01T08:00:00.000Z', updatedAt: '2026-10-25T10:00:00.000Z' },
+            { id: 2, examId: 1, enrollmentId: 2, studentId: 6, studentName: 'Ani Nurhayati', score: 80, status: 'graded', gradedBy: 2, gradedByName: 'Ahmad Fauzi, M.M.', gradedAt: '2026-10-25T10:05:00.000Z', note: 'Perlu memperdalam bagian pengendalian.', createdAt: '2026-10-01T08:00:00.000Z', updatedAt: '2026-10-25T10:05:00.000Z' },
+            { id: 3, examId: 1, enrollmentId: 3, studentId: 7, studentName: 'Rina Setiawati', score: null, status: 'missing', gradedBy: null, gradedByName: '', gradedAt: null, note: 'Tidak hadir tanpa keterangan.', createdAt: '2026-10-01T08:00:00.000Z', updatedAt: '2026-10-20T11:00:00.000Z' },
+            { id: 4, examId: 2, enrollmentId: 1, studentId: 5, studentName: 'Budi Santoso', score: null, status: 'not_assessed', gradedBy: null, gradedByName: '', gradedAt: null, note: '', createdAt: '2026-10-15T08:00:00.000Z', updatedAt: '2026-10-15T08:00:00.000Z' },
+            { id: 5, examId: 2, enrollmentId: 2, studentId: 6, studentName: 'Ani Nurhayati', score: null, status: 'not_assessed', gradedBy: null, gradedByName: '', gradedAt: null, note: '', createdAt: '2026-10-15T08:00:00.000Z', updatedAt: '2026-10-15T08:00:00.000Z' },
+            { id: 6, examId: 2, enrollmentId: 3, studentId: 7, studentName: 'Rina Setiawati', score: null, status: 'not_assessed', gradedBy: null, gradedByName: '', gradedAt: null, note: '', createdAt: '2026-10-15T08:00:00.000Z', updatedAt: '2026-10-15T08:00:00.000Z' }
+        ];
+    }
+
+    function seedCategories() {        return [
             { id: 1, name: 'Pelatihan', slug: 'pelatihan', status: 'active' },
             { id: 2, name: 'Soft Skill', slug: 'soft-skill', status: 'active' },
             { id: 3, name: 'Administrasi', slug: 'administrasi', status: 'active' },
@@ -582,6 +694,239 @@
         } else {
             write(KEYS.certificates, changed);
         }
+
+        // ---------- Phase 5: tugas, pengumpulan, dan ujian ----------
+        if (!Array.isArray(read(KEYS.assignments, null))) {
+            write(KEYS.assignments, seedAssignments());
+        }
+        if (!Array.isArray(read(KEYS.assignmentFiles, null))) {
+            write(KEYS.assignmentFiles, []);
+        }
+        if (!Array.isArray(read(KEYS.assignmentRubrics, null))) {
+            write(KEYS.assignmentRubrics, seedAssignmentRubrics());
+        }
+        if (!Array.isArray(read(KEYS.submissions, null))) {
+            write(KEYS.submissions, seedSubmissions());
+        }
+        if (!Array.isArray(read(KEYS.submissionFiles, null))) {
+            write(KEYS.submissionFiles, []);
+        }
+        if (!Array.isArray(read(KEYS.submissionReviews, null))) {
+            write(KEYS.submissionReviews, seedSubmissionReviews());
+        }
+        if (!Array.isArray(read(KEYS.exams, null))) {
+            write(KEYS.exams, seedExams());
+        }
+        if (!Array.isArray(read(KEYS.examParticipants, null))) {
+            write(KEYS.examParticipants, seedExamParticipants());
+        }
+        if (!Array.isArray(read(KEYS.examResults, null))) {
+            write(KEYS.examResults, seedExamResults());
+        }
+
+        const assignmentStatuses = ['draft', 'published', 'closed', 'archived'];
+        const assignmentTypes = ['file_upload', 'text_submission', 'in_class_practice', 'external_reference'];
+        const examStatuses = ['draft', 'published', 'closed', 'archived'];
+        const examTypes = ['written', 'practical', 'oral', 'project', 'other'];
+        const submissionStatuses = ['submitted', 'late', 'reviewed', 'revision_requested', 'resubmitted', 'accepted'];
+        const participantStatuses = ['registered', 'attended', 'absent', 'excused'];
+        const resultStatuses = ['not_assessed', 'excused', 'missing', 'graded'];
+
+        const classListForTasks = ELIPS.getClasses();
+        const userListForTasks = ELIPS.getUsers();
+
+        const assignmentList = ELIPS.getAssignments();
+        const assignmentMap = {};
+        assignmentList.forEach(function (item) {
+            item.id = Number(item.id);
+            item.classId = Number(item.classId);
+            const classItem = classListForTasks.find(function (c) { return Number(c.id) === item.classId; });
+            if (classItem) {
+                if (!item.classCode) item.classCode = classItem.code || '';
+                if (!item.className) item.className = classItem.name || '';
+                if (!item.courseId) item.courseId = Number(classItem.courseId);
+                if (!item.courseTitle) item.courseTitle = classItem.courseTitle || '';
+                if (!item.curriculumVersionId) item.curriculumVersionId = Number(classItem.curriculumVersionId);
+            }
+            item.curriculumVersionId = Number(item.curriculumVersionId) || 0;
+            item.moduleId = item.moduleId === null || item.moduleId === undefined || item.moduleId === ''
+                ? null : Number(item.moduleId);
+            item.lessonId = item.lessonId === null || item.lessonId === undefined || item.lessonId === ''
+                ? null : Number(item.lessonId);
+            item.title = String(item.title || '');
+            item.instructions = String(item.instructions || '');
+            if (assignmentTypes.indexOf(item.type) === -1) item.type = 'text_submission';
+            if (assignmentStatuses.indexOf(item.status) === -1) item.status = 'draft';
+            item.openAt = item.openAt || null;
+            item.dueAt = item.dueAt || null;
+            item.maxScore = Number(item.maxScore) || 100;
+            item.weight = Number(item.weight) || 0;
+            item.requireFile = !!item.requireFile;
+            item.allowedTypes = String(item.allowedTypes || '');
+            item.maxFileSize = item.maxFileSize === null || item.maxFileSize === undefined || item.maxFileSize === ''
+                ? null : Number(item.maxFileSize);
+            item.createdBy = item.createdBy === null || item.createdBy === undefined ? null : Number(item.createdBy);
+            item.updatedBy = item.updatedBy === null || item.updatedBy === undefined ? null : Number(item.updatedBy);
+            item.createdAt = item.createdAt || new Date().toISOString();
+            item.updatedAt = item.updatedAt || item.createdAt;
+            assignmentMap[item.id] = item;
+        });
+        write(KEYS.assignments, assignmentList);
+
+        const assignmentFileList = ELIPS.getAssignmentFiles();
+        assignmentFileList.forEach(function (file) {
+            file.id = Number(file.id);
+            file.assignmentId = Number(file.assignmentId);
+            file.fileName = String(file.fileName || '');
+            file.filePath = String(file.filePath || '');
+            file.fileSize = file.fileSize === null || file.fileSize === undefined ? null : Number(file.fileSize);
+            file.mimeType = String(file.mimeType || '');
+            file.createdAt = file.createdAt || new Date().toISOString();
+        });
+        write(KEYS.assignmentFiles, assignmentFileList);
+
+        const rubricList = ELIPS.getAssignmentRubrics();
+        rubricList.forEach(function (rubric) {
+            rubric.id = Number(rubric.id);
+            rubric.assignmentId = Number(rubric.assignmentId);
+            rubric.criterion = String(rubric.criterion || '');
+            rubric.description = String(rubric.description || '');
+            rubric.maxScore = Number(rubric.maxScore) || 0;
+            rubric.order = Number(rubric.order) || 1;
+            rubric.createdAt = rubric.createdAt || new Date().toISOString();
+            rubric.updatedAt = rubric.updatedAt || null;
+        });
+        write(KEYS.assignmentRubrics, rubricList);
+
+        const submissionList = ELIPS.getSubmissions();
+        const submissionMap = {};
+        submissionList.forEach(function (item) {
+            item.id = Number(item.id);
+            item.assignmentId = Number(item.assignmentId);
+            item.enrollmentId = Number(item.enrollmentId);
+            item.studentId = Number(item.studentId);
+            const assignment = assignmentMap[item.assignmentId];
+            if (assignment) {
+                if (!item.assignmentTitle) item.assignmentTitle = assignment.title;
+                if (!item.classId) item.classId = assignment.classId;
+                if (!item.assignmentType) item.assignmentType = assignment.type;
+                if (item.maxScore === undefined || item.maxScore === null) item.maxScore = assignment.maxScore;
+            }
+            item.classId = item.classId === null || item.classId === undefined ? null : Number(item.classId);
+            item.assignmentType = String(item.assignmentType || '');
+            item.maxScore = Number(item.maxScore) || 0;
+            const student = userListForTasks.find(function (u) { return Number(u.id) === item.studentId; });
+            if (!item.studentName) item.studentName = student ? student.name : '';
+            if (submissionStatuses.indexOf(item.status) === -1) item.status = 'submitted';
+            item.submittedAt = item.submittedAt || item.createdAt || new Date().toISOString();
+            item.isLate = !!item.isLate;
+            item.score = item.score === null || item.score === undefined || item.score === '' ? null : Number(item.score);
+            item.reviewedBy = item.reviewedBy === null || item.reviewedBy === undefined ? null : Number(item.reviewedBy);
+            item.reviewedAt = item.reviewedAt || null;
+            item.revisionCount = Number(item.revisionCount) || 0;
+            item.textAnswer = String(item.textAnswer || '');
+            item.feedback = String(item.feedback || '');
+            item.createdAt = item.createdAt || item.submittedAt;
+            item.updatedAt = item.updatedAt || item.createdAt;
+            submissionMap[item.id] = item;
+        });
+        write(KEYS.submissions, submissionList);
+
+        const submissionFileList = ELIPS.getSubmissionFiles();
+        submissionFileList.forEach(function (file) {
+            file.id = Number(file.id);
+            file.submissionId = Number(file.submissionId);
+            file.fileName = String(file.fileName || '');
+            file.filePath = String(file.filePath || '');
+            file.fileSize = file.fileSize === null || file.fileSize === undefined ? null : Number(file.fileSize);
+            file.mimeType = String(file.mimeType || '');
+            file.createdAt = file.createdAt || new Date().toISOString();
+        });
+        write(KEYS.submissionFiles, submissionFileList);
+
+        const reviewList = ELIPS.getSubmissionReviews();
+        reviewList.forEach(function (item) {
+            item.id = Number(item.id);
+            item.submissionId = Number(item.submissionId);
+            item.reviewerId = item.reviewerId === null || item.reviewerId === undefined ? null : Number(item.reviewerId);
+            const reviewer = userListForTasks.find(function (u) { return Number(u.id) === item.reviewerId; });
+            if (!item.reviewerName) item.reviewerName = reviewer ? reviewer.name : '';
+            if (['submit', 'score', 'revision', 'accept'].indexOf(item.action) === -1) item.action = 'submit';
+            item.score = item.score === null || item.score === undefined || item.score === '' ? null : Number(item.score);
+            item.note = String(item.note || '');
+            item.createdAt = item.createdAt || new Date().toISOString();
+        });
+        write(KEYS.submissionReviews, reviewList);
+
+        const examList = ELIPS.getExams();
+        const examMap = {};
+        examList.forEach(function (item) {
+            item.id = Number(item.id);
+            item.classId = Number(item.classId);
+            const classItem = classListForTasks.find(function (c) { return Number(c.id) === item.classId; });
+            if (classItem) {
+                if (!item.classCode) item.classCode = classItem.code || '';
+                if (!item.className) item.className = classItem.name || '';
+                if (!item.courseId) item.courseId = Number(classItem.courseId);
+                if (!item.courseTitle) item.courseTitle = classItem.courseTitle || '';
+                if (!item.curriculumVersionId) item.curriculumVersionId = Number(classItem.curriculumVersionId);
+            }
+            item.curriculumVersionId = Number(item.curriculumVersionId) || 0;
+            item.title = String(item.title || '');
+            item.description = String(item.description || '');
+            if (examTypes.indexOf(item.type) === -1) item.type = 'written';
+            if (examStatuses.indexOf(item.status) === -1) item.status = 'draft';
+            item.examDate = item.examDate || null;
+            item.startTime = item.startTime || null;
+            item.durationMinutes = item.durationMinutes === null || item.durationMinutes === undefined || item.durationMinutes === ''
+                ? null : Number(item.durationMinutes);
+            item.maxScore = Number(item.maxScore) || 100;
+            item.weight = Number(item.weight) || 0;
+            item.instructions = String(item.instructions || '');
+            item.createdBy = item.createdBy === null || item.createdBy === undefined ? null : Number(item.createdBy);
+            item.updatedBy = item.updatedBy === null || item.updatedBy === undefined ? null : Number(item.updatedBy);
+            item.createdAt = item.createdAt || new Date().toISOString();
+            item.updatedAt = item.updatedAt || item.createdAt;
+            examMap[item.id] = item;
+        });
+        write(KEYS.exams, examList);
+
+        const participantList = ELIPS.getExamParticipants();
+        participantList.forEach(function (item) {
+            item.id = Number(item.id);
+            item.examId = Number(item.examId);
+            item.enrollmentId = Number(item.enrollmentId);
+            item.studentId = Number(item.studentId);
+            const student = userListForTasks.find(function (u) { return Number(u.id) === item.studentId; });
+            if (!item.studentName) item.studentName = student ? student.name : '';
+            if (participantStatuses.indexOf(item.status) === -1) item.status = 'registered';
+            item.note = String(item.note || '');
+            item.createdAt = item.createdAt || new Date().toISOString();
+            item.updatedAt = item.updatedAt || item.createdAt;
+        });
+        write(KEYS.examParticipants, participantList);
+
+        const resultList = ELIPS.getExamResults();
+        resultList.forEach(function (item) {
+            item.id = Number(item.id);
+            item.examId = Number(item.examId);
+            item.enrollmentId = Number(item.enrollmentId);
+            item.studentId = Number(item.studentId);
+            const student = userListForTasks.find(function (u) { return Number(u.id) === item.studentId; });
+            if (!item.studentName) item.studentName = student ? student.name : '';
+            item.score = item.score === null || item.score === undefined || item.score === '' ? null : Number(item.score);
+            if (resultStatuses.indexOf(item.status) === -1) item.status = 'not_assessed';
+            item.gradedBy = item.gradedBy === null || item.gradedBy === undefined ? null : Number(item.gradedBy);
+            if (!item.gradedByName && item.gradedBy) {
+                const grader = userListForTasks.find(function (u) { return Number(u.id) === item.gradedBy; });
+                item.gradedByName = grader ? grader.name : '';
+            }
+            item.gradedAt = item.gradedAt || null;
+            item.note = String(item.note || '');
+            item.createdAt = item.createdAt || new Date().toISOString();
+            item.updatedAt = item.updatedAt || item.createdAt;
+        });
+        write(KEYS.examResults, resultList);
     }
 
     // Seed & migrasi dijalankan saat modul dimuat.
