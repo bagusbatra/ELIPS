@@ -2145,10 +2145,18 @@ function elips_action_session_status(array $p): array
         $actualJp = (float) $session['planned_jp'];
     }
 
+    $reason = trim((string) ($p['reason'] ?? ''));
+    $notes = (string) $session['notes'];
+    if ($reason !== '') {
+        $notes = $notes === '' ? 'Alasan: ' . $reason : $notes . "\n" . 'Alasan: ' . $reason;
+    }
+
     $stmt = elips_db()->prepare(
-        'UPDATE class_sessions SET status = ?, actual_jp = ?, updated_by = ?, updated_at = UTC_TIMESTAMP() WHERE id = ?'
+        'UPDATE class_sessions
+         SET status = ?, actual_jp = ?, notes = ?, updated_by = ?, updated_at = UTC_TIMESTAMP()
+         WHERE id = ?'
     );
-    $stmt->execute([$status, round($actualJp, 2), (int) $actor['id'], $id]);
+    $stmt->execute([$status, round($actualJp, 2), $notes, (int) $actor['id'], $id]);
 
     $class = elips_class_row((int) $session['class_id']);
     $label = ($class ? $class['name'] : 'Kelas #' . $session['class_id']) . ' — Pertemuan ' . $session['session_number'];
@@ -2157,7 +2165,8 @@ function elips_action_session_status(array $p): array
         'session',
         $id,
         $label,
-        'Mengubah status sesi "' . $label . '" dari ' . $session['status'] . ' menjadi ' . $status . '.',
+        'Mengubah status sesi "' . $label . '" dari ' . $session['status'] . ' menjadi ' . $status . '.'
+            . ($reason !== '' ? ' Alasan: ' . $reason : ''),
         $actor
     );
 

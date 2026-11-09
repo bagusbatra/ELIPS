@@ -264,13 +264,13 @@ Seluruh aturan di atas ditegakkan **di server** (`api/actions.php` + `api/helper
 | Admin membuat angkatan/kelas | ✅ Selesai | `class.create/update/status/delete`; kode kelas unik, periode tervalidasi, kuota > 0 |
 | Admin mengelola cabang | ✅ Selesai | `admin/settings.html` + `branch.create/update/status/delete`; kode cabang unik, status aktif/nonaktif |
 | Kelas terkait cabang | ✅ Selesai | `classes.branch_id` (nullable, `ON DELETE SET NULL`); cabang nonaktif ditolak saat create/update |
-| Kalender & jadwal per cabang | ✅ Selesai | `admin/schedule.html`; filter cabang/kelas, kalender bulanan, agenda harian, ringkasan JP, daftar sesi, detail sesi |
+| Kalender & jadwal per cabang | ✅ Selesai | `admin/schedule.html`; filter cabang/kelas/instruktur/lokasi dan multi-status, kalender bulanan, agenda harian, ringkasan JP, daftar sesi, detail sesi, aksi langsung (buat/edit/jadwalkan ulang/batalkan/selesai/hapus), serta filter tersimpan di URL |
 | Satu kelas = satu tentor, histori pergantian | ✅ Selesai | `classes.instructor_id` + `class_instructor_histories`; `class.assignInstructor` menutup histori lama |
 | Satu tentor dapat mengampu banyak kelas | ✅ Selesai | Dashboard instruktur menampilkan tabel “Kelas yang Diampu” |
 | Enrollment berbasis kelas | ✅ Selesai | `enrollments.class_id`; `enrollment.assignClass` dan `enrollment.classStatus` |
 | Kuota dan status enrollment | ✅ Selesai | Kuota dicek saat pendaftaran; kuota tidak boleh diturunkan di bawah peserta aktif; status `active/completed/withdrawn/cancelled` |
 | Jadwal sesi tunggal & berulang | ✅ Selesai | `session.create`/`session.createBulk`; tanggal eksplisit atau `startDate` + `weekdays` + `occurrences` (maks. 52) |
-| JP rencana/aktual & lifecycle sesi | ✅ Selesai | `session.update`/`session.status`; sesi `cancelled`/`no_show`/`rescheduled` tidak dihitung JP aktual |
+| JP rencana/aktual & lifecycle sesi | ✅ Selesai | `session.update`/`session.status`; sesi `cancelled`/`no_show`/`rescheduled` tidak dihitung JP aktual; pembatalan dapat menyertakan `reason` yang disimpan ke catatan dan audit |
 | Reschedule dengan sesi pengganti | ✅ Selesai | Sesi asal → `rescheduled`; sesi baru menyimpan `rescheduledFromId` |
 | Presensi per sesi & enrollment | ✅ Selesai | `attendance.saveBulk`; unik `(sessionId, enrollmentId)`; status `present/late/permission/sick/absent/excused` |
 | Koreksi presensi dengan audit | ✅ Selesai | `attendance.correct` + tabel `attendance_corrections` (nilai lama/baru, aktor, alasan, waktu) |
@@ -369,7 +369,7 @@ Backend berada di folder `api/` dan terdiri dari front controller, konfigurasi, 
 | `admin/users.html` | ✅ Selesai | Tambah pengguna diawali modal pilihan role Admin/Instruktur/Peserta, edit/hapus pengguna, filter role & pencarian, serta penugasan instruktur ke kursus |
 | `admin/courses.html` | ✅ Selesai | Tambah/edit kursus, tugaskan 1 instruktur per kursus, publikasi/Draft, filter status & pencarian |
 | `admin/academic.html` | ✅ Selesai | Kelola versi kurikulum (buat/publish/clone/retire/hapus draft), kelas/angkatan (versi terkunci, cabang, tentor, kuota, periode), histori tentor, roster peserta, detail struktur kurikulum, serta jadwal sesi, presensi, koreksi, dan rekap kehadiran; filter cabang & kursus |
-| `admin/schedule.html` | ✅ Selesai | Kalender & jadwal admin: filter cabang/kelas, kalender bulanan, agenda harian, ringkasan JP, daftar sesi + filter status, modal detail sesi, dan tautan ke akademik/pengaturan |
+| `admin/schedule.html` | ✅ Selesai | Kalender & jadwal admin: filter cabang/kelas/instruktur/lokasi dan multi-status dengan sinkronisasi URL, kalender bulanan, agenda harian, ringkasan JP, daftar sesi, modal detail sesi dengan aksi langsung (buat, edit, jadwalkan ulang, batalkan dengan alasan, tandai selesai, hapus), serta tautan ke akademik/pengaturan |
 | `admin/enrollment.html` | ✅ Selesai | Pendaftaran siswa ke kelas, filter kelas/status, aktif/nonaktifkan enrollment |
 | `admin/certificates.html` | ✅ Selesai | Persetujuan e-sertifikat: Draft → Publish, filter status, dan tampilan nomor/tanggal persetujuan |
 | `admin/notifications.html` | ✅ Selesai | Outbox notifikasi email simulasi: statistik, filter jenis/penerima/tanggal/pencarian, detail isi, ekspor CSV, dan pembersihan outbox |
@@ -473,7 +473,7 @@ Backend berada di folder `api/` dan terdiri dari front controller, konfigurasi, 
 | Fitur | Status | Keterangan |
 |---|---|---|
 | Jadwal sesi tunggal | ✅ Selesai | `admin/academic.html` dan `instructor/dashboard.html`; aksi `session.create` |
-| Kalender & jadwal admin | ✅ Selesai | `admin/schedule.html`; filter cabang/kelas, kalender bulanan, agenda harian, ringkasan JP, daftar sesi + filter status, modal detail sesi |
+| Kalender & jadwal admin | ✅ Selesai | `admin/schedule.html`; filter cabang/kelas/instruktur/lokasi dan multi-status, kalender bulanan, agenda harian, ringkasan JP, daftar sesi, modal detail sesi dengan aksi langsung |
 | Jadwal berulang | ✅ Selesai | `session.createBulk` dengan `dates[]` atau `startDate` + `weekdays` (ISO 1–7) + `occurrences` (maks. 52) |
 | Modul terkait sesi | ✅ Selesai | Sesi dapat merujuk modul dari versi kurikulum kelas; modul hanya informatif dan tidak mengubah struktur |
 | JP rencana & aktual | ✅ Selesai | `plannedJp`/`actualJp`; sesi `cancelled`/`no_show`/`rescheduled` dikecualikan dari JP aktual |
@@ -625,11 +625,14 @@ else                            -> student/dashboard.html
 - Kelas hanya boleh merujuk cabang berstatus `active`; perubahan kelas ke cabang nonaktif ditolak server.
 - `branch.delete` ditolak selama masih ada kelas yang merujuk cabang tersebut; gunakan status `inactive` bila cabang tidak dipakai lagi.
 - Perubahan nama/kode/kota cabang disinkronkan ke field denormalisasi `branchCode`/`branchName`/`branchCity` pada kelas dan sesi.
-- `admin/schedule.html` adalah halaman baca (read-focused) untuk admin:
-  - filter cabang di bagian atas, lalu filter kelas pada cabang tersebut;
-  - kalender bulanan dengan chip sesi berwarna sesuai status (`scheduled`, `confirmed`, `completed`, `cancelled`/`no_show`);
+- `admin/schedule.html` adalah halaman operasional kalender untuk admin:
+  - filter cabang, kelas pada cabang tersebut, instruktur, lokasi, dan multi-status (chip); semua filter berlaku untuk kalender, agenda harian, ringkasan bulanan, statistik, dan tabel sesi;
+  - nilai filter aktif (`branch`, `class`, `instructor`, `location`, `status`, `month`, `date`) disimpan pada query string melalui `history.replaceState` sehingga tampilan dapat dibuka ulang/dibagikan; pada mode `file://` kegagalan pembaruan URL diabaikan;
+  - kalender bulanan dengan chip sesi berwarna sesuai status (`scheduled`, `confirmed`, `completed`, `cancelled`/`no_show`) dan tombol tambah sesi pada sel tanggal;
   - agenda harian saat tanggal dipilih, ringkasan jumlah sesi + JP rencana/aktual, dan daftar sesi bulan berjalan;
   - modal detail sesi menampilkan kelas, cabang, kursus, tanggal/waktu, modul, tentor, JP, status, lokasi, dan ringkasan presensi;
+  - aksi langsung dari kalender/daftar/modal: buat sesi (tanggal terisi otomatis), edit, jadwalkan ulang (sesi baru bertaut `rescheduledFromId` dan sesi asal menjadi `rescheduled`), batalkan dengan alasan opsional, tandai selesai (JP aktual terisi otomatis), dan hapus;
+  - tombol hapus hanya tersedia untuk sesi yang belum `completed` dan belum memiliki presensi; aturan akhir tetap ditegakkan server pada mode API;
   - tautan cepat ke `admin/academic.html` (kelola sesi/kelas) dan `admin/settings.html` (kelola cabang).
 - Navigasi admin menampilkan tautan **Kalender & Jadwal** pada seluruh halaman admin, setelah menu **Kurikulum & Kelas**.
 
@@ -677,6 +680,7 @@ else                            -> student/dashboard.html
 - Sesi berstatus `cancelled`, `no_show`, atau `rescheduled` tidak dihitung sebagai JP aktual.
 - Sesi `completed` tidak dapat dihapus. Sesi yang sudah memiliki presensi juga tidak dapat dihapus; gunakan pembatalan agar riwayat tetap ada.
 - Reschedule membuat sesi pengganti baru dan menandai sesi asal `rescheduled`; sesi pengganti menyimpan `rescheduledFromId`.
+- `session.status` menerima `reason` opsional; alasan pembatalan ditambahkan ke `notes` sesi dan dicatat pada detail audit.
 
 ### Presensi & Rekap Kehadiran
 - Presensi disimpan di tabel `attendances` (mode server) atau key `elips_attendances` (mode lokal), unik per `(sessionId, enrollmentId)`.
@@ -786,6 +790,7 @@ else                            -> student/dashboard.html
 | Cabang pada kelas | ✅ Lulus uji | `api-v4-branches`/`local-v4-branches` memverifikasi create/update/status/delete, kode unik, cabang nonaktif ditolak, dan hapus cabang terpakai ditolak |
 | UI manajemen cabang | ✅ Lulus uji | `test-branch-pages` memverifikasi tabel cabang, modal tambah/edit, status, hapus, dan blokir hapus cabang seed |
 | Kalender & jadwal admin | ✅ Lulus uji | `test-branch-pages` memverifikasi 42 sel kalender, agenda harian, ringkasan JP, filter cabang/kelas/status, modal sesi, dan navigasi bulan |
+| Aksi langsung & filter kalender | ✅ Lulus uji | `test-schedule-actions` memverifikasi filter instruktur/lokasi/multi-status, pembuatan dari kalender, edit, reschedule, pembatalan beralasan, tandai selesai, hapus, dan pemulihan filter dari URL |
 | Pengaturan akses materi kelas | ✅ Lulus uji | `api-v4-materials`/`local-v4-materials` memverifikasi default `open`, keempat mode, validasi mode, dan guard role |
 | Prasyarat sequential & scheduled | ✅ Lulus uji | Pelajaran kedua terkunci sampai pelajaran pertama selesai; mode scheduled memakai tanggal sesi modul |
 | Mode conditional | ✅ Lulus uji | Membutuhkan penyelesaian pelajaran sebelumnya dan tanggal sesi modul yang sudah tiba |
@@ -831,7 +836,7 @@ else                            -> student/dashboard.html
 - **Responsive:** Menggunakan CSS custom yang responsif.
 - **UI Konsisten:** Menggunakan komponen seragam (navbar, sidebar, cards, tables, badges).
 - **Keamanan:** Pada mode server password di-hash, sesi memakai cookie `HttpOnly`/`SameSite=Lax`, dan otorisasi role/kepemilikan ditegakkan di server. Mode lokal tetap bersifat demo dan tidak boleh dianggap aman untuk produksi.
-- **Cakupan v4.0:** Increment ini mencakup **Phase 1–4** (versi kurikulum + kelas/angkatan + enrollment berbasis kelas + jadwal sesi/presensi offline + materi tambahan dan mode akses materi) serta **cabang + kalender/jadwal admin**. Tugas/ujian, pembayaran, dan sertifikat PDF mengikuti phase berikutnya pada `ELIPS-LMS-PRD-v4.0.md`.
+- **Cakupan v4.0:** Increment ini mencakup **Phase 1–4** (versi kurikulum + kelas/angkatan + enrollment berbasis kelas + jadwal sesi/presensi offline + materi tambahan dan mode akses materi) serta **cabang + kalender/jadwal admin** dengan aksi sesi langsung dan filter lanjutan. Tugas/ujian, pembayaran, dan sertifikat PDF mengikuti phase berikutnya pada `ELIPS-LMS-PRD-v4.0.md`.
 - **Kompatibilitas v3.0:** Struktur v3 tetap dipertahankan. Setiap kursus lama mendapat versi kurikulum `1.0`; enrollment lama dipetakan ke kelas migrasi (`legacy_import`) agar tidak ada data yang hilang.
 
 ---

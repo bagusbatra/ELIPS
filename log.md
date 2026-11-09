@@ -2,7 +2,7 @@
 
 **Versi dokumen:** 4.0  
 **Terakhir diperbarui:** 2026-11-06
-**Status proyek:** Dual-mode — PHP 8/MySQL 8 + fallback `localStorage`; v4.0 Phase 1–4 (kurikulum, kelas/angkatan, enrollment berbasis kelas, jadwal & presensi offline, materi tambahan & mode akses materi) plus cabang dan kalender jadwal Admin
+**Status proyek:** Dual-mode - PHP 8/MySQL 8 + fallback `localStorage`; v4.0 Phase 1-4 (kurikulum, kelas/angkatan, enrollment berbasis kelas, jadwal & presensi offline, materi tambahan & mode akses materi) plus cabang, kalender jadwal Admin, serta aksi langsung dan filter jadwal lanjutan
 **Dokumen terkait:** `prd.md`, `erd.md`, `ELIPS-LMS-PRD-v4.0.md`
 
 ---
@@ -149,6 +149,52 @@ Prinsip yang dipakai:
 ---
 
 ## 3. Riwayat Perubahan
+
+### v4.0 - 2026-11-09 - Aksi langsung kalender dan filter jadwal lanjutan
+
+**Tujuan:** menjadikan `admin/schedule.html` sebagai pusat operasi sesi pertemuan, bukan hanya tampilan baca, dengan filter yang lebih lengkap dan aksi langsung yang konsisten pada mode server maupun `localStorage`, tanpa perubahan skema database.
+
+Perubahan backend:
+
+- `session.status` menerima parameter opsional `reason`. Bila diisi, alasan ditambahkan ke `notes` sesi dan disertakan pada detail audit; status, JP aktual, dan guard kepemilikan tetap mengikuti aturan sebelumnya.
+- Tidak ada perubahan `api/schema.sql`; data alasan memakai kolom `notes` yang sudah ada agar tetap kompatibel dengan database lama.
+- Aksi `session.create`, `session.update`, dan `session.delete` yang dipakai form/aksi kalender tetap memakai validasi dan otorisasi server yang sama dengan halaman akademik.
+
+Perubahan client:
+
+- `admin/schedule.html`:
+  - filter baru untuk instruktur, lokasi, dan multi-status berbasis chip (Semua, Terjadwal, Terkonfirmasi, Selesai, Dijadwalkan Ulang, Dibatalkan, Tidak Hadir);
+  - seluruh filter (cabang, kelas, instruktur, lokasi, status) berlaku untuk kalender bulanan, agenda harian, ringkasan JP, statistik, dan tabel sesi;
+  - filter, bulan, dan tanggal aktif disinkronkan ke query string (`branch`, `class`, `instructor`, `location`, `status`, `month`, `date`) dan dipulihkan saat halaman dibuka kembali;
+  - tombol **Tambah Sesi** pada header, sel kalender, dan agenda kosong membuka form dengan tanggal terisi otomatis;
+  - modal detail sesi menyediakan aksi **Edit**, **Jadwalkan Ulang**, **Batalkan**, **Tandai Selesai**, dan **Hapus** sesuai status/presensi sesi;
+  - form sesi memakai konvensi `admin/academic.html` (kelas, nomor pertemuan, tanggal, modul, waktu, lokasi/ruang, tentor, JP, status, catatan) dan menampilkan pemberitahuan khusus saat menjadwalkan ulang;
+  - tabel sesi mendapat tombol aksi lihat/edit; tombol aksi disembunyikan atau ditolak bila sesi sudah selesai atau berpresensi.
+- `assets/js/crud-academic.js`: `setSessionStatus` meneruskan `reason` ke API dan, pada mode lokal, menambahkan alasan ke `notes` serta detail audit.
+- `assets/css/style.css`: gaya tombol bahaya, chip status, aksi modal, grid form dua kolom, tombol tambah pada kalender, dan penyesuaian responsif.
+
+Aturan bisnis utama:
+
+- Aksi kalender tidak melewati aturan yang sudah ada: sesi `completed` tidak dapat dihapus/dijadwalkan ulang, sesi berpresensi tidak dapat dihapus, dan instruktur non-pengampu tetap ditolak server.
+- Pembatalan bersifat opsional alasannya; bila diisi, alasan tersimpan di catatan sesi dan audit.
+- Reschedule membuat sesi pengganti baru bertaut `rescheduledFromId` dan menandai sesi asal `rescheduled`; sesi asal tidak dihitung sebagai JP aktual.
+- Menandai selesai mengisi JP aktual dari JP rencana bila masih kosong.
+- Filter status kosong berarti semua status; memilih chip status menerapkan filter ke seluruh tampilan.
+
+Pengujian:
+
+- `php -l api/actions.php` dan `node --check assets/js/crud-academic.js` lulus.
+- `test-schedule-actions.js` lulus seluruh pemeriksaan: filter instruktur/lokasi/multi-status, pembuatan sesi dari kalender, edit, reschedule, pembatalan beralasan, tandai selesai, hapus, sinkronisasi URL, dan pemulihan filter dari URL.
+- Regresi UI tetap lulus: `test-branch-pages`, `test-sessions-page`, `test-learning`, dan `test-instructor`.
+- Regresi backend/mode lokal tetap lulus: `api-phase5` 52/52, `api-v4-sessions` 37/37, `local-phase5` 34/34, dan `local-v4-sessions` 47/47.
+
+Batasan increment ini:
+
+- Belum ada drag-and-drop atau pengubahan tanggal langsung pada kalender; perubahan tanggal memakai form edit/reschedule.
+- Aksi massal (mis. batalkan beberapa sesi sekaligus) belum tersedia.
+- Query string menyimpan filter untuk kemudahan berbagi tampilan, bukan sebagai otorisasi; akses tetap ditentukan role pengguna.
+
+---
 
 ### v4.0 - 2026-11-06 - Phase 4: materi tambahan, mode akses kelas, dan progress pendukung
 
@@ -681,6 +727,9 @@ Perubahan sentralisasi:
 | Password aman di server | Password disimpan dengan `password_hash()` dan diverifikasi dengan `password_verify()`; hash tidak pernah masuk snapshot |
 | Snapshot konsisten | Respons tulis menyertakan snapshot terbaru dan sesi; `api.js` mengganti seluruh cache dari respons tersebut |
 | Sanitasi server-side | `elips_sanitize_html()` membuang tag/atribut berbahaya sebelum materi teks disimpan |
+| Aksi kalender mengikuti aturan sesi | Edit, reschedule, batalkan, selesai, dan hapus memakai `session.update`/`session.status`/`session.delete`; sesi selesai atau berpresensi tidak dapat dihapus |
+| Alasan pembatalan tercatat | `reason` opsional pada `session.status` ditambahkan ke `notes` dan detail audit |
+| Filter kalender konsisten | Filter cabang/kelas/instruktur/lokasi/multi-status berlaku untuk kalender, agenda, ringkasan, statistik, dan tabel; state disimpan di URL |
 
 ---
 
@@ -736,7 +785,7 @@ Akun lama tanpa password otomatis dimigrasikan ke password demo `elips123` saat 
 
 ## 6. Hasil Pengujian Terakhir
 
-Pengujian dijalankan setelah backend PHP/MySQL, client dual-mode (v3.0), increment v4.0 Phase 1–4, dan penambahan cabang/kalender jadwal:
+Pengujian dijalankan setelah backend PHP/MySQL, client dual-mode (v3.0), increment v4.0 Phase 1–4, penambahan cabang/kalender jadwal, dan aksi langsung/filter jadwal lanjutan:
 
 | Pemeriksaan | Hasil |
 |---|---|
@@ -764,6 +813,7 @@ Pengujian dijalankan setelah backend PHP/MySQL, client dual-mode (v3.0), increme
 | Mode lokal v4 Phase 4 (`local-v4-materials`) | ✅ 35/35 |
 | Mode lokal cabang (`local-v4-branches`) | ✅ 18/18 |
 | UI materi Admin/Instruktur/Peserta (`test-v4-material-ui`) | ✅ 25/25 |
+| Aksi langsung & filter kalender (`test-schedule-actions`) | ✅ Lulus |
 | UI akademik admin (`test-academic-page`) | ✅ Lulus |
 | UI cabang & kalender admin (`test-branch-pages`) | ✅ Lulus |
 | UI jadwal/presensi lokal (`test-sessions-page`) | ✅ 47/47 |

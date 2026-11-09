@@ -1199,9 +1199,15 @@
             : Number(item.actualJp) || 0;
         if (status === 'completed' && actualJp <= 0) actualJp = Number(item.plannedJp) || 0;
 
+        const reason = extra && extra.reason !== undefined ? String(extra.reason).trim() : '';
         const user = sessionActor();
         item.status = status;
         item.actualJp = actualJp;
+        if (reason) {
+            item.notes = item.notes
+                ? String(item.notes) + '\nAlasan: ' + reason
+                : 'Alasan: ' + reason;
+        }
         item.updatedBy = user ? user.id : null;
         item.updatedAt = new Date().toISOString();
         ELIPS.setClassSessions(sessions);
@@ -1215,6 +1221,7 @@
             entityLabel: label,
             actorId: user ? user.id : null,
             detail: 'Mengubah status sesi "' + label + '" dari ' + previous + ' menjadi ' + status + '.'
+                + (reason ? ' Alasan: ' + reason : '')
         });
         return success('Status sesi diperbarui menjadi ' + status + '.', item);
     }
