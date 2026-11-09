@@ -487,6 +487,7 @@ Pada mode server, entitas yang sama disimpan di tabel MySQL bernama snake_case (
 | 21 | `AUDIT_LOGS` | `elips_auditLogs` | Array of object | Aktor dan entitas polimorfik |
 | 22 | `NOTIFICATIONS` | `elips_notifications` | Array of object | Penerima dan entitas polimorfik |
 | 23 | `SESSION` | `elips_session` | Object tunggal | Sesi user yang sedang login (mode server: sesi PHP) |
+| 24 | `STAFF_ATTENDANCES` | `elips_staffAttendances` | Array of object | Absensi pribadi staf/admin, foto, lokasi, dan metadata perangkat |
 
 Key lama yang dimigrasikan: `elips_enrolled` (self-enrollment) dipindahkan ke `elips_enrollments` oleh `seed.js`, lalu dihapus. Pada migrasi v3 → v4, `seed.js` membuat entri `elips_categories`/`elips_curriculumVersions`/`elips_classes`/`elips_branches` bila belum ada, mengisi `curriculumVersionId` pada modul/materi lama, lalu menambahkan sesi dan presensi demo untuk kelas migrasi. Kelas lama tanpa cabang diberi `branchId = null` agar tetap kompatibel. Sejak Phase 4, `seed.js` juga menormalisasi empat koleksi materi/progres; kelas yang belum memiliki pengaturan akses **tidak** dibuatkan baris, sehingga default implisit `open` tetap sama dengan mode server.
 
@@ -1210,6 +1211,47 @@ Bukan koleksi, melainkan **satu objek** yang merepresentasikan sesi login aktif 
 - `requireRole(role)` hanya memakai `getSessionUser()`; tanpa sesi diarahkan ke `login.html`, role tidak sesuai diarahkan ke dashboard role-nya.
 - Sesi tidak otomatis dihapus ketika user dihapus; ini dapat menghasilkan sesi yang menunjuk user tidak valid.
 
+### 5.12 STAFF_ATTENDANCES - `elips_staffAttendances`
+
+Absensi pribadi staf/admin yang dicatat dari dashboard Admin. Bukan presensi peserta per sesi.
+
+| Field | Tipe | Key | Wajib | Keterangan |
+|---|---|---|---|---|
+| `id` | number | PK | Ya | ID catatan |
+| `userId` | number | FK -> `users.id` | Ya | Pemilik catatan (admin yang login) |
+| `userName` | string | - | Tidak | Nama pemilik (hasil JOIN, bukan input client) |
+| `kind` | enum `in`/`out` | - | Ya | Jenis absensi masuk/pulang |
+| `attendanceDate` | date `YYYY-MM-DD` | - | Ya | Tanggal kalender lokal absensi |
+| `takenAt` | datetime ISO | - | Ya | Waktu foto diambil (disimpan UTC di server) |
+| `timezone` | string | - | Tidak | Zona waktu browser |
+| `photo` | string (data URL) | - | Ya | Foto JPEG/PNG/WebP; base64 disimpan di MySQL |
+| `photoMime` | string | - | Ya | MIME foto terdeteksi |
+| `latitude` | number/null | - | Tidak | Lintang, harus berpasangan dengan `longitude` |
+| `longitude` | number/null | - | Tidak | Bujur, harus berpasangan dengan `latitude` |
+| `accuracyM` | number/null | - | Tidak | Akurasi GPS dalam meter |
+| `locationLabel` | string | - | Tidak | Label lokasi manual/otomatis |
+| `locationSource` | enum `gps`/`manual`/`none` | - | Ya | Sumber lokasi |
+| `ipAddress` | string | - | Tidak | Diisi server dari `REMOTE_ADDR` |
+| `userAgent` | string | - | Tidak | User agent browser |
+| `platform` | string | - | Tidak | Platform perangkat |
+| `language` | string | - | Tidak | Bahasa browser |
+| `screen` | string | - | Tidak | Ukuran layar, mis. `1920x1080` |
+| `deviceMemory` | number/null | - | Tidak | Perkiraan memori perangkat (GB) |
+| `hardwareConcurrency` | number/null | - | Tidak | Jumlah CPU core logis |
+| `connectionType` | string | - | Tidak | Tipe koneksi efektif |
+| `online` | boolean | - | Ya | Status jaringan saat mencatat |
+| `notes` | string | - | Tidak | Catatan tambahan (maks. 2000 karakter) |
+| `createdAt` | datetime ISO | - | Ya | Waktu dibuat |
+| `updatedAt` | datetime/null | - | Tidak | Waktu diperbarui |
+
+**Aturan:**
+
+- Hanya Admin yang dapat membuat, membaca, dan menghapus catatan; server membatasi operasi pada `userId` milik aktor.
+- Foto wajib dan harus berupa data URL gambar valid (JPEG/PNG/WebP) dengan ukuran terbatas.
+- Koordinat harus lengkap berpasangan dan berada dalam rentang valid; `locationSource` diturunkan bila tidak konsisten.
+- Mode lokal menyimpan data URL terkompresi dan memangkas riwayat per pengguna menjadi 20 catatan; mode server menyimpan seluruh riwayat yang belum dihapus.
+- Snapshot bootstrap tidak memuat koleksi ini maupun foto; data dibaca lewat `staffAttendance.list`.
+
 ---
 
 ## 6. Relasi Lengkap
@@ -1256,6 +1298,7 @@ Bukan koleksi, melainkan **satu objek** yang merepresentasikan sesi login aktif 
 | R37 | `USERS` (aktor) → `ATTENDANCE_CORRECTIONS` | 1 — N | `attendance_corrections.actorId` | User dihapus: `actorId=null`, snapshot nama/role tetap | Audit historis |
 | R38 | `BRANCHES` → `CLASSES` | 1 — N | `classes.branchId` | Cabang dihapus: `branchId=null` (FK `SET NULL`) | Cabang opsional; hapus ditolak aplikasi bila masih dipakai |
 | R39 | `BRANCHES` → `CLASS_SESSIONS` | 1 — N | `class_sessions.branchId` (turunan) | Mengikuti kelas; bukan FK fisik | Mode lokal menyimpan `branchId` denormalisasi, mode server memakai JOIN kelas |
+| R40 | `USERS` (admin) -> `STAFF_ATTENDANCES` | 1 -> N | `staff_attendances.userId` | User dihapus: catatan absensi dihapus (`ON DELETE CASCADE`) | Absensi pribadi; hanya pemilik yang dapat mengakses |
 
 ### 6.1 Relasi Banyak-ke-Banyak
 
@@ -1940,6 +1983,7 @@ Bagian ini mendokumentasikan skema yang benar-benar dieksekusi oleh `api/schema.
 | 20 | `class_materials` | Materi tambahan kelas | `id`, `class_id`, `lesson_id`, `session_id`, `type`, `status`, `sort_order` | `class_id` → `classes.id`; `lesson_id` → `lessons.id`; `session_id` → `class_sessions.id` |
 | 21 | `class_lesson_progress` | Progres pelajaran per enrollment | `id`, `class_id`, `enrollment_id`, `lesson_id`, `completed_by` | `enrollment_id` → `enrollments.id`; `lesson_id` → `lessons.id`; unik(`enrollment_id`, `lesson_id`) |
 | 22 | `class_material_progress` | Progres materi tambahan per enrollment | `id`, `class_id`, `enrollment_id`, `material_id`, `completed_by` | `enrollment_id` → `enrollments.id`; `material_id` → `class_materials.id`; unik(`enrollment_id`, `material_id`) |
+| 23 | `staff_attendances` | Absensi pribadi staf/admin (kamera + metadata) | `id`, `user_id`, `kind`, `attendance_date`, `taken_at`, `photo`, `latitude`, `longitude` | `user_id` → `users.id` (`ON DELETE CASCADE`) |
 
 Sesi login **tidak** memakai tabel: autentikasi memakai sesi PHP native (`$_SESSION`) dengan cookie `HttpOnly` dan `SameSite=Lax`.
 
@@ -2312,6 +2356,36 @@ Catatan: `uq_certificates_enrollment (enrollment_id)` memastikan satu sertifikat
 | `completed_at` | `DATETIME` | tidak | `CURRENT_TIMESTAMP` | Waktu selesai |
 | `created_at` | `DATETIME` | tidak | `CURRENT_TIMESTAMP` | Waktu dibuat |
 
+**`staff_attendances`**
+
+| Kolom | Tipe | Null | Default | Keterangan |
+|---|---|---|---|---|
+| `id` | `INT UNSIGNED` | tidak | AUTO_INCREMENT | Primary key |
+| `user_id` | `INT UNSIGNED` | tidak | - | Pemilik catatan (FK `users.id`) |
+| `kind` | `ENUM('in','out')` | tidak | `'in'` | Absensi masuk/pulang |
+| `attendance_date` | `DATE` | tidak | - | Tanggal kalender lokal |
+| `taken_at` | `DATETIME` | tidak | - | Waktu foto (UTC) |
+| `timezone` | `VARCHAR(64)` | tidak | `''` | Zona waktu browser |
+| `photo` | `LONGTEXT` | ya | `NULL` | Base64 foto |
+| `photo_mime` | `VARCHAR(50)` | tidak | `'image/jpeg'` | MIME terdeteksi |
+| `latitude` | `DECIMAL(10,7)` | ya | `NULL` | Lintang |
+| `longitude` | `DECIMAL(10,7)` | ya | `NULL` | Bujur |
+| `accuracy_m` | `DECIMAL(10,2)` | ya | `NULL` | Akurasi GPS (meter) |
+| `location_label` | `VARCHAR(255)` | tidak | `''` | Label lokasi |
+| `location_source` | `ENUM('gps','manual','none')` | tidak | `'none'` | Sumber lokasi |
+| `ip_address` | `VARCHAR(45)` | tidak | `''` | IP dari server |
+| `user_agent` | `VARCHAR(255)` | tidak | `''` | User agent |
+| `platform` | `VARCHAR(120)` | tidak | `''` | Platform perangkat |
+| `language` | `VARCHAR(30)` | tidak | `''` | Bahasa browser |
+| `screen` | `VARCHAR(30)` | tidak | `''` | Ukuran layar |
+| `device_memory` | `DECIMAL(6,2)` | ya | `NULL` | Memori perangkat (GB) |
+| `hardware_concurrency` | `INT UNSIGNED` | ya | `NULL` | Jumlah CPU core |
+| `connection_type` | `VARCHAR(30)` | tidak | `''` | Tipe koneksi |
+| `online` | `TINYINT(1)` | tidak | `1` | Status jaringan |
+| `notes` | `TEXT` | tidak | - | Catatan tambahan |
+| `created_at` | `DATETIME` | tidak | `CURRENT_TIMESTAMP` | Waktu dibuat |
+| `updated_at` | `DATETIME` | ya | `NULL` | Waktu diperbarui |
+
 ### 16.3 Index dan Constraint
 
 | Tabel | Index / Constraint | Tipe |
@@ -2351,6 +2425,7 @@ Catatan: `uq_certificates_enrollment (enrollment_id)` memastikan satu sertifikat
 | `completed_lessons` | `idx_completed_course (course_id)` | INDEX |
 | `audit_logs` | `idx_audit_created (created_at)`, `idx_audit_actor (actor_id)`, `idx_audit_entity (entity)` | INDEX |
 | `notifications` | `idx_notifications_created (created_at)`, `idx_notifications_type (type)`, `idx_notifications_recipient (recipient_id)` | INDEX |
+| `staff_attendances` | `idx_staff_attendances_user_date (user_id, attendance_date)`, `idx_staff_attendances_date (attendance_date)`, `idx_staff_attendances_taken (taken_at)` | INDEX |
 
 ### 16.4 Foreign Key dan Aturan Hapus
 
@@ -2422,6 +2497,7 @@ Catatan: `uq_certificates_enrollment (enrollment_id)` memastikan satu sertifikat
 | `fk_completed_student` | `completed_lessons.student_id` | `users.id` | `CASCADE` |
 | `fk_completed_course` | `completed_lessons.course_id` | `courses.id` | `CASCADE` |
 | `fk_completed_lesson` | `completed_lessons.lesson_id` | `lessons.id` | `CASCADE` |
+| `fk_staff_attendances_user` | `staff_attendances.user_id` | `users.id` | `CASCADE` |
 
 Catatan: `audit_logs` dan `notifications` sengaja tidak memiliki foreign key fisik ke `users`. Keduanya menyimpan snapshot nama/role/email agar riwayat tetap terbaca meski akun asal dihapus, dan penghapusan pengguna tidak terblokir oleh riwayat. `classes.course_id` dan `classes.curriculum_version_id` memakai `RESTRICT` agar penghapusan kursus/versi yang sudah dipakai kelas ditolak di level database, bukan hanya di level aplikasi.
 
@@ -2452,14 +2528,15 @@ Snapshot API memakai nama koleksi yang sama dengan model `localStorage`, sehingg
 | `class_lesson_progress` | `classLessonProgress` | `class_id`/`enrollment_id`/`student_id`/`lesson_id`/`completed_by` → camelCase; `completed_at`/`created_at` → ISO |
 | `class_material_progress` | `classMaterialProgress` | `class_id`/`enrollment_id`/`student_id`/`material_id`/`completed_by` → camelCase; `completed_at`/`created_at` → ISO |
 | `audit_logs` | `auditLogs` | `actor_id`/`actor_name`/`actor_role` → camelCase; `created_at` → ISO |
+| `staff_attendances` | `staffAttendances` (tidak di snapshot) | Dibaca lewat `staffAttendance.list`; `user_id`/`attendance_date`/`taken_at`/`photo_mime`/`accuracy_m`/`location_label`/`location_source`/`ip_address`/`user_agent`/`device_memory`/`hardware_concurrency`/`connection_type`/`created_at` → camelCase; `photo` base64 tetap data URL |
 | `notifications` | `notifications` | `recipient_id`/`recipient_email` → camelCase; `created_at` → ISO |
 | Sesi PHP | `session` (cache di `api.js`) | `{ userId }` dari `$_SESSION`, bukan tabel |
 
-Snapshot hanya memuat modul/materi dari versi kurikulum aktif (non-`retired`) tiap kursus. Struktur versi lain diambil lewat aksi `curriculum.detail`. Sejak Phase 4, snapshot juga memuat `classMaterialSettings`, `classMaterials`, `classLessonProgress`, dan `classMaterialProgress`; `classMaterials` sengaja hanya berisi metadata tanpa `content`/`file_path`.
+Snapshot hanya memuat modul/materi dari versi kurikulum aktif (non-`retired`) tiap kursus. Struktur versi lain diambil lewat aksi `curriculum.detail`. Sejak Phase 4, snapshot juga memuat `classMaterialSettings`, `classMaterials`, `classLessonProgress`, dan `classMaterialProgress`; `classMaterials` sengaja hanya berisi metadata tanpa `content`/`file_path`. Koleksi `staffAttendances` sengaja tidak dimasukkan ke snapshot bootstrap karena memuat foto pribadi dan metadata perangkat; data hanya dikembalikan oleh aksi `staffAttendance.list` milik admin yang login.
 
 ### 16.6 Catatan Operasional
 
-- **Instalasi:** `php api/install.php --fresh` menghapus database lama, membuat ulang skema, dan mengisi data demo (7 pengguna, 4 kategori, 3 cabang, 4 kursus, 4 versi kurikulum, 25 modul, 75 materi, 1 kelas migrasi, 1 histori tentor, 3 enrollment, 4 sesi pertemuan, dan 9 baris presensi). Password demo `elips123` di-hash saat seeding.
+- **Instalasi:** `php api/install.php --fresh` menghapus database lama, membuat ulang skema, dan mengisi data demo (7 pengguna, 4 kategori, 3 cabang, 4 kursus, 4 versi kurikulum, 25 modul, 75 materi, 1 kelas migrasi, 1 histori tentor, 3 enrollment, 4 sesi pertemuan, dan 9 baris presensi). Tabel `staff_attendances` dibuat (tabel ke-23) tetapi tidak diisi data demo karena absensi bersifat pribadi dan dibuat dari dashboard. Password demo `elips123` di-hash saat seeding.
 - **Timezone:** koneksi PDO disetel UTC; kolom `DATE` untuk tanggal kalender dan `DATETIME` untuk timestamp.
 - **Transaksi:** operasi multi-tabel dijalankan dalam transaksi eksplisit:
   - pembuatan kelas + penguncian versi kurikulum (`curriculum_versions.status = 'locked'`) + histori tentor awal;

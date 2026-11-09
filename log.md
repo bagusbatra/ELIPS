@@ -1,8 +1,8 @@
 # Log Pengembangan ELIPS LMS
 
 **Versi dokumen:** 4.0  
-**Terakhir diperbarui:** 2026-11-06
-**Status proyek:** Dual-mode - PHP 8/MySQL 8 + fallback `localStorage`; v4.0 Phase 1-4 (kurikulum, kelas/angkatan, enrollment berbasis kelas, jadwal & presensi offline, materi tambahan & mode akses materi) plus cabang, kalender jadwal Admin, serta aksi langsung dan filter jadwal lanjutan
+**Terakhir diperbarui:** 2026-11-09
+**Status proyek:** Dual-mode - PHP 8/MySQL 8 + fallback `localStorage`; v4.0 Phase 1-4 (kurikulum, kelas/angkatan, enrollment berbasis kelas, jadwal & presensi offline, materi tambahan & mode akses materi) plus cabang, kalender jadwal Admin, serta aksi langsung dan filter jadwal lanjutan, dan absensi staf berbasis kamera di dashboard Admin
 **Dokumen terkait:** `prd.md`, `erd.md`, `ELIPS-LMS-PRD-v4.0.md`
 
 ---
@@ -123,7 +123,7 @@ config → core → api → utils → data → seed → sync → progress → au
 | `core.js` | Namespace `window.ELIPS`, daftar key storage, helper baca/tulis, `nextId`, objek hasil `{ ok, message, data }`, validasi dasar, password demo | `ELIPS.read`, `ELIPS.write`, `ELIPS.nextId`, `ELIPS.DEFAULT_PASSWORD`, `ELIPS._` |
 | `api.js` | Jembatan dual-mode: bootstrap snapshot, cache sinkron, panggilan aksi tulis, fallback lokal | `ELIPS.api.enabled`, `ELIPS.api.call`, `ELIPS.api.refresh` |
 | `utils.js` | Konversi nilai ke huruf, nomor sertifikat, escape HTML, sanitasi HTML materi, format tanggal, toast | `gradeLetter`, `generateCertificateNumber`, `escapeHtml`, `sanitizeHtml`, `formatDate`, `toast` |
-| `data.js` | Getter/setter seluruh koleksi data; tidak berisi aturan bisnis | `getUsers`, `getBranches`, `getCourses`, `getCurriculumVersions`, `getClasses`, `getClassInstructorHistories`, `getEnrollments`, `getClassSessions`, `getSessionsByClass`, `getAttendances`, `getSessionAttendances`, `getAttendanceCorrections`, `getModules`, `getLessons`, `getGrades`, `getCertificates`, `getCompletedLessons`, `getPublishedCertificatesByStudent` |
+| `data.js` | Getter/setter seluruh koleksi data; tidak berisi aturan bisnis | `getUsers`, `getBranches`, `getCourses`, `getCurriculumVersions`, `getClasses`, `getClassInstructorHistories`, `getEnrollments`, `getClassSessions`, `getSessionsByClass`, `getAttendances`, `getSessionAttendances`, `getAttendanceCorrections`, `getModules`, `getLessons`, `getGrades`, `getCertificates`, `getCompletedLessons`, `getPublishedCertificatesByStudent`, `getStaffAttendances`, `getStaffAttendancesByUser` |
 | `seed.js` | Data demo awal (termasuk sesi & presensi) dan migrasi/normalisasi data lama; dilewati pada mode server | dijalankan otomatis saat modul dimuat (kecuali mode server) |
 | `sync.js` | Sinkronisasi data turunan: nama instruktur, kepemilikan konten, counter modul/materi, pelepasan kursus | `syncCourseCounters` dan helper internal `syncAllContentOwners`, `releaseInstructorCourses` |
 | `progress.js` | Struktur kursus, progres belajar, overview siswa dan instruktur | `getCourseStructure`, `getCourseProgress`, `isLessonUnlocked`, `getStudentCourseOverview`, `getInstructorCourses`, `getInstructorSummary` |
@@ -149,6 +149,52 @@ Prinsip yang dipakai:
 ---
 
 ## 3. Riwayat Perubahan
+
+### v4.0 - 2026-11-09 - Absensi staf dengan kamera dan metadata kehadiran
+
+**Tujuan:** menambahkan absensi kehadiran staf/admin sebagai fitur utama dashboard Admin, dengan pengambilan foto via kamera, pratinjau, fallback unggah, serta perekaman metadata waktu, lokasi, dan perangkat yang konsisten antara mode server dan `localStorage`.
+
+Perubahan backend:
+
+- `api/schema.sql` menambahkan tabel `staff_attendances` (tabel ke-23) dengan kolom identitas pengguna, jenis `in/out`, tanggal dan waktu absensi, zona waktu, foto base64 + `photo_mime`, koordinat dan akurasi, label/sumber lokasi, IP, user agent, platform, bahasa, layar, memori perangkat, CPU core, tipe koneksi, status online, catatan, dan timestamp. Foreign key `user_id` memakai `ON DELETE CASCADE`, dengan index per pengguna/tanggal, tanggal, dan waktu.
+- `api/actions.php` menambahkan aksi `staffAttendance.create`, `staffAttendance.list`, dan `staffAttendance.delete`. Ketiganya memakai `elips_require_admin()` dan hanya mengoperasikan catatan milik admin yang login.
+- Validasi server mencakup jenis absensi, tanggal kalender (`checkdate`), waktu `takenAt`, foto wajib berupa data URL gambar yang isinya diverifikasi `getimagesizefromstring()` dengan batas ukuran, koordinat berpasangan dan dalam rentang valid, serta pembatasan panjang metadata.
+- IP dicatat server dari `REMOTE_ADDR`; `locationSource` diturunkan menjadi `gps`, `manual`, atau `none` bila tidak dikirim konsisten.
+- `api/helpers.php` menambahkan `elips_staff_attendance_public()` untuk serialisasi camelCase dan foto opsional.
+- Snapshot bootstrap **tidak** memuat koleksi absensi staf maupun foto; data hanya dibaca melalui `staffAttendance.list`.
+
+Perubahan client:
+
+- `admin/dashboard.html`: hero **Absensi Kehadiran** dengan tombol Absen Masuk/Pulang, status hari ini, serta ringkasan jam masuk/pulang; bagian riwayat absensi pribadi; modal kamera dengan video pratinjau, Ambil Foto, Ulangi, Nyalakan Kamera, dan fallback Unggah Foto; form tanggal/jam/lokasi/catatan; modal detail metadata lengkap; aksi hapus dengan konfirmasi.
+- `assets/js/core.js` menambahkan key `staffAttendances: 'elips_staffAttendances'`.
+- `assets/js/data.js` menambahkan `getStaffAttendances`, `setStaffAttendances`, dan `getStaffAttendancesByUser` (urut `takenAt` terbaru).
+- `assets/js/audit.js` menambahkan label entitas `staff_attendance: 'Absensi Staf'`.
+- `assets/css/style.css` menambahkan gaya hero absensi, riwayat, modal kamera/detail, chip metadata, dan aturan responsif.
+- Foto kamera/berkas dikompres menjadi JPEG di client sebelum disimpan. Mode lokal menyimpan data URL dan memangkas riwayat per pengguna menjadi 20 catatan; mode server menyimpan base64 di `staff_attendances.photo`.
+
+Aturan bisnis utama:
+
+- Absensi dashboard adalah absensi pribadi admin/staf yang login, bukan presensi peserta per sesi; akses lintas pengguna ditolak server.
+- Jenis `in` dan `out` boleh tercatat lebih dari sekali dalam sehari sebagai catatan terpisah.
+- Kamera memerlukan secure context (`localhost`/HTTPS); bila tidak tersedia, izin ditolak, atau dibuka via `file://`, pengguna diarahkan memakai unggah foto.
+- Geolokasi bersifat opsional; kegagalan/keterbatasan GPS tidak memblokir penyimpanan dan lokasi dapat diisi manual.
+- Create/delete mencatat audit entitas `staff_attendance`; operasi yang ditolak tidak menambah audit.
+
+Pengujian:
+
+- `php -l api/actions.php`, `php -l api/helpers.php`, dan `node --check` untuk `core.js`, `data.js`, `audit.js`, serta skrip inline dashboard lulus.
+- `php api/install.php --fresh` berhasil membuat 23 tabel termasuk `staff_attendances`.
+- `test-staff-attendance-page.js` mencakup hero, status hari ini, modal kamera/fallback, penyimpanan lokal, metadata, riwayat, detail, audit, hapus, dan empty state.
+- `test-staff-attendance-api.js` lulus 41 pemeriksaan: guard role, validasi foto/koordinat/tanggal/jenis, persistensi metadata, kepemilikan hapus, urutan riwayat, dan snapshot tanpa foto.
+- Regresi UI/API/mode lokal tetap lulus: `test-all-pages`, `test-admin-pages`, `test-p0`, `test-schedule-actions`, `test-sessions-page`, `test-branch-pages`, `test-learning`, `test-instructor`; `api-phase5` 52/52, `api-v4-sessions` 37/37, `api-v4-branches` 17/17, `api-v4-materials` 42/42; `local-phase5` 34/34, `local-v4-sessions` 47/47, `local-v4-branches` 18/18, `local-v4-materials` 35/35.
+
+Batasan increment ini:
+
+- Absensi belum terhubung ke rekap/payroll dan belum memiliki aturan jam kerja atau keterlambatan.
+- Foto disimpan sebagai base64 di database; produksi sebaiknya memindahkan berkas ke object storage dan menyimpan URL/referensi.
+- Belum ada koreksi/approval absensi oleh admin lain; catatan hanya dapat dibuat dan dihapus oleh pemiliknya.
+
+---
 
 ### v4.0 - 2026-11-09 - Aksi langsung kalender dan filter jadwal lanjutan
 
@@ -737,7 +783,7 @@ Perubahan sentralisasi:
 
 ### 5.1 MySQL (mode server)
 
-Tabel: `users`, `categories`, `branches`, `courses`, `curriculum_versions`, `classes`, `class_instructor_histories`, `modules`, `lessons`, `class_material_settings`, `class_materials`, `enrollments`, `class_sessions`, `attendances`, `attendance_corrections`, `class_lesson_progress`, `class_material_progress`, `grades`, `certificates`, `completed_lessons`, `audit_logs`, dan `notifications` (22 tabel). Detail kolom, relasi, dan foreign key ada di `erd.md` §16. Sesi login disimpan di sesi PHP native, bukan tabel database.
+Tabel: `users`, `categories`, `branches`, `courses`, `curriculum_versions`, `classes`, `class_instructor_histories`, `modules`, `lessons`, `class_material_settings`, `class_materials`, `enrollments`, `class_sessions`, `attendances`, `attendance_corrections`, `class_lesson_progress`, `class_material_progress`, `grades`, `certificates`, `completed_lessons`, `audit_logs`, `notifications`, dan `staff_attendances` (23 tabel). Detail kolom, relasi, dan foreign key ada di `erd.md` §16. Sesi login disimpan di sesi PHP native, bukan tabel database.
 
 ### 5.2 `localStorage` (mode fallback)
 
@@ -765,6 +811,7 @@ Tabel: `users`, `categories`, `branches`, `courses`, `curriculum_versions`, `cla
 | `elips_completedLessons` | Progres pelajaran legacy yang tetap dibaca untuk kompatibilitas |
 | `elips_auditLogs` | Jejak audit perubahan kursus, nilai, sertifikat, pengguna, penugasan, modul, materi, sesi, presensi, dan materi kelas |
 | `elips_notifications` | Outbox notifikasi email simulasi: penerima, subjek, isi, entitas, dan waktu |
+| `elips_staffAttendances` | Absensi pribadi staf/admin: jenis masuk/pulang, tanggal/waktu, foto, lokasi GPS/manual, dan metadata perangkat |
 | `elips_session` | Sesi pengguna yang sedang login |
 
 Akun demo utama:
@@ -785,7 +832,7 @@ Akun lama tanpa password otomatis dimigrasikan ke password demo `elips123` saat 
 
 ## 6. Hasil Pengujian Terakhir
 
-Pengujian dijalankan setelah backend PHP/MySQL, client dual-mode (v3.0), increment v4.0 Phase 1–4, penambahan cabang/kalender jadwal, dan aksi langsung/filter jadwal lanjutan:
+Pengujian dijalankan setelah backend PHP/MySQL, client dual-mode (v3.0), increment v4.0 Phase 1–4, penambahan cabang/kalender jadwal, dan aksi langsung/filter jadwal lanjutan, serta absensi staf:
 
 | Pemeriksaan | Hasil |
 |---|---|
@@ -814,6 +861,8 @@ Pengujian dijalankan setelah backend PHP/MySQL, client dual-mode (v3.0), increme
 | Mode lokal cabang (`local-v4-branches`) | ✅ 18/18 |
 | UI materi Admin/Instruktur/Peserta (`test-v4-material-ui`) | ✅ 25/25 |
 | Aksi langsung & filter kalender (`test-schedule-actions`) | ✅ Lulus |
+| Absensi staf halaman lokal (`test-staff-attendance-page`) | Lulus |
+| API absensi staf (`test-staff-attendance-api`) | Lulus 41/41 |
 | UI akademik admin (`test-academic-page`) | ✅ Lulus |
 | UI cabang & kalender admin (`test-branch-pages`) | ✅ Lulus |
 | UI jadwal/presensi lokal (`test-sessions-page`) | ✅ 47/47 |
@@ -866,6 +915,11 @@ Catatan penting yang diuji:
 - Persetujuan instruktur memblokir peserta menandai selesai sampai staf mengonfirmasi progres enrollment.
 - Snapshot materi hanya metadata; `file_path` dan `content` tidak diekspos.
 - Perubahan pengaturan/status materi tanpa alasan yang diwajibkan ditolak dan tidak menambah audit; perubahan sah mencatat nilai sebelum/sesudah.
+- Absensi staf hanya dapat dibuat/dibaca/dihapus oleh admin pemiliknya; instruktur dan peserta ditolak.
+- Foto absensi wajib berupa gambar valid; data URL non-gambar, koordinat tidak lengkap, dan tanggal tidak valid ditolak server.
+- Metadata absensi (zona waktu, lokasi, perangkat, koneksi, catatan, IP server) tersimpan konsisten dan muncul di detail.
+- Snapshot bootstrap tidak memuat koleksi/foto absensi staf; riwayat hanya dimuat lewat aksi khusus.
+- Kamera tanpa dukungan/izin/secure context menampilkan fallback unggah foto; GPS gagal tidak memblokir penyimpanan.
 
 ---
 

@@ -134,6 +134,17 @@
         });
     }
 
+    // ---------- Absensi staf/admin (kamera + metadata) ----------
+    function getStaffAttendances() { return read(KEYS.staffAttendances, []); }
+    function setStaffAttendances(list) { return write(KEYS.staffAttendances, list); }
+    function getStaffAttendancesByUser(userId) {
+        return getStaffAttendances()
+            .filter(function (a) { return Number(a.userId) === Number(userId); })
+            .sort(function (a, b) {
+                return String(b.takenAt || '').localeCompare(String(a.takenAt || ''));
+            });
+    }
+
     // ---------- Modules ----------
     function getModules() { return read(KEYS.modules, []); }
     function setModules(list) { return write(KEYS.modules, list); }
@@ -435,6 +446,9 @@
         getAttendanceCorrections: getAttendanceCorrections,
         setAttendanceCorrections: setAttendanceCorrections,
         getCorrectionsByAttendance: getCorrectionsByAttendance,
+        getStaffAttendances: getStaffAttendances,
+        setStaffAttendances: setStaffAttendances,
+        getStaffAttendancesByUser: getStaffAttendancesByUser,
         getModules: getModules,
         setModules: setModules,
         getModulesByCourse: getModulesByCourse,

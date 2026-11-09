@@ -45,6 +45,7 @@
         examResults: 'elips_examResults',
         auditLogs: 'elips_auditLogs',
         notifications: 'elips_notifications',
+        staffAttendances: 'elips_staffAttendances',
         session: 'elips_session'
     };
 

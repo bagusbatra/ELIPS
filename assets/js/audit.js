@@ -52,7 +52,8 @@
         submission: 'Pengumpulan Tugas',
         exam: 'Ujian',
         exam_participant: 'Peserta Ujian',
-        exam_result: 'Hasil Ujian'
+        exam_result: 'Hasil Ujian',
+        staff_attendance: 'Absensi Staf'
     };
 
     function actionLabel(action) {

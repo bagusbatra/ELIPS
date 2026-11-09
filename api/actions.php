@@ -93,6 +93,12 @@ function elips_dispatch(string $action, array $payload): array
             return elips_action_attendance_recap($payload);
         case 'attendance.myRecap':
             return elips_action_attendance_my_recap($payload);
+        case 'staffAttendance.create':
+            return elips_action_staff_attendance_create($payload);
+        case 'staffAttendance.list':
+            return elips_action_staff_attendance_list($payload);
+        case 'staffAttendance.delete':
+            return elips_action_staff_attendance_delete($payload);
         case 'module.create':
             return elips_action_module_create($payload);
         case 'module.update':
@@ -5040,6 +5046,199 @@ function elips_action_progress_complete(array $p): array
         'courseId' => $courseId,
         'lessonId' => $lessonId,
     ]);
+}
+
+// ---------- Absensi staf/admin ----------
+
+function elips_action_staff_attendance_create(array $p): array
+{
+    $actor = elips_require_admin();
+    $kind = strtolower(trim((string) ($p['kind'] ?? 'in')));
+    if (!in_array($kind, ['in', 'out'], true)) {
+        return elips_fail('Jenis absensi tidak valid.');
+    }
+
+    $takenRaw = trim((string) ($p['takenAt'] ?? ''));
+    try {
+        $taken = new DateTimeImmutable($takenRaw !== '' ? $takenRaw : 'now');
+    } catch (Throwable $e) {
+        return elips_fail('Waktu absensi tidak valid.');
+    }
+    $takenUtc = $taken->setTimezone(new DateTimeZone('UTC'));
+
+    $attendanceDate = trim((string) ($p['attendanceDate'] ?? ''));
+    if ($attendanceDate === '') {
+        $attendanceDate = $taken->format('Y-m-d');
+    }
+    if (!preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $attendanceDate, $dateMatch)
+        || !checkdate((int) $dateMatch[2], (int) $dateMatch[3], (int) $dateMatch[1])) {
+        return elips_fail('Tanggal absensi tidak valid.');
+    }
+
+    $photoRaw = trim((string) ($p['photo'] ?? ''));
+    if ($photoRaw === '') {
+        return elips_fail('Foto absensi wajib diambil terlebih dahulu.');
+    }
+    if (strlen($photoRaw) > 4000000) {
+        return elips_fail('Ukuran foto absensi terlalu besar.');
+    }
+    if (!preg_match('#^data:(image/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=\r\n]+)$#i', $photoRaw, $photoMatch)) {
+        return elips_fail('Format foto absensi tidak valid.');
+    }
+    $photoMime = strtolower($photoMatch[1]);
+    $encoded = preg_replace('/\s+/', '', $photoMatch[2]) ?? '';
+    $binary = base64_decode($encoded, true);
+    if ($binary === false || $binary === '') {
+        return elips_fail('Foto absensi tidak dapat dibaca.');
+    }
+    if (strlen($binary) > 2000000) {
+        return elips_fail('Ukuran foto absensi melebihi 2 MB.');
+    }
+    $imageInfo = @getimagesizefromstring($binary);
+    if (!$imageInfo || !isset($imageInfo['mime'])) {
+        return elips_fail('File foto absensi tidak valid.');
+    }
+    $detectedMime = strtolower((string) $imageInfo['mime']);
+    if (!in_array($detectedMime, ['image/jpeg', 'image/png', 'image/webp'], true)) {
+        return elips_fail('Tipe foto absensi tidak didukung.');
+    }
+    $photoMime = $detectedMime;
+
+    $rawLat = $p['latitude'] ?? null;
+    $rawLng = $p['longitude'] ?? null;
+    $hasLat = $rawLat !== null && $rawLat !== '';
+    $hasLng = $rawLng !== null && $rawLng !== '';
+    if ($hasLat !== $hasLng) {
+        return elips_fail('Koordinat lokasi tidak lengkap.');
+    }
+    $latitude = null;
+    $longitude = null;
+    if ($hasLat) {
+        if (!is_numeric($rawLat) || !is_numeric($rawLng)) {
+            return elips_fail('Koordinat lokasi tidak valid.');
+        }
+        $latitude = (float) $rawLat;
+        $longitude = (float) $rawLng;
+        if ($latitude < -90 || $latitude > 90 || $longitude < -180 || $longitude > 180) {
+            return elips_fail('Koordinat lokasi di luar rentang yang valid.');
+        }
+    }
+    $accuracy = null;
+    if (isset($p['accuracyM']) && $p['accuracyM'] !== '' && $p['accuracyM'] !== null) {
+        if (!is_numeric($p['accuracyM'])) {
+            return elips_fail('Akurasi lokasi tidak valid.');
+        }
+        $accuracy = max(0, round((float) $p['accuracyM'], 2));
+    }
+
+    $locationLabel = mb_substr(trim((string) ($p['locationLabel'] ?? '')), 0, 255);
+    $locationSource = strtolower(trim((string) ($p['locationSource'] ?? 'none')));
+    if (!in_array($locationSource, ['gps', 'manual', 'none'], true)) {
+        $locationSource = 'none';
+    }
+    if ($locationSource === 'none' && $latitude !== null && $longitude !== null) {
+        $locationSource = 'gps';
+    }
+    if ($locationSource === 'none' && $locationLabel !== '') {
+        $locationSource = 'manual';
+    }
+
+    $timezone = mb_substr(trim((string) ($p['timezone'] ?? '')), 0, 64);
+    $ipAddress = mb_substr(trim((string) ($_SERVER['REMOTE_ADDR'] ?? '')), 0, 45);
+    $userAgent = mb_substr(trim((string) ($p['userAgent'] ?? '')), 0, 255);
+    $platform = mb_substr(trim((string) ($p['platform'] ?? '')), 0, 120);
+    $language = mb_substr(trim((string) ($p['language'] ?? '')), 0, 30);
+    $screen = mb_substr(trim((string) ($p['screen'] ?? '')), 0, 30);
+    $connectionType = mb_substr(trim((string) ($p['connectionType'] ?? '')), 0, 30);
+    $deviceMemory = null;
+    if (isset($p['deviceMemory']) && $p['deviceMemory'] !== '' && is_numeric($p['deviceMemory'])) {
+        $deviceMemory = max(0, round((float) $p['deviceMemory'], 2));
+    }
+    $hardwareConcurrency = null;
+    if (isset($p['hardwareConcurrency']) && $p['hardwareConcurrency'] !== ''
+        && is_numeric($p['hardwareConcurrency'])) {
+        $hardwareConcurrency = max(0, (int) $p['hardwareConcurrency']);
+    }
+    $online = !empty($p['online']) ? 1 : 0;
+    $notes = mb_substr(trim((string) ($p['notes'] ?? '')), 0, 2000);
+
+    $db = elips_db();
+    $stmt = $db->prepare(
+        'INSERT INTO staff_attendances
+            (user_id, kind, attendance_date, taken_at, timezone, photo, photo_mime,
+             latitude, longitude, accuracy_m, location_label, location_source,
+             ip_address, user_agent, platform, language, screen, device_memory,
+             hardware_concurrency, connection_type, online, notes, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP())'
+    );
+    $stmt->execute([
+        (int) $actor['id'], $kind, $attendanceDate, $takenUtc->format('Y-m-d H:i:s'), $timezone,
+        $encoded, $photoMime, $latitude, $longitude, $accuracy, $locationLabel, $locationSource,
+        $ipAddress, $userAgent, $platform, $language, $screen, $deviceMemory,
+        $hardwareConcurrency, $connectionType, $online, $notes,
+    ]);
+    $id = (int) $db->lastInsertId();
+
+    $label = ($kind === 'in' ? 'Absensi Masuk' : 'Absensi Pulang') . ' — ' . $attendanceDate;
+    $detail = 'Mencatat ' . ($kind === 'in' ? 'absensi masuk' : 'absensi pulang')
+        . ' pada ' . $taken->format('Y-m-d H:i')
+        . ($locationLabel !== '' ? ' di ' . $locationLabel : '')
+        . ($latitude !== null ? ' (' . $latitude . ', ' . $longitude . ')' : '') . '.';
+    elips_audit('create', 'staff_attendance', $id, $label, $detail, $actor);
+
+    $rowStmt = $db->prepare(
+        'SELECT sa.*, u.name AS user_name
+         FROM staff_attendances sa
+         LEFT JOIN users u ON u.id = sa.user_id
+         WHERE sa.id = ? LIMIT 1'
+    );
+    $rowStmt->execute([$id]);
+    $row = $rowStmt->fetch();
+    return elips_ok('Absensi berhasil disimpan.', $row ? elips_staff_attendance_public($row, true) : null);
+}
+
+function elips_action_staff_attendance_list(array $p): array
+{
+    $actor = elips_require_admin();
+    $limit = (int) ($p['limit'] ?? 30);
+    $limit = max(1, min(100, $limit));
+    $stmt = elips_db()->prepare(
+        'SELECT sa.*, u.name AS user_name
+         FROM staff_attendances sa
+         LEFT JOIN users u ON u.id = sa.user_id
+         WHERE sa.user_id = ?
+         ORDER BY sa.taken_at DESC, sa.id DESC
+         LIMIT ' . $limit
+    );
+    $stmt->execute([(int) $actor['id']]);
+    $records = [];
+    foreach ($stmt->fetchAll() as $row) {
+        $records[] = elips_staff_attendance_public($row, true);
+    }
+    return elips_ok('Riwayat absensi dimuat.', $records);
+}
+
+function elips_action_staff_attendance_delete(array $p): array
+{
+    $actor = elips_require_admin();
+    $id = (int) ($p['id'] ?? 0);
+    $stmt = elips_db()->prepare('SELECT * FROM staff_attendances WHERE id = ? LIMIT 1');
+    $stmt->execute([$id]);
+    $row = $stmt->fetch();
+    if (!$row) {
+        return elips_fail('Absensi tidak ditemukan.');
+    }
+    if ((int) $row['user_id'] !== (int) $actor['id']) {
+        return elips_fail('Anda hanya dapat menghapus absensi milik sendiri.');
+    }
+
+    $delete = elips_db()->prepare('DELETE FROM staff_attendances WHERE id = ?');
+    $delete->execute([$id]);
+
+    $label = ($row['kind'] === 'in' ? 'Absensi Masuk' : 'Absensi Pulang')
+        . ' — ' . elips_date_only($row['attendance_date']);
+    elips_audit('delete', 'staff_attendance', $id, $label, 'Menghapus catatan ' . $label . '.', $actor);
+    return elips_ok('Catatan absensi dihapus.');
 }
 
 // ---------- Admin housekeeping ----------

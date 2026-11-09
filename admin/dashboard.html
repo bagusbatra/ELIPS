@@ -97,6 +97,41 @@
                 <p class="dashboard-subtitle">Ringkasan keseluruhan sistem LMS</p>
             </div>
 
+            <section class="attendance-hero" aria-labelledby="attendanceHeroTitle">
+                <div class="attendance-hero-content">
+                    <div class="attendance-hero-icon">
+                        <i class="bi bi-camera-video-fill"></i>
+                    </div>
+                    <div class="attendance-hero-text">
+                        <span class="attendance-hero-eyebrow">Fitur Utama</span>
+                        <h2 class="attendance-hero-title" id="attendanceHeroTitle">Absensi Kehadiran</h2>
+                        <p class="attendance-hero-description">
+                            Klik tombol absen untuk membuka kamera. Foto, jam, lokasi, dan informasi
+                            perangkat akan direkam otomatis sebagai bukti kehadiran.
+                        </p>
+                        <div class="attendance-hero-status" id="attendanceHeroStatus">
+                            Memuat status absensi hari ini&hellip;
+                        </div>
+                        <div class="attendance-hero-today">
+                            <span class="attendance-pill" id="attendanceTodayIn">
+                                <i class="bi bi-box-arrow-in-right"></i> Masuk: &ndash;
+                            </span>
+                            <span class="attendance-pill" id="attendanceTodayOut">
+                                <i class="bi bi-box-arrow-right"></i> Pulang: &ndash;
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                <div class="attendance-hero-actions">
+                    <button type="button" class="btn btn-primary btn-lg" onclick="openAttendanceModal('in')">
+                        <i class="bi bi-camera"></i> Absen Masuk
+                    </button>
+                    <button type="button" class="btn btn-outline btn-lg" onclick="openAttendanceModal('out')">
+                        <i class="bi bi-camera-fill"></i> Absen Pulang
+                    </button>
+                </div>
+            </section>
+
             <div class="dashboard-stats">
                 <div class="stat-card">
                     <div class="stat-card-icon blue">
@@ -132,6 +167,28 @@
                     <div class="stat-card-info">
                         <div class="stat-card-value">0</div>
                         <div class="stat-card-label">Sertifikat Terbit</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="dashboard-section" id="attendanceHistorySection">
+                <div class="dashboard-section-header">
+                    <div>
+                        <h2 class="dashboard-section-title">Riwayat Absensi Saya</h2>
+                        <p class="attendance-history-hint">
+                            Catatan terbaru lengkap dengan foto dan metadata perangkat.
+                        </p>
+                    </div>
+                    <div class="attendance-history-tools">
+                        <span class="attendance-history-count" id="attendanceHistoryCount">0 catatan</span>
+                        <button type="button" class="btn btn-ghost" onclick="loadAttendanceHistory()">
+                            <i class="bi bi-arrow-clockwise"></i> Muat Ulang
+                        </button>
+                    </div>
+                </div>
+                <div class="dashboard-section-body">
+                    <div class="attendance-history" id="attendanceHistory">
+                        <div class="attendance-empty">Memuat riwayat absensi&hellip;</div>
                     </div>
                 </div>
             </div>
@@ -311,6 +368,117 @@
         </main>
     </div>
 
+    <!-- Modal Absensi: kamera, foto, dan metadata -->
+    <div id="attendanceModal" class="attendance-modal" style="display: none;">
+        <div class="attendance-modal-card" role="dialog" aria-modal="true" aria-labelledby="attendanceModalTitle">
+            <div class="attendance-modal-header">
+                <div>
+                    <h3 class="attendance-modal-title" id="attendanceModalTitle">Absen Masuk</h3>
+                    <p class="attendance-modal-subtitle" id="attendanceModalSubtitle">
+                        Ambil foto melalui kamera atau unggah foto sebagai alternatif.
+                    </p>
+                </div>
+                <button type="button" class="attendance-modal-close" onclick="closeAttendanceModal()" aria-label="Tutup">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+            <div class="attendance-modal-body">
+                <div class="attendance-camera-panel">
+                    <div class="attendance-camera-stage">
+                        <video id="attendanceVideo" autoplay playsinline muted style="display: none;"></video>
+                        <canvas id="attendanceCanvas" style="display: none;"></canvas>
+                        <img id="attendancePreview" alt="Pratinjau foto absensi" style="display: none;">
+                        <div class="attendance-camera-placeholder" id="attendanceCameraPlaceholder">
+                            <i class="bi bi-camera-video"></i>
+                            <p>Kamera belum aktif</p>
+                            <small>Klik &ldquo;Nyalakan Kamera&rdquo; atau unggah foto sebagai alternatif.</small>
+                        </div>
+                        <div class="attendance-camera-marker" id="attendanceCameraMarker" style="display: none;">
+                            <span><i class="bi bi-record-circle"></i> Kamera aktif</span>
+                        </div>
+                    </div>
+                    <div class="attendance-camera-status" id="attendanceCameraStatus">
+                        <i class="bi bi-info-circle"></i>
+                        <span>Menyiapkan kamera&hellip;</span>
+                    </div>
+                    <div class="attendance-camera-controls">
+                        <button type="button" class="btn btn-primary" id="attendanceCaptureBtn"
+                            onclick="captureAttendancePhoto()" disabled>
+                            <i class="bi bi-camera"></i> Ambil Foto
+                        </button>
+                        <button type="button" class="btn btn-ghost" id="attendanceRetakeBtn"
+                            onclick="retakeAttendancePhoto()" style="display: none;">
+                            <i class="bi bi-arrow-counterclockwise"></i> Ulangi
+                        </button>
+                        <button type="button" class="btn btn-outline" id="attendanceStartBtn"
+                            onclick="startAttendanceCamera()">
+                            <i class="bi bi-camera-video"></i> Nyalakan Kamera
+                        </button>
+                        <label class="btn btn-ghost attendance-upload-btn">
+                            <i class="bi bi-upload"></i> Unggah Foto
+                            <input type="file" id="attendanceFile" accept="image/*" capture="user"
+                                onchange="handleAttendanceFile(event)" hidden>
+                        </label>
+                    </div>
+                </div>
+                <form class="attendance-meta-panel" id="attendanceForm" onsubmit="return saveStaffAttendance(event)">
+                    <div class="attendance-form-grid">
+                        <div class="form-group">
+                            <label class="form-label" for="attendanceDate">Tanggal Absensi *</label>
+                            <input type="date" id="attendanceDate" class="form-input" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="attendanceTime">Jam Tercatat</label>
+                            <input type="text" id="attendanceTime" class="form-input" readonly>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="attendanceLocationLabel">Lokasi</label>
+                        <div class="attendance-location-row">
+                            <input type="text" id="attendanceLocationLabel" class="form-input"
+                                placeholder="Contoh: Kantor Pusat Jakarta" maxlength="255">
+                            <button type="button" class="btn btn-outline" onclick="requestAttendanceLocation(true)">
+                                <i class="bi bi-geo-alt"></i> Ambil Lokasi
+                            </button>
+                        </div>
+                        <small class="form-hint" id="attendanceCoordinateHint">
+                            Lokasi GPS belum diambil.
+                        </small>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="attendanceNotes">Catatan</label>
+                        <textarea id="attendanceNotes" class="form-input" rows="2" maxlength="2000"
+                            placeholder="Catatan tambahan (opsional)"></textarea>
+                    </div>
+                    <div class="attendance-meta-preview" id="attendanceMetaPreview"></div>
+                    <div class="attendance-modal-actions">
+                        <button type="button" class="btn btn-ghost" onclick="closeAttendanceModal()">Batal</button>
+                        <button type="submit" class="btn btn-primary" id="attendanceSaveBtn" disabled>
+                            <i class="bi bi-check2-circle"></i> Simpan Absensi
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Detail Absensi -->
+    <div id="attendanceDetailModal" class="attendance-modal" style="display: none;">
+        <div class="attendance-modal-card attendance-detail-card" role="dialog" aria-modal="true"
+            aria-labelledby="attendanceDetailTitle">
+            <div class="attendance-modal-header">
+                <div>
+                    <h3 class="attendance-modal-title" id="attendanceDetailTitle">Detail Absensi</h3>
+                    <p class="attendance-modal-subtitle" id="attendanceDetailSubtitle">Metadata lengkap catatan absensi.</p>
+                </div>
+                <button type="button" class="attendance-modal-close" onclick="closeAttendanceDetail()" aria-label="Tutup">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+            <div class="attendance-detail-body" id="attendanceDetailBody"></div>
+        </div>
+    </div>
+
     <script src="../assets/js/config.js"></script>
     <script src="../assets/js/core.js"></script>
     <script src="../assets/js/api.js"></script>
@@ -329,9 +497,828 @@
     <script src="../assets/js/crud-grades.js"></script>
     <script src="../assets/js/ui.js"></script>
     <script>
-        document.addEventListener('DOMContentLoaded', function () {
-            ELIPS.requireRole('admin');
-        });
+        (function () {
+            'use strict';
+
+            const MAX_HISTORY = 30;
+            const MAX_PHOTO_EDGE = 640;
+            const PHOTO_QUALITY = 0.72;
+            const LOCAL_KEEP_PER_USER = 20;
+
+            const state = {
+                kind: 'in',
+                stream: null,
+                photo: '',
+                photoMime: '',
+                takenAt: null,
+                records: [],
+                location: { lat: null, lng: null, accuracy: null, label: '' }
+            };
+
+            function $(id) {
+                return document.getElementById(id);
+            }
+
+            function pad(value) {
+                return value < 10 ? '0' + value : String(value);
+            }
+
+            function todayLocalDate(date) {
+                const d = date || new Date();
+                return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+            }
+
+            function formatTimeOnly(value) {
+                if (!value) return '-';
+                const date = new Date(value);
+                if (isNaN(date.getTime())) return String(value);
+                return date.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+            }
+
+            function formatDateTime(value) {
+                if (!value) return '-';
+                const date = new Date(value);
+                if (isNaN(date.getTime())) return String(value);
+                return date.toLocaleString('id-ID', {
+                    day: '2-digit', month: 'short', year: 'numeric',
+                    hour: '2-digit', minute: '2-digit'
+                });
+            }
+
+            function formatCoords(lat, lng, accuracy) {
+                const latitude = Number(lat);
+                const longitude = Number(lng);
+                if (!isFinite(latitude) || !isFinite(longitude)) return '-';
+                let text = latitude.toFixed(6) + ', ' + longitude.toFixed(6);
+                if (accuracy !== null && accuracy !== undefined && isFinite(Number(accuracy))) {
+                    text += ' (±' + Math.round(Number(accuracy)) + ' m)';
+                }
+                return text;
+            }
+
+            function collectEnvironment() {
+                const nav = window.navigator || {};
+                const conn = nav.connection || nav.mozConnection || nav.webkitConnection || null;
+                let timezone = '';
+                try {
+                    timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+                } catch (err) {
+                    timezone = '';
+                }
+                const scr = window.screen || {};
+                return {
+                    timezone: timezone,
+                    userAgent: nav.userAgent || '',
+                    platform: nav.platform || '',
+                    language: nav.language || '',
+                    screen: scr.width && scr.height ? scr.width + 'x' + scr.height : '',
+                    deviceMemory: typeof nav.deviceMemory === 'number' ? nav.deviceMemory : null,
+                    hardwareConcurrency: typeof nav.hardwareConcurrency === 'number' ? nav.hardwareConcurrency : null,
+                    connectionType: conn ? (conn.effectiveType || conn.type || '') : '',
+                    online: nav.onLine !== false
+                };
+            }
+
+            function setCameraStatus(message, tone) {
+                const el = $('attendanceCameraStatus');
+                if (!el) return;
+                const icon = tone === 'error' ? 'exclamation-triangle'
+                    : tone === 'success' ? 'check-circle' : 'info-circle';
+                el.className = 'attendance-camera-status' + (tone ? ' is-' + tone : '');
+                el.innerHTML = '<i class="bi bi-' + icon + '"></i><span>'
+                    + ELIPS.escapeHtml(message) + '</span>';
+            }
+
+            function renderAttendanceMetaPreview() {
+                const el = $('attendanceMetaPreview');
+                if (!el) return;
+                const env = collectEnvironment();
+                const items = [
+                    ['Zona waktu', env.timezone || '-'],
+                    ['Layar', env.screen || '-'],
+                    ['Perangkat', env.platform || '-'],
+                    ['Jaringan', env.connectionType || 'Tidak diketahui'],
+                    ['CPU core', env.hardwareConcurrency ? String(env.hardwareConcurrency) : '-'],
+                    ['Status', env.online ? 'Online' : 'Offline']
+                ];
+                el.innerHTML = items.map(function (item) {
+                    return '<span class="attendance-meta-chip"><strong>'
+                        + ELIPS.escapeHtml(item[0]) + ':</strong> '
+                        + ELIPS.escapeHtml(item[1]) + '</span>';
+                }).join('');
+            }
+
+            function setLocationHint() {
+                const hint = $('attendanceCoordinateHint');
+                if (!hint) return;
+                const loc = state.location;
+                if (loc.lat === null || loc.lng === null) {
+                    hint.textContent = 'Lokasi GPS belum diambil.';
+                    return;
+                }
+                hint.textContent = 'Koordinat: ' + loc.lat.toFixed(6) + ', ' + loc.lng.toFixed(6)
+                    + (loc.accuracy !== null ? ' (akurasi ±' + Math.round(loc.accuracy) + ' m)' : '');
+            }
+
+            function requestAttendanceLocation(manual) {
+                const geo = window.navigator ? window.navigator.geolocation : null;
+                if (!geo || typeof geo.getCurrentPosition !== 'function') {
+                    if (manual) {
+                        ELIPS.toast('Perangkat tidak mendukung geolokasi. Isi lokasi secara manual.');
+                    }
+                    setLocationHint();
+                    return;
+                }
+                if (manual) setCameraStatus('Mengambil lokasi GPS...', 'info');
+                try {
+                    geo.getCurrentPosition(function (position) {
+                        state.location.lat = Number(position.coords.latitude);
+                        state.location.lng = Number(position.coords.longitude);
+                        state.location.accuracy = position.coords.accuracy !== undefined
+                            ? Number(position.coords.accuracy) : null;
+                        const label = $('attendanceLocationLabel');
+                        if (label && !label.value.trim()) {
+                            label.value = 'Koordinat ' + state.location.lat.toFixed(6)
+                                + ', ' + state.location.lng.toFixed(6);
+                        }
+                        setLocationHint();
+                        if (manual) setCameraStatus('Lokasi GPS berhasil direkam.', 'success');
+                    }, function (error) {
+                        let message = 'Lokasi tidak dapat diambil.';
+                        if (error && error.code === 1) {
+                            message = 'Izin lokasi ditolak. Isi lokasi secara manual bila perlu.';
+                        } else if (error && error.code === 3) {
+                            message = 'Pengambilan lokasi melebihi batas waktu.';
+                        } else if (error && error.code === 2) {
+                            message = 'Lokasi tidak tersedia dari perangkat ini.';
+                        }
+                        if (manual) {
+                            setCameraStatus(message, 'error');
+                            ELIPS.toast(message);
+                        }
+                    }, { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 });
+                } catch (err) {
+                    if (manual) setCameraStatus('Geolokasi tidak dapat diakses di halaman ini.', 'error');
+                }
+            }
+
+            function stopAttendanceCamera() {
+                const stream = state.stream;
+                state.stream = null;
+                if (stream && typeof stream.getTracks === 'function') {
+                    stream.getTracks().forEach(function (track) {
+                        try { track.stop(); } catch (err) { /* ignore */ }
+                    });
+                }
+                const video = $('attendanceVideo');
+                if (video) {
+                    try { video.pause(); } catch (err) { /* ignore */ }
+                    video.srcObject = null;
+                    video.style.display = 'none';
+                }
+                const marker = $('attendanceCameraMarker');
+                if (marker) marker.style.display = 'none';
+                const capture = $('attendanceCaptureBtn');
+                if (capture) capture.disabled = true;
+            }
+
+            function startAttendanceCamera() {
+                if (state.photo) {
+                    setCameraStatus('Foto sudah diambil. Klik Ulangi untuk mengambil ulang.', 'info');
+                    return Promise.resolve();
+                }
+                const media = window.navigator ? window.navigator.mediaDevices : null;
+                if (!media || typeof media.getUserMedia !== 'function') {
+                    setCameraStatus('Kamera tidak tersedia di perangkat/browser ini. Gunakan tombol Unggah Foto.', 'error');
+                    return Promise.resolve();
+                }
+                if (window.isSecureContext === false) {
+                    setCameraStatus('Kamera memerlukan HTTPS atau localhost. Gunakan tombol Unggah Foto.', 'error');
+                    return Promise.resolve();
+                }
+                setCameraStatus('Meminta izin kamera...', 'info');
+                const startBtn = $('attendanceStartBtn');
+                if (startBtn) startBtn.disabled = true;
+                const constraints = {
+                    video: {
+                        facingMode: state.kind === 'in' ? 'user' : 'environment',
+                        width: { ideal: 1280 }
+                    },
+                    audio: false
+                };
+                let request;
+                try {
+                    request = media.getUserMedia(constraints);
+                } catch (err) {
+                    request = Promise.reject(err);
+                }
+                return Promise.resolve(request).then(function (stream) {
+                    state.stream = stream;
+                    const video = $('attendanceVideo');
+                    if (video) {
+                        video.srcObject = stream;
+                        video.style.display = 'block';
+                        const play = video.play();
+                        if (play && typeof play.catch === 'function') play.catch(function () { });
+                    }
+                    if ($('attendanceCameraPlaceholder')) $('attendanceCameraPlaceholder').style.display = 'none';
+                    if ($('attendancePreview')) $('attendancePreview').style.display = 'none';
+                    if ($('attendanceCameraMarker')) $('attendanceCameraMarker').style.display = 'flex';
+                    if ($('attendanceCaptureBtn')) $('attendanceCaptureBtn').disabled = false;
+                    setCameraStatus('Kamera siap. Posisikan wajah lalu klik Ambil Foto.', 'success');
+                }).catch(function (error) {
+                    const name = error && error.name;
+                    let message = 'Kamera tidak dapat diakses. Gunakan tombol Unggah Foto.';
+                    if (name === 'NotAllowedError' || name === 'SecurityError') {
+                        message = 'Izin kamera ditolak. Gunakan Unggah Foto atau izinkan kamera di pengaturan browser.';
+                    } else if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+                        message = 'Kamera tidak ditemukan. Gunakan tombol Unggah Foto.';
+                    } else if (name === 'NotReadableError' || name === 'TrackStartError') {
+                        message = 'Kamera sedang dipakai aplikasi lain. Tutup aplikasi tersebut lalu coba lagi.';
+                    } else if (name === 'OverconstrainedError') {
+                        message = 'Kamera tidak mendukung mode yang diminta. Coba lagi atau unggah foto.';
+                    }
+                    setCameraStatus(message, 'error');
+                }).then(function () {
+                    if (startBtn) startBtn.disabled = false;
+                });
+            }
+
+            function setAttendancePhoto(dataUrl, mime) {
+                state.photo = dataUrl;
+                state.photoMime = mime || 'image/jpeg';
+                state.takenAt = new Date().toISOString();
+                const preview = $('attendancePreview');
+                if (preview) {
+                    preview.src = dataUrl;
+                    preview.style.display = 'block';
+                }
+                if ($('attendanceVideo')) $('attendanceVideo').style.display = 'none';
+                if ($('attendanceCameraPlaceholder')) $('attendanceCameraPlaceholder').style.display = 'none';
+                if ($('attendanceCameraMarker')) $('attendanceCameraMarker').style.display = 'none';
+                if ($('attendanceCaptureBtn')) $('attendanceCaptureBtn').disabled = true;
+                if ($('attendanceRetakeBtn')) $('attendanceRetakeBtn').style.display = 'inline-flex';
+                if ($('attendanceSaveBtn')) $('attendanceSaveBtn').disabled = false;
+                if ($('attendanceTime')) $('attendanceTime').value = formatTimeOnly(state.takenAt);
+                if ($('attendanceDate') && !$('attendanceDate').value) {
+                    $('attendanceDate').value = todayLocalDate();
+                }
+            }
+
+            function captureAttendancePhoto() {
+                const video = $('attendanceVideo');
+                if (!video || !video.videoWidth) {
+                    setCameraStatus('Kamera belum siap. Tunggu sebentar atau gunakan Unggah Foto.', 'error');
+                    return;
+                }
+                const canvas = $('attendanceCanvas');
+                const scale = Math.min(1, MAX_PHOTO_EDGE / Math.max(video.videoWidth, video.videoHeight));
+                canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
+                canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
+                const context = canvas.getContext('2d');
+                if (!context) {
+                    setCameraStatus('Browser tidak mendukung pengambilan foto. Gunakan Unggah Foto.', 'error');
+                    return;
+                }
+                context.drawImage(video, 0, 0, canvas.width, canvas.height);
+                let dataUrl = '';
+                try {
+                    dataUrl = canvas.toDataURL('image/jpeg', PHOTO_QUALITY);
+                } catch (err) {
+                    dataUrl = '';
+                }
+                if (!dataUrl || dataUrl.indexOf('data:image/') !== 0) {
+                    setCameraStatus('Foto gagal diambil. Coba lagi atau gunakan Unggah Foto.', 'error');
+                    return;
+                }
+                stopAttendanceCamera();
+                setAttendancePhoto(dataUrl, 'image/jpeg');
+                setCameraStatus('Foto berhasil diambil. Periksa data lalu simpan absensi.', 'success');
+            }
+
+            function retakeAttendancePhoto() {
+                state.photo = '';
+                state.photoMime = '';
+                state.takenAt = null;
+                if ($('attendancePreview')) {
+                    $('attendancePreview').style.display = 'none';
+                    $('attendancePreview').removeAttribute('src');
+                }
+                if ($('attendanceRetakeBtn')) $('attendanceRetakeBtn').style.display = 'none';
+                if ($('attendanceSaveBtn')) $('attendanceSaveBtn').disabled = true;
+                if ($('attendanceVideo')) $('attendanceVideo').style.display = 'none';
+                if ($('attendanceCameraPlaceholder')) $('attendanceCameraPlaceholder').style.display = 'flex';
+                if ($('attendanceTime')) $('attendanceTime').value = '';
+                startAttendanceCamera();
+            }
+
+            function compressAttendanceImage(dataUrl, maxEdge) {
+                return new Promise(function (resolve) {
+                    try {
+                        const image = new Image();
+                        image.onload = function () {
+                            try {
+                                const scale = Math.min(1, maxEdge / Math.max(image.width || 1, image.height || 1));
+                                const canvas = document.createElement('canvas');
+                                canvas.width = Math.max(1, Math.round((image.width || 1) * scale));
+                                canvas.height = Math.max(1, Math.round((image.height || 1) * scale));
+                                const context = canvas.getContext('2d');
+                                if (!context) {
+                                    resolve(dataUrl);
+                                    return;
+                                }
+                                context.drawImage(image, 0, 0, canvas.width, canvas.height);
+                                resolve(canvas.toDataURL('image/jpeg', PHOTO_QUALITY));
+                            } catch (err) {
+                                resolve(dataUrl);
+                            }
+                        };
+                        image.onerror = function () { resolve(dataUrl); };
+                        image.src = dataUrl;
+                    } catch (err) {
+                        resolve(dataUrl);
+                    }
+                });
+            }
+
+            function handleAttendanceFile(event) {
+                const input = event && event.target;
+                const file = input && input.files && input.files[0];
+                if (!file) return;
+                if (!/^image\//.test(file.type || '')) {
+                    ELIPS.toast('File harus berupa gambar.');
+                    input.value = '';
+                    return;
+                }
+                if (file.size > 8 * 1024 * 1024) {
+                    ELIPS.toast('Ukuran file maksimal 8 MB.');
+                    input.value = '';
+                    return;
+                }
+                setCameraStatus('Membaca file foto...', 'info');
+                const reader = new FileReader();
+                reader.onload = function () {
+                    compressAttendanceImage(String(reader.result || ''), MAX_PHOTO_EDGE).then(function (dataUrl) {
+                        if (!dataUrl || dataUrl.indexOf('data:image/') !== 0) {
+                            setCameraStatus('File foto tidak dapat dibaca. Coba file lain.', 'error');
+                        } else {
+                            stopAttendanceCamera();
+                            setAttendancePhoto(dataUrl, file.type || 'image/jpeg');
+                            setCameraStatus('Foto dari file berhasil dimuat. Periksa data lalu simpan absensi.', 'success');
+                        }
+                        input.value = '';
+                    });
+                };
+                reader.onerror = function () {
+                    setCameraStatus('Gagal membaca file foto.', 'error');
+                    input.value = '';
+                };
+                reader.readAsDataURL(file);
+            }
+
+            function buildAttendancePayload() {
+                const env = collectEnvironment();
+                const locationInput = $('attendanceLocationLabel');
+                const locationLabel = locationInput ? locationInput.value.trim() : '';
+                const lat = state.location.lat;
+                const lng = state.location.lng;
+                const hasCoords = lat !== null && lng !== null && isFinite(lat) && isFinite(lng);
+                const locationSource = hasCoords ? 'gps' : (locationLabel ? 'manual' : 'none');
+                const notesInput = $('attendanceNotes');
+                const dateInput = $('attendanceDate');
+                return {
+                    kind: state.kind,
+                    attendanceDate: dateInput && dateInput.value ? dateInput.value : todayLocalDate(),
+                    takenAt: state.takenAt || new Date().toISOString(),
+                    timezone: env.timezone,
+                    photo: state.photo,
+                    latitude: hasCoords ? lat : null,
+                    longitude: hasCoords ? lng : null,
+                    accuracyM: hasCoords ? state.location.accuracy : null,
+                    locationLabel: locationLabel,
+                    locationSource: locationSource,
+                    userAgent: env.userAgent,
+                    platform: env.platform,
+                    language: env.language,
+                    screen: env.screen,
+                    deviceMemory: env.deviceMemory,
+                    hardwareConcurrency: env.hardwareConcurrency,
+                    connectionType: env.connectionType,
+                    online: env.online,
+                    notes: notesInput ? notesInput.value.trim() : ''
+                };
+            }
+
+            function trimLocalAttendance(list, userId) {
+                const mine = list.filter(function (item) {
+                    return Number(item.userId) === Number(userId);
+                });
+                if (mine.length <= LOCAL_KEEP_PER_USER) return list;
+                const keep = {};
+                mine.sort(function (a, b) {
+                    return String(b.takenAt || '').localeCompare(String(a.takenAt || ''));
+                }).slice(0, LOCAL_KEEP_PER_USER).forEach(function (item) {
+                    keep[item.id] = true;
+                });
+                return list.filter(function (item) {
+                    return Number(item.userId) !== Number(userId) || keep[item.id];
+                });
+            }
+
+            function saveStaffAttendance(event) {
+                if (event) event.preventDefault();
+                const user = ELIPS.getCurrentUser ? ELIPS.getCurrentUser() : null;
+                if (!user) {
+                    ELIPS.toast('Sesi berakhir. Silakan masuk kembali.');
+                    return false;
+                }
+                if (!state.photo) {
+                    ELIPS.toast('Ambil foto absensi terlebih dahulu.');
+                    return false;
+                }
+                const payload = buildAttendancePayload();
+                if (!payload.attendanceDate) {
+                    ELIPS.toast('Tanggal absensi wajib diisi.');
+                    return false;
+                }
+                const saveBtn = $('attendanceSaveBtn');
+                if (saveBtn) saveBtn.disabled = true;
+
+                if (ELIPS.api && ELIPS.api.enabled) {
+                    const result = ELIPS.api.call('staffAttendance.create', payload);
+                    if (!result.ok) {
+                        ELIPS.toast(result.message || 'Absensi gagal disimpan.');
+                        if (saveBtn) saveBtn.disabled = false;
+                        return false;
+                    }
+                    ELIPS.toast(result.message || 'Absensi berhasil disimpan.');
+                    closeAttendanceModal();
+                    loadAttendanceHistory();
+                    return false;
+                }
+
+                try {
+                    const all = ELIPS.getStaffAttendances();
+                    const record = Object.assign({}, payload, {
+                        id: ELIPS.nextId(all),
+                        userId: user.id,
+                        userName: user.name,
+                        photoMime: state.photoMime || 'image/jpeg',
+                        ipAddress: 'lokal',
+                        createdAt: new Date().toISOString(),
+                        updatedAt: null
+                    });
+                    all.push(record);
+                    ELIPS.setStaffAttendances(trimLocalAttendance(all, user.id));
+                    if (typeof ELIPS.logAudit === 'function') {
+                        ELIPS.logAudit({
+                            action: 'create',
+                            entity: 'staff_attendance',
+                            entityId: record.id,
+                            entityLabel: (record.kind === 'in' ? 'Absensi Masuk' : 'Absensi Pulang')
+                                + ' — ' + record.attendanceDate,
+                            detail: 'Mencatat absensi ' + (record.kind === 'in' ? 'masuk' : 'pulang')
+                                + ' pada ' + formatDateTime(record.takenAt)
+                                + (record.locationLabel ? ' di ' + record.locationLabel : '') + '.',
+                            actorId: user.id
+                        });
+                    }
+                    ELIPS.toast('Absensi berhasil disimpan.');
+                    closeAttendanceModal();
+                    loadAttendanceHistory();
+                } catch (err) {
+                    if (saveBtn) saveBtn.disabled = false;
+                    ELIPS.toast('Absensi gagal disimpan: '
+                        + (err && err.message ? err.message : 'penyimpanan penuh'));
+                }
+                return false;
+            }
+
+            function deviceSummary(record) {
+                const parts = [];
+                if (record.platform) parts.push(record.platform);
+                if (record.screen) parts.push(record.screen);
+                if (record.connectionType) parts.push(record.connectionType);
+                return parts.length ? parts.join(' • ') : 'Perangkat tidak tercatat';
+            }
+
+            function locationSummary(record) {
+                if (record.locationLabel) return record.locationLabel;
+                if (record.latitude !== null && record.latitude !== undefined
+                    && record.longitude !== null && record.longitude !== undefined) {
+                    return formatCoords(record.latitude, record.longitude, record.accuracyM);
+                }
+                return 'Lokasi tidak tersedia';
+            }
+
+            function renderAttendanceHistory() {
+                const container = $('attendanceHistory');
+                const counter = $('attendanceHistoryCount');
+                if (!container) return;
+                const records = state.records || [];
+                if (counter) counter.textContent = records.length + ' catatan';
+                if (!records.length) {
+                    container.innerHTML = '<div class="attendance-empty">'
+                        + '<i class="bi bi-camera"></i>'
+                        + '<p>Belum ada catatan absensi. Klik Absen Masuk untuk memulai.</p>'
+                        + '</div>';
+                    return;
+                }
+                container.innerHTML = records.map(function (record) {
+                    const isIn = record.kind === 'in';
+                    const kindLabel = isIn ? 'Masuk' : 'Pulang';
+                    const kindClass = isIn ? 'is-in' : 'is-out';
+                    const date = ELIPS.formatDate(record.attendanceDate);
+                    const time = formatTimeOnly(record.takenAt);
+                    const photo = record.photo
+                        ? '<img src="' + ELIPS.escapeHtml(record.photo) + '" alt="Foto absensi '
+                            + ELIPS.escapeHtml(kindLabel) + ' ' + ELIPS.escapeHtml(date) + '">'
+                        : '<i class="bi bi-image"></i>';
+                    const notes = record.notes
+                        ? '<p class="attendance-history-notes">' + ELIPS.escapeHtml(record.notes) + '</p>'
+                        : '';
+                    return '<article class="attendance-history-item">'
+                        + '<div class="attendance-history-photo">' + photo + '</div>'
+                        + '<div class="attendance-history-info">'
+                        + '<div class="attendance-history-top">'
+                        + '<span class="attendance-kind ' + kindClass + '">'
+                        + '<i class="bi bi-' + (isIn ? 'box-arrow-in-right' : 'box-arrow-right') + '"></i> '
+                        + 'Absen ' + kindLabel + '</span>'
+                        + '<span class="attendance-history-date">'
+                        + ELIPS.escapeHtml(date) + ' • ' + ELIPS.escapeHtml(time) + '</span>'
+                        + '</div>'
+                        + '<div class="attendance-history-meta">'
+                        + '<span><i class="bi bi-geo-alt"></i> '
+                        + ELIPS.escapeHtml(locationSummary(record)) + '</span>'
+                        + '<span><i class="bi bi-phone"></i> '
+                        + ELIPS.escapeHtml(deviceSummary(record)) + '</span>'
+                        + '</div>'
+                        + notes
+                        + '</div>'
+                        + '<div class="attendance-history-actions">'
+                        + '<button type="button" class="btn btn-ghost" title="Lihat detail"'
+                        + ' onclick="openAttendanceDetail(' + record.id + ')">'
+                        + '<i class="bi bi-eye"></i></button>'
+                        + '<button type="button" class="btn btn-ghost attendance-delete-btn" title="Hapus"'
+                        + ' onclick="deleteStaffAttendance(' + record.id + ')">'
+                        + '<i class="bi bi-trash"></i></button>'
+                        + '</div>'
+                        + '</article>';
+                }).join('');
+            }
+
+            function refreshAttendanceHero() {
+                const today = todayLocalDate();
+                const todayRecords = (state.records || []).filter(function (record) {
+                    return record.attendanceDate === today;
+                });
+                const inRecord = todayRecords.filter(function (r) { return r.kind === 'in'; })[0] || null;
+                const outRecord = todayRecords.filter(function (r) { return r.kind === 'out'; })[0] || null;
+                const inPill = $('attendanceTodayIn');
+                const outPill = $('attendanceTodayOut');
+                const status = $('attendanceHeroStatus');
+                if (inPill) {
+                    inPill.classList.toggle('has-value', !!inRecord);
+                    inPill.innerHTML = '<i class="bi bi-box-arrow-in-right"></i> Masuk: '
+                        + (inRecord ? ELIPS.escapeHtml(formatTimeOnly(inRecord.takenAt)) : '–');
+                }
+                if (outPill) {
+                    outPill.classList.toggle('has-value', !!outRecord);
+                    outPill.innerHTML = '<i class="bi bi-box-arrow-right"></i> Pulang: '
+                        + (outRecord ? ELIPS.escapeHtml(formatTimeOnly(outRecord.takenAt)) : '–');
+                }
+                if (status) {
+                    if (!todayRecords.length) {
+                        status.textContent = 'Belum ada absensi hari ini. Mulai dengan Absen Masuk.';
+                    } else if (inRecord && !outRecord) {
+                        status.textContent = 'Anda sudah absen masuk pukul '
+                            + formatTimeOnly(inRecord.takenAt) + '. Jangan lupa absen pulang.';
+                    } else if (!inRecord && outRecord) {
+                        status.textContent = 'Absen pulang tercatat pukul '
+                            + formatTimeOnly(outRecord.takenAt) + '.';
+                    } else {
+                        status.textContent = 'Absensi hari ini lengkap. Terima kasih.';
+                    }
+                }
+            }
+
+            function loadAttendanceHistory() {
+                const container = $('attendanceHistory');
+                const user = ELIPS.getCurrentUser ? ELIPS.getCurrentUser() : null;
+                if (!user) {
+                    if (container) {
+                        container.innerHTML = '<div class="attendance-empty">Sesi tidak ditemukan.</div>';
+                    }
+                    return;
+                }
+                if (container) {
+                    container.innerHTML = '<div class="attendance-empty">Memuat riwayat absensi&hellip;</div>';
+                }
+                let records = [];
+                if (ELIPS.api && ELIPS.api.enabled) {
+                    const result = ELIPS.api.call('staffAttendance.list', { limit: MAX_HISTORY });
+                    if (!result.ok) {
+                        if (container) {
+                            container.innerHTML = '<div class="attendance-empty">'
+                                + ELIPS.escapeHtml(result.message || 'Riwayat absensi gagal dimuat.')
+                                + '</div>';
+                        }
+                        state.records = [];
+                        refreshAttendanceHero();
+                        return;
+                    }
+                    records = Array.isArray(result.data) ? result.data : [];
+                } else {
+                    records = ELIPS.getStaffAttendancesByUser(user.id).slice(0, MAX_HISTORY);
+                }
+                state.records = records;
+                renderAttendanceHistory();
+                refreshAttendanceHero();
+            }
+
+            function openAttendanceModal(kind) {
+                stopAttendanceCamera();
+                state.kind = kind === 'out' ? 'out' : 'in';
+                state.photo = '';
+                state.photoMime = '';
+                state.takenAt = null;
+                state.location = { lat: null, lng: null, accuracy: null, label: '' };
+                if ($('attendanceModalTitle')) {
+                    $('attendanceModalTitle').textContent = state.kind === 'in' ? 'Absen Masuk' : 'Absen Pulang';
+                }
+                if ($('attendanceModalSubtitle')) {
+                    $('attendanceModalSubtitle').textContent = state.kind === 'in'
+                        ? 'Ambil foto saat mulai bekerja. Waktu, lokasi, dan perangkat dicatat otomatis.'
+                        : 'Ambil foto saat selesai bekerja. Waktu, lokasi, dan perangkat dicatat otomatis.';
+                }
+                if ($('attendanceDate')) $('attendanceDate').value = todayLocalDate();
+                if ($('attendanceTime')) $('attendanceTime').value = '';
+                if ($('attendanceLocationLabel')) $('attendanceLocationLabel').value = '';
+                if ($('attendanceNotes')) $('attendanceNotes').value = '';
+                if ($('attendancePreview')) {
+                    $('attendancePreview').style.display = 'none';
+                    $('attendancePreview').removeAttribute('src');
+                }
+                if ($('attendanceCameraPlaceholder')) $('attendanceCameraPlaceholder').style.display = 'flex';
+                if ($('attendanceRetakeBtn')) $('attendanceRetakeBtn').style.display = 'none';
+                if ($('attendanceSaveBtn')) $('attendanceSaveBtn').disabled = true;
+                if ($('attendanceCaptureBtn')) $('attendanceCaptureBtn').disabled = true;
+                if ($('attendanceVideo')) $('attendanceVideo').style.display = 'none';
+                if ($('attendanceCameraMarker')) $('attendanceCameraMarker').style.display = 'none';
+                if ($('attendanceFile')) $('attendanceFile').value = '';
+                setLocationHint();
+                renderAttendanceMetaPreview();
+                if ($('attendanceModal')) $('attendanceModal').style.display = 'flex';
+                document.body.classList.add('attendance-modal-open');
+                startAttendanceCamera();
+                requestAttendanceLocation(false);
+            }
+
+            function closeAttendanceModal() {
+                stopAttendanceCamera();
+                if ($('attendanceModal')) $('attendanceModal').style.display = 'none';
+                document.body.classList.remove('attendance-modal-open');
+                if ($('attendanceFile')) $('attendanceFile').value = '';
+            }
+
+            function openAttendanceDetail(id) {
+                const record = (state.records || []).filter(function (item) {
+                    return Number(item.id) === Number(id);
+                })[0];
+                if (!record) {
+                    ELIPS.toast('Catatan absensi tidak ditemukan.');
+                    return;
+                }
+                const kindLabel = record.kind === 'in' ? 'Absen Masuk' : 'Absen Pulang';
+                const photo = record.photo
+                    ? '<div class="attendance-detail-photo"><img src="' + ELIPS.escapeHtml(record.photo)
+                        + '" alt="Foto ' + ELIPS.escapeHtml(kindLabel) + '"></div>'
+                    : '';
+                const rows = [
+                    ['Tanggal', ELIPS.formatDate(record.attendanceDate)],
+                    ['Jam tercatat', formatDateTime(record.takenAt)],
+                    ['Zona waktu', record.timezone || '-'],
+                    ['Lokasi', locationSummary(record)],
+                    ['Koordinat', record.latitude !== null && record.latitude !== undefined
+                        ? formatCoords(record.latitude, record.longitude, record.accuracyM) : '-'],
+                    ['Sumber lokasi', record.locationSource === 'gps' ? 'GPS perangkat'
+                        : record.locationSource === 'manual' ? 'Input manual' : 'Tidak tersedia'],
+                    ['Alamat IP', record.ipAddress || '-'],
+                    ['Perangkat', record.platform || '-'],
+                    ['Layar', record.screen || '-'],
+                    ['Bahasa', record.language || '-'],
+                    ['Koneksi', record.connectionType || 'Tidak diketahui'],
+                    ['Memori perangkat', record.deviceMemory ? record.deviceMemory + ' GB' : '-'],
+                    ['CPU core', record.hardwareConcurrency || '-'],
+                    ['Status jaringan', record.online === false ? 'Offline' : 'Online'],
+                    ['Catatan', record.notes || '-'],
+                    ['User agent', record.userAgent || '-'],
+                    ['Dicatat pada', formatDateTime(record.createdAt)]
+                ];
+                const detailHtml = photo
+                    + '<div class="attendance-detail-grid">'
+                    + rows.map(function (row) {
+                        return '<div class="attendance-detail-row">'
+                            + '<span class="attendance-detail-label">' + ELIPS.escapeHtml(row[0]) + '</span>'
+                            + '<span class="attendance-detail-value">' + ELIPS.escapeHtml(row[1]) + '</span>'
+                            + '</div>';
+                    }).join('')
+                    + '</div>'
+                    + '<div class="attendance-detail-actions">'
+                    + '<button type="button" class="btn btn-danger"'
+                    + ' onclick="deleteStaffAttendance(' + record.id + ', true)">'
+                    + '<i class="bi bi-trash"></i> Hapus Catatan</button>'
+                    + '<button type="button" class="btn btn-primary" onclick="closeAttendanceDetail()">Tutup</button>'
+                    + '</div>';
+                if ($('attendanceDetailTitle')) $('attendanceDetailTitle').textContent = kindLabel;
+                if ($('attendanceDetailSubtitle')) {
+                    $('attendanceDetailSubtitle').textContent = ELIPS.formatDate(record.attendanceDate)
+                        + ' • ' + formatTimeOnly(record.takenAt);
+                }
+                if ($('attendanceDetailBody')) $('attendanceDetailBody').innerHTML = detailHtml;
+                if ($('attendanceDetailModal')) $('attendanceDetailModal').style.display = 'flex';
+                document.body.classList.add('attendance-modal-open');
+            }
+
+            function closeAttendanceDetail() {
+                if ($('attendanceDetailModal')) $('attendanceDetailModal').style.display = 'none';
+                document.body.classList.remove('attendance-modal-open');
+            }
+
+            function deleteStaffAttendance(id, fromDetail) {
+                const record = (state.records || []).filter(function (item) {
+                    return Number(item.id) === Number(id);
+                })[0];
+                if (!record) return;
+                const label = (record.kind === 'in' ? 'absen masuk' : 'absen pulang')
+                    + ' ' + ELIPS.formatDate(record.attendanceDate);
+                if (!window.confirm('Hapus catatan ' + label + '?')) return;
+
+                if (ELIPS.api && ELIPS.api.enabled) {
+                    const result = ELIPS.api.call('staffAttendance.delete', { id: Number(id) });
+                    if (!result.ok) {
+                        ELIPS.toast(result.message || 'Gagal menghapus absensi.');
+                        return;
+                    }
+                    ELIPS.toast(result.message || 'Catatan absensi dihapus.');
+                } else {
+                    const remaining = ELIPS.getStaffAttendances().filter(function (item) {
+                        return Number(item.id) !== Number(id);
+                    });
+                    ELIPS.setStaffAttendances(remaining);
+                    if (typeof ELIPS.logAudit === 'function') {
+                        ELIPS.logAudit({
+                            action: 'delete',
+                            entity: 'staff_attendance',
+                            entityId: Number(id),
+                            entityLabel: (record.kind === 'in' ? 'Absensi Masuk' : 'Absensi Pulang')
+                                + ' — ' + record.attendanceDate,
+                            detail: 'Menghapus catatan ' + label + '.'
+                        });
+                    }
+                    ELIPS.toast('Catatan absensi dihapus.');
+                }
+                if (fromDetail) closeAttendanceDetail();
+                loadAttendanceHistory();
+            }
+
+            function initAttendance() {
+                const user = ELIPS.requireRole('admin');
+                if (!user) return;
+                const nameEl = document.querySelector('.dashboard-user-name');
+                if (nameEl) nameEl.textContent = user.name;
+                const avatar = document.querySelector('.dashboard-avatar');
+                if (avatar) {
+                    avatar.textContent = String(user.name || 'A').split(/\s+/)
+                        .map(function (part) { return part.charAt(0); })
+                        .slice(0, 2).join('').toUpperCase();
+                }
+                renderAttendanceMetaPreview();
+                loadAttendanceHistory();
+                document.addEventListener('keydown', function (event) {
+                    if (event.key === 'Escape') {
+                        closeAttendanceModal();
+                        closeAttendanceDetail();
+                    }
+                });
+            }
+
+            window.openAttendanceModal = openAttendanceModal;
+            window.closeAttendanceModal = closeAttendanceModal;
+            window.startAttendanceCamera = startAttendanceCamera;
+            window.captureAttendancePhoto = captureAttendancePhoto;
+            window.retakeAttendancePhoto = retakeAttendancePhoto;
+            window.handleAttendanceFile = handleAttendanceFile;
+            window.requestAttendanceLocation = requestAttendanceLocation;
+            window.setAttendancePhoto = setAttendancePhoto;
+            window.saveStaffAttendance = saveStaffAttendance;
+            window.loadAttendanceHistory = loadAttendanceHistory;
+            window.openAttendanceDetail = openAttendanceDetail;
+            window.closeAttendanceDetail = closeAttendanceDetail;
+            window.deleteStaffAttendance = deleteStaffAttendance;
+
+            document.addEventListener('DOMContentLoaded', initAttendance);
+        })();
     </script>
 </body>
 </html>

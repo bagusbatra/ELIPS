@@ -1270,6 +1270,48 @@ function elips_attendance_correction_public(int $id): ?array
 }
 
 /**
+ * Serialisasi absensi staf/admin. Foto bersifat opsional karena snapshot
+ * tidak boleh membawa data biner; daftar absensi pribadi meminta foto
+ * secara eksplisit melalui action khusus.
+ */
+function elips_staff_attendance_public(array $row, bool $includePhoto = true): array
+{
+    $photo = '';
+    if ($includePhoto && !empty($row['photo'])) {
+        $mime = trim((string) ($row['photo_mime'] ?? '')) ?: 'image/jpeg';
+        $photo = 'data:' . $mime . ';base64,' . $row['photo'];
+    }
+    return [
+        'id' => (int) $row['id'],
+        'userId' => (int) $row['user_id'],
+        'userName' => $row['user_name'] ?? '',
+        'kind' => $row['kind'],
+        'attendanceDate' => elips_date_only($row['attendance_date']),
+        'takenAt' => elips_iso($row['taken_at']),
+        'timezone' => $row['timezone'],
+        'photo' => $photo,
+        'photoMime' => $row['photo_mime'],
+        'latitude' => $row['latitude'] === null ? null : (float) $row['latitude'],
+        'longitude' => $row['longitude'] === null ? null : (float) $row['longitude'],
+        'accuracyM' => $row['accuracy_m'] === null ? null : (float) $row['accuracy_m'],
+        'locationLabel' => $row['location_label'],
+        'locationSource' => $row['location_source'],
+        'ipAddress' => $row['ip_address'],
+        'userAgent' => $row['user_agent'],
+        'platform' => $row['platform'],
+        'language' => $row['language'],
+        'screen' => $row['screen'],
+        'deviceMemory' => $row['device_memory'] === null ? null : (float) $row['device_memory'],
+        'hardwareConcurrency' => $row['hardware_concurrency'] === null ? null : (int) $row['hardware_concurrency'],
+        'connectionType' => $row['connection_type'],
+        'online' => (bool) $row['online'],
+        'notes' => $row['notes'],
+        'createdAt' => elips_iso($row['created_at']),
+        'updatedAt' => elips_iso($row['updated_at']),
+    ];
+}
+
+/**
  * Rekap kehadiran berbasis JP. Hanya sesi yang memenuhi kebijakan
  * yang dihitung sebagai JP wajib; status di luar kebijakan tetap
  * dilaporkan terpisah.

@@ -665,3 +665,36 @@ CREATE TABLE IF NOT EXISTS `notifications` (
     KEY `idx_notifications_type` (`type`),
     KEY `idx_notifications_recipient` (`recipient_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `staff_attendances` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `user_id` INT UNSIGNED NOT NULL,
+    `kind` ENUM('in', 'out') NOT NULL DEFAULT 'in',
+    `attendance_date` DATE NOT NULL,
+    `taken_at` DATETIME NOT NULL,
+    `timezone` VARCHAR(64) NOT NULL DEFAULT '',
+    `photo` LONGTEXT NULL,
+    `photo_mime` VARCHAR(50) NOT NULL DEFAULT 'image/jpeg',
+    `latitude` DECIMAL(10,7) NULL,
+    `longitude` DECIMAL(10,7) NULL,
+    `accuracy_m` DECIMAL(10,2) NULL,
+    `location_label` VARCHAR(255) NOT NULL DEFAULT '',
+    `location_source` ENUM('gps', 'manual', 'none') NOT NULL DEFAULT 'none',
+    `ip_address` VARCHAR(45) NOT NULL DEFAULT '',
+    `user_agent` VARCHAR(255) NOT NULL DEFAULT '',
+    `platform` VARCHAR(120) NOT NULL DEFAULT '',
+    `language` VARCHAR(30) NOT NULL DEFAULT '',
+    `screen` VARCHAR(30) NOT NULL DEFAULT '',
+    `device_memory` DECIMAL(6,2) NULL,
+    `hardware_concurrency` INT UNSIGNED NULL,
+    `connection_type` VARCHAR(30) NOT NULL DEFAULT '',
+    `online` TINYINT(1) NOT NULL DEFAULT 1,
+    `notes` TEXT NOT NULL,
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NULL,
+    PRIMARY KEY (`id`),
+    KEY `idx_staff_attendances_user_date` (`user_id`, `attendance_date`),
+    KEY `idx_staff_attendances_date` (`attendance_date`),
+    KEY `idx_staff_attendances_taken` (`taken_at`),
+    CONSTRAINT `fk_staff_attendances_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

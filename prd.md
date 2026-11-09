@@ -299,6 +299,7 @@ Seluruh aturan di atas ditegakkan **di server** (`api/actions.php` + `api/helper
 | Notifikasi email simulasi | ✅ Selesai | `assets/js/notifications.js` dan tabel `notifications`; halaman `admin/notifications.html` |
 | Backend PHP + MySQL | ✅ Selesai | `api/` menyediakan autentikasi sesi, CRUD v3/v4, snapshot, audit, notifikasi, dan seeding data demo |
 | Dual-mode client | ✅ Selesai | `assets/js/api.js` memakai API saat tersedia dan otomatis fallback ke `localStorage`; `crud-academic.js` menyediakan aturan v4 di kedua mode |
+| Absensi staf dengan kamera di dashboard Admin | ✅ Selesai | Hero **Absensi Kehadiran** membuka kamera, mengambil foto, dan merekam waktu, lokasi GPS/manual, serta metadata perangkat; tersedia fallback unggah foto dan riwayat absensi pribadi |
 
 ---
 
@@ -537,6 +538,22 @@ Backend berada di folder `api/` dan terdiri dari front controller, konfigurasi, 
 | Laporan (Admin) | ✅ Selesai | `admin/reports.html` - progres per peserta, statistik per kursus |
 | Pengaturan (Admin) | ✅ Selesai | `admin/settings.html` - pengaturan umum, sertifikat, pembelajaran |
 
+### 6.5a Absensi Staf (Kamera + Metadata)
+
+Fitur utama pada `admin/dashboard.html` untuk mencatat kehadiran staf/admin sendiri.
+
+| Fitur | Status | Keterangan |
+|---|---|---|
+| Hero Absensi Kehadiran | Selesai | Tombol **Absen Masuk** dan **Absen Pulang** membuka modal kamera; status hari ini menampilkan jam masuk/pulang |
+| Ambil foto via kamera | Selesai | `getUserMedia` dengan pratinjau video, tombol Ambil Foto, dan Ulangi; foto dikompres menjadi JPEG sebelum disimpan |
+| Fallback unggah foto | Selesai | Kamera tidak tersedia/izin ditolak/konteks tidak aman (`file://` atau non-HTTPS) diarahkan ke tombol **Unggah Foto** |
+| Lokasi GPS & manual | Selesai | Geolokasi opsional (lat/long/akurasi) dan kolom label lokasi manual; kegagalan GPS tidak memblokir absensi |
+| Metadata perangkat | Selesai | Zona waktu, user agent, platform, bahasa, ukuran layar, memori perangkat, CPU core, tipe koneksi, status online, dan IP (server) |
+| Riwayat absensi pribadi | Selesai | Daftar 30 catatan terbaru dengan foto, jenis masuk/pulang, tanggal, jam, lokasi, dan perangkat |
+| Detail & hapus catatan | Selesai | Modal detail menampilkan seluruh metadata dan foto; staf dapat menghapus catatan miliknya sendiri |
+| Mode server | Selesai | Aksi `staffAttendance.create`, `staffAttendance.list`, dan `staffAttendance.delete`; hanya Admin yang dapat mengakses dan hanya atas namanya sendiri |
+| Mode lokal | Selesai | Koleksi `elips_staffAttendances`; riwayat per pengguna dipangkas menjadi 20 catatan terbaru |
+
 ### 6.6 Manajemen Pengguna
 | Fitur | Status | Keterangan |
 |---|---|---|
@@ -738,6 +755,18 @@ else                            -> student/dashboard.html
 - Outbox diurutkan terbaru lebih dulu, dibatasi 1000 entri, dan dapat difilter berdasarkan jenis, penerima, rentang tanggal, pencarian, serta limit.
 - Admin dapat mengekspor hasil filter ke CSV dan membersihkan seluruh outbox dari `admin/notifications.html`.
 
+### Absensi Staf (Kamera + Metadata)
+- Absensi pada dashboard Admin adalah **absensi pribadi staf/admin** yang sedang login, bukan presensi peserta per sesi. Staf hanya dapat membuat, membaca, dan menghapus catatan miliknya sendiri.
+- Dua jenis catatan: `in` (absen masuk) dan `out` (absen pulang). Pengulangan dalam hari yang sama diizinkan sebagai catatan terpisah; dashboard menampilkan catatan masuk/pulang paling awal yang tersedia untuk status hari ini.
+- Foto wajib ada. Server hanya menerima data URL `image/jpeg`, `image/png`, atau `image/webp`, memverifikasi isi biner dengan `getimagesizefromstring()`, dan membatasi ukuran foto (maks. 2 MB biner, 4 juta karakter data URL).
+- Waktu `takenAt` disimpan dalam UTC; tanggal absensi (`attendanceDate`) tetap tanggal kalender lokal yang dipilih staf dan divalidasi dengan `checkdate()`.
+- Koordinat harus dikirim berpasangan dan berada dalam rentang lat -90..90 / lng -180..180. `locationSource` diturunkan otomatis menjadi `gps` bila koordinat valid, `manual` bila hanya label lokasi, atau `none`.
+- IP diambil server dari `REMOTE_ADDR`; metadata perangkat lain berasal dari browser dan dibatasi panjangnya sebelum disimpan.
+- Kamera memerlukan secure context (`localhost` atau HTTPS). Bila kamera/geolokasi tidak tersedia, ditolak, atau halaman dibuka via `file://`, UI menampilkan pesan dan pengguna dapat mengunggah foto serta mengisi lokasi manual.
+- Mode lokal menyimpan catatan di `elips_staffAttendances` dengan `photo` berupa data URL terkompresi dan memangkas riwayat per pengguna menjadi 20 catatan; mode server menyimpan foto base64 di `staff_attendances.photo` dengan `photo_mime`.
+- Snapshot bootstrap sengaja **tidak** memuat koleksi absensi staf maupun foto; dashboard memuat riwayat melalui `staffAttendance.list` agar foto tidak bocor ke halaman/role lain.
+- Setiap create/delete mencatat audit dengan entitas `staff_attendance`; pada mode server audit ditulis backend, pada mode lokal ditulis client.
+
 ---
 
 ## 8. Testing Checklist
@@ -824,6 +853,9 @@ else                            -> student/dashboard.html
 | Notifikasi sertifikat terbit | ✅ Lulus uji | Approval Draft → Publish membuat satu notifikasi untuk peserta dengan nomor sertifikat final |
 | Operasi gagal tidak membuat notifikasi | ✅ Lulus uji | Approval ulang dan publikasi tanpa perubahan status tidak menambah outbox |
 | Filter, ekspor & pembersihan outbox | ✅ Lulus uji | Filter jenis/penerima/tanggal/pencarian dan tombol CSV/bersihkan tersedia di `admin/notifications.html` |
+| Absensi staf dari dashboard Admin | Lulus uji | `test-staff-attendance-page` memverifikasi hero, modal kamera/fallback, penyimpanan lokal, metadata, detail, audit, dan hapus catatan |
+| API absensi staf & privasi | Lulus uji | `test-staff-attendance-api` memverifikasi guard role, validasi foto/koordinat/tanggal, persistensi metadata, kepemilikan hapus, dan snapshot tanpa foto |
+| Degradasi kamera & geolokasi | Lulus uji | Kamera tanpa dukungan/izin/secure context menampilkan fallback unggah; GPS gagal tidak memblokir penyimpanan |
 
 ---
 
@@ -836,7 +868,7 @@ else                            -> student/dashboard.html
 - **Responsive:** Menggunakan CSS custom yang responsif.
 - **UI Konsisten:** Menggunakan komponen seragam (navbar, sidebar, cards, tables, badges).
 - **Keamanan:** Pada mode server password di-hash, sesi memakai cookie `HttpOnly`/`SameSite=Lax`, dan otorisasi role/kepemilikan ditegakkan di server. Mode lokal tetap bersifat demo dan tidak boleh dianggap aman untuk produksi.
-- **Cakupan v4.0:** Increment ini mencakup **Phase 1–4** (versi kurikulum + kelas/angkatan + enrollment berbasis kelas + jadwal sesi/presensi offline + materi tambahan dan mode akses materi) serta **cabang + kalender/jadwal admin** dengan aksi sesi langsung dan filter lanjutan. Tugas/ujian, pembayaran, dan sertifikat PDF mengikuti phase berikutnya pada `ELIPS-LMS-PRD-v4.0.md`.
+- **Cakupan v4.0:** Increment ini mencakup **Phase 1–4** (versi kurikulum + kelas/angkatan + enrollment berbasis kelas + jadwal sesi/presensi offline + materi tambahan dan mode akses materi) serta **cabang + kalender/jadwal admin** dengan aksi sesi langsung dan filter lanjutan, ditambah **absensi staf berbasis kamera** di dashboard Admin. Tugas/ujian, pembayaran, dan sertifikat PDF mengikuti phase berikutnya pada `ELIPS-LMS-PRD-v4.0.md`.
 - **Kompatibilitas v3.0:** Struktur v3 tetap dipertahankan. Setiap kursus lama mendapat versi kurikulum `1.0`; enrollment lama dipetakan ke kelas migrasi (`legacy_import`) agar tidak ada data yang hilang.
 
 ---
