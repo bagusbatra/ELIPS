@@ -210,25 +210,135 @@ CREATE TABLE IF NOT EXISTS `class_instructor_histories` (
     CONSTRAINT `fk_class_history_actor` FOREIGN KEY (`actor_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS `predicate_ranges` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `letter` VARCHAR(4) NOT NULL,
+    `label` VARCHAR(60) NOT NULL DEFAULT '',
+    `min_score` DECIMAL(5,2) NOT NULL,
+    `max_score` DECIMAL(5,2) NOT NULL,
+    `sort_order` INT UNSIGNED NOT NULL DEFAULT 0,
+    `is_active` TINYINT(1) NOT NULL DEFAULT 1,
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NULL,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uq_predicate_ranges_letter` (`letter`),
+    KEY `idx_predicate_ranges_order` (`sort_order`, `min_score`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `grade_schemes` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `course_id` INT UNSIGNED NOT NULL,
+    `class_id` INT UNSIGNED NOT NULL,
+    `name` VARCHAR(150) NOT NULL,
+    `status` ENUM('draft', 'published', 'archived') NOT NULL DEFAULT 'draft',
+    `pass_score` DECIMAL(5,2) NOT NULL DEFAULT 60.00,
+    `rounding` ENUM('half_up', 'half_down', 'floor', 'ceil') NOT NULL DEFAULT 'half_up',
+    `notes` TEXT NOT NULL,
+    `created_by` INT UNSIGNED NULL,
+    `updated_by` INT UNSIGNED NULL,
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NULL,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uq_grade_schemes_class` (`class_id`),
+    KEY `idx_grade_schemes_course` (`course_id`),
+    KEY `idx_grade_schemes_status` (`status`),
+    CONSTRAINT `fk_grade_schemes_course` FOREIGN KEY (`course_id`) REFERENCES `courses` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_grade_schemes_class` FOREIGN KEY (`class_id`) REFERENCES `classes` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_grade_schemes_created_by` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+    CONSTRAINT `fk_grade_schemes_updated_by` FOREIGN KEY (`updated_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `grade_scheme_components` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `scheme_id` INT UNSIGNED NOT NULL,
+    `type` ENUM('assignment', 'exam', 'manual') NOT NULL DEFAULT 'manual',
+    `name` VARCHAR(150) NOT NULL,
+    `description` TEXT NOT NULL,
+    `weight` DECIMAL(5,2) NOT NULL DEFAULT 0.00,
+    `aggregation` ENUM('weighted', 'average') NOT NULL DEFAULT 'weighted',
+    `max_score` DECIMAL(6,2) NOT NULL DEFAULT 100.00,
+    `is_required` TINYINT(1) NOT NULL DEFAULT 1,
+    `sort_order` INT UNSIGNED NOT NULL DEFAULT 1,
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NULL,
+    PRIMARY KEY (`id`),
+    KEY `idx_grade_scheme_components_scheme` (`scheme_id`, `sort_order`),
+    KEY `idx_grade_scheme_components_type` (`type`),
+    CONSTRAINT `fk_grade_scheme_components_scheme` FOREIGN KEY (`scheme_id`) REFERENCES `grade_schemes` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS `grades` (
     `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
     `enrollment_id` INT UNSIGNED NULL,
+    `scheme_id` INT UNSIGNED NULL,
     `course_id` INT UNSIGNED NOT NULL,
     `student_id` INT UNSIGNED NOT NULL,
     `instructor_id` INT UNSIGNED NULL,
     `score` TINYINT UNSIGNED NOT NULL,
+    `final_score` DECIMAL(6,2) NULL,
     `grade` CHAR(2) NOT NULL,
+    `status` ENUM('draft', 'incomplete', 'finalized') NOT NULL DEFAULT 'draft',
+    `components_snapshot` LONGTEXT NULL,
     `note` TEXT NOT NULL,
+    `finalized_by` INT UNSIGNED NULL,
+    `finalized_at` DATETIME NULL,
+    `computed_at` DATETIME NULL,
     `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `updated_at` DATETIME NULL,
     PRIMARY KEY (`id`),
     UNIQUE KEY `uq_grades_enrollment` (`enrollment_id`),
     KEY `idx_grades_student_course` (`student_id`, `course_id`),
     KEY `idx_grades_instructor` (`instructor_id`),
+    KEY `idx_grades_scheme` (`scheme_id`),
+    KEY `idx_grades_status` (`status`),
     CONSTRAINT `fk_grades_enrollment` FOREIGN KEY (`enrollment_id`) REFERENCES `enrollments` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_grades_scheme` FOREIGN KEY (`scheme_id`) REFERENCES `grade_schemes` (`id`) ON DELETE SET NULL,
     CONSTRAINT `fk_grades_student` FOREIGN KEY (`student_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
     CONSTRAINT `fk_grades_course` FOREIGN KEY (`course_id`) REFERENCES `courses` (`id`) ON DELETE CASCADE,
-    CONSTRAINT `fk_grades_instructor` FOREIGN KEY (`instructor_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
+    CONSTRAINT `fk_grades_instructor` FOREIGN KEY (`instructor_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+    CONSTRAINT `fk_grades_finalized_by` FOREIGN KEY (`finalized_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `grade_component_scores` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `component_id` INT UNSIGNED NOT NULL,
+    `enrollment_id` INT UNSIGNED NOT NULL,
+    `student_id` INT UNSIGNED NOT NULL,
+    `score` DECIMAL(6,2) NULL,
+    `status` ENUM('not_assessed', 'graded', 'excused', 'missing') NOT NULL DEFAULT 'not_assessed',
+    `assessor_id` INT UNSIGNED NULL,
+    `assessed_at` DATETIME NULL,
+    `note` TEXT NOT NULL,
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NULL,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uq_grade_component_scores_component_enrollment` (`component_id`, `enrollment_id`),
+    KEY `idx_grade_component_scores_enrollment` (`enrollment_id`),
+    KEY `idx_grade_component_scores_student` (`student_id`),
+    KEY `idx_grade_component_scores_status` (`status`),
+    CONSTRAINT `fk_grade_component_scores_component` FOREIGN KEY (`component_id`) REFERENCES `grade_scheme_components` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_grade_component_scores_enrollment` FOREIGN KEY (`enrollment_id`) REFERENCES `enrollments` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_grade_component_scores_student` FOREIGN KEY (`student_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_grade_component_scores_assessor` FOREIGN KEY (`assessor_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `grade_corrections` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `grade_id` INT UNSIGNED NOT NULL,
+    `enrollment_id` INT UNSIGNED NULL,
+    `previous_score` DECIMAL(6,2) NULL,
+    `new_score` DECIMAL(6,2) NULL,
+    `previous_letter` VARCHAR(4) NULL,
+    `new_letter` VARCHAR(4) NULL,
+    `reason` TEXT NOT NULL,
+    `actor_id` INT UNSIGNED NULL,
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_grade_corrections_grade` (`grade_id`),
+    KEY `idx_grade_corrections_enrollment` (`enrollment_id`),
+    CONSTRAINT `fk_grade_corrections_grade` FOREIGN KEY (`grade_id`) REFERENCES `grades` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_grade_corrections_enrollment` FOREIGN KEY (`enrollment_id`) REFERENCES `enrollments` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_grade_corrections_actor` FOREIGN KEY (`actor_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `certificates` (

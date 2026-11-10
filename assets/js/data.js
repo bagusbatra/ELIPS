@@ -178,6 +178,227 @@
         return getGrades().filter(function (g) { return g.studentId === Number(studentId); });
     }
 
+    // ---------- Penilaian & finalisasi (Phase 6) ----------
+    function defaultPredicateRanges() {
+        return [
+            { letter: 'A', label: 'Sangat Baik', minScore: 90, maxScore: 100, sortOrder: 1, isActive: true },
+            { letter: 'A-', label: 'Sangat Baik', minScore: 80, maxScore: 89.99, sortOrder: 2, isActive: true },
+            { letter: 'B+', label: 'Baik', minScore: 75, maxScore: 79.99, sortOrder: 3, isActive: true },
+            { letter: 'B', label: 'Baik', minScore: 70, maxScore: 74.99, sortOrder: 4, isActive: true },
+            { letter: 'B-', label: 'Baik', minScore: 65, maxScore: 69.99, sortOrder: 5, isActive: true },
+            { letter: 'C+', label: 'Cukup', minScore: 60, maxScore: 64.99, sortOrder: 6, isActive: true },
+            { letter: 'C', label: 'Cukup', minScore: 55, maxScore: 59.99, sortOrder: 7, isActive: true },
+            { letter: 'D', label: 'Kurang', minScore: 50, maxScore: 54.99, sortOrder: 8, isActive: true },
+            { letter: 'E', label: 'Tidak Lulus', minScore: 0, maxScore: 49.99, sortOrder: 9, isActive: true }
+        ];
+    }
+    function getPredicateRanges() {
+        const list = read(KEYS.predicateRanges, []);
+        return Array.isArray(list) && list.length ? list : defaultPredicateRanges();
+    }
+    function setPredicateRanges(list) { return write(KEYS.predicateRanges, list); }
+    function predicateLetter(score) {
+        const value = Number(score);
+        if (!isFinite(value)) return null;
+        const ranges = getPredicateRanges()
+            .filter(function (r) { return r.isActive !== false; })
+            .slice()
+            .sort(function (a, b) { return Number(b.minScore) - Number(a.minScore); });
+        for (let i = 0; i < ranges.length; i++) {
+            if (value >= Number(ranges[i].minScore) && value <= Number(ranges[i].maxScore)) {
+                return ranges[i].letter;
+            }
+        }
+        return 'E';
+    }
+    function gradeRound(value, mode) {
+        const factor = 100;
+        const scaled = Number(value) * factor;
+        let rounded;
+        if (mode === 'floor') rounded = Math.floor(scaled);
+        else if (mode === 'ceil') rounded = Math.ceil(scaled);
+        else if (mode === 'half_down') rounded = Math.round(scaled - 0.000000001);
+        else rounded = Math.round(scaled);
+        return rounded / factor;
+    }
+
+    function getGradeSchemes() { return read(KEYS.gradeSchemes, []); }
+    function setGradeSchemes(list) { return write(KEYS.gradeSchemes, list); }
+    function getGradeSchemeById(id) {
+        return getGradeSchemes().find(function (s) { return Number(s.id) === Number(id); }) || null;
+    }
+    function getGradeSchemeByClass(classId) {
+        return getGradeSchemes().find(function (s) { return Number(s.classId) === Number(classId); }) || null;
+    }
+    function getGradeSchemeComponents() { return read(KEYS.gradeSchemeComponents, []); }
+    function setGradeSchemeComponents(list) { return write(KEYS.gradeSchemeComponents, list); }
+    function getGradeComponentsByScheme(schemeId) {
+        return getGradeSchemeComponents()
+            .filter(function (c) { return Number(c.schemeId) === Number(schemeId); })
+            .sort(function (a, b) {
+                const order = (Number(a.order) || 0) - (Number(b.order) || 0);
+                return order !== 0 ? order : Number(a.id) - Number(b.id);
+            });
+    }
+    function getGradeComponentScores() { return read(KEYS.gradeComponentScores, []); }
+    function setGradeComponentScores(list) { return write(KEYS.gradeComponentScores, list); }
+    function getGradeComponentScore(componentId, enrollmentId) {
+        return getGradeComponentScores().find(function (s) {
+            return Number(s.componentId) === Number(componentId) &&
+                Number(s.enrollmentId) === Number(enrollmentId);
+        }) || null;
+    }
+    function getGradeCorrections() { return read(KEYS.gradeCorrections, []); }
+    function setGradeCorrections(list) { return write(KEYS.gradeCorrections, list); }
+    function getGradeCorrectionsByGrade(gradeId) {
+        return getGradeCorrections()
+            .filter(function (c) { return Number(c.gradeId) === Number(gradeId); })
+            .sort(function (a, b) { return Number(b.id) - Number(a.id); });
+    }
+    function gradeWeightTotal(components) {
+        return (components || []).reduce(function (total, component) {
+            return total + (Number(component.weight) || 0);
+        }, 0);
+    }
+
+    // Cermin dari elips_grade_compute_enrollment() pada server agar mode
+    // localStorage menghasilkan nilai yang sama.
+    function computeEnrollmentGrade(enrollment, schemeOverride) {
+        if (!enrollment) {
+            return { schemeId: null, status: 'no_scheme', components: [], missing: [], finalScore: null, letter: null, passed: null };
+        }
+        const classId = Number(enrollment.classId);
+        const enrollmentId = Number(enrollment.id);
+        const scheme = schemeOverride || getGradeSchemeByClass(classId);
+        if (!scheme) {
+            return { schemeId: null, schemeName: '', schemeStatus: null, passScore: null, rounding: 'half_up', components: [], missing: [], finalScore: null, letter: null, status: 'no_scheme', passed: null };
+        }
+        const components = getGradeComponentsByScheme(scheme.id);
+        const resultComponents = [];
+        const missing = [];
+
+        components.forEach(function (component) {
+            const componentId = Number(component.id);
+            const override = getGradeComponentScore(componentId, enrollmentId);
+            const isRequired = component.isRequired !== false;
+            const result = {
+                componentId: componentId,
+                name: component.name,
+                type: component.type,
+                weight: Number(component.weight) || 0,
+                aggregation: component.aggregation || 'weighted',
+                maxScore: Number(component.maxScore) || 100,
+                isRequired: isRequired,
+                order: Number(component.order) || 0,
+                score: null,
+                status: 'not_assessed',
+                note: '',
+                activities: []
+            };
+
+            if (override && override.status === 'excused') {
+                result.status = 'excused';
+                result.note = override.note || '';
+                resultComponents.push(result);
+                return;
+            }
+
+            if (component.type === 'manual') {
+                if (override && override.status === 'graded' && override.score !== null && override.score !== undefined) {
+                    result.score = Math.max(0, Math.min(100, Number(override.score)));
+                    result.status = 'graded';
+                    result.note = override.note || '';
+                } else {
+                    result.status = 'missing';
+                    result.note = override ? override.note || '' : '';
+                }
+            } else {
+                const activities = component.type === 'assignment'
+                    ? getAssignmentsByClass(classId).filter(function (a) {
+                        return a.status === 'published' || a.status === 'closed';
+                    })
+                    : getExamsByClass(classId).filter(function (e) {
+                        return e.status === 'published' || e.status === 'closed';
+                    });
+                let weightedSum = 0;
+                let weightTotal = 0;
+                let activityMissing = false;
+                activities.forEach(function (activity) {
+                    const maxScore = Number(activity.maxScore) > 0 ? Number(activity.maxScore) : 100;
+                    const record = component.type === 'assignment'
+                        ? getSubmissionByEnrollment(activity.id, enrollmentId)
+                        : getExamResultByEnrollment(activity.id, enrollmentId);
+                    const row = {
+                        id: Number(activity.id),
+                        title: activity.title,
+                        maxScore: maxScore,
+                        weight: Number(activity.weight) || 0,
+                        score: null,
+                        normalized: null,
+                        status: 'missing'
+                    };
+                    if (record && record.status === 'excused') {
+                        row.status = 'excused';
+                    } else if (record && record.score !== null && record.score !== undefined &&
+                        (component.type === 'assignment' ? record.status === 'reviewed' : record.status === 'graded')) {
+                        const normalized = Math.max(0, Math.min(100, (Number(record.score) / maxScore) * 100));
+                        row.score = Number(record.score);
+                        row.normalized = normalized;
+                        row.status = 'graded';
+                        const weight = result.aggregation === 'average' ? 1 : (Number(activity.weight) > 0 ? Number(activity.weight) : 1);
+                        weightedSum += normalized * weight;
+                        weightTotal += weight;
+                    } else {
+                        activityMissing = true;
+                    }
+                    result.activities.push(row);
+                });
+                if (activities.length === 0) {
+                    result.status = 'missing';
+                } else if (weightTotal > 0) {
+                    result.score = weightedSum / weightTotal;
+                    result.status = activityMissing ? 'missing' : 'graded';
+                } else {
+                    result.status = 'missing';
+                }
+            }
+
+            if (result.status === 'missing' && isRequired) {
+                missing.push(component.name);
+            }
+            resultComponents.push(result);
+        });
+
+        const included = resultComponents.filter(function (component) {
+            return component.status === 'graded' && component.score !== null;
+        });
+        const weightTotal = gradeWeightTotal(included);
+        let finalScore = null;
+        let letter = null;
+        let status = 'incomplete';
+        if (missing.length === 0 && weightTotal > 0) {
+            const sum = included.reduce(function (total, component) {
+                return total + component.score * component.weight;
+            }, 0);
+            finalScore = gradeRound(sum / weightTotal, scheme.rounding || 'half_up');
+            letter = predicateLetter(finalScore);
+            status = 'computed';
+        }
+        return {
+            schemeId: Number(scheme.id),
+            schemeName: scheme.name,
+            schemeStatus: scheme.status,
+            passScore: Number(scheme.passScore),
+            rounding: scheme.rounding || 'half_up',
+            components: resultComponents,
+            missing: missing,
+            finalScore: finalScore,
+            letter: letter,
+            status: status,
+            passed: finalScore === null ? null : finalScore >= Number(scheme.passScore)
+        };
+    }
+
     // ---------- Certificates ----------
     function getCertificates() { return read(KEYS.certificates, []); }
     function setCertificates(list) { return write(KEYS.certificates, list); }
@@ -460,6 +681,26 @@
         setGrades: setGrades,
         getGrade: getGrade,
         getGradesByStudent: getGradesByStudent,
+        defaultPredicateRanges: defaultPredicateRanges,
+        getPredicateRanges: getPredicateRanges,
+        setPredicateRanges: setPredicateRanges,
+        predicateLetter: predicateLetter,
+        gradeRound: gradeRound,
+        getGradeSchemes: getGradeSchemes,
+        setGradeSchemes: setGradeSchemes,
+        getGradeSchemeById: getGradeSchemeById,
+        getGradeSchemeByClass: getGradeSchemeByClass,
+        getGradeSchemeComponents: getGradeSchemeComponents,
+        setGradeSchemeComponents: setGradeSchemeComponents,
+        getGradeComponentsByScheme: getGradeComponentsByScheme,
+        getGradeComponentScores: getGradeComponentScores,
+        setGradeComponentScores: setGradeComponentScores,
+        getGradeComponentScore: getGradeComponentScore,
+        getGradeCorrections: getGradeCorrections,
+        setGradeCorrections: setGradeCorrections,
+        getGradeCorrectionsByGrade: getGradeCorrectionsByGrade,
+        gradeWeightTotal: gradeWeightTotal,
+        computeEnrollmentGrade: computeEnrollmentGrade,
         getCertificates: getCertificates,
         setCertificates: setCertificates,
         getCertificatesByStudent: getCertificatesByStudent,

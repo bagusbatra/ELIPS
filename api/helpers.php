@@ -2091,18 +2091,40 @@ function elips_grade_public(int $id): ?array
     if (!$row) {
         return null;
     }
+    $components = [];
+    if (!empty($row['components_snapshot'])) {
+        $decoded = json_decode((string) $row['components_snapshot'], true);
+        if (is_array($decoded)) {
+            $components = $decoded;
+        }
+    }
     return [
         'id' => (int) $row['id'],
         'enrollmentId' => $row['enrollment_id'] === null ? null : (int) $row['enrollment_id'],
+        'schemeId' => $row['scheme_id'] === null ? null : (int) $row['scheme_id'],
         'courseId' => (int) $row['course_id'],
         'studentId' => (int) $row['student_id'],
         'instructorId' => $row['instructor_id'] === null ? null : (int) $row['instructor_id'],
         'score' => (int) $row['score'],
+        'finalScore' => $row['final_score'] === null ? null : (float) $row['final_score'],
         'grade' => $row['grade'],
+        'status' => $row['status'] ?? 'draft',
+        'components' => $components,
         'note' => $row['note'],
+        'finalizedBy' => $row['finalized_by'] === null ? null : (int) $row['finalized_by'],
+        'finalizedAt' => elips_iso($row['finalized_at']),
+        'computedAt' => elips_iso($row['computed_at']),
         'createdAt' => elips_iso($row['created_at']),
         'updatedAt' => elips_iso($row['updated_at']),
     ];
+}
+
+function elips_grade_row_by_enrollment(int $enrollmentId): ?array
+{
+    $stmt = elips_db()->prepare('SELECT * FROM grades WHERE enrollment_id = ? LIMIT 1');
+    $stmt->execute([$enrollmentId]);
+    $row = $stmt->fetch();
+    return $row ?: null;
 }
 
 function elips_certificate_public(int $id): ?array
@@ -2132,18 +2154,424 @@ function elips_certificate_public(int $id): ?array
 
 // ---------- Nilai & sertifikat ----------
 
-function elips_grade_letter($score): string
+function elips_default_predicate_ranges(): array
+{
+    return [
+        ['letter' => 'A', 'label' => 'Sangat Baik', 'minScore' => 90.0, 'maxScore' => 100.0, 'sortOrder' => 1],
+        ['letter' => 'A-', 'label' => 'Sangat Baik', 'minScore' => 80.0, 'maxScore' => 89.99, 'sortOrder' => 2],
+        ['letter' => 'B+', 'label' => 'Baik', 'minScore' => 75.0, 'maxScore' => 79.99, 'sortOrder' => 3],
+        ['letter' => 'B', 'label' => 'Baik', 'minScore' => 70.0, 'maxScore' => 74.99, 'sortOrder' => 4],
+        ['letter' => 'B-', 'label' => 'Baik', 'minScore' => 65.0, 'maxScore' => 69.99, 'sortOrder' => 5],
+        ['letter' => 'C+', 'label' => 'Cukup', 'minScore' => 60.0, 'maxScore' => 64.99, 'sortOrder' => 6],
+        ['letter' => 'C', 'label' => 'Cukup', 'minScore' => 55.0, 'maxScore' => 59.99, 'sortOrder' => 7],
+        ['letter' => 'D', 'label' => 'Kurang', 'minScore' => 50.0, 'maxScore' => 54.99, 'sortOrder' => 8],
+        ['letter' => 'E', 'label' => 'Tidak Lulus', 'minScore' => 0.0, 'maxScore' => 49.99, 'sortOrder' => 9],
+    ];
+}
+
+function elips_predicate_ranges(bool $activeOnly = true): array
+{
+    $sql = 'SELECT * FROM predicate_ranges';
+    if ($activeOnly) {
+        $sql .= ' WHERE is_active = 1';
+    }
+    $sql .= ' ORDER BY sort_order ASC, min_score DESC, id ASC';
+    $rows = elips_db()->query($sql)->fetchAll();
+    if (!$rows) {
+        return elips_default_predicate_ranges();
+    }
+    $ranges = [];
+    foreach ($rows as $row) {
+        $ranges[] = [
+            'id' => (int) $row['id'],
+            'letter' => $row['letter'],
+            'label' => $row['label'],
+            'minScore' => (float) $row['min_score'],
+            'maxScore' => (float) $row['max_score'],
+            'sortOrder' => (int) $row['sort_order'],
+            'isActive' => (bool) $row['is_active'],
+            'createdAt' => elips_iso($row['created_at']),
+            'updatedAt' => elips_iso($row['updated_at']),
+        ];
+    }
+    return $ranges;
+}
+
+function elips_predicate_letter($score): string
 {
     $value = (float) $score;
-    if ($value >= 90) return 'A';
-    if ($value >= 80) return 'A-';
-    if ($value >= 75) return 'B+';
-    if ($value >= 70) return 'B';
-    if ($value >= 65) return 'B-';
-    if ($value >= 60) return 'C+';
-    if ($value >= 55) return 'C';
-    if ($value >= 50) return 'D';
+    foreach (elips_predicate_ranges() as $range) {
+        if ($value >= (float) $range['minScore'] && $value <= (float) $range['maxScore']) {
+            return (string) $range['letter'];
+        }
+    }
+    // Fallback ke pemetaan bawaan bila konfigurasi tidak mencakup skor.
+    foreach (elips_default_predicate_ranges() as $range) {
+        if ($value >= $range['minScore'] && $value <= $range['maxScore']) {
+            return $range['letter'];
+        }
+    }
     return 'E';
+}
+
+function elips_grade_letter($score): string
+{
+    return elips_predicate_letter($score);
+}
+
+function elips_grade_round(float $value, string $mode): float
+{
+    switch ($mode) {
+        case 'floor':
+            return floor($value * 100) / 100;
+        case 'ceil':
+            return ceil($value * 100) / 100;
+        case 'half_down':
+            return round($value, 2, PHP_ROUND_HALF_DOWN);
+        case 'half_up':
+        default:
+            return round($value, 2, PHP_ROUND_HALF_UP);
+    }
+}
+
+function elips_grade_scheme_component_public(array $row): array
+{
+    return [
+        'id' => (int) $row['id'],
+        'schemeId' => (int) $row['scheme_id'],
+        'type' => $row['type'],
+        'name' => $row['name'],
+        'description' => $row['description'],
+        'weight' => (float) $row['weight'],
+        'aggregation' => $row['aggregation'],
+        'maxScore' => (float) $row['max_score'],
+        'isRequired' => (bool) $row['is_required'],
+        'order' => (int) $row['sort_order'],
+        'createdAt' => elips_iso($row['created_at']),
+        'updatedAt' => elips_iso($row['updated_at']),
+    ];
+}
+
+function elips_grade_scheme_components(int $schemeId): array
+{
+    $stmt = elips_db()->prepare(
+        'SELECT * FROM grade_scheme_components WHERE scheme_id = ? ORDER BY sort_order ASC, id ASC'
+    );
+    $stmt->execute([$schemeId]);
+    $components = [];
+    foreach ($stmt->fetchAll() as $row) {
+        $components[] = elips_grade_scheme_component_public($row);
+    }
+    return $components;
+}
+
+function elips_grade_scheme_row(int $id): ?array
+{
+    $stmt = elips_db()->prepare(
+        'SELECT gs.*, c.title AS course_title, cl.code AS class_code, cl.name AS class_name
+         FROM grade_schemes gs
+         JOIN courses c ON c.id = gs.course_id
+         JOIN classes cl ON cl.id = gs.class_id
+         WHERE gs.id = ? LIMIT 1'
+    );
+    $stmt->execute([$id]);
+    $row = $stmt->fetch();
+    return $row ?: null;
+}
+
+function elips_grade_scheme_for_class(int $classId): ?array
+{
+    $stmt = elips_db()->prepare('SELECT id FROM grade_schemes WHERE class_id = ? LIMIT 1');
+    $stmt->execute([$classId]);
+    $id = $stmt->fetchColumn();
+    return $id === false ? null : elips_grade_scheme_row((int) $id);
+}
+
+function elips_grade_scheme_public(array $row, bool $withComponents = true): array
+{
+    $result = [
+        'id' => (int) $row['id'],
+        'courseId' => (int) $row['course_id'],
+        'courseTitle' => $row['course_title'] ?? '',
+        'classId' => (int) $row['class_id'],
+        'classCode' => $row['class_code'] ?? '',
+        'className' => $row['class_name'] ?? '',
+        'name' => $row['name'],
+        'status' => $row['status'],
+        'passScore' => (float) $row['pass_score'],
+        'rounding' => $row['rounding'],
+        'notes' => $row['notes'],
+        'createdBy' => $row['created_by'] === null ? null : (int) $row['created_by'],
+        'updatedBy' => $row['updated_by'] === null ? null : (int) $row['updated_by'],
+        'createdAt' => elips_iso($row['created_at']),
+        'updatedAt' => elips_iso($row['updated_at']),
+    ];
+    if ($withComponents) {
+        $result['components'] = elips_grade_scheme_components((int) $row['id']);
+        $result['totalWeight'] = array_sum(array_map(function ($component) {
+            return (float) $component['weight'];
+        }, $result['components']));
+    }
+    return $result;
+}
+
+function elips_grade_component_score_public(array $row): array
+{
+    return [
+        'id' => (int) $row['id'],
+        'componentId' => (int) $row['component_id'],
+        'enrollmentId' => (int) $row['enrollment_id'],
+        'studentId' => (int) $row['student_id'],
+        'score' => $row['score'] === null ? null : (float) $row['score'],
+        'status' => $row['status'],
+        'assessorId' => $row['assessor_id'] === null ? null : (int) $row['assessor_id'],
+        'assessorName' => $row['assessor_name'] ?? '',
+        'assessedAt' => elips_iso($row['assessed_at']),
+        'note' => $row['note'],
+        'createdAt' => elips_iso($row['created_at']),
+        'updatedAt' => elips_iso($row['updated_at']),
+    ];
+}
+
+function elips_grade_correction_public(array $row): array
+{
+    return [
+        'id' => (int) $row['id'],
+        'gradeId' => (int) $row['grade_id'],
+        'enrollmentId' => $row['enrollment_id'] === null ? null : (int) $row['enrollment_id'],
+        'previousScore' => $row['previous_score'] === null ? null : (float) $row['previous_score'],
+        'newScore' => $row['new_score'] === null ? null : (float) $row['new_score'],
+        'previousLetter' => $row['previous_letter'],
+        'newLetter' => $row['new_letter'],
+        'reason' => $row['reason'],
+        'actorId' => $row['actor_id'] === null ? null : (int) $row['actor_id'],
+        'actorName' => $row['actor_name'] ?? '',
+        'createdAt' => elips_iso($row['created_at']),
+    ];
+}
+
+/**
+ * Menghitung nilai akhir satu enrollment berdasarkan skema penilaian.
+ * Nilai kosong tidak pernah dianggap nol: komponen wajib yang belum
+ * dinilai membuat hasil berstatus incomplete.
+ */
+function elips_grade_compute_enrollment(array $enrollment, ?array $scheme = null): array
+{
+    $classId = $enrollment['class_id'] === null ? 0 : (int) $enrollment['class_id'];
+    $enrollmentId = (int) $enrollment['id'];
+    if ($scheme === null && $classId > 0) {
+        $scheme = elips_grade_scheme_for_class($classId);
+    }
+    if (!$scheme) {
+        return [
+            'schemeId' => null,
+            'schemeName' => '',
+            'schemeStatus' => null,
+            'passScore' => null,
+            'rounding' => 'half_up',
+            'components' => [],
+            'missing' => [],
+            'finalScore' => null,
+            'letter' => null,
+            'status' => 'no_scheme',
+            'passed' => null,
+        ];
+    }
+
+    $db = elips_db();
+    $components = elips_grade_scheme_components((int) $scheme['id']);
+    $resultComponents = [];
+    $missing = [];
+
+    foreach ($components as $component) {
+        $componentId = (int) $component['id'];
+        $type = $component['type'];
+        $componentResult = [
+            'componentId' => $componentId,
+            'name' => $component['name'],
+            'type' => $type,
+            'weight' => (float) $component['weight'],
+            'aggregation' => $component['aggregation'],
+            'maxScore' => (float) $component['maxScore'],
+            'isRequired' => (bool) $component['isRequired'],
+            'order' => (int) $component['order'],
+            'score' => null,
+            'status' => 'not_assessed',
+            'note' => '',
+            'activities' => [],
+        ];
+
+        // Pengecualian resmi (excused) berlaku untuk semua jenis komponen.
+        $stmt = $db->prepare(
+            'SELECT * FROM grade_component_scores WHERE component_id = ? AND enrollment_id = ? LIMIT 1'
+        );
+        $stmt->execute([$componentId, $enrollmentId]);
+        $override = $stmt->fetch() ?: null;
+        if ($override && $override['status'] === 'excused') {
+            $componentResult['status'] = 'excused';
+            $componentResult['note'] = $override['note'];
+            $resultComponents[] = $componentResult;
+            continue;
+        }
+
+        if ($type === 'manual') {
+            if ($override && $override['status'] === 'graded' && $override['score'] !== null) {
+                $componentResult['score'] = max(0, min(100, (float) $override['score']));
+                $componentResult['status'] = 'graded';
+                $componentResult['note'] = $override['note'];
+            } elseif ($override && $override['status'] === 'missing') {
+                $componentResult['status'] = 'missing';
+                $componentResult['note'] = $override['note'];
+            } else {
+                $componentResult['status'] = 'missing';
+            }
+        } elseif ($type === 'assignment') {
+            $stmt = $db->prepare(
+                "SELECT * FROM assignments
+                 WHERE class_id = ? AND status IN ('published', 'closed')
+                   AND type IN ('file_upload', 'text_submission')
+                 ORDER BY id ASC"
+            );
+            $stmt->execute([$classId]);
+            $activities = $stmt->fetchAll();
+            $weightedSum = 0.0;
+            $weightTotal = 0.0;
+            $activityMissing = false;
+            foreach ($activities as $activity) {
+                $maxScore = (float) $activity['max_score'] > 0 ? (float) $activity['max_score'] : 100.0;
+                $stmt = $db->prepare(
+                    'SELECT * FROM submissions WHERE assignment_id = ? AND enrollment_id = ? LIMIT 1'
+                );
+                $stmt->execute([(int) $activity['id'], $enrollmentId]);
+                $submission = $stmt->fetch() ?: null;
+                $activityRow = [
+                    'id' => (int) $activity['id'],
+                    'title' => $activity['title'],
+                    'maxScore' => $maxScore,
+                    'weight' => (float) $activity['weight'],
+                    'score' => null,
+                    'normalized' => null,
+                    'status' => 'missing',
+                ];
+                if ($submission && $submission['score'] !== null) {
+                    $normalized = ((float) $submission['score'] / $maxScore) * 100;
+                    $normalized = max(0, min(100, $normalized));
+                    $activityRow['score'] = (float) $submission['score'];
+                    $activityRow['normalized'] = $normalized;
+                    $activityRow['status'] = 'graded';
+                    $weight = $component['aggregation'] === 'average' ? 1.0 : ((float) $activity['weight'] > 0 ? (float) $activity['weight'] : 1.0);
+                    $weightedSum += $normalized * $weight;
+                    $weightTotal += $weight;
+                } else {
+                    $activityMissing = true;
+                }
+                $componentResult['activities'][] = $activityRow;
+            }
+            if (count($activities) === 0) {
+                $componentResult['status'] = 'missing';
+            } elseif ($weightTotal > 0) {
+                $componentResult['score'] = $weightedSum / $weightTotal;
+                $componentResult['status'] = $weightTotal > 0 ? 'graded' : 'missing';
+                if ($activityMissing) {
+                    // Nilai sebagian tetap ditampilkan, tetapi komponen wajib
+                    // yang belum lengkap tidak boleh menghasilkan final.
+                    $componentResult['status'] = 'missing';
+                }
+            } else {
+                $componentResult['status'] = 'missing';
+            }
+        } elseif ($type === 'exam') {
+            $stmt = $db->prepare(
+                "SELECT * FROM exams
+                 WHERE class_id = ? AND status IN ('published', 'closed')
+                 ORDER BY id ASC"
+            );
+            $stmt->execute([$classId]);
+            $activities = $stmt->fetchAll();
+            $weightedSum = 0.0;
+            $weightTotal = 0.0;
+            $activityMissing = false;
+            foreach ($activities as $activity) {
+                $maxScore = (float) $activity['max_score'] > 0 ? (float) $activity['max_score'] : 100.0;
+                $stmt = $db->prepare(
+                    'SELECT * FROM exam_results WHERE exam_id = ? AND enrollment_id = ? LIMIT 1'
+                );
+                $stmt->execute([(int) $activity['id'], $enrollmentId]);
+                $examResult = $stmt->fetch() ?: null;
+                $activityRow = [
+                    'id' => (int) $activity['id'],
+                    'title' => $activity['title'],
+                    'maxScore' => $maxScore,
+                    'weight' => (float) $activity['weight'],
+                    'score' => null,
+                    'normalized' => null,
+                    'status' => 'missing',
+                ];
+                if ($examResult && $examResult['status'] === 'excused') {
+                    $activityRow['status'] = 'excused';
+                } elseif ($examResult && $examResult['status'] === 'graded' && $examResult['score'] !== null) {
+                    $normalized = ((float) $examResult['score'] / $maxScore) * 100;
+                    $normalized = max(0, min(100, $normalized));
+                    $activityRow['score'] = (float) $examResult['score'];
+                    $activityRow['normalized'] = $normalized;
+                    $activityRow['status'] = 'graded';
+                    $weight = $component['aggregation'] === 'average' ? 1.0 : ((float) $activity['weight'] > 0 ? (float) $activity['weight'] : 1.0);
+                    $weightedSum += $normalized * $weight;
+                    $weightTotal += $weight;
+                } else {
+                    $activityMissing = true;
+                }
+                $componentResult['activities'][] = $activityRow;
+            }
+            if (count($activities) === 0) {
+                $componentResult['status'] = 'missing';
+            } elseif ($weightTotal > 0) {
+                $componentResult['score'] = $weightedSum / $weightTotal;
+                $componentResult['status'] = $activityMissing ? 'missing' : 'graded';
+            } else {
+                $componentResult['status'] = 'missing';
+            }
+        }
+
+        if ($componentResult['status'] === 'missing' && (bool) $component['isRequired']) {
+            $missing[] = $component['name'];
+        }
+        $resultComponents[] = $componentResult;
+    }
+
+    $included = array_values(array_filter($resultComponents, function ($component) {
+        return $component['status'] === 'graded' && $component['score'] !== null;
+    }));
+    $weightTotal = array_sum(array_map(function ($component) {
+        return (float) $component['weight'];
+    }, $included));
+
+    $finalScore = null;
+    $letter = null;
+    $status = 'incomplete';
+    if (count($missing) === 0 && $weightTotal > 0) {
+        $sum = 0.0;
+        foreach ($included as $component) {
+            $sum += (float) $component['score'] * (float) $component['weight'];
+        }
+        $finalScore = elips_grade_round($sum / $weightTotal, (string) $scheme['rounding']);
+        $letter = elips_predicate_letter($finalScore);
+        $status = 'computed';
+    }
+
+    return [
+        'schemeId' => (int) $scheme['id'],
+        'schemeName' => $scheme['name'],
+        'schemeStatus' => $scheme['status'],
+        'passScore' => (float) $scheme['pass_score'],
+        'rounding' => $scheme['rounding'],
+        'components' => $resultComponents,
+        'missing' => $missing,
+        'finalScore' => $finalScore,
+        'letter' => $letter,
+        'status' => $status,
+        'passed' => $finalScore === null ? null : ($finalScore >= (float) $scheme['pass_score']),
+    ];
 }
 
 function elips_unique_certificate_number(string $prefix): string

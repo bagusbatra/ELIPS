@@ -67,6 +67,77 @@ try {
         );
     }
 
+    // ---------- Migrasi v4.0: Phase 6 penilaian ----------
+    // Skema baru membuat kolom penilaian langsung; database lama perlu
+    // ditambahkan agar data nilai yang sudah ada tetap kompatibel.
+    $gradeColumnMigrations = [
+        'scheme_id' => 'ALTER TABLE grades ADD COLUMN scheme_id INT UNSIGNED NULL AFTER enrollment_id',
+        'final_score' => 'ALTER TABLE grades ADD COLUMN final_score DECIMAL(6,2) NULL AFTER score',
+        'status' => "ALTER TABLE grades ADD COLUMN status ENUM('draft', 'incomplete', 'finalized') NOT NULL DEFAULT 'draft' AFTER grade",
+        'components_snapshot' => 'ALTER TABLE grades ADD COLUMN components_snapshot LONGTEXT NULL AFTER status',
+        'finalized_by' => 'ALTER TABLE grades ADD COLUMN finalized_by INT UNSIGNED NULL AFTER note',
+        'finalized_at' => 'ALTER TABLE grades ADD COLUMN finalized_at DATETIME NULL AFTER finalized_by',
+        'computed_at' => 'ALTER TABLE grades ADD COLUMN computed_at DATETIME NULL AFTER finalized_at',
+    ];
+    foreach ($gradeColumnMigrations as $column => $sql) {
+        $hasColumn = (bool) $db->query("SHOW COLUMNS FROM grades LIKE " . $db->quote($column))->fetch();
+        if (!$hasColumn) {
+            $db->exec($sql);
+        }
+    }
+    $gradeIndexMigrations = [
+        'idx_grades_scheme' => 'ALTER TABLE grades ADD KEY idx_grades_scheme (scheme_id)',
+        'idx_grades_status' => 'ALTER TABLE grades ADD KEY idx_grades_status (status)',
+    ];
+    foreach ($gradeIndexMigrations as $index => $sql) {
+        $hasIndex = (bool) $db->query("SHOW INDEX FROM grades WHERE Key_name = " . $db->quote($index))->fetch();
+        if (!$hasIndex) {
+            $db->exec($sql);
+        }
+    }
+    $gradeFkMigrations = [
+        'fk_grades_scheme' => 'ALTER TABLE grades ADD CONSTRAINT fk_grades_scheme
+             FOREIGN KEY (scheme_id) REFERENCES grade_schemes (id) ON DELETE SET NULL',
+        'fk_grades_finalized_by' => 'ALTER TABLE grades ADD CONSTRAINT fk_grades_finalized_by
+             FOREIGN KEY (finalized_by) REFERENCES users (id) ON DELETE SET NULL',
+    ];
+    foreach ($gradeFkMigrations as $constraint => $sql) {
+        $stmt = $db->prepare(
+            "SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS
+             WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'grades'
+               AND CONSTRAINT_NAME = ?"
+        );
+        $stmt->execute([$constraint]);
+        if ((int) $stmt->fetchColumn() === 0) {
+            $db->exec($sql);
+        }
+    }
+
+    // Rentang predikat default mengikuti pemetaan huruf yang sudah dipakai
+    // versi sebelumnya, sehingga perilaku lama tetap konsisten.
+    $predicateCount = (int) $db->query('SELECT COUNT(*) FROM predicate_ranges')->fetchColumn();
+    if ($predicateCount === 0) {
+        $predicateStmt = $db->prepare(
+            'INSERT INTO predicate_ranges (letter, label, min_score, max_score, sort_order)
+             VALUES (?, ?, ?, ?, ?)'
+        );
+        $predicates = [
+            ['A', 'Sangat Baik', 90.00, 100.00, 1],
+            ['A-', 'Sangat Baik', 80.00, 89.99, 2],
+            ['B+', 'Baik', 75.00, 79.99, 3],
+            ['B', 'Baik', 70.00, 74.99, 4],
+            ['B-', 'Baik', 65.00, 69.99, 5],
+            ['C+', 'Cukup', 60.00, 64.99, 6],
+            ['C', 'Cukup', 55.00, 59.99, 7],
+            ['D', 'Kurang', 50.00, 54.99, 8],
+            ['E', 'Tidak Lulus', 0.00, 49.99, 9],
+        ];
+        foreach ($predicates as $predicate) {
+            $predicateStmt->execute($predicate);
+        }
+        echo "Rentang predikat default ditambahkan.\n";
+    }
+
     $branchCount = (int) $db->query('SELECT COUNT(*) FROM branches')->fetchColumn();
     if ($branchCount === 0) {
         $branchStmt = $db->prepare(
@@ -479,6 +550,46 @@ try {
     ];
     foreach ($examResults as $examResult) {
         $examResultStmt->execute($examResult);
+    }
+
+    // ---------- Skema penilaian Phase 6 (demo) ----------
+    $schemeStmt = $db->prepare(
+        "INSERT INTO grade_schemes
+         (id, course_id, class_id, name, status, pass_score, rounding, notes, created_by, updated_by, created_at, updated_at)
+         VALUES (1, 1, 1, ?, 'published', 60.00, 'half_up', ?, 1, 1, ?, ?)"
+    );
+    $schemeStmt->execute([
+        'Skema Penilaian Pelatihan Manajemen Dasar',
+        'Template bobot: tugas 30%, ujian 40%, penilaian manual 30%.',
+        '2026-10-01 08:00:00',
+        '2026-10-01 08:00:00',
+    ]);
+
+    $componentStmt = $db->prepare(
+        'INSERT INTO grade_scheme_components
+         (id, scheme_id, type, name, description, weight, aggregation, max_score, is_required, sort_order, created_at, updated_at)
+         VALUES (?, 1, ?, ?, ?, ?, ?, 100.00, 1, ?, ?, ?)'
+    );
+    $components = [
+        [1, 'assignment', 'Tugas', 'Rata-rata nilai tugas kelas.', 30.00, 'weighted', 1, '2026-10-01 08:00:00', '2026-10-01 08:00:00'],
+        [2, 'exam', 'Ujian', 'Rata-rata nilai ujian kelas.', 40.00, 'weighted', 2, '2026-10-01 08:00:00', '2026-10-01 08:00:00'],
+        [3, 'manual', 'Praktik & Partisipasi', 'Penilaian langsung oleh instruktur.', 30.00, 'average', 3, '2026-10-01 08:00:00', '2026-10-01 08:00:00'],
+    ];
+    foreach ($components as $component) {
+        $componentStmt->execute($component);
+    }
+
+    $manualStmt = $db->prepare(
+        'INSERT INTO grade_component_scores
+         (id, component_id, enrollment_id, student_id, score, status, assessor_id, assessed_at, note, created_at, updated_at)
+         VALUES (?, 3, ?, ?, ?, ?, 2, ?, ?, ?, ?)'
+    );
+    $manualScores = [
+        [1, 1, 5, 90.00, 'graded', '2026-10-28 10:00:00', 'Praktik kerja rapi dan komunikatif.', '2026-10-28 10:00:00', '2026-10-28 10:00:00'],
+        [2, 2, 6, 85.00, 'graded', '2026-10-28 10:05:00', 'Pemahaman konsep baik, partisipasi aktif.', '2026-10-28 10:05:00', '2026-10-28 10:05:00'],
+    ];
+    foreach ($manualScores as $manualScore) {
+        $manualStmt->execute($manualScore);
     }
 
     $db->commit();

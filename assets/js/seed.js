@@ -307,6 +307,48 @@
         ];
     }
 
+    function seedPredicateRanges() {
+        return [
+            { id: 1, letter: 'A', label: 'Sangat Baik', minScore: 90, maxScore: 100, sortOrder: 1, isActive: true },
+            { id: 2, letter: 'A-', label: 'Sangat Baik', minScore: 80, maxScore: 89.99, sortOrder: 2, isActive: true },
+            { id: 3, letter: 'B+', label: 'Baik', minScore: 75, maxScore: 79.99, sortOrder: 3, isActive: true },
+            { id: 4, letter: 'B', label: 'Baik', minScore: 70, maxScore: 74.99, sortOrder: 4, isActive: true },
+            { id: 5, letter: 'B-', label: 'Baik', minScore: 65, maxScore: 69.99, sortOrder: 5, isActive: true },
+            { id: 6, letter: 'C+', label: 'Cukup', minScore: 60, maxScore: 64.99, sortOrder: 6, isActive: true },
+            { id: 7, letter: 'C', label: 'Cukup', minScore: 55, maxScore: 59.99, sortOrder: 7, isActive: true },
+            { id: 8, letter: 'D', label: 'Kurang', minScore: 50, maxScore: 54.99, sortOrder: 8, isActive: true },
+            { id: 9, letter: 'E', label: 'Tidak Lulus', minScore: 0, maxScore: 49.99, sortOrder: 9, isActive: true }
+        ];
+    }
+
+    function seedGradeSchemes() {
+        return [
+            {
+                id: 1, courseId: 1, courseTitle: 'Pelatihan Manajemen Dasar', classId: 1,
+                classCode: 'ANG-2026-MNJ-01', className: 'Angkatan 2026 — Pelatihan Manajemen Dasar',
+                name: 'Skema Penilaian Pelatihan Manajemen Dasar', status: 'published',
+                passScore: 60, rounding: 'half_up',
+                notes: 'Template bobot: tugas 30%, ujian 40%, penilaian manual 30%.',
+                createdBy: 1, updatedBy: 1, createdAt: '2026-10-01T08:00:00.000Z', updatedAt: '2026-10-01T08:00:00.000Z'
+            }
+        ];
+    }
+
+    function seedGradeSchemeComponents() {
+        return [
+            { id: 1, schemeId: 1, type: 'assignment', name: 'Tugas', description: 'Rata-rata nilai tugas kelas.', weight: 30, aggregation: 'weighted', maxScore: 100, isRequired: true, order: 1, createdAt: '2026-10-01T08:00:00.000Z', updatedAt: '2026-10-01T08:00:00.000Z' },
+            { id: 2, schemeId: 1, type: 'exam', name: 'Ujian', description: 'Rata-rata nilai ujian kelas.', weight: 40, aggregation: 'weighted', maxScore: 100, isRequired: true, order: 2, createdAt: '2026-10-01T08:00:00.000Z', updatedAt: '2026-10-01T08:00:00.000Z' },
+            { id: 3, schemeId: 1, type: 'manual', name: 'Praktik & Partisipasi', description: 'Penilaian langsung oleh instruktur.', weight: 30, aggregation: 'average', maxScore: 100, isRequired: true, order: 3, createdAt: '2026-10-01T08:00:00.000Z', updatedAt: '2026-10-01T08:00:00.000Z' }
+        ];
+    }
+
+    function seedGradeComponentScores() {
+        return [
+            { id: 1, componentId: 3, enrollmentId: 1, studentId: 5, score: 90, status: 'graded', assessorId: 2, assessorName: 'Ahmad Fauzi, M.M.', assessedAt: '2026-10-28T10:00:00.000Z', note: 'Praktik kerja rapi dan komunikatif.', createdAt: '2026-10-28T10:00:00.000Z', updatedAt: '2026-10-28T10:00:00.000Z' },
+            { id: 2, componentId: 3, enrollmentId: 2, studentId: 6, score: 85, status: 'graded', assessorId: 2, assessorName: 'Ahmad Fauzi, M.M.', assessedAt: '2026-10-28T10:05:00.000Z', note: 'Pemahaman konsep baik, partisipasi aktif.', createdAt: '2026-10-28T10:05:00.000Z', updatedAt: '2026-10-28T10:05:00.000Z' }
+        ];
+    }
+
     function seedCategories() {        return [
             { id: 1, name: 'Pelatihan', slug: 'pelatihan', status: 'active' },
             { id: 2, name: 'Soft Skill', slug: 'soft-skill', status: 'active' },
@@ -722,6 +764,23 @@
         }
         if (!Array.isArray(read(KEYS.examResults, null))) {
             write(KEYS.examResults, seedExamResults());
+        }
+
+        // ---------- Phase 6: skema penilaian, predikat, dan finalisasi ----------
+        if (!Array.isArray(read(KEYS.predicateRanges, null))) {
+            write(KEYS.predicateRanges, seedPredicateRanges());
+        }
+        if (!Array.isArray(read(KEYS.gradeSchemes, null))) {
+            write(KEYS.gradeSchemes, seedGradeSchemes());
+        }
+        if (!Array.isArray(read(KEYS.gradeSchemeComponents, null))) {
+            write(KEYS.gradeSchemeComponents, seedGradeSchemeComponents());
+        }
+        if (!Array.isArray(read(KEYS.gradeComponentScores, null))) {
+            write(KEYS.gradeComponentScores, seedGradeComponentScores());
+        }
+        if (!Array.isArray(read(KEYS.gradeCorrections, null))) {
+            write(KEYS.gradeCorrections, []);
         }
 
         const assignmentStatuses = ['draft', 'published', 'closed', 'archived'];

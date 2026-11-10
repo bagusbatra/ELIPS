@@ -229,19 +229,50 @@ function elips_snapshot(): array
     }
 
     $grades = [];
-    foreach ($db->query('SELECT * FROM grades ORDER BY id ASC') as $row) {
-        $grades[] = [
+    foreach ($db->query('SELECT id FROM grades ORDER BY id ASC') as $row) {
+        $grade = elips_grade_public((int) $row['id']);
+        if ($grade) $grades[] = $grade;
+    }
+    $predicateRanges = [];
+    foreach ($db->query('SELECT * FROM predicate_ranges ORDER BY sort_order ASC, min_score DESC, id ASC') as $row) {
+        $predicateRanges[] = [
             'id' => (int) $row['id'],
-            'enrollmentId' => $row['enrollment_id'] === null ? null : (int) $row['enrollment_id'],
-            'courseId' => (int) $row['course_id'],
-            'studentId' => (int) $row['student_id'],
-            'instructorId' => $row['instructor_id'] === null ? null : (int) $row['instructor_id'],
-            'score' => (int) $row['score'],
-            'grade' => $row['grade'],
-            'note' => $row['note'],
+            'letter' => $row['letter'],
+            'label' => $row['label'],
+            'minScore' => (float) $row['min_score'],
+            'maxScore' => (float) $row['max_score'],
+            'sortOrder' => (int) $row['sort_order'],
+            'isActive' => (bool) $row['is_active'],
             'createdAt' => elips_iso($row['created_at']),
             'updatedAt' => elips_iso($row['updated_at']),
         ];
+    }
+
+    $gradeSchemes = [];
+    foreach ($db->query('SELECT id FROM grade_schemes ORDER BY id ASC') as $row) {
+        $scheme = elips_grade_scheme_row((int) $row['id']);
+        if ($scheme) {
+            $gradeSchemes[] = elips_grade_scheme_public($scheme);
+        }
+    }
+
+    $gradeSchemeComponents = [];
+    foreach ($db->query('SELECT * FROM grade_scheme_components ORDER BY scheme_id ASC, sort_order ASC, id ASC') as $row) {
+        $gradeSchemeComponents[] = elips_grade_scheme_component_public($row);
+    }
+
+    $gradeComponentScores = [];
+    foreach ($db->query('SELECT * FROM grade_component_scores ORDER BY id ASC') as $row) {
+        $gradeComponentScores[] = elips_grade_component_score_public($row);
+    }
+
+    $gradeCorrections = [];
+    foreach ($db->query(
+        'SELECT gc.*, u.name AS actor_name FROM grade_corrections gc
+         LEFT JOIN users u ON u.id = gc.actor_id
+         ORDER BY gc.id ASC'
+    ) as $row) {
+        $gradeCorrections[] = elips_grade_correction_public($row);
     }
 
     $certificates = [];
@@ -430,6 +461,11 @@ function elips_snapshot(): array
         'modules' => $modules,
         'lessons' => $lessons,
         'grades' => $grades,
+        'predicateRanges' => $predicateRanges,
+        'gradeSchemes' => $gradeSchemes,
+        'gradeSchemeComponents' => $gradeSchemeComponents,
+        'gradeComponentScores' => $gradeComponentScores,
+        'gradeCorrections' => $gradeCorrections,
         'certificates' => $certificates,
         'completedLessons' => $completedLessons,
         'classMaterialSettings' => $classMaterialSettings,

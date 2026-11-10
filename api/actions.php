@@ -161,6 +161,30 @@ function elips_dispatch(string $action, array $payload): array
             return elips_action_exam_result($payload);
         case 'grade.save':
             return elips_action_grade_save($payload);
+        case 'grade.roster':
+            return elips_action_grade_roster($payload);
+        case 'grade.manualSave':
+            return elips_action_grade_manual_save($payload);
+        case 'grade.exempt':
+            return elips_action_grade_exempt($payload);
+        case 'grade.finalize':
+            return elips_action_grade_finalize($payload);
+        case 'grade.correct':
+            return elips_action_grade_correct($payload);
+        case 'grade.transcript':
+            return elips_action_grade_transcript($payload);
+        case 'predicate.list':
+            return elips_action_predicate_list();
+        case 'predicate.save':
+            return elips_action_predicate_save($payload);
+        case 'gradeScheme.list':
+            return elips_action_grade_scheme_list($payload);
+        case 'gradeScheme.save':
+            return elips_action_grade_scheme_save($payload);
+        case 'gradeScheme.status':
+            return elips_action_grade_scheme_status($payload);
+        case 'gradeScheme.delete':
+            return elips_action_grade_scheme_delete($payload);
         case 'certificate.draft':
             return elips_action_certificate_draft($payload);
         case 'certificate.approve':
@@ -4795,6 +4819,11 @@ function elips_action_grade_save(array $p): array
         }
         $isNewGrade = $grade === null;
 
+        if ($grade && ($grade['status'] ?? 'draft') === 'finalized') {
+            $db->rollBack();
+            return elips_fail('Nilai sudah difinalisasi dan terkunci. Gunakan koreksi nilai dengan alasan.');
+        }
+
         if ($grade) {
             $stmt = $db->prepare(
                 'UPDATE grades SET enrollment_id = ?, score = ?, grade = ?, note = ?, instructor_id = ?, updated_at = UTC_TIMESTAMP() WHERE id = ?'
@@ -4878,6 +4907,937 @@ function elips_action_grade_save(array $p): array
     return elips_ok('Nilai disimpan. E-sertifikat Draft menunggu persetujuan Admin.', [
         'grade' => elips_grade_public($gradeId),
         'certificate' => elips_certificate_public($certificateId),
+    ]);
+}
+
+// ---------- Penilaian & finalisasi (Phase 6) ----------
+
+function elips_grade_scheme_from_payload(array $p): array
+{
+    $data = elips_payload_array($p, 'data');
+    return $data ?: $p;
+}
+
+function elips_grade_weight_total(array $components): float
+{
+    $total = 0.0;
+    foreach ($components as $component) {
+        $total += (float) ($component['weight'] ?? 0);
+    }
+    return round($total, 2);
+}
+
+function elips_grade_scheme_validate_components(array $components, string $status): ?string
+{
+    if (count($components) === 0 && $status === 'published') {
+        return 'Skema harus memiliki minimal satu komponen sebelum dipublikasikan.';
+    }
+    $seen = [];
+    foreach ($components as $index => $component) {
+        $type = (string) ($component['type'] ?? '');
+        if (!in_array($type, ['assignment', 'exam', 'manual'], true)) {
+            return 'Jenis komponen #' . ($index + 1) . ' tidak valid.';
+        }
+        $name = trim((string) ($component['name'] ?? ''));
+        if ($name === '') {
+            return 'Nama komponen #' . ($index + 1) . ' wajib diisi.';
+        }
+        if (isset($seen[mb_strtolower($name)])) {
+            return 'Nama komponen "' . $name . '" dipakai lebih dari sekali.';
+        }
+        $seen[mb_strtolower($name)] = true;
+        $weight = (float) ($component['weight'] ?? 0);
+        if ($weight < 0 || $weight > 100) {
+            return 'Bobot komponen "' . $name . '" harus antara 0-100.';
+        }
+        $aggregation = (string) ($component['aggregation'] ?? 'weighted');
+        if (!in_array($aggregation, ['weighted', 'average'], true)) {
+            return 'Agregasi komponen "' . $name . '" tidak valid.';
+        }
+        $maxScore = (float) ($component['maxScore'] ?? 100);
+        if ($maxScore <= 0 || $maxScore > 100) {
+            return 'Skor maksimum komponen "' . $name . '" harus antara 0-100.';
+        }
+    }
+    if ($status === 'published' && abs(elips_grade_weight_total($components) - 100.0) > 0.01) {
+        return 'Total bobot komponen harus tepat 100% sebelum skema dipublikasikan.';
+    }
+    return null;
+}
+
+function elips_action_predicate_list(): array
+{
+    elips_require_login();
+    return elips_ok('', ['ranges' => elips_predicate_ranges(false)]);
+}
+
+function elips_action_predicate_save(array $p): array
+{
+    $actor = elips_require_admin();
+    $ranges = $p['ranges'] ?? null;
+    if (!is_array($ranges) || count($ranges) === 0) {
+        return elips_fail('Daftar rentang predikat wajib diisi.');
+    }
+
+    $normalized = [];
+    $seen = [];
+    foreach ($ranges as $index => $range) {
+        if (!is_array($range)) {
+            return elips_fail('Rentang predikat #' . ($index + 1) . ' tidak valid.');
+        }
+        $letter = trim((string) ($range['letter'] ?? ''));
+        if ($letter === '' || mb_strlen($letter) > 4) {
+            return elips_fail('Huruf predikat #' . ($index + 1) . ' tidak valid.');
+        }
+        $key = mb_strtolower($letter);
+        if (isset($seen[$key])) {
+            return elips_fail('Huruf predikat "' . $letter . '" dipakai lebih dari sekali.');
+        }
+        $seen[$key] = true;
+
+        $min = (float) ($range['minScore'] ?? -1);
+        $max = (float) ($range['maxScore'] ?? -1);
+        if ($min < 0 || $max > 100 || $min > $max) {
+            return elips_fail('Rentang predikat "' . $letter . '" harus berada di 0-100 dan min <= max.');
+        }
+        $normalized[] = [
+            'letter' => $letter,
+            'label' => trim((string) ($range['label'] ?? '')),
+            'minScore' => $min,
+            'maxScore' => $max,
+            'sortOrder' => (int) ($range['sortOrder'] ?? ($index + 1)),
+            'isActive' => array_key_exists('isActive', $range) ? (bool) $range['isActive'] : true,
+        ];
+    }
+
+    $active = array_values(array_filter($normalized, function ($range) {
+        return $range['isActive'];
+    }));
+    if (count($active) === 0) {
+        return elips_fail('Minimal satu rentang predikat harus aktif.');
+    }
+    usort($active, function ($a, $b) {
+        return $a['minScore'] <=> $b['minScore'];
+    });
+    if ($active[0]['minScore'] > 0.0) {
+        return elips_fail('Rentang predikat aktif harus dimulai dari skor 0.');
+    }
+    $previous = null;
+    foreach ($active as $range) {
+        if ($previous !== null) {
+            if ($range['minScore'] <= $previous['maxScore']) {
+                return elips_fail('Rentang predikat tidak boleh tumpang tindih.');
+            }
+            if (round($range['minScore'] - $previous['maxScore'], 2) > 0.01) {
+                return elips_fail('Rentang predikat harus mencakup seluruh skala tanpa celah.');
+            }
+        }
+        $previous = $range;
+    }
+    if ($previous['maxScore'] < 100.0) {
+        return elips_fail('Rentang predikat aktif harus mencakup skor hingga 100.');
+    }
+
+    $db = elips_db();
+    $db->beginTransaction();
+    try {
+        $db->exec('DELETE FROM predicate_ranges');
+        $stmt = $db->prepare(
+            'INSERT INTO predicate_ranges (letter, label, min_score, max_score, sort_order, is_active, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP())'
+        );
+        foreach ($normalized as $range) {
+            $stmt->execute([
+                $range['letter'],
+                $range['label'],
+                $range['minScore'],
+                $range['maxScore'],
+                $range['sortOrder'],
+                $range['isActive'] ? 1 : 0,
+            ]);
+        }
+        $db->commit();
+    } catch (Throwable $e) {
+        $db->rollBack();
+        throw $e;
+    }
+
+    elips_audit('predicate', 'predicate', null, 'Rentang predikat', 'Memperbarui ' . count($normalized) . ' rentang predikat A-E.', $actor);
+    return elips_ok('Rentang predikat disimpan.', ['ranges' => elips_predicate_ranges(false)]);
+}
+
+function elips_action_grade_scheme_list(array $p): array
+{
+    $actor = elips_require_login();
+    $db = elips_db();
+    $sql = 'SELECT gs.id FROM grade_schemes gs';
+    $params = [];
+    $where = [];
+    if (!empty($p['classId'])) {
+        $where[] = 'gs.class_id = ?';
+        $params[] = (int) $p['classId'];
+    }
+    if (!empty($p['courseId'])) {
+        $where[] = 'gs.course_id = ?';
+        $params[] = (int) $p['courseId'];
+    }
+    if ($where) {
+        $sql .= ' WHERE ' . implode(' AND ', $where);
+    }
+    $sql .= ' ORDER BY gs.id ASC';
+    $stmt = $db->prepare($sql);
+    $stmt->execute($params);
+    $schemes = [];
+    foreach ($stmt->fetchAll() as $row) {
+        $scheme = elips_grade_scheme_row((int) $row['id']);
+        if (!$scheme) continue;
+        $class = elips_class_row((int) $scheme['class_id']);
+        if (!$class || !elips_can_manage_class($class, $actor)) continue;
+        $schemes[] = elips_grade_scheme_public($scheme);
+    }
+    return elips_ok('', ['schemes' => $schemes]);
+}
+
+function elips_action_grade_scheme_save(array $p): array
+{
+    $actor = elips_require_login();
+    $data = elips_grade_scheme_from_payload($p);
+    $schemeId = (int) ($data['id'] ?? 0);
+    $classId = (int) ($data['classId'] ?? 0);
+
+    $existing = $schemeId > 0 ? elips_grade_scheme_row($schemeId) : null;
+    if ($schemeId > 0 && !$existing) return elips_fail('Skema penilaian tidak ditemukan.');
+    if (!$classId && $existing) $classId = (int) $existing['class_id'];
+    if (!$classId) return elips_fail('Kelas tidak valid.');
+
+    $class = elips_class_row($classId);
+    if (!$class) return elips_fail('Kelas tidak ditemukan.');
+    if (!elips_can_manage_class($class, $actor)) return elips_fail('Anda tidak berhak mengatur penilaian kelas ini.');
+
+    if (!$existing) {
+        $existing = elips_grade_scheme_for_class($classId);
+        if ($existing) $schemeId = (int) $existing['id'];
+    }
+
+    $name = trim((string) ($data['name'] ?? ($existing['name'] ?? '')));
+    if ($name === '') return elips_fail('Nama skema penilaian wajib diisi.');
+
+    $status = (string) ($data['status'] ?? ($existing['status'] ?? 'draft'));
+    if (!in_array($status, ['draft', 'published', 'archived'], true)) return elips_fail('Status skema tidak valid.');
+    if ($existing && $existing['status'] === 'published' && $status === 'draft') {
+        return elips_fail('Skema yang sudah dipublikasikan tidak dapat dikembalikan ke draft. Arsipkan skema untuk menggantinya.');
+    }
+
+    $rounding = (string) ($data['rounding'] ?? ($existing['rounding'] ?? 'half_up'));
+    if (!in_array($rounding, ['half_up', 'half_down', 'floor', 'ceil'], true)) return elips_fail('Mode pembulatan tidak valid.');
+
+    $passScore = (float) ($data['passScore'] ?? ($existing['pass_score'] ?? 60));
+    if ($passScore < 0 || $passScore > 100) return elips_fail('Batas lulus harus antara 0-100.');
+
+    $components = $data['components'] ?? null;
+    if ($components === null && $existing) {
+        $components = elips_grade_scheme_components((int) $existing['id']);
+    }
+    if (!is_array($components)) $components = [];
+    $components = array_values(array_map(function ($component) {
+        return is_array($component) ? $component : [];
+    }, $components));
+
+    $validation = elips_grade_scheme_validate_components($components, $status);
+    if ($validation !== null) return elips_fail($validation);
+
+    // Skema yang sudah dipakai nilai final tidak boleh diubah strukturnya
+    // agar histori nilai tetap konsisten.
+    if ($existing) {
+        $stmt = elips_db()->prepare("SELECT COUNT(*) FROM grades WHERE scheme_id = ? AND status = 'finalized'");
+        $stmt->execute([(int) $existing['id']]);
+        if ((int) $stmt->fetchColumn() > 0) {
+            $sameComponents = true;
+            $current = elips_grade_scheme_components((int) $existing['id']);
+            if (count($current) !== count($components)) {
+                $sameComponents = false;
+            } else {
+                foreach ($components as $index => $component) {
+                    if ((int) ($component['id'] ?? 0) !== (int) $current[$index]['id']
+                        || (string) ($component['type'] ?? '') !== $current[$index]['type']
+                        || abs((float) ($component['weight'] ?? 0) - (float) $current[$index]['weight']) > 0.01) {
+                        $sameComponents = false;
+                        break;
+                    }
+                }
+            }
+            if (!$sameComponents) {
+                return elips_fail('Skema sudah memiliki nilai final. Komponen dan bobot tidak dapat diubah; gunakan koreksi nilai.');
+            }
+        }
+    }
+
+    $db = elips_db();
+    $db->beginTransaction();
+    try {
+        if ($existing) {
+            $stmt = $db->prepare(
+                'UPDATE grade_schemes
+                 SET name = ?, status = ?, pass_score = ?, rounding = ?, notes = ?, updated_by = ?, updated_at = UTC_TIMESTAMP()
+                 WHERE id = ?'
+            );
+            $stmt->execute([$name, $status, $passScore, $rounding, (string) ($data['notes'] ?? ($existing['notes'] ?? '')), (int) $actor['id'], (int) $existing['id']]);
+            $schemeId = (int) $existing['id'];
+            $existingComponents = [];
+            foreach (elips_grade_scheme_components($schemeId) as $component) {
+                $existingComponents[(int) $component['id']] = $component;
+            }
+            $keptIds = [];
+            $insertComponent = $db->prepare(
+                'INSERT INTO grade_scheme_components
+                 (scheme_id, type, name, description, weight, aggregation, max_score, is_required, sort_order, created_at, updated_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP())'
+            );
+            $updateComponent = $db->prepare(
+                'UPDATE grade_scheme_components
+                 SET type = ?, name = ?, description = ?, weight = ?, aggregation = ?, max_score = ?, is_required = ?, sort_order = ?, updated_at = UTC_TIMESTAMP()
+                 WHERE id = ? AND scheme_id = ?'
+            );
+            foreach ($components as $index => $component) {
+                $componentId = (int) ($component['id'] ?? 0);
+                $values = [
+                    (string) ($component['type'] ?? 'manual'),
+                    trim((string) ($component['name'] ?? '')),
+                    (string) ($component['description'] ?? ''),
+                    (float) ($component['weight'] ?? 0),
+                    (string) ($component['aggregation'] ?? 'weighted'),
+                    (float) ($component['maxScore'] ?? 100),
+                    !empty($component['isRequired']) ? 1 : 0,
+                    (int) ($component['order'] ?? ($index + 1)),
+                ];
+                if ($componentId > 0 && isset($existingComponents[$componentId])) {
+                    $updateComponent->execute(array_merge($values, [$componentId, $schemeId]));
+                    $keptIds[] = $componentId;
+                } else {
+                    $insertComponent->execute(array_merge([$schemeId], $values));
+                    $keptIds[] = (int) $db->lastInsertId();
+                }
+            }
+            foreach (array_keys($existingComponents) as $componentId) {
+                if (!in_array($componentId, $keptIds, true)) {
+                    $stmt = $db->prepare('DELETE FROM grade_scheme_components WHERE id = ? AND scheme_id = ?');
+                    $stmt->execute([$componentId, $schemeId]);
+                }
+            }
+        } else {
+            $stmt = $db->prepare(
+                'INSERT INTO grade_schemes
+                 (course_id, class_id, name, status, pass_score, rounding, notes, created_by, updated_by, created_at, updated_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP())'
+            );
+            $stmt->execute([
+                (int) $class['course_id'],
+                $classId,
+                $name,
+                $status,
+                $passScore,
+                $rounding,
+                (string) ($data['notes'] ?? ''),
+                (int) $actor['id'],
+                (int) $actor['id'],
+            ]);
+            $schemeId = (int) $db->lastInsertId();
+            $insertComponent = $db->prepare(
+                'INSERT INTO grade_scheme_components
+                 (scheme_id, type, name, description, weight, aggregation, max_score, is_required, sort_order, created_at, updated_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP())'
+            );
+            foreach ($components as $index => $component) {
+                $insertComponent->execute([
+                    $schemeId,
+                    (string) ($component['type'] ?? 'manual'),
+                    trim((string) ($component['name'] ?? '')),
+                    (string) ($component['description'] ?? ''),
+                    (float) ($component['weight'] ?? 0),
+                    (string) ($component['aggregation'] ?? 'weighted'),
+                    (float) ($component['maxScore'] ?? 100),
+                    !empty($component['isRequired']) ? 1 : 0,
+                    (int) ($component['order'] ?? ($index + 1)),
+                ]);
+            }
+        }
+        $db->commit();
+    } catch (Throwable $e) {
+        $db->rollBack();
+        throw $e;
+    }
+
+    $scheme = elips_grade_scheme_public(elips_grade_scheme_row($schemeId));
+    elips_audit(
+        'status',
+        'grade_scheme',
+        $schemeId,
+        $scheme['name'],
+        ($existing ? 'Memperbarui' : 'Membuat') . ' skema penilaian "' . $scheme['name'] . '" untuk kelas ' . $scheme['classCode'] . '.',
+        $actor
+    );
+    return elips_ok('Skema penilaian disimpan.', ['scheme' => $scheme]);
+}
+
+function elips_action_grade_scheme_status(array $p): array
+{
+    $actor = elips_require_login();
+    $schemeId = (int) ($p['id'] ?? 0);
+    $status = (string) ($p['status'] ?? '');
+    if (!in_array($status, ['draft', 'published', 'archived'], true)) return elips_fail('Status skema tidak valid.');
+    $scheme = elips_grade_scheme_row($schemeId);
+    if (!$scheme) return elips_fail('Skema penilaian tidak ditemukan.');
+    $class = elips_class_row((int) $scheme['class_id']);
+    if (!$class || !elips_can_manage_class($class, $actor)) return elips_fail('Anda tidak berhak mengubah skema ini.');
+
+    if ($status === 'published') {
+        $components = elips_grade_scheme_components($schemeId);
+        $validation = elips_grade_scheme_validate_components($components, 'published');
+        if ($validation !== null) return elips_fail($validation);
+    }
+
+    $stmt = elips_db()->prepare('UPDATE grade_schemes SET status = ?, updated_by = ?, updated_at = UTC_TIMESTAMP() WHERE id = ?');
+    $stmt->execute([$status, (int) $actor['id'], $schemeId]);
+
+    elips_audit('status', 'grade_scheme', $schemeId, $scheme['name'], 'Mengubah status skema penilaian menjadi ' . $status . '.', $actor);
+    return elips_ok('Status skema diperbarui.', ['scheme' => elips_grade_scheme_public(elips_grade_scheme_row($schemeId))]);
+}
+
+function elips_action_grade_scheme_delete(array $p): array
+{
+    $actor = elips_require_login();
+    $schemeId = (int) ($p['id'] ?? 0);
+    $scheme = elips_grade_scheme_row($schemeId);
+    if (!$scheme) return elips_fail('Skema penilaian tidak ditemukan.');
+    $class = elips_class_row((int) $scheme['class_id']);
+    if (!$class || !elips_can_manage_class($class, $actor)) return elips_fail('Anda tidak berhak menghapus skema ini.');
+    if ($scheme['status'] === 'published') {
+        return elips_fail('Arsipkan skema terlebih dahulu sebelum menghapus.');
+    }
+
+    $stmt = elips_db()->prepare('DELETE FROM grade_schemes WHERE id = ?');
+    $stmt->execute([$schemeId]);
+    elips_audit('delete', 'grade_scheme', $schemeId, $scheme['name'], 'Menghapus skema penilaian "' . $scheme['name'] . '".', $actor);
+    return elips_ok('Skema penilaian dihapus.');
+}
+
+function elips_grade_computation_for_enrollment(array $enrollment): array
+{
+    return elips_grade_compute_enrollment($enrollment);
+}
+
+function elips_action_grade_roster(array $p): array
+{
+    $actor = elips_require_login();
+    $classId = (int) ($p['classId'] ?? 0);
+    $class = elips_class_row($classId);
+    if (!$class) return elips_fail('Kelas tidak ditemukan.');
+    if (!elips_can_manage_class($class, $actor)) return elips_fail('Anda tidak berhak melihat nilai kelas ini.');
+
+    $scheme = elips_grade_scheme_for_class($classId);
+    $db = elips_db();
+    $stmt = $db->prepare(
+        "SELECT e.*, u.name AS student_name, u.email AS student_email
+         FROM enrollments e JOIN users u ON u.id = e.student_id
+         WHERE e.class_id = ? AND e.status IN ('active', 'pending')
+         ORDER BY u.name ASC"
+    );
+    $stmt->execute([$classId]);
+
+    $roster = [];
+    foreach ($stmt->fetchAll() as $enrollment) {
+        $computed = elips_grade_compute_enrollment($enrollment, $scheme);
+        $gradeRow = elips_grade_row_by_enrollment((int) $enrollment['id']);
+        $gradePublic = $gradeRow ? elips_grade_public((int) $gradeRow['id']) : null;
+        $roster[] = [
+            'enrollmentId' => (int) $enrollment['id'],
+            'studentId' => (int) $enrollment['student_id'],
+            'studentName' => $enrollment['student_name'],
+            'studentEmail' => $enrollment['student_email'],
+            'enrollmentStatus' => $enrollment['status'],
+            'gradeId' => $gradePublic ? $gradePublic['id'] : null,
+            'gradeStatus' => $gradePublic ? $gradePublic['status'] : 'draft',
+            'finalScore' => $gradePublic && $gradePublic['finalScore'] !== null ? $gradePublic['finalScore'] : $computed['finalScore'],
+            'letter' => $gradePublic && $gradePublic['grade'] !== '' ? $gradePublic['grade'] : $computed['letter'],
+            'computedStatus' => $computed['status'],
+            'missing' => $computed['missing'],
+            'passed' => $computed['passed'],
+            'finalizedAt' => $gradePublic ? $gradePublic['finalizedAt'] : null,
+            'components' => $computed['components'],
+        ];
+    }
+
+    return elips_ok('', [
+        'class' => [
+            'id' => (int) $class['id'],
+            'code' => $class['code'],
+            'name' => $class['name'],
+            'courseId' => (int) $class['course_id'],
+        ],
+        'scheme' => $scheme ? elips_grade_scheme_public($scheme) : null,
+        'predicates' => elips_predicate_ranges(false),
+        'roster' => $roster,
+    ]);
+}
+
+function elips_action_grade_manual_save(array $p): array
+{
+    $actor = elips_require_login();
+    $enrollmentId = (int) ($p['enrollmentId'] ?? 0);
+    $componentId = (int) ($p['componentId'] ?? 0);
+    $enrollment = elips_enrollment_row($enrollmentId);
+    if (!$enrollment) return elips_fail('Penugasan peserta tidak ditemukan.');
+
+    $gradeRow = elips_grade_row_by_enrollment($enrollmentId);
+    if ($gradeRow && ($gradeRow['status'] ?? 'draft') === 'finalized') {
+        return elips_fail('Nilai sudah difinalisasi. Gunakan koreksi nilai dengan alasan.');
+    }
+
+    $classId = $enrollment['class_id'] === null ? 0 : (int) $enrollment['class_id'];
+    $class = elips_class_row($classId);
+    if (!$class) return elips_fail('Kelas peserta tidak ditemukan.');
+    if (!elips_can_manage_class($class, $actor)) return elips_fail('Anda tidak berhak menilai peserta ini.');
+
+    $scheme = elips_grade_scheme_for_class($classId);
+    if (!$scheme) return elips_fail('Skema penilaian kelas belum dibuat.');
+
+    $stmt = elips_db()->prepare('SELECT * FROM grade_scheme_components WHERE id = ? AND scheme_id = ? LIMIT 1');
+    $stmt->execute([$componentId, (int) $scheme['id']]);
+    $component = $stmt->fetch() ?: null;
+    if (!$component) return elips_fail('Komponen penilaian tidak ditemukan pada skema kelas.');
+    if ($component['type'] !== 'manual') {
+        return elips_fail('Nilai komponen tugas/ujian dihitung otomatis dari aktivitas.');
+    }
+
+    $status = (string) ($p['status'] ?? 'graded');
+    if (!in_array($status, ['not_assessed', 'graded', 'excused', 'missing'], true)) {
+        return elips_fail('Status komponen tidak valid.');
+    }
+    $note = trim((string) ($p['note'] ?? ''));
+    $score = null;
+    if ($status === 'graded') {
+        if (!isset($p['score']) || $p['score'] === '' || $p['score'] === null) {
+            return elips_fail('Masukkan nilai komponen antara 0-100.');
+        }
+        $score = (float) $p['score'];
+        if ($score < 0 || $score > 100) return elips_fail('Masukkan nilai komponen antara 0-100.');
+    }
+
+    $db = elips_db();
+    $stmt = $db->prepare('SELECT id FROM grade_component_scores WHERE component_id = ? AND enrollment_id = ? LIMIT 1');
+    $stmt->execute([$componentId, $enrollmentId]);
+    $existingId = $stmt->fetchColumn();
+    if ($existingId !== false) {
+        $stmt = $db->prepare(
+            'UPDATE grade_component_scores
+             SET score = ?, status = ?, assessor_id = ?, assessed_at = UTC_TIMESTAMP(), note = ?, updated_at = UTC_TIMESTAMP()
+             WHERE id = ?'
+        );
+        $stmt->execute([$score, $status, (int) $actor['id'], $note, (int) $existingId]);
+    } else {
+        $stmt = $db->prepare(
+            'INSERT INTO grade_component_scores
+             (component_id, enrollment_id, student_id, score, status, assessor_id, assessed_at, note, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(), ?, UTC_TIMESTAMP(), UTC_TIMESTAMP())'
+        );
+        $stmt->execute([$componentId, $enrollmentId, (int) $enrollment['student_id'], $score, $status, (int) $actor['id'], $note]);
+    }
+
+    $student = elips_user_row((int) $enrollment['student_id']);
+    $studentName = $student ? $student['name'] : 'Peserta #' . $enrollment['student_id'];
+    elips_audit(
+        'grade',
+        'grade_component',
+        $componentId,
+        $component['name'] . ' — ' . $studentName,
+        'Menyimpan nilai komponen "' . $component['name'] . '" untuk ' . $studentName
+            . ($score !== null ? ' sebesar ' . $score : ' dengan status ' . $status) . '.',
+        $actor
+    );
+
+    return elips_ok('Nilai komponen disimpan.', [
+        'computed' => elips_grade_computation_for_enrollment($enrollment),
+    ]);
+}
+
+function elips_action_grade_exempt(array $p): array
+{
+    $actor = elips_require_login();
+    $enrollmentId = (int) ($p['enrollmentId'] ?? 0);
+    $componentId = (int) ($p['componentId'] ?? 0);
+    $reason = trim((string) ($p['reason'] ?? ($p['note'] ?? '')));
+    if (mb_strlen($reason) < 5) return elips_fail('Alasan pengecualian wajib diisi minimal 5 karakter.');
+
+    $enrollment = elips_enrollment_row($enrollmentId);
+    if (!$enrollment) return elips_fail('Penugasan peserta tidak ditemukan.');
+    $gradeRow = elips_grade_row_by_enrollment($enrollmentId);
+    if ($gradeRow && ($gradeRow['status'] ?? 'draft') === 'finalized') {
+        return elips_fail('Nilai sudah difinalisasi. Gunakan koreksi nilai dengan alasan.');
+    }
+
+    $classId = $enrollment['class_id'] === null ? 0 : (int) $enrollment['class_id'];
+    $class = elips_class_row($classId);
+    if (!$class) return elips_fail('Kelas peserta tidak ditemukan.');
+    if (!elips_can_manage_class($class, $actor)) return elips_fail('Anda tidak berhak mengecualikan komponen peserta ini.');
+
+    $scheme = elips_grade_scheme_for_class($classId);
+    if (!$scheme) return elips_fail('Skema penilaian kelas belum dibuat.');
+    $stmt = elips_db()->prepare('SELECT * FROM grade_scheme_components WHERE id = ? AND scheme_id = ? LIMIT 1');
+    $stmt->execute([$componentId, (int) $scheme['id']]);
+    $component = $stmt->fetch() ?: null;
+    if (!$component) return elips_fail('Komponen penilaian tidak ditemukan pada skema kelas.');
+
+    $db = elips_db();
+    $stmt = $db->prepare('SELECT id FROM grade_component_scores WHERE component_id = ? AND enrollment_id = ? LIMIT 1');
+    $stmt->execute([$componentId, $enrollmentId]);
+    $existingId = $stmt->fetchColumn();
+    if ($existingId !== false) {
+        $stmt = $db->prepare(
+            'UPDATE grade_component_scores
+             SET score = NULL, status = \'excused\', assessor_id = ?, assessed_at = UTC_TIMESTAMP(), note = ?, updated_at = UTC_TIMESTAMP()
+             WHERE id = ?'
+        );
+        $stmt->execute([(int) $actor['id'], $reason, (int) $existingId]);
+    } else {
+        $stmt = $db->prepare(
+            'INSERT INTO grade_component_scores
+             (component_id, enrollment_id, student_id, score, status, assessor_id, assessed_at, note, created_at, updated_at)
+             VALUES (?, ?, ?, NULL, \'excused\', ?, UTC_TIMESTAMP(), ?, UTC_TIMESTAMP(), UTC_TIMESTAMP())'
+        );
+        $stmt->execute([$componentId, $enrollmentId, (int) $enrollment['student_id'], (int) $actor['id'], $reason]);
+    }
+
+    $student = elips_user_row((int) $enrollment['student_id']);
+    $studentName = $student ? $student['name'] : 'Peserta #' . $enrollment['student_id'];
+    elips_audit(
+        'exempt',
+        'grade_component',
+        $componentId,
+        $component['name'] . ' — ' . $studentName,
+        'Memberi pengecualian komponen "' . $component['name'] . '" untuk ' . $studentName . ' — alasan: ' . $reason . '.',
+        $actor
+    );
+
+    return elips_ok('Pengecualian komponen disimpan.', [
+        'computed' => elips_grade_computation_for_enrollment($enrollment),
+    ]);
+}
+
+function elips_action_grade_finalize(array $p): array
+{
+    $actor = elips_require_login();
+    $enrollmentIds = [];
+    if (!empty($p['enrollmentIds']) && is_array($p['enrollmentIds'])) {
+        foreach ($p['enrollmentIds'] as $id) {
+            $enrollmentIds[] = (int) $id;
+        }
+    } else {
+        $enrollmentIds[] = (int) ($p['enrollmentId'] ?? 0);
+    }
+    $enrollmentIds = array_values(array_unique(array_filter($enrollmentIds)));
+    if (count($enrollmentIds) === 0) return elips_fail('Pilih minimal satu peserta untuk difinalisasi.');
+
+    $db = elips_db();
+    $finalized = [];
+    foreach ($enrollmentIds as $enrollmentId) {
+        $enrollment = elips_enrollment_row($enrollmentId);
+        if (!$enrollment) return elips_fail('Penugasan peserta #' . $enrollmentId . ' tidak ditemukan.');
+
+        $classId = $enrollment['class_id'] === null ? 0 : (int) $enrollment['class_id'];
+        $class = elips_class_row($classId);
+        if (!$class) return elips_fail('Kelas peserta tidak ditemukan.');
+        if (!elips_can_manage_class($class, $actor)) return elips_fail('Anda tidak berhak memfinalisasi nilai kelas ini.');
+
+        $scheme = elips_grade_scheme_for_class($classId);
+        if (!$scheme) return elips_fail('Skema penilaian kelas belum dibuat.');
+        if ($scheme['status'] !== 'published') {
+            return elips_fail('Skema penilaian harus dipublikasikan sebelum nilai difinalisasi.');
+        }
+
+        $existing = elips_grade_row_by_enrollment($enrollmentId);
+        if ($existing && ($existing['status'] ?? 'draft') === 'finalized') {
+            return elips_fail('Nilai peserta #' . $enrollmentId . ' sudah difinalisasi.');
+        }
+
+        $computed = elips_grade_compute_enrollment($enrollment, $scheme);
+        if (count($computed['missing']) > 0) {
+            return elips_fail('Komponen wajib belum lengkap: ' . implode(', ', $computed['missing']) . '.');
+        }
+        if ($computed['status'] !== 'computed' || $computed['finalScore'] === null) {
+            return elips_fail('Nilai akhir belum dapat dihitung untuk peserta #' . $enrollmentId . '.');
+        }
+
+        $snapshot = json_encode($computed['components'], JSON_UNESCAPED_UNICODE);
+        $scoreInt = (int) round($computed['finalScore']);
+        $scoreInt = max(0, min(100, $scoreInt));
+        $instructorId = $class['instructor_id'] !== null ? (int) $class['instructor_id'] : (int) $actor['id'];
+        $note = $existing['note'] ?? '';
+
+        $db->beginTransaction();
+        try {
+            if ($existing) {
+                $stmt = $db->prepare(
+                    "UPDATE grades
+                     SET scheme_id = ?, enrollment_id = ?, course_id = ?, student_id = ?, instructor_id = ?,
+                         score = ?, final_score = ?, grade = ?, status = 'finalized', components_snapshot = ?,
+                         finalized_by = ?, finalized_at = UTC_TIMESTAMP(), computed_at = UTC_TIMESTAMP(), updated_at = UTC_TIMESTAMP()
+                     WHERE id = ?"
+                );
+                $stmt->execute([
+                    (int) $scheme['id'], $enrollmentId, (int) $enrollment['course_id'], (int) $enrollment['student_id'], $instructorId,
+                    $scoreInt, $computed['finalScore'], $computed['letter'], $snapshot,
+                    (int) $actor['id'], (int) $existing['id'],
+                ]);
+                $gradeId = (int) $existing['id'];
+            } else {
+                $stmt = $db->prepare(
+                    "INSERT INTO grades
+                     (enrollment_id, scheme_id, course_id, student_id, instructor_id, score, final_score, grade, status,
+                      components_snapshot, note, finalized_by, finalized_at, computed_at, created_at, updated_at)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'finalized', ?, ?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP(), UTC_TIMESTAMP(), UTC_TIMESTAMP())"
+                );
+                $stmt->execute([
+                    $enrollmentId, (int) $scheme['id'], (int) $enrollment['course_id'], (int) $enrollment['student_id'], $instructorId,
+                    $scoreInt, $computed['finalScore'], $computed['letter'], $snapshot, $note, (int) $actor['id'],
+                ]);
+                $gradeId = (int) $db->lastInsertId();
+            }
+            $db->commit();
+        } catch (Throwable $e) {
+            $db->rollBack();
+            throw $e;
+        }
+
+        $student = elips_user_row((int) $enrollment['student_id']);
+        $studentName = $student ? $student['name'] : 'Peserta #' . $enrollment['student_id'];
+        elips_audit(
+            'finalize',
+            'grade',
+            $gradeId,
+            $studentName . ' — ' . $class['code'],
+            'Memfinalisasi nilai akhir ' . $computed['finalScore'] . ' (' . $computed['letter'] . ') untuk ' . $studentName . '.',
+            $actor
+        );
+        $finalized[] = elips_grade_public($gradeId);
+    }
+
+    return elips_ok('Nilai akhir difinalisasi dan dikunci.', ['grades' => $finalized]);
+}
+
+function elips_action_grade_correct(array $p): array
+{
+    $actor = elips_require_login();
+    $gradeId = (int) ($p['gradeId'] ?? 0);
+    if (!$gradeId && !empty($p['enrollmentId'])) {
+        $row = elips_grade_row_by_enrollment((int) $p['enrollmentId']);
+        if ($row) $gradeId = (int) $row['id'];
+    }
+    if ($gradeId <= 0) return elips_fail('Nilai tidak ditemukan.');
+    $stmt = elips_db()->prepare('SELECT * FROM grades WHERE id = ? LIMIT 1');
+    $stmt->execute([$gradeId]);
+    $grade = $stmt->fetch() ?: null;
+    if (!$grade) return elips_fail('Nilai tidak ditemukan.');
+    if (($grade['status'] ?? 'draft') !== 'finalized') {
+        return elips_fail('Koreksi hanya berlaku untuk nilai yang sudah difinalisasi.');
+    }
+
+    $course = elips_course_row((int) $grade['course_id']);
+    if (!$course) return elips_fail('Kursus tidak ditemukan.');
+    if (!elips_can_manage_course($course, $actor)) return elips_fail('Anda tidak berhak mengoreksi nilai ini.');
+
+    $reason = trim((string) ($p['reason'] ?? ''));
+    if (mb_strlen($reason) < 5) return elips_fail('Alasan koreksi wajib diisi minimal 5 karakter.');
+
+    $enrollment = elips_enrollment_row((int) $grade['enrollment_id']);
+    if (!$enrollment) return elips_fail('Penugasan peserta tidak ditemukan.');
+    $scheme = elips_grade_scheme_row((int) $grade['scheme_id']);
+    if (!$scheme) return elips_fail('Skema penilaian nilai ini tidak ditemukan.');
+
+    $componentScores = $p['componentScores'] ?? null;
+    $manualScore = isset($p['finalScore']) && $p['finalScore'] !== '' ? (float) $p['finalScore'] : null;
+
+    $db = elips_db();
+    $newScore = null;
+    $newLetter = null;
+    $snapshot = $grade['components_snapshot'];
+    $hasComponentScores = is_array($componentScores) && count($componentScores) > 0;
+
+    // Validasi seluruh masukan sebelum transaksi agar koreksi bersifat atomik.
+    $normalizedScores = [];
+    if ($hasComponentScores) {
+        foreach ($componentScores as $entry) {
+            if (!is_array($entry)) continue;
+            $componentId = (int) ($entry['componentId'] ?? 0);
+            if (!isset($entry['score']) || $entry['score'] === '') continue;
+            $score = (float) $entry['score'];
+            if ($score < 0 || $score > 100) {
+                return elips_fail('Nilai komponen harus antara 0-100.');
+            }
+            $check = $db->prepare('SELECT id FROM grade_scheme_components WHERE id = ? AND scheme_id = ? LIMIT 1');
+            $check->execute([$componentId, (int) $scheme['id']]);
+            if ($check->fetchColumn() === false) {
+                return elips_fail('Komponen #' . $componentId . ' bukan bagian dari skema nilai ini.');
+            }
+            $normalizedScores[] = ['componentId' => $componentId, 'score' => $score];
+        }
+        if (count($normalizedScores) === 0) {
+            return elips_fail('Masukkan minimal satu nilai komponen.');
+        }
+    } elseif ($manualScore === null) {
+        return elips_fail('Masukkan nilai komponen atau nilai akhir pengganti.');
+    } elseif ($manualScore < 0 || $manualScore > 100) {
+        return elips_fail('Nilai akhir harus antara 0-100.');
+    }
+
+    $previousScore = $grade['final_score'] !== null ? (float) $grade['final_score'] : (float) $grade['score'];
+    $previousLetter = $grade['grade'];
+
+    $db->beginTransaction();
+    try {
+        if ($hasComponentScores) {
+            $update = $db->prepare(
+                'UPDATE grade_component_scores
+                 SET score = ?, status = \'graded\', assessor_id = ?, assessed_at = UTC_TIMESTAMP(), updated_at = UTC_TIMESTAMP()
+                 WHERE component_id = ? AND enrollment_id = ?'
+            );
+            $insert = $db->prepare(
+                'INSERT INTO grade_component_scores
+                 (component_id, enrollment_id, student_id, score, status, assessor_id, assessed_at, note, created_at, updated_at)
+                 VALUES (?, ?, ?, ?, \'graded\', ?, UTC_TIMESTAMP(), \'\', UTC_TIMESTAMP(), UTC_TIMESTAMP())'
+            );
+            foreach ($normalizedScores as $entry) {
+                $lookup = $db->prepare('SELECT id FROM grade_component_scores WHERE component_id = ? AND enrollment_id = ? LIMIT 1');
+                $lookup->execute([$entry['componentId'], (int) $grade['enrollment_id']]);
+                $scoreId = $lookup->fetchColumn();
+                if ($scoreId !== false) {
+                    $update->execute([$entry['score'], (int) $actor['id'], $entry['componentId'], (int) $grade['enrollment_id']]);
+                } else {
+                    $insert->execute([$entry['componentId'], (int) $grade['enrollment_id'], (int) $grade['student_id'], $entry['score'], (int) $actor['id']]);
+                }
+            }
+
+            $computed = elips_grade_compute_enrollment($enrollment, $scheme);
+            if (count($computed['missing']) > 0) {
+                $db->rollBack();
+                return elips_fail('Komponen wajib belum lengkap: ' . implode(', ', $computed['missing']) . '.');
+            }
+            if ($computed['finalScore'] === null) {
+                $db->rollBack();
+                return elips_fail('Nilai akhir belum dapat dihitung.');
+            }
+            $newScore = $computed['finalScore'];
+            $newLetter = $computed['letter'];
+            $snapshot = json_encode($computed['components'], JSON_UNESCAPED_UNICODE);
+        } else {
+            $newScore = elips_grade_round($manualScore, (string) $scheme['rounding']);
+            $newLetter = elips_predicate_letter($newScore);
+        }
+
+        $scoreInt = max(0, min(100, (int) round($newScore)));
+
+        $stmt = $db->prepare(
+            "UPDATE grades
+             SET score = ?, final_score = ?, grade = ?, components_snapshot = ?, status = 'finalized',
+                 finalized_by = ?, finalized_at = UTC_TIMESTAMP(), computed_at = UTC_TIMESTAMP(), updated_at = UTC_TIMESTAMP()
+             WHERE id = ?"
+        );
+        $stmt->execute([$scoreInt, $newScore, $newLetter, $snapshot, (int) $actor['id'], (int) $grade['id']]);
+        $stmt = $db->prepare(
+            'INSERT INTO grade_corrections
+             (grade_id, enrollment_id, previous_score, new_score, previous_letter, new_letter, reason, actor_id, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP())'
+        );
+        $stmt->execute([
+            (int) $grade['id'],
+            $grade['enrollment_id'] === null ? null : (int) $grade['enrollment_id'],
+            $previousScore,
+            $newScore,
+            $previousLetter,
+            $newLetter,
+            $reason,
+            (int) $actor['id'],
+        ]);
+        $correctionId = (int) $db->lastInsertId();
+        $db->commit();
+    } catch (Throwable $e) {
+        if ($db->inTransaction()) $db->rollBack();
+        throw $e;
+    }
+
+    $student = elips_user_row((int) $grade['student_id']);
+    $studentName = $student ? $student['name'] : 'Peserta #' . $grade['student_id'];
+    elips_audit(
+        'correct',
+        'grade',
+        (int) $grade['id'],
+        $studentName . ' — ' . $course['title'],
+        'Mengoreksi nilai dari ' . $previousScore . ' (' . $previousLetter . ') menjadi ' . $newScore . ' (' . $newLetter . ') — alasan: ' . $reason . '.',
+        $actor
+    );
+
+    return elips_ok('Koreksi nilai disimpan dan dicatat pada jejak audit.', [
+        'grade' => elips_grade_public((int) $grade['id']),
+        'correction' => [
+            'id' => $correctionId,
+            'previousScore' => $previousScore,
+            'newScore' => $newScore,
+            'previousLetter' => $previousLetter,
+            'newLetter' => $newLetter,
+            'reason' => $reason,
+        ],
+    ]);
+}
+
+function elips_action_grade_transcript(array $p): array
+{
+    $actor = elips_require_login();
+    $enrollment = null;
+    if (!empty($p['enrollmentId'])) {
+        $enrollment = elips_enrollment_row((int) $p['enrollmentId']);
+    } elseif (!empty($p['studentId']) && !empty($p['courseId'])) {
+        $stmt = elips_db()->prepare('SELECT * FROM enrollments WHERE student_id = ? AND course_id = ? LIMIT 1');
+        $stmt->execute([(int) $p['studentId'], (int) $p['courseId']]);
+        $enrollment = $stmt->fetch() ?: null;
+    }
+    if (!$enrollment) return elips_fail('Penugasan peserta tidak ditemukan.');
+
+    if ($actor['role'] === 'peserta') {
+        if ((int) $enrollment['student_id'] !== (int) $actor['id']) {
+            return elips_fail('Anda hanya dapat melihat nilai Anda sendiri.');
+        }
+    } else {
+        $classId = $enrollment['class_id'] === null ? 0 : (int) $enrollment['class_id'];
+        $class = elips_class_row($classId);
+        $course = elips_course_row((int) $enrollment['course_id']);
+        $allowed = $class && elips_can_manage_class($class, $actor);
+        if (!$allowed && $course) {
+            $allowed = elips_can_manage_course($course, $actor);
+        }
+        if (!$allowed) return elips_fail('Anda tidak berhak melihat nilai peserta ini.');
+    }
+
+    $computed = elips_grade_compute_enrollment($enrollment);
+    $gradeRow = elips_grade_row_by_enrollment((int) $enrollment['id']);
+    $gradePublic = $gradeRow ? elips_grade_public((int) $gradeRow['id']) : null;
+
+    $corrections = [];
+    if ($gradePublic) {
+        $stmt = elips_db()->prepare(
+            'SELECT gc.*, u.name AS actor_name FROM grade_corrections gc
+             LEFT JOIN users u ON u.id = gc.actor_id
+             WHERE gc.grade_id = ? ORDER BY gc.id DESC'
+        );
+        $stmt->execute([(int) $gradePublic['id']]);
+        foreach ($stmt->fetchAll() as $row) {
+            $corrections[] = elips_grade_correction_public($row);
+        }
+    }
+
+    return elips_ok('', [
+        'enrollment' => elips_enrollment_public((int) $enrollment['id']),
+        'grade' => $gradePublic,
+        'computed' => $computed,
+        'corrections' => $corrections,
     ]);
 }
 

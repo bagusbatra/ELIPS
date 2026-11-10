@@ -30,7 +30,10 @@
         correct: 'Koreksi',
         confirm: 'Konfirmasi',
         unconfirm: 'Batal Konfirmasi',
-        revision: 'Minta Revisi'
+        revision: 'Minta Revisi',
+        finalize: 'Finalisasi',
+        exempt: 'Pengecualian',
+        predicate: 'Predikat'
     };
 
     const ENTITY_LABELS = {
@@ -53,7 +56,10 @@
         exam: 'Ujian',
         exam_participant: 'Peserta Ujian',
         exam_result: 'Hasil Ujian',
-        staff_attendance: 'Absensi Staf'
+        staff_attendance: 'Absensi Staf',
+        predicate: 'Rentang Predikat',
+        grade_scheme: 'Skema Penilaian',
+        grade_component: 'Komponen Nilai'
     };
 
     function actionLabel(action) {

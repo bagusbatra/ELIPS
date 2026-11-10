@@ -83,6 +83,7 @@
         let assignmentDetail = null;
         let examDetail = null;
         let pendingSubmissionFiles = [];
+        let transcriptMode = false;
 
         const TASK_ASSIGNMENT_TYPE_LABELS = {
             file_upload: 'Unggah File',
@@ -354,7 +355,8 @@
             }
             renderSidebar();
             renderProgress();
-            if (activeAssignmentId) renderAssignment();
+            if (transcriptMode) renderTranscript();
+            else if (activeAssignmentId) renderAssignment();
             else if (activeExamId) renderExam();
             else if (activeMaterialId) renderMaterial(activeMaterialId);
             else renderLesson(activeLessonId);
@@ -500,6 +502,9 @@
                         !!activeAssignmentId || !!activeExamId
                     );
                 }
+                if (activeEnrollment) {
+                    appendSidebarModule(container, 'Hasil Belajar', transcriptSidebarHtml(), transcriptMode);
+                }
                 return;
             }
 
@@ -521,6 +526,31 @@
                 const isModuleOpen = activeModuleId ? item.module.id === activeModuleId : moduleIndex === 0;
                 appendSidebarModule(container, item.module.title, lessons.map(lessonSidebarHtml).join(''), isModuleOpen);
             });
+            if (activeEnrollment) {
+                appendSidebarModule(container, 'Hasil Belajar', transcriptSidebarHtml(), transcriptMode);
+            }
+        }
+
+        function transcriptSidebarHtml() {
+            return '<a href="#" class="learning-lesson ' + (transcriptMode ? 'active ' : '') + '" onclick="selectTranscript(event)">' +
+                '<div class="learning-lesson-left">' +
+                '<i class="bi bi-award"></i>' +
+                '<span class="learning-lesson-title">Nilai &amp; Transkrip</span>' +
+                '</div>' +
+                '<span class="learning-lesson-type">Nilai</span>' +
+                '</a>';
+        }
+
+        function selectTranscript(event) {
+            if (event) event.preventDefault();
+            transcriptMode = true;
+            activeLessonId = null;
+            activeMaterialId = null;
+            activeAssignmentId = null;
+            activeExamId = null;
+            renderAll();
+            const main = document.querySelector('.learning-main');
+            if (main) main.scrollTop = 0;
         }
 
         function selectLesson(lessonId, event) {
@@ -536,6 +566,7 @@
 
             activeLessonId = lessonId;
             activeMaterialId = null;
+            transcriptMode = false;
             renderAll();
             const main = document.querySelector('.learning-main');
             if (main) main.scrollTop = 0;
@@ -553,6 +584,7 @@
             activeLessonId = null;
             activeAssignmentId = null;
             activeExamId = null;
+            transcriptMode = false;
             renderAll();
             const main = document.querySelector('.learning-main');
             if (main) main.scrollTop = 0;
@@ -651,6 +683,7 @@
             activeLessonId = null;
             activeMaterialId = null;
             pendingSubmissionFiles = [];
+            transcriptMode = false;
             renderAll();
             const main = document.querySelector('.learning-main');
             if (main) main.scrollTop = 0;
@@ -663,6 +696,7 @@
             activeAssignmentId = null;
             activeLessonId = null;
             activeMaterialId = null;
+            transcriptMode = false;
             renderAll();
             const main = document.querySelector('.learning-main');
             if (main) main.scrollTop = 0;
@@ -672,6 +706,135 @@
             if (!taskClassroom) return null;
             const list = kind === 'exam' ? taskClassroom.exams : taskClassroom.assignments;
             return list.find(function (item) { return Number(item.id) === Number(id); }) || null;
+        }
+
+        function gradeComponentStatusBadge(status) {
+            const map = {
+                graded: { label: 'Dinilai', className: 'badge-success' },
+                not_assessed: { label: 'Belum Dinilai', className: 'badge-primary' },
+                missing: { label: 'Belum Ada Nilai', className: 'badge-danger' },
+                excused: { label: 'Dikecualikan', className: 'badge-warning' }
+            };
+            const item = map[status] || { label: status || '-', className: 'badge-primary' };
+            return '<span class="badge ' + item.className + '">' + ELIPS.escapeHtml(item.label) + '</span>';
+        }
+
+        function gradeScoreText(value) {
+            if (value === null || value === undefined || value === '') return '-';
+            const number = Number(value);
+            if (isNaN(number)) return '-';
+            return String(Math.round(number * 100) / 100);
+        }
+
+        function renderTranscript() {
+            const container = document.getElementById('learningContent');
+            if (!activeEnrollment) {
+                container.innerHTML = '<p style="color: var(--text-secondary);">Transkrip nilai tersedia setelah Anda terdaftar pada kursus.</p>';
+                return;
+            }
+
+            const result = ELIPS.gradeTranscript({
+                enrollmentId: activeEnrollment.id,
+                actorId: activeStudent.id
+            });
+            if (!result || !result.ok) {
+                container.innerHTML = '<p style="color: var(--danger);">' +
+                    ELIPS.escapeHtml(result && result.message ? result.message : 'Transkrip nilai belum tersedia.') + '</p>';
+                return;
+            }
+
+            const data = result.data || {};
+            const computed = data.computed || {};
+            const grade = data.grade || null;
+            const finalized = !!(grade && grade.status === 'finalized');
+            const components = computed.components || [];
+            const corrections = data.corrections || [];
+            const hasScheme = computed.status !== 'no_scheme' && components.length > 0;
+
+            const statusNote = !hasScheme
+                ? '<div class="form-hint" style="margin-bottom:1rem;">Skema penilaian kelas belum disiapkan instruktur.</div>'
+                : (!finalized
+                    ? '<div class="form-hint" style="margin-bottom:1rem;"><i class="bi bi-info-circle"></i> Nilai masih berjalan. Nilai akhir akan dikunci setelah instruktur memfinalisasi.</div>'
+                    : '<div class="form-hint" style="margin-bottom:1rem;"><i class="bi bi-lock-fill"></i> Nilai sudah difinalisasi pada ' +
+                        ELIPS.escapeHtml(taskFormatDateTime(grade.finalizedAt)) + '. Perubahan hanya melalui koreksi yang tercatat.</div>');
+
+            const summary = [
+                '<div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:0.75rem; margin-bottom:1.25rem;">',
+                '<div class="learning-article" style="padding:1rem;">',
+                '  <div style="font-size:0.8125rem; color:var(--text-secondary);">Nilai Akhir</div>',
+                '  <div style="font-size:1.75rem; font-weight:700;">' + gradeScoreText(computed.finalScore) + '</div>',
+                '  <div class="form-hint">Predikat: <strong>' + ELIPS.escapeHtml(computed.letter || '-') + '</strong></div>',
+                '</div>',
+                '<div class="learning-article" style="padding:1rem;">',
+                '  <div style="font-size:0.8125rem; color:var(--text-secondary);">Status</div>',
+                '  <div style="margin-top:0.35rem;">' + (finalized
+                    ? '<span class="badge badge-success">Final</span>'
+                    : '<span class="badge badge-warning">' + ELIPS.escapeHtml(computed.status === 'incomplete' ? 'Belum Lengkap' : 'Berjalan') + '</span>') + '</div>',
+                '  <div class="form-hint" style="margin-top:0.35rem;">' + (computed.passed === null || computed.passed === undefined
+                    ? 'Kriteria kelulusan belum dapat ditentukan'
+                    : (computed.passed ? 'Memenuhi batas lulus ' : 'Di bawah batas lulus ') + gradeScoreText(computed.passScore)) + '</div>',
+                '</div>',
+                '<div class="learning-article" style="padding:1rem;">',
+                '  <div style="font-size:0.8125rem; color:var(--text-secondary);">Skema</div>',
+                '  <div style="font-weight:600; margin-top:0.35rem;">' + ELIPS.escapeHtml(computed.schemeName || '-') + '</div>',
+                '  <div class="form-hint">Pembulatan: ' + ELIPS.escapeHtml(computed.rounding || '-') + '</div>',
+                '</div>',
+                '</div>'
+            ].join('');
+
+            const missing = (computed.missing || []).length
+                ? '<div class="form-hint" style="color:var(--danger); margin-bottom:1rem;"><i class="bi bi-exclamation-triangle"></i> Komponen wajib belum lengkap: ' +
+                    ELIPS.escapeHtml(computed.missing.join(', ')) + '</div>'
+                : '';
+
+            const componentRows = components.map(function (component) {
+                const activities = (component.activities || []).map(function (activity) {
+                    return '<li>' + ELIPS.escapeHtml(activity.title || 'Aktivitas') +
+                        ' — ' + gradeScoreText(activity.normalized) +
+                        ' <span class="form-hint">(' + ELIPS.escapeHtml(activity.status || '-') + ')</span></li>';
+                }).join('');
+                return [
+                    '<tr>',
+                    '<td><div class="table-course-title">' + ELIPS.escapeHtml(component.name) + '</div>' +
+                        '<div class="table-course-meta">' + ELIPS.escapeHtml(component.type) + ' • bobot ' + gradeScoreText(component.weight) + '%</div>' +
+                        (activities ? '<ul style="margin:0.35rem 0 0 1rem; font-size:0.8125rem;">' + activities + '</ul>' : '') + '</td>',
+                    '<td>' + gradeScoreText(component.score) + '</td>',
+                    '<td>' + gradeComponentStatusBadge(component.status) + '</td>',
+                    '<td>' + (component.isRequired === false ? 'Tidak wajib' : 'Wajib') + '</td>',
+                    '</tr>'
+                ].join('');
+            }).join('');
+
+            const componentTable = hasScheme
+                ? '<div style="overflow-x:auto;"><table class="dashboard-table"><thead><tr><th>Komponen</th><th>Nilai</th><th>Status</th><th>Kewajiban</th></tr></thead><tbody>' +
+                    componentRows + '</tbody></table></div>'
+                : '';
+
+            const correctionTable = corrections.length
+                ? '<h3 style="font-size:1rem; margin:1.5rem 0 0.5rem;">Riwayat Koreksi Nilai</h3>' +
+                    '<div style="overflow-x:auto;"><table class="dashboard-table"><thead><tr><th>Waktu</th><th>Perubahan</th><th>Alasan</th><th>Oleh</th></tr></thead><tbody>' +
+                    corrections.map(function (correction) {
+                        return '<tr>' +
+                            '<td>' + ELIPS.escapeHtml(taskFormatDateTime(correction.createdAt)) + '</td>' +
+                            '<td>' + gradeScoreText(correction.previousScore) + ' (' + ELIPS.escapeHtml(correction.previousLetter || '-') + ') → ' +
+                                gradeScoreText(correction.newScore) + ' (' + ELIPS.escapeHtml(correction.newLetter || '-') + ')</td>' +
+                            '<td>' + ELIPS.escapeHtml(correction.reason || '-') + '</td>' +
+                            '<td>' + ELIPS.escapeHtml(correction.actorName || '-') + '</td>' +
+                            '</tr>';
+                    }).join('') + '</tbody></table></div>'
+                : '';
+
+            container.innerHTML = [
+                '<div class="learning-article" style="padding:1.5rem;">',
+                '  <h1 class="learning-article-title" style="font-size:1.5rem; margin-bottom:0.5rem;">Nilai &amp; Transkrip</h1>',
+                '  <p style="color:var(--text-secondary); margin-bottom:1rem;">' + ELIPS.escapeHtml(activeCourse ? activeCourse.title : '') + '</p>',
+                statusNote,
+                summary,
+                missing,
+                componentTable,
+                correctionTable,
+                '</div>'
+            ].join('');
         }
 
         function renderAssignment() {

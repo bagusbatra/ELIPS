@@ -119,6 +119,21 @@
 
             <div class="dashboard-section">
                 <div class="dashboard-section-header" style="flex-wrap: wrap; gap: 0.75rem;">
+                    <h2 class="dashboard-section-title">Skema Penilaian &amp; Finalisasi</h2>
+                    <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center;">
+                        <select id="gradeClassFilter" class="form-input" style="max-width: 320px;" onchange="loadGradePanel()"></select>
+                        <button type="button" class="btn btn-outline" onclick="loadGradePanel()"><i class="bi bi-arrow-clockwise"></i> Muat Ulang</button>
+                    </div>
+                </div>
+                <div class="dashboard-section-body">
+                    <div id="gradePanelMessage" class="form-hint" style="margin-bottom: 0.75rem;"></div>
+                    <div id="gradeSchemeCard"></div>
+                    <div id="gradeRosterCard" style="margin-top: 1.25rem;"></div>
+                </div>
+            </div>
+
+            <div class="dashboard-section">
+                <div class="dashboard-section-header" style="flex-wrap: wrap; gap: 0.75rem;">
                     <h2 class="dashboard-section-title">Daftar Peserta</h2>
                     <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center;">
                         <select id="courseFilter" class="form-input" style="max-width: 220px;" onchange="refreshData()"></select>
@@ -187,6 +202,35 @@
         </div>
     </div>
 
+    <!-- Modal Koreksi Nilai Final -->
+    <div id="correctionModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; padding: 1rem;">
+        <div style="background: white; border-radius: var(--radius-lg); max-width: 560px; width: 100%; max-height: 90vh; overflow-y: auto;">
+            <div style="padding: 1.5rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between;">
+                <h3 style="font-size: 1.25rem; font-weight: 600;">Koreksi Nilai Final</h3>
+                <button onclick="closeCorrectionModal()" aria-label="Tutup" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--text-secondary);">
+                    <i class="bi bi-x"></i>
+                </button>
+            </div>
+            <div style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem;">
+                <div><strong>Peserta:</strong> <span id="correctionStudentName"></span></div>
+                <div id="correctionComponentInputs" style="display: flex; flex-direction: column; gap: 0.5rem;"></div>
+                <div class="form-group">
+                    <label class="form-label" for="correctionFinalScore">Nilai akhir pengganti (opsional)</label>
+                    <input type="number" id="correctionFinalScore" class="form-input" min="0" max="100" placeholder="Kosongkan bila hanya mengoreksi komponen">
+                    <small class="form-hint">Jika diisi, nilai ini dipakai langsung sebagai nilai akhir. Jika kosong, nilai dihitung ulang dari komponen.</small>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="correctionReason">Alasan koreksi *</label>
+                    <textarea id="correctionReason" class="form-input" rows="3" placeholder="Contoh: kesalahan input nilai praktik, revisi hasil verifikasi instruktur."></textarea>
+                </div>
+            </div>
+            <div style="padding: 1.5rem; border-top: 1px solid var(--border); display: flex; gap: 0.75rem; justify-content: flex-end;">
+                <button class="btn btn-ghost" onclick="closeCorrectionModal()">Batal</button>
+                <button class="btn btn-primary" onclick="submitCorrection()">Simpan Koreksi</button>
+            </div>
+        </div>
+    </div>
+
     <script src="../assets/js/config.js"></script>
     <script src="../assets/js/core.js"></script>
     <script src="../assets/js/api.js"></script>
@@ -239,6 +283,8 @@
             }
 
             refreshData();
+            populateGradeClassFilter();
+            loadGradePanel();
         });
 
         function refreshData() {
@@ -376,11 +422,418 @@
             });
         }
 
+        let currentGradeClassId = null;
+        let currentGradePanel = null;
+        let correctionTarget = null;
+
+        function populateGradeClassFilter() {
+            const select = document.getElementById('gradeClassFilter');
+            if (!select || !currentInstructor) return;
+            const classes = ELIPS.getClassesByInstructor(currentInstructor.id);
+            select.innerHTML = '';
+            if (!classes.length) {
+                select.innerHTML = '<option value="">Belum ada kelas</option>';
+                return;
+            }
+            classes.forEach(function (classItem) {
+                const option = document.createElement('option');
+                option.value = String(classItem.id);
+                option.textContent = (classItem.code || 'Kelas') + ' — ' + (classItem.name || '');
+                select.appendChild(option);
+            });
+            const params = new URLSearchParams(window.location.search);
+            const requested = parseInt(params.get('class'), 10);
+            if (requested && classes.some(function (c) { return Number(c.id) === requested; })) {
+                select.value = String(requested);
+            }
+            currentGradeClassId = Number(select.value) || null;
+        }
+
+        function gradeStatusBadge(status) {
+            const map = {
+                computed: { label: 'Siap Finalisasi', className: 'badge-warning' },
+                incomplete: { label: 'Belum Lengkap', className: 'badge-danger' },
+                finalized: { label: 'Final', className: 'badge-success' },
+                no_scheme: { label: 'Tanpa Skema', className: 'badge-primary' },
+                draft: { label: 'Draft', className: 'badge-primary' }
+            };
+            const item = map[status] || { label: status || '-', className: 'badge-primary' };
+            return '<span class="badge ' + item.className + '">' + ELIPS.escapeHtml(item.label) + '</span>';
+        }
+
+        function componentStatusLabel(component) {
+            if (!component) return '-';
+            if (component.status === 'excused') return 'Dikecualikan';
+            if (component.status === 'missing') return 'Belum ada nilai';
+            if (component.score === null || component.score === undefined) return 'Belum dinilai';
+            return Number(component.score).toFixed(2).replace(/\.00$/, '');
+        }
+
+        function schemeComponentRow(component, index) {
+            const item = component || {};
+            function option(value, label, selected) {
+                return '<option value="' + value + '"' + (selected === value ? ' selected' : '') + '>' + label + '</option>';
+            }
+            return [
+                '<tr data-component-row>',
+                '<input type="hidden" data-field="id" value="' + (item.id ? Number(item.id) : '') + '">',
+                '<td><select class="form-input" data-field="type">' +
+                    option('assignment', 'Tugas', item.type) +
+                    option('exam', 'Ujian', item.type) +
+                    option('manual', 'Manual', item.type) +
+                '</select></td>',
+                '<td><input type="text" class="form-input" data-field="name" value="' + ELIPS.escapeHtml(item.name || '') + '" placeholder="Nama komponen"></td>',
+                '<td><input type="number" class="form-input" data-field="weight" min="0" max="100" step="0.01" value="' + (item.weight === undefined ? '' : Number(item.weight)) + '" oninput="updateSchemeWeightTotal()"></td>',
+                '<td><select class="form-input" data-field="aggregation">' +
+                    option('weighted', 'Berbobot', item.aggregation) +
+                    option('average', 'Rata-rata', item.aggregation) +
+                '</select></td>',
+                '<td style="text-align:center;"><input type="checkbox" data-field="isRequired"' + (item.isRequired === false ? '' : ' checked') + '></td>',
+                '<td><button type="button" class="btn btn-ghost" style="padding: 0.25rem 0.5rem;" onclick="removeSchemeComponentRow(this)" title="Hapus komponen"><i class="bi bi-trash"></i></button></td>',
+                '</tr>'
+            ].join('');
+        }
+
+        function updateSchemeWeightTotal() {
+            const rows = document.querySelectorAll('#schemeComponentsBody [data-component-row]');
+            let total = 0;
+            rows.forEach(function (row) {
+                total += Number(row.querySelector('[data-field="weight"]').value) || 0;
+            });
+            const target = document.getElementById('schemeWeightTotal');
+            if (!target) return;
+            target.textContent = 'Total bobot: ' + total.toFixed(2).replace(/\.00$/, '') + '%';
+            target.style.color = Math.abs(total - 100) <= 0.01 ? 'var(--success)' : 'var(--danger)';
+        }
+
+        function removeSchemeComponentRow(button) {
+            const row = button.closest('[data-component-row]');
+            if (row) row.parentNode.removeChild(row);
+            updateSchemeWeightTotal();
+        }
+
+        function addSchemeComponentRow() {
+            const body = document.getElementById('schemeComponentsBody');
+            if (!body) return;
+            const wrapper = document.createElement('tbody');
+            wrapper.innerHTML = schemeComponentRow({ type: 'manual', aggregation: 'average', weight: 0, isRequired: true }, body.children.length);
+            body.appendChild(wrapper.firstElementChild);
+            updateSchemeWeightTotal();
+        }
+
+        function renderSchemeCard(scheme) {
+            const card = document.getElementById('gradeSchemeCard');
+            if (!card) return;
+            const components = scheme && Array.isArray(scheme.components) ? scheme.components : [];
+            const status = scheme ? scheme.status : 'draft';
+            const rows = components.length
+                ? components.map(schemeComponentRow).join('')
+                : schemeComponentRow({ type: 'assignment', aggregation: 'weighted', weight: 30, isRequired: true }, 0) +
+                  schemeComponentRow({ type: 'exam', aggregation: 'weighted', weight: 40, isRequired: true }, 1) +
+                  schemeComponentRow({ type: 'manual', aggregation: 'average', weight: 30, isRequired: true }, 2);
+            card.innerHTML = [
+                '<div style="border:1px solid var(--border); border-radius:var(--radius-lg); padding:1rem;">',
+                '  <div style="display:flex; justify-content:space-between; gap:1rem; flex-wrap:wrap; align-items:center; margin-bottom:0.75rem;">',
+                '    <h3 style="font-size:1rem; font-weight:600;">' + (scheme ? 'Skema Kelas' : 'Buat Skema Penilaian') + '</h3>',
+                '    <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">',
+                '      <button type="button" class="btn btn-outline" onclick="addSchemeComponentRow()"><i class="bi bi-plus-lg"></i> Komponen</button>',
+                '      <button type="button" class="btn btn-primary" onclick="submitSchemeForm()"><i class="bi bi-save"></i> Simpan Skema</button>',
+                (scheme ? '      <button type="button" class="btn btn-ghost" onclick="removeScheme()"><i class="bi bi-trash"></i> Hapus</button>' : ''),
+                '    </div>',
+                '  </div>',
+                '  <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:0.75rem;">',
+                '    <div class="form-group"><label class="form-label">Nama skema *</label><input type="text" id="schemeName" class="form-input" value="' + ELIPS.escapeHtml(scheme ? scheme.name : 'Skema Penilaian Kelas') + '"></div>',
+                '    <div class="form-group"><label class="form-label">Status</label><select id="schemeStatus" class="form-input">' +
+                    '<option value="draft"' + (status === 'draft' ? ' selected' : '') + '>Draft</option>' +
+                    '<option value="published"' + (status === 'published' ? ' selected' : '') + '>Published</option>' +
+                    '<option value="archived"' + (status === 'archived' ? ' selected' : '') + '>Archived</option>' +
+                  '</select></div>',
+                '    <div class="form-group"><label class="form-label">Batas lulus</label><input type="number" id="schemePassScore" class="form-input" min="0" max="100" step="0.01" value="' + (scheme ? Number(scheme.passScore) : 60) + '"></div>',
+                '    <div class="form-group"><label class="form-label">Pembulatan</label><select id="schemeRounding" class="form-input">' +
+                    '<option value="half_up"' + (!scheme || scheme.rounding === 'half_up' ? ' selected' : '') + '>Half up</option>' +
+                    '<option value="half_down"' + (scheme && scheme.rounding === 'half_down' ? ' selected' : '') + '>Half down</option>' +
+                    '<option value="floor"' + (scheme && scheme.rounding === 'floor' ? ' selected' : '') + '>Floor</option>' +
+                    '<option value="ceil"' + (scheme && scheme.rounding === 'ceil' ? ' selected' : '') + '>Ceil</option>' +
+                  '</select></div>',
+                '  </div>',
+                '  <div class="form-group"><label class="form-label">Catatan</label><input type="text" id="schemeNotes" class="form-input" value="' + ELIPS.escapeHtml(scheme ? scheme.notes || '' : '') + '"></div>',
+                '  <div style="overflow-x:auto;">',
+                '    <table class="dashboard-table"><thead><tr><th>Jenis</th><th>Nama</th><th>Bobot (%)</th><th>Agregasi</th><th>Wajib</th><th></th></tr></thead>',
+                '    <tbody id="schemeComponentsBody">' + rows + '</tbody></table>',
+                '  </div>',
+                '  <div id="schemeWeightTotal" style="font-weight:600; margin-top:0.5rem;"></div>',
+                '</div>'
+            ].join('');
+            updateSchemeWeightTotal();
+        }
+
+        function readSchemeForm() {
+            const components = [];
+            document.querySelectorAll('#schemeComponentsBody [data-component-row]').forEach(function (row) {
+                const weight = Number(row.querySelector('[data-field="weight"]').value);
+                const name = row.querySelector('[data-field="name"]').value.trim();
+                if (!name && !weight) return;
+                const idValue = row.querySelector('[data-field="id"]').value;
+                components.push({
+                    id: idValue ? Number(idValue) : null,
+                    type: row.querySelector('[data-field="type"]').value,
+                    name: name,
+                    weight: weight,
+                    aggregation: row.querySelector('[data-field="aggregation"]').value,
+                    maxScore: 100,
+                    isRequired: row.querySelector('[data-field="isRequired"]').checked
+                });
+            });
+            return {
+                classId: currentGradeClassId,
+                id: currentGradePanel && currentGradePanel.scheme ? currentGradePanel.scheme.id : null,
+                name: document.getElementById('schemeName').value.trim(),
+                status: document.getElementById('schemeStatus').value,
+                passScore: Number(document.getElementById('schemePassScore').value),
+                rounding: document.getElementById('schemeRounding').value,
+                notes: document.getElementById('schemeNotes').value.trim(),
+                components: components,
+                actorId: currentInstructor.id
+            };
+        }
+
+        function submitSchemeForm() {
+            if (!currentGradeClassId) return;
+            const result = ELIPS.saveGradeScheme(readSchemeForm());
+            ELIPS.toast(result.message);
+            if (result.ok) loadGradePanel();
+        }
+
+        function removeScheme() {
+            if (!currentGradePanel || !currentGradePanel.scheme) return;
+            if (!window.confirm('Hapus skema penilaian kelas ini? Nilai komponen yang tersimpan ikut dihapus.')) return;
+            const result = ELIPS.deleteGradeScheme({ id: currentGradePanel.scheme.id, actorId: currentInstructor.id });
+            ELIPS.toast(result.message);
+            if (result.ok) loadGradePanel();
+        }
+
+        function renderRosterCard(data) {
+            const card = document.getElementById('gradeRosterCard');
+            if (!card) return;
+            if (!data.scheme) {
+                card.innerHTML = '<div class="form-hint">Belum ada skema penilaian untuk kelas ini. Buat dan publikasikan skema terlebih dahulu.</div>';
+                return;
+            }
+            const components = data.scheme.components || [];
+            const roster = data.roster || [];
+            const headerCells = components.map(function (component) {
+                return '<th>' + ELIPS.escapeHtml(component.name) + '<div class="table-course-meta">' + Math.round(Number(component.weight)) + '%</div></th>';
+            }).join('');
+            const rows = roster.map(function (row) {
+                const componentCells = components.map(function (component) {
+                    const computed = (row.components || []).find(function (c) { return Number(c.componentId) === Number(component.id); });
+                    return '<td>' + renderRosterComponentCell(row, component, computed) + '</td>';
+                }).join('');
+                let action = '-';
+                if (row.gradeStatus === 'finalized') {
+                    action = '<button type="button" class="btn btn-ghost" style="padding:0.25rem 0.5rem; font-size:0.8125rem;" onclick="openCorrectionModal(' + row.enrollmentId + ')"><i class="bi bi-pencil-square"></i> Koreksi</button>';
+                } else if (row.computedStatus === 'computed') {
+                    action = '<button type="button" class="btn btn-primary" style="padding:0.25rem 0.5rem; font-size:0.8125rem;" onclick="finalizeSingle(' + row.enrollmentId + ')"><i class="bi bi-lock"></i> Finalisasi</button>';
+                } else {
+                    action = '<span class="form-hint">Lengkapi nilai</span>';
+                }
+                return [
+                    '<tr>',
+                    '<td><div class="table-course-title">' + ELIPS.escapeHtml(row.studentName) + '</div><div class="table-course-meta">' + ELIPS.escapeHtml(row.studentEmail || '') + '</div></td>',
+                    componentCells,
+                    '<td><strong>' + (row.finalScore === null || row.finalScore === undefined ? '-' : Number(row.finalScore).toFixed(2).replace(/\.00$/, '')) + '</strong><div class="table-course-meta">' + ELIPS.escapeHtml(row.letter || '-') + '</div></td>',
+                    '<td>' + gradeStatusBadge(row.gradeStatus === 'finalized' ? 'finalized' : row.computedStatus) +
+                        (row.missing && row.missing.length ? '<div class="table-course-meta" style="color:var(--danger);">Kurang: ' + ELIPS.escapeHtml(row.missing.join(', ')) + '</div>' : '') +
+                    '</td>',
+                    '<td>' + action + '</td>',
+                    '</tr>'
+                ].join('');
+            }).join('');
+
+            card.innerHTML = [
+                '<div style="display:flex; justify-content:space-between; gap:0.75rem; flex-wrap:wrap; align-items:center; margin-bottom:0.75rem;">',
+                '  <h3 style="font-size:1rem; font-weight:600;">Nilai Peserta</h3>',
+                '  <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">',
+                '    <span class="form-hint" style="align-self:center;">Skema: ' + ELIPS.escapeHtml(data.scheme.name) + ' (' + ELIPS.escapeHtml(data.scheme.status) + ')</span>',
+                '    <button type="button" class="btn btn-outline" onclick="finalizeAllReady()"><i class="bi bi-lock-fill"></i> Finalisasi yang Lengkap</button>',
+                '  </div>',
+                '</div>',
+                roster.length ? [
+                    '<div style="overflow-x:auto;"><table class="dashboard-table"><thead><tr>',
+                    '<th>Peserta</th>', headerCells,
+                    '<th>Nilai Akhir</th><th>Status</th><th>Aksi</th>',
+                    '</tr></thead><tbody>', rows, '</tbody></table></div>'
+                ].join('') : '<div class="form-hint">Belum ada peserta aktif pada kelas ini.</div>'
+            ].join('');
+        }
+
+        function renderRosterComponentCell(row, component, computed) {
+            if (!computed) return '-';
+            if (computed.status === 'excused') {
+                return '<span class="badge badge-primary">Dikecualikan</span>';
+            }
+            if (component.type === 'manual') {
+                if (row.gradeStatus === 'finalized') {
+                    return computed.score === null || computed.score === undefined
+                        ? '<span class="form-hint">-</span>'
+                        : '<span>' + Number(computed.score).toFixed(2).replace(/\.00$/, '') + '</span>';
+                }
+                const value = computed.score === null || computed.score === undefined ? '' : Number(computed.score);
+                return [
+                    '<div style="display:flex; gap:0.25rem; align-items:center;">',
+                    '<input type="number" class="form-input" style="width:80px; padding:0.25rem 0.5rem;" min="0" max="100" value="' + value + '" data-manual-component="' + component.id + '" data-manual-enrollment="' + row.enrollmentId + '" onchange="updateManualScore(this)">',
+                    '<button type="button" class="btn btn-ghost" style="padding:0.2rem 0.4rem;" title="Pengecualian" onclick="exemptComponent(' + row.enrollmentId + ',' + component.id + ')"><i class="bi bi-slash-circle"></i></button>',
+                    '</div>'
+                ].join('');
+            }
+            if (computed.score === null || computed.score === undefined) {
+                return '<span class="badge badge-danger">Belum ada</span>';
+            }
+            return '<span>' + Number(computed.score).toFixed(2).replace(/\.00$/, '') + '</span>';
+        }
+
+        function loadGradePanel() {
+            if (!currentInstructor) return;
+            const select = document.getElementById('gradeClassFilter');
+            currentGradeClassId = select ? Number(select.value) || null : null;
+            const message = document.getElementById('gradePanelMessage');
+            if (!currentGradeClassId) {
+                if (message) message.textContent = 'Pilih kelas untuk mengatur skema penilaian.';
+                document.getElementById('gradeSchemeCard').innerHTML = '';
+                document.getElementById('gradeRosterCard').innerHTML = '';
+                return;
+            }
+            const result = ELIPS.gradeRoster({ classId: currentGradeClassId, actorId: currentInstructor.id });
+            if (!result.ok) {
+                if (message) message.textContent = result.message;
+                return;
+            }
+            currentGradePanel = result.data;
+            if (message) message.textContent = '';
+            renderSchemeCard(result.data.scheme);
+            renderRosterCard(result.data);
+        }
+
+        function updateManualScore(input) {
+            if (!currentInstructor) return;
+            const value = input.value === '' ? null : Number(input.value);
+            const result = ELIPS.saveManualComponentScore({
+                enrollmentId: Number(input.getAttribute('data-manual-enrollment')),
+                componentId: Number(input.getAttribute('data-manual-component')),
+                score: value,
+                status: value === null ? 'not_assessed' : 'graded',
+                actorId: currentInstructor.id
+            });
+            ELIPS.toast(result.message);
+            if (result.ok) loadGradePanel();
+        }
+
+        function exemptComponent(enrollmentId, componentId) {
+            if (!currentInstructor) return;
+            const reason = window.prompt('Alasan pengecualian komponen (minimal 5 karakter):', '');
+            if (reason === null) return;
+            const result = ELIPS.exemptGradeComponent({
+                enrollmentId: enrollmentId,
+                componentId: componentId,
+                reason: reason,
+                actorId: currentInstructor.id
+            });
+            ELIPS.toast(result.message);
+            if (result.ok) loadGradePanel();
+        }
+
+        function finalizeSingle(enrollmentId) {
+            if (!currentInstructor) return;
+            if (!window.confirm('Finalisasi nilai peserta ini? Nilai akan terkunci dan perubahan hanya melalui koreksi.')) return;
+            const result = ELIPS.finalizeGrades({ enrollmentIds: [enrollmentId], actorId: currentInstructor.id });
+            ELIPS.toast(result.message);
+            if (result.ok) loadGradePanel();
+        }
+
+        function finalizeAllReady() {
+            if (!currentGradePanel) return;
+            const ready = (currentGradePanel.roster || []).filter(function (row) {
+                return row.gradeStatus !== 'finalized' && row.computedStatus === 'computed';
+            });
+            if (!ready.length) {
+                ELIPS.toast('Tidak ada peserta yang siap difinalisasi.');
+                return;
+            }
+            if (!window.confirm('Finalisasi ' + ready.length + ' peserta yang nilainya sudah lengkap?')) return;
+            const result = ELIPS.finalizeGrades({
+                enrollmentIds: ready.map(function (row) { return row.enrollmentId; }),
+                actorId: currentInstructor.id
+            });
+            ELIPS.toast(result.message);
+            if (result.ok) loadGradePanel();
+        }
+
+        function openCorrectionModal(enrollmentId) {
+            if (!currentGradePanel) return;
+            const row = (currentGradePanel.roster || []).find(function (item) { return Number(item.enrollmentId) === Number(enrollmentId); });
+            if (!row) return;
+            correctionTarget = row;
+            document.getElementById('correctionStudentName').textContent = row.studentName;
+            document.getElementById('correctionFinalScore').value = '';
+            document.getElementById('correctionReason').value = '';
+            const container = document.getElementById('correctionComponentInputs');
+            const manualComponents = (currentGradePanel.scheme.components || []).filter(function (component) {
+                return component.type === 'manual';
+            });
+            container.innerHTML = manualComponents.length ? manualComponents.map(function (component) {
+                const computed = (row.components || []).find(function (c) { return Number(c.componentId) === Number(component.id); });
+                const value = computed && computed.score !== null && computed.score !== undefined ? Number(computed.score) : '';
+                return '<div class="form-group"><label class="form-label">' + ELIPS.escapeHtml(component.name) + '</label>' +
+                    '<input type="number" class="form-input" min="0" max="100" value="' + value + '" data-correction-component="' + component.id + '"></div>';
+            }).join('') : '<div class="form-hint">Tidak ada komponen manual. Isi nilai akhir pengganti bila perlu.</div>';
+            document.getElementById('correctionModal').style.display = 'flex';
+        }
+
+        function closeCorrectionModal() {
+            document.getElementById('correctionModal').style.display = 'none';
+            correctionTarget = null;
+        }
+
+        function submitCorrection() {
+            if (!correctionTarget || !currentInstructor) return;
+            const reason = document.getElementById('correctionReason').value.trim();
+            if (reason.length < 5) {
+                ELIPS.toast('Alasan koreksi wajib diisi minimal 5 karakter.');
+                return;
+            }
+            const componentScores = [];
+            document.querySelectorAll('#correctionComponentInputs [data-correction-component]').forEach(function (input) {
+                if (input.value !== '') {
+                    componentScores.push({ componentId: Number(input.getAttribute('data-correction-component')), score: Number(input.value) });
+                }
+            });
+            const finalScoreValue = document.getElementById('correctionFinalScore').value;
+            const payload = {
+                enrollmentId: correctionTarget.enrollmentId,
+                reason: reason,
+                actorId: currentInstructor.id
+            };
+            if (componentScores.length) payload.componentScores = componentScores;
+            if (finalScoreValue !== '') payload.finalScore = Number(finalScoreValue);
+            if (!componentScores.length && finalScoreValue === '') {
+                ELIPS.toast('Masukkan nilai komponen atau nilai akhir pengganti.');
+                return;
+            }
+            const result = ELIPS.correctGrade(payload);
+            ELIPS.toast(result.message);
+            if (result.ok) {
+                closeCorrectionModal();
+                loadGradePanel();
+            }
+        }
+
         function resetFilters() {
             document.getElementById('courseFilter').value = '';
             document.getElementById('statusFilter').value = 'all';
             document.getElementById('studentSearch').value = '';
             refreshData();
+            populateGradeClassFilter();
+            loadGradePanel();
         }
 
         function openGradeModal(data) {

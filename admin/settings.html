@@ -194,6 +194,39 @@
             </div>
 
             <div class="dashboard-section">
+                <div class="dashboard-section-header" style="flex-wrap: wrap; gap: 0.75rem;">
+                    <h2 class="dashboard-section-title">Predikat Nilai</h2>
+                    <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                        <button type="button" class="btn btn-outline" onclick="addPredicateRow()"><i class="bi bi-plus-lg"></i> Rentang</button>
+                        <button type="button" class="btn btn-outline" onclick="resetPredicateRanges()"><i class="bi bi-arrow-counterclockwise"></i> Default A-E</button>
+                        <button type="button" class="btn btn-primary" onclick="savePredicates()"><i class="bi bi-save"></i> Simpan Predikat</button>
+                    </div>
+                </div>
+                <div class="dashboard-section-body">
+                    <p class="form-hint" style="margin-bottom: 0.75rem;">
+                        Rentang predikat harus menutup skala 0-100 tanpa celah dan tanpa tumpang tindih.
+                        Perubahan berlaku untuk perhitungan nilai berikutnya; nilai yang sudah difinalisasi tetap memakai huruf saat finalisasi.
+                    </p>
+                    <div style="overflow-x: auto;">
+                        <table class="dashboard-table">
+                            <thead>
+                                <tr>
+                                    <th>Huruf</th>
+                                    <th>Label</th>
+                                    <th>Skor minimum</th>
+                                    <th>Skor maksimum</th>
+                                    <th style="text-align: center;">Aktif</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody id="predicateTableBody"></tbody>
+                        </table>
+                    </div>
+                    <div id="predicateCoverage" class="form-hint" style="margin-top: 0.5rem; font-weight: 600;"></div>
+                </div>
+            </div>
+
+            <div class="dashboard-section">
                 <div class="dashboard-section-header">
                     <h2 class="dashboard-section-title">Pengaturan Pembelajaran</h2>
                 </div>
@@ -425,9 +458,119 @@
             ELIPS.toast(result.message);
         }
 
+        // ---------- Predikat nilai (Phase 6) ----------
+        function predicateRowHtml(range, index) {
+            const item = range || {};
+            return [
+                '<tr data-predicate-row>',
+                '<td><input type="text" class="form-input" data-field="letter" maxlength="4" style="width:70px;" value="' + ELIPS.escapeHtml(item.letter || '') + '"></td>',
+                '<td><input type="text" class="form-input" data-field="label" value="' + ELIPS.escapeHtml(item.label || '') + '" placeholder="Label predikat"></td>',
+                '<td><input type="number" class="form-input" data-field="minScore" min="0" max="100" step="0.01" style="width:110px;" value="' + (item.minScore === undefined ? '' : Number(item.minScore)) + '" oninput="updatePredicateCoverage()"></td>',
+                '<td><input type="number" class="form-input" data-field="maxScore" min="0" max="100" step="0.01" style="width:110px;" value="' + (item.maxScore === undefined ? '' : Number(item.maxScore)) + '" oninput="updatePredicateCoverage()"></td>',
+                '<td style="text-align:center;"><input type="checkbox" data-field="isActive"' + (item.isActive === false ? '' : ' checked') + ' onchange="updatePredicateCoverage()"></td>',
+                '<td><button type="button" class="btn btn-ghost" style="padding:0.25rem 0.5rem; color: var(--danger);" title="Hapus rentang" onclick="removePredicateRow(this)"><i class="bi bi-trash"></i></button></td>',
+                '</tr>'
+            ].join('');
+        }
+
+        function renderPredicates() {
+            const body = document.getElementById('predicateTableBody');
+            if (!body) return;
+            const ranges = ELIPS.getPredicateRanges().slice().sort(function (a, b) {
+                return Number(b.minScore) - Number(a.minScore);
+            });
+            body.innerHTML = ranges.map(predicateRowHtml).join('') ||
+                '<tr><td colspan="6" style="text-align:center; color: var(--text-secondary);">Belum ada rentang predikat.</td></tr>';
+            updatePredicateCoverage();
+        }
+
+        function addPredicateRow() {
+            const body = document.getElementById('predicateTableBody');
+            if (!body) return;
+            const empty = body.querySelector('td[colspan]');
+            if (empty) body.innerHTML = '';
+            const wrapper = document.createElement('tbody');
+            wrapper.innerHTML = predicateRowHtml({ letter: '', label: '', minScore: '', maxScore: '', isActive: true });
+            body.appendChild(wrapper.firstElementChild);
+            updatePredicateCoverage();
+        }
+
+        function removePredicateRow(button) {
+            const row = button.closest('[data-predicate-row]');
+            if (row) row.parentNode.removeChild(row);
+            updatePredicateCoverage();
+        }
+
+        function readPredicateForm() {
+            const rows = [];
+            document.querySelectorAll('#predicateTableBody [data-predicate-row]').forEach(function (row, index) {
+                rows.push({
+                    letter: row.querySelector('[data-field="letter"]').value.trim(),
+                    label: row.querySelector('[data-field="label"]').value.trim(),
+                    minScore: row.querySelector('[data-field="minScore"]').value === '' ? null : Number(row.querySelector('[data-field="minScore"]').value),
+                    maxScore: row.querySelector('[data-field="maxScore"]').value === '' ? null : Number(row.querySelector('[data-field="maxScore"]').value),
+                    sortOrder: index + 1,
+                    isActive: row.querySelector('[data-field="isActive"]').checked
+                });
+            });
+            return rows;
+        }
+
+        function updatePredicateCoverage() {
+            const target = document.getElementById('predicateCoverage');
+            if (!target) return;
+            const rows = readPredicateForm().filter(function (row) { return row.isActive; });
+            if (!rows.length) {
+                target.textContent = 'Tidak ada rentang aktif.';
+                target.style.color = 'var(--danger)';
+                return;
+            }
+            rows.sort(function (a, b) { return Number(a.minScore) - Number(b.minScore); });
+            let covered = 0;
+            let gap = false;
+            let overlap = false;
+            rows.forEach(function (row, index) {
+                if (row.minScore === null || row.maxScore === null || isNaN(row.minScore) || isNaN(row.maxScore)) {
+                    gap = true;
+                    return;
+                }
+                if (index === 0) {
+                    covered = row.maxScore;
+                    if (row.minScore > 0) gap = true;
+                    return;
+                }
+                if (row.minScore <= rows[index - 1].maxScore) overlap = true;
+                else if (Math.round((row.minScore - rows[index - 1].maxScore) * 100) / 100 > 0.01) gap = true;
+                covered = Math.max(covered, row.maxScore);
+            });
+            const complete = !gap && !overlap && covered >= 100;
+            target.textContent = complete
+                ? 'Rentang predikat menutup skala 0-100 tanpa celah.'
+                : (overlap ? 'Rentang tumpang tindih.' : (gap ? 'Masih ada celah atau nilai kosong pada rentang.' : 'Rentang belum mencapai skor 100.'));
+            target.style.color = complete ? 'var(--success)' : 'var(--danger)';
+        }
+
+        function savePredicates() {
+            const result = ELIPS.savePredicateRanges({
+                ranges: readPredicateForm(),
+                actorId: currentActorId()
+            });
+            ELIPS.toast(result.message);
+            if (result.ok) renderPredicates();
+        }
+
+        function resetPredicateRanges() {
+            if (!window.confirm('Kembalikan rentang predikat ke default A-E?')) return;
+            const defaults = ELIPS.defaultPredicateRanges();
+            const result = ELIPS.savePredicateRanges({ ranges: defaults, actorId: currentActorId() });
+            ELIPS.toast(result.message);
+            if (result.ok) renderPredicates();
+        }
+
         document.addEventListener('DOMContentLoaded', function () {
             ELIPS.requireRole('admin');
             renderBranches();
+            renderPredicates();
         });
     </script>
 </body>

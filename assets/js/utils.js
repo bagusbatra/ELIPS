@@ -8,6 +8,10 @@
     'use strict';
 
     function gradeLetter(score) {
+        if (typeof ELIPS.predicateLetter === 'function') {
+            const letter = ELIPS.predicateLetter(score);
+            if (letter) return letter;
+        }
         const value = Number(score);
         if (isNaN(value)) return '-';
         if (value >= 90) return 'A';
