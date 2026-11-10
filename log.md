@@ -1,8 +1,8 @@
 # Log Pengembangan ELIPS LMS
 
 **Versi dokumen:** 4.0  
-**Terakhir diperbarui:** 2026-11-09
-**Status proyek:** Dual-mode - PHP 8/MySQL 8 + fallback `localStorage`; v4.0 Phase 1-4 (kurikulum, kelas/angkatan, enrollment berbasis kelas, jadwal & presensi offline, materi tambahan & mode akses materi) plus cabang, kalender jadwal Admin, serta aksi langsung dan filter jadwal lanjutan, dan absensi staf berbasis kamera di dashboard Admin
+**Terakhir diperbarui:** 2026-11-10
+**Status proyek:** Dual-mode - PHP 8/MySQL 8 + fallback `localStorage`; v4.0 Phase 1-4 (kurikulum, kelas/angkatan, enrollment berbasis kelas, jadwal & presensi offline, materi tambahan & mode akses materi) plus cabang, kalender jadwal Admin, aksi langsung dan filter jadwal lanjutan, serta absensi staf berbasis kamera di dashboard Admin dengan alur harian masuk/pulang
 **Dokumen terkait:** `prd.md`, `erd.md`, `ELIPS-LMS-PRD-v4.0.md`
 
 ---
@@ -149,6 +149,43 @@ Prinsip yang dipakai:
 ---
 
 ## 3. Riwayat Perubahan
+
+### v4.0 - 2026-11-10 - Penyempurnaan alur absensi harian dan modal berhasil
+
+**Tujuan:** menyelaraskan fitur absensi dashboard dengan alur kerja harian: satu absen masuk dan satu absen pulang per admin per hari, tombol yang hanya menampilkan aksi berikutnya, penguncian tanggal/jam/lokasi otomatis saat simpan, tampilan kamera yang ringkas, dan modal konfirmasi berhasil dengan satu tombol Selesai.
+
+Perubahan client:
+
+- `admin/dashboard.html`:
+  - Hero hanya menampilkan **Absen Masuk** bila belum ada catatan `in` hari ini, **Absen Pulang** bila `in` sudah ada dan `out` belum, dan badge **Absensi hari ini lengkap** bila keduanya sudah tercatat; tombol disembunyikan saat status belum dimuat atau gagal dimuat.
+  - Aturan harian `allowedKind()` memfilter catatan berdasarkan tanggal lokal hari ini dan `userId` pengguna aktif; modal menolak dibuka atau disimpan bila status berubah di tengah proses.
+  - Modal ambil foto disederhanakan menjadi layar kamera, tombol **Ambil Foto**, **Ulangi**, **Nyalakan Kamera**, **Unggah Foto**, kolom **Catatan**, **Batal**, dan **Simpan Absensi**; input tanggal/jam/lokasi manual dan panel metadata dihapus.
+  - Tanggal, jam, dan lokasi dikunci otomatis saat simpan: `attendanceDate` = tanggal lokal hari ini, `takenAt` = waktu simpan, koordinat GPS diambil saat modal dibuka atau dicoba ulang saat simpan; kegagalan GPS menyimpan `locationSource = none` tanpa memblokir absensi.
+  - Modal **Absensi Berhasil** menampilkan foto, identitas akun (nama, email, role, ID), seluruh metadata absensi dan perangkat, serta hanya satu tombol **Selesai**; modal tidak dapat ditutup dengan Escape/backdrop. Setelah ditutup, riwayat dan status hero dimuat ulang.
+  - Pengaman ganda mencegah penyimpanan ganda selama proses simpan (`saving`), menonaktifkan tombol saat menyimpan, dan menangani penutupan modal saat izin kamera masih menunggu.
+- `assets/css/style.css`: menambahkan gaya kartu modal ambil foto yang ringkas, badge status selesai, header/ikon modal sukses, dan penyesuaian responsif.
+
+Tidak ada perubahan backend/skema: `staff_attendances`, serializer, dan aksi `staffAttendance.create/list/delete` tetap sama. Aturan satu masuk + satu pulang per hari ditegakkan di UI, bukan unique constraint database.
+
+Aturan bisnis:
+
+- Setiap admin memiliki catatan absensi harian sendiri; role lain tetap ditolak server.
+- Tombol aksi mengikuti status hari ini dan tidak menampilkan aksi yang tidak valid.
+- Tanggal, jam, dan lokasi tidak dapat diedit pengguna dan dikunci pada saat simpan.
+- Modal sukses hanya dapat ditutup melalui tombol **Selesai**.
+
+Pengujian:
+
+- `node --check` skrip inline dashboard lulus; `test-staff-attendance-page.js` diperbarui dan lulus 80 pemeriksaan: tombol awal/berganti, komposisi modal ringkas, penguncian tanggal, modal sukses lengkap dengan satu tombol, Escape tidak menutup modal sukses, guard status lengkap, detail, audit, dan hapus.
+- `test-staff-attendance-api.js` tetap lulus 41/41 pemeriksaan (guard role, validasi, persistensi metadata, kepemilikan, snapshot tanpa foto).
+- `php api/install.php --fresh` berhasil; database demo ditinggalkan bersih setelah pengujian.
+
+Batasan:
+
+- Aturan satu masuk/pulang per hari belum menjadi constraint database, sehingga pemanggilan API langsung masih dapat membuat duplikat.
+- Lokasi hanya mengandalkan GPS perangkat; belum ada reverse geocoding/pemetaan label alamat.
+
+---
 
 ### v4.0 - 2026-11-09 - Absensi staf dengan kamera dan metadata kehadiran
 
@@ -811,7 +848,7 @@ Tabel: `users`, `categories`, `branches`, `courses`, `curriculum_versions`, `cla
 | `elips_completedLessons` | Progres pelajaran legacy yang tetap dibaca untuk kompatibilitas |
 | `elips_auditLogs` | Jejak audit perubahan kursus, nilai, sertifikat, pengguna, penugasan, modul, materi, sesi, presensi, dan materi kelas |
 | `elips_notifications` | Outbox notifikasi email simulasi: penerima, subjek, isi, entitas, dan waktu |
-| `elips_staffAttendances` | Absensi pribadi staf/admin: jenis masuk/pulang, tanggal/waktu, foto, lokasi GPS/manual, dan metadata perangkat |
+| `elips_staffAttendances` | Absensi harian pribadi staf/admin: maks. satu masuk + satu pulang per hari, tanggal/waktu terisi otomatis, foto, lokasi GPS otomatis, dan metadata perangkat |
 | `elips_session` | Sesi pengguna yang sedang login |
 
 Akun demo utama:
@@ -832,7 +869,7 @@ Akun lama tanpa password otomatis dimigrasikan ke password demo `elips123` saat 
 
 ## 6. Hasil Pengujian Terakhir
 
-Pengujian dijalankan setelah backend PHP/MySQL, client dual-mode (v3.0), increment v4.0 Phase 1–4, penambahan cabang/kalender jadwal, dan aksi langsung/filter jadwal lanjutan, serta absensi staf:
+Pengujian dijalankan setelah backend PHP/MySQL, client dual-mode (v3.0), increment v4.0 Phase 1-4, penambahan cabang/kalender jadwal, aksi langsung/filter jadwal lanjutan, serta absensi staf dan penyempurnaan alur hariannya:
 
 | Pemeriksaan | Hasil |
 |---|---|
@@ -861,7 +898,7 @@ Pengujian dijalankan setelah backend PHP/MySQL, client dual-mode (v3.0), increme
 | Mode lokal cabang (`local-v4-branches`) | ✅ 18/18 |
 | UI materi Admin/Instruktur/Peserta (`test-v4-material-ui`) | ✅ 25/25 |
 | Aksi langsung & filter kalender (`test-schedule-actions`) | ✅ Lulus |
-| Absensi staf halaman lokal (`test-staff-attendance-page`) | Lulus |
+| Absensi staf halaman lokal (`test-staff-attendance-page`) | Lulus 80/80 |
 | API absensi staf (`test-staff-attendance-api`) | Lulus 41/41 |
 | UI akademik admin (`test-academic-page`) | ✅ Lulus |
 | UI cabang & kalender admin (`test-branch-pages`) | ✅ Lulus |
@@ -916,6 +953,9 @@ Catatan penting yang diuji:
 - Snapshot materi hanya metadata; `file_path` dan `content` tidak diekspos.
 - Perubahan pengaturan/status materi tanpa alasan yang diwajibkan ditolak dan tidak menambah audit; perubahan sah mencatat nilai sebelum/sesudah.
 - Absensi staf hanya dapat dibuat/dibaca/dihapus oleh admin pemiliknya; instruktur dan peserta ditolak.
+- Tombol hero mengikuti status harian: hanya Absen Masuk saat belum ada catatan, hanya Absen Pulang setelah absen masuk, dan badge selesai saat masuk+pulang lengkap.
+- Modal ambil foto hanya memuat kamera, tombol foto, catatan, batal, dan simpan; tanggal/jam/lokasi tidak dapat diedit dan dikunci otomatis saat simpan.
+- Modal berhasil menampilkan identitas akun dan seluruh metadata dengan satu tombol Selesai; Escape/backdrop tidak menutup modal tersebut.
 - Foto absensi wajib berupa gambar valid; data URL non-gambar, koordinat tidak lengkap, dan tanggal tidak valid ditolak server.
 - Metadata absensi (zona waktu, lokasi, perangkat, koneksi, catatan, IP server) tersimpan konsisten dan muncul di detail.
 - Snapshot bootstrap tidak memuat koleksi/foto absensi staf; riwayat hanya dimuat lewat aksi khusus.

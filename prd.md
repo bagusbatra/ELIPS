@@ -299,7 +299,7 @@ Seluruh aturan di atas ditegakkan **di server** (`api/actions.php` + `api/helper
 | Notifikasi email simulasi | ✅ Selesai | `assets/js/notifications.js` dan tabel `notifications`; halaman `admin/notifications.html` |
 | Backend PHP + MySQL | ✅ Selesai | `api/` menyediakan autentikasi sesi, CRUD v3/v4, snapshot, audit, notifikasi, dan seeding data demo |
 | Dual-mode client | ✅ Selesai | `assets/js/api.js` memakai API saat tersedia dan otomatis fallback ke `localStorage`; `crud-academic.js` menyediakan aturan v4 di kedua mode |
-| Absensi staf dengan kamera di dashboard Admin | ✅ Selesai | Hero **Absensi Kehadiran** membuka kamera, mengambil foto, dan merekam waktu, lokasi GPS/manual, serta metadata perangkat; tersedia fallback unggah foto dan riwayat absensi pribadi |
+| Absensi staf dengan kamera di dashboard Admin | ✅ Selesai | Hero **Absensi Kehadiran** membuka kamera, mengambil foto, dan merekam waktu, lokasi GPS otomatis, serta metadata perangkat; tanggal/jam/lokasi dikunci saat simpan, dengan fallback unggah foto, riwayat pribadi, dan modal berhasil |
 
 ---
 
@@ -427,7 +427,7 @@ Backend berada di folder `api/` dan terdiri dari front controller, konfigurasi, 
 | `api/helpers.php` | ✅ Selesai | Sesi, otorisasi, serializer (termasuk cabang, sesi/presensi/koreksi), kebijakan kehadiran, rekap, sanitasi HTML, audit, dan notifikasi |
 | `api/snapshot.php` | ✅ Selesai | Snapshot koleksi untuk cache client, termasuk `branches`, `classSessions`, `attendances`, dan `attendanceCorrections` |
 | `api/actions.php` | ✅ Selesai | Aksi bisnis dan validasi role/kepemilikan di server, termasuk aksi `branch.*`, `session.*`, dan `attendance.*` |
-| `api/schema.sql` | ✅ Selesai | Skema MySQL 8 (22 tabel), foreign key, dan index |
+| `api/schema.sql` | ✅ Selesai | Skema MySQL 8 (23 tabel), foreign key, dan index |
 | `api/install.php` | ✅ Selesai | Installer/seeder data demo (`--fresh` untuk reset), termasuk cabang, sesi, dan presensi; migrasi `branch_id` untuk database lama |
 
 ---
@@ -544,10 +544,12 @@ Fitur utama pada `admin/dashboard.html` untuk mencatat kehadiran staf/admin send
 
 | Fitur | Status | Keterangan |
 |---|---|---|
-| Hero Absensi Kehadiran | Selesai | Tombol **Absen Masuk** dan **Absen Pulang** membuka modal kamera; status hari ini menampilkan jam masuk/pulang |
+| Hero Absensi Kehadiran | Selesai | Hanya menampilkan **Absen Masuk** bila belum ada catatan hari ini, **Absen Pulang** setelah absen masuk, dan badge selesai bila masuk+pulang lengkap; status hari ini menampilkan jam masuk/pulang |
 | Ambil foto via kamera | Selesai | `getUserMedia` dengan pratinjau video, tombol Ambil Foto, dan Ulangi; foto dikompres menjadi JPEG sebelum disimpan |
 | Fallback unggah foto | Selesai | Kamera tidak tersedia/izin ditolak/konteks tidak aman (`file://` atau non-HTTPS) diarahkan ke tombol **Unggah Foto** |
-| Lokasi GPS & manual | Selesai | Geolokasi opsional (lat/long/akurasi) dan kolom label lokasi manual; kegagalan GPS tidak memblokir absensi |
+| Lokasi GPS otomatis | Selesai | Geolokasi opsional (lat/long/akurasi) diambil otomatis tanpa input manual; kegagalan GPS tidak memblokir absensi dan `locationSource` menjadi `none` |
+| Penguncian tanggal, jam, lokasi | Selesai | Tanggal = hari ini dan jam = waktu simpan diisi otomatis serta tidak dapat diedit pengguna; koordinat dikunci saat simpan |
+| Modal berhasil | Selesai | Setelah simpan tampil foto, identitas akun, dan seluruh metadata; hanya satu tombol **Selesai** dan modal tidak dapat ditutup dengan Escape/backdrop |
 | Metadata perangkat | Selesai | Zona waktu, user agent, platform, bahasa, ukuran layar, memori perangkat, CPU core, tipe koneksi, status online, dan IP (server) |
 | Riwayat absensi pribadi | Selesai | Daftar 30 catatan terbaru dengan foto, jenis masuk/pulang, tanggal, jam, lokasi, dan perangkat |
 | Detail & hapus catatan | Selesai | Modal detail menampilkan seluruh metadata dan foto; staf dapat menghapus catatan miliknya sendiri |
@@ -757,12 +759,13 @@ else                            -> student/dashboard.html
 
 ### Absensi Staf (Kamera + Metadata)
 - Absensi pada dashboard Admin adalah **absensi pribadi staf/admin** yang sedang login, bukan presensi peserta per sesi. Staf hanya dapat membuat, membaca, dan menghapus catatan miliknya sendiri.
-- Dua jenis catatan: `in` (absen masuk) dan `out` (absen pulang). Pengulangan dalam hari yang sama diizinkan sebagai catatan terpisah; dashboard menampilkan catatan masuk/pulang paling awal yang tersedia untuk status hari ini.
+- Dua jenis catatan: `in` (absen masuk) dan `out` (absen pulang). Setiap admin hanya memiliki maksimal satu catatan `in` dan satu `out` per hari; dashboard hanya menampilkan tombol aksi berikutnya (Absen Masuk → Absen Pulang → badge selesai) dan menolak aksi yang tidak sesuai status.
 - Foto wajib ada. Server hanya menerima data URL `image/jpeg`, `image/png`, atau `image/webp`, memverifikasi isi biner dengan `getimagesizefromstring()`, dan membatasi ukuran foto (maks. 2 MB biner, 4 juta karakter data URL).
-- Waktu `takenAt` disimpan dalam UTC; tanggal absensi (`attendanceDate`) tetap tanggal kalender lokal yang dipilih staf dan divalidasi dengan `checkdate()`.
-- Koordinat harus dikirim berpasangan dan berada dalam rentang lat -90..90 / lng -180..180. `locationSource` diturunkan otomatis menjadi `gps` bila koordinat valid, `manual` bila hanya label lokasi, atau `none`.
+- Waktu `takenAt` disimpan dalam UTC dan tanggal absensi (`attendanceDate`) memakai tanggal kalender lokal hari ini. Keduanya diisi otomatis saat tombol Simpan ditekan, tidak dapat diedit pengguna, dan tanggal divalidasi dengan `checkdate()`.
+- Koordinat harus dikirim berpasangan dan berada dalam rentang lat -90..90 / lng -180..180. UI mengambil koordinat GPS secara otomatis; bila tidak tersedia, `locationSource` menjadi `none` dan absensi tetap dapat disimpan.
 - IP diambil server dari `REMOTE_ADDR`; metadata perangkat lain berasal dari browser dan dibatasi panjangnya sebelum disimpan.
-- Kamera memerlukan secure context (`localhost` atau HTTPS). Bila kamera/geolokasi tidak tersedia, ditolak, atau halaman dibuka via `file://`, UI menampilkan pesan dan pengguna dapat mengunggah foto serta mengisi lokasi manual.
+- Kamera memerlukan secure context (`localhost` atau HTTPS). Bila kamera/geolokasi tidak tersedia, ditolak, atau halaman dibuka via `file://`, UI menampilkan pesan dan pengguna dapat mengunggah foto; lokasi tidak perlu diisi manual.
+- Modal ambil foto hanya berisi layar kamera, tombol Ambil Foto/Ulangi/Nyalakan Kamera/Unggah Foto, Catatan, Batal, dan Simpan Absensi. Setelah berhasil, modal sukses menampilkan foto, identitas akun, dan seluruh metadata dengan satu tombol **Selesai** yang tidak dapat ditutup lewat Escape/backdrop.
 - Mode lokal menyimpan catatan di `elips_staffAttendances` dengan `photo` berupa data URL terkompresi dan memangkas riwayat per pengguna menjadi 20 catatan; mode server menyimpan foto base64 di `staff_attendances.photo` dengan `photo_mime`.
 - Snapshot bootstrap sengaja **tidak** memuat koleksi absensi staf maupun foto; dashboard memuat riwayat melalui `staffAttendance.list` agar foto tidak bocor ke halaman/role lain.
 - Setiap create/delete mencatat audit dengan entitas `staff_attendance`; pada mode server audit ditulis backend, pada mode lokal ditulis client.
@@ -853,8 +856,8 @@ else                            -> student/dashboard.html
 | Notifikasi sertifikat terbit | ✅ Lulus uji | Approval Draft → Publish membuat satu notifikasi untuk peserta dengan nomor sertifikat final |
 | Operasi gagal tidak membuat notifikasi | ✅ Lulus uji | Approval ulang dan publikasi tanpa perubahan status tidak menambah outbox |
 | Filter, ekspor & pembersihan outbox | ✅ Lulus uji | Filter jenis/penerima/tanggal/pencarian dan tombol CSV/bersihkan tersedia di `admin/notifications.html` |
-| Absensi staf dari dashboard Admin | Lulus uji | `test-staff-attendance-page` memverifikasi hero, modal kamera/fallback, penyimpanan lokal, metadata, detail, audit, dan hapus catatan |
-| API absensi staf & privasi | Lulus uji | `test-staff-attendance-api` memverifikasi guard role, validasi foto/koordinat/tanggal, persistensi metadata, kepemilikan hapus, dan snapshot tanpa foto |
+| Absensi staf dari dashboard Admin | Lulus uji | `test-staff-attendance-page` (80/80) memverifikasi tombol masuk/pulang sesuai status harian, modal kamera/fallback yang ringkas, penguncian tanggal, modal sukses dengan satu tombol Selesai, penyimpanan lokal, detail, audit, dan hapus catatan |
+| API absensi staf & privasi | Lulus uji | `test-staff-attendance-api` (41/41) memverifikasi guard role, validasi foto/koordinat/tanggal, persistensi metadata, kepemilikan hapus, dan snapshot tanpa foto |
 | Degradasi kamera & geolokasi | Lulus uji | Kamera tanpa dukungan/izin/secure context menampilkan fallback unggah; GPS gagal tidak memblokir penyimpanan |
 
 ---

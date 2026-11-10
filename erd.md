@@ -9,7 +9,7 @@
 
 ## 1. Ringkasan
 
-ELIPS LMS adalah aplikasi Learning Management System dengan tiga role: **Admin**, **Instruktur**, dan **Peserta**. Pada mode server, data disimpan di **MySQL 8** dengan 22 tabel (20 domain inti + 2 operasional) dan foreign key fisik (lihat §13 dan §16). Pada mode fallback, data disimpan sebagai koleksi JSON di `localStorage` dengan model logis yang sama. Sesi login pada mode server disimpan di sesi PHP native, bukan tabel database.
+ELIPS LMS adalah aplikasi Learning Management System dengan tiga role: **Admin**, **Instruktur**, dan **Peserta**. Pada mode server, data disimpan di **MySQL 8** dengan 23 tabel (20 domain inti + 3 operasional/pribadi) dan foreign key fisik (lihat §13 dan §16). Pada mode fallback, data disimpan sebagai koleksi JSON di `localStorage` dengan model logis yang sama. Sesi login pada mode server disimpan di sesi PHP native, bukan tabel database.
 
 Sejak v4.0, kursus dipisahkan dari penyelenggaraannya:
 
@@ -38,12 +38,12 @@ Publikasi kursus / penerbitan sertifikat ── menghasilkan ──► Notificat
 
 | Termasuk ERD | Tidak termasuk |
 |---|---|
-| 20 tabel domain MySQL + tabel histori/outbox dan koleksi `localStorage` yang setara | Halaman statis dan tampilan UI |
+| 20 tabel domain MySQL + tabel operasional (audit, notifikasi, absensi staf) dan koleksi `localStorage` yang setara | Halaman statis dan tampilan UI |
 | Relasi, kardinalitas, foreign key, dan aturan hapus | Data pengaturan halaman Admin (belum dipersistensi) |
 | Enum status dan lifecycle (kursus, kurikulum, kelas, sesi, presensi, enrollment, akses materi, sertifikat) | Data laporan/statistik turunan (dihitung saat runtime) |
 | Sesi PHP native (bukan tabel) | Integrasi email nyata (masih simulasi/outbox) |
 
-Catatan: jumlah tabel domain inti adalah 20 (`categories`, `users`, `branches`, `courses`, `curriculum_versions`, `modules`, `lessons`, `classes`, `class_instructor_histories`, `class_material_settings`, `class_materials`, `enrollments`, `class_sessions`, `attendances`, `attendance_corrections`, `class_lesson_progress`, `class_material_progress`, `grades`, `certificates`, `completed_lessons`) ditambah dua tabel operasional (`audit_logs`, `notifications`).
+Catatan: jumlah tabel domain inti adalah 20 (`categories`, `users`, `branches`, `courses`, `curriculum_versions`, `modules`, `lessons`, `classes`, `class_instructor_histories`, `class_material_settings`, `class_materials`, `enrollments`, `class_sessions`, `attendances`, `attendance_corrections`, `class_lesson_progress`, `class_material_progress`, `grades`, `certificates`, `completed_lessons`) ditambah tiga tabel operasional/pribadi (`audit_logs`, `notifications`, `staff_attendances`), sehingga total 23 tabel.
 
 ---
 
@@ -394,6 +394,34 @@ erDiagram
         datetime loggedInAt
     }
 
+    STAFF_ATTENDANCES {
+        number id PK
+        number userId FK
+        enum kind
+        date attendanceDate
+        datetime takenAt
+        string timezone
+        longtext photo
+        string photoMime
+        number latitude
+        number longitude
+        number accuracyM
+        string locationLabel
+        enum locationSource
+        string ipAddress
+        string userAgent
+        string platform
+        string language
+        string screen
+        number deviceMemory
+        number hardwareConcurrency
+        string connectionType
+        boolean online
+        text notes
+        datetime createdAt
+        datetime updatedAt
+    }
+
     CATEGORIES |o--o{ COURSES : "mengklasifikasikan"
     USERS |o--o{ COURSES : "mengampu sebagai instruktur"
     COURSES ||--o{ CURRICULUM_VERSIONS : "memiliki versi"
@@ -452,6 +480,7 @@ erDiagram
     COURSES |o--o{ NOTIFICATIONS : "direferensikan notifikasi"
     CERTIFICATES |o--o{ NOTIFICATIONS : "direferensikan notifikasi"
     USERS ||--o| SESSION : "memiliki sesi aktif"
+    USERS ||--o{ STAFF_ATTENDANCES : "mencatat absensi pribadi"
 ```
 
 > **Cara membaca:** `USERS |o--o{ CLASSES` berarti satu instruktur dapat mengampu nol atau banyak kelas, sedangkan satu kelas memiliki nol atau satu instruktur (boleh `null` saat draft atau setelah dilepas). Relasi peserta ke kelas bersifat **N—N** dan dipecah melalui `ENROLLMENTS`. Setiap kelas menunjuk tepat satu `curriculum_versions`; begitu kelas dibuat, versi tersebut berstatus `locked`. Sejak Phase 4, setiap kelas dapat memiliki satu pengaturan akses materi dan banyak materi tambahan; progres materi disimpan per enrollment agar peserta yang mengikuti beberapa kelas tidak saling menimpa. Notasi `|o` di sisi `USERS` menandai FK yang boleh `null`; `||` menandai FK yang wajib terisi.
@@ -487,7 +516,7 @@ Pada mode server, entitas yang sama disimpan di tabel MySQL bernama snake_case (
 | 21 | `AUDIT_LOGS` | `elips_auditLogs` | Array of object | Aktor dan entitas polimorfik |
 | 22 | `NOTIFICATIONS` | `elips_notifications` | Array of object | Penerima dan entitas polimorfik |
 | 23 | `SESSION` | `elips_session` | Object tunggal | Sesi user yang sedang login (mode server: sesi PHP) |
-| 24 | `STAFF_ATTENDANCES` | `elips_staffAttendances` | Array of object | Absensi pribadi staf/admin, foto, lokasi, dan metadata perangkat |
+| 24 | `STAFF_ATTENDANCES` | `elips_staffAttendances` | Array of object | Absensi harian pribadi staf/admin: maks. satu `in` + satu `out` per hari, foto, lokasi, dan metadata perangkat |
 
 Key lama yang dimigrasikan: `elips_enrolled` (self-enrollment) dipindahkan ke `elips_enrollments` oleh `seed.js`, lalu dihapus. Pada migrasi v3 → v4, `seed.js` membuat entri `elips_categories`/`elips_curriculumVersions`/`elips_classes`/`elips_branches` bila belum ada, mengisi `curriculumVersionId` pada modul/materi lama, lalu menambahkan sesi dan presensi demo untuk kelas migrasi. Kelas lama tanpa cabang diberi `branchId = null` agar tetap kompatibel. Sejak Phase 4, `seed.js` juga menormalisasi empat koleksi materi/progres; kelas yang belum memiliki pengaturan akses **tidak** dibuatkan baris, sehingga default implisit `open` tetap sama dengan mode server.
 
@@ -1213,7 +1242,7 @@ Bukan koleksi, melainkan **satu objek** yang merepresentasikan sesi login aktif 
 
 ### 5.12 STAFF_ATTENDANCES - `elips_staffAttendances`
 
-Absensi pribadi staf/admin yang dicatat dari dashboard Admin. Bukan presensi peserta per sesi.
+Absensi harian pribadi staf/admin yang dicatat dari dashboard Admin. Bukan presensi peserta per sesi. Setiap hari setiap admin memiliki paling banyak satu catatan `in` dan satu catatan `out`.
 
 | Field | Tipe | Key | Wajib | Keterangan |
 |---|---|---|---|---|
@@ -1221,16 +1250,16 @@ Absensi pribadi staf/admin yang dicatat dari dashboard Admin. Bukan presensi pes
 | `userId` | number | FK -> `users.id` | Ya | Pemilik catatan (admin yang login) |
 | `userName` | string | - | Tidak | Nama pemilik (hasil JOIN, bukan input client) |
 | `kind` | enum `in`/`out` | - | Ya | Jenis absensi masuk/pulang |
-| `attendanceDate` | date `YYYY-MM-DD` | - | Ya | Tanggal kalender lokal absensi |
-| `takenAt` | datetime ISO | - | Ya | Waktu foto diambil (disimpan UTC di server) |
+| `attendanceDate` | date `YYYY-MM-DD` | - | Ya | Tanggal kalender lokal; diisi otomatis tanggal hari ini dan dikunci saat simpan |
+| `takenAt` | datetime ISO | - | Ya | Waktu simpan/foto (disimpan UTC di server); diisi otomatis dan dikunci saat simpan |
 | `timezone` | string | - | Tidak | Zona waktu browser |
 | `photo` | string (data URL) | - | Ya | Foto JPEG/PNG/WebP; base64 disimpan di MySQL |
 | `photoMime` | string | - | Ya | MIME foto terdeteksi |
 | `latitude` | number/null | - | Tidak | Lintang, harus berpasangan dengan `longitude` |
 | `longitude` | number/null | - | Tidak | Bujur, harus berpasangan dengan `latitude` |
 | `accuracyM` | number/null | - | Tidak | Akurasi GPS dalam meter |
-| `locationLabel` | string | - | Tidak | Label lokasi manual/otomatis |
-| `locationSource` | enum `gps`/`manual`/`none` | - | Ya | Sumber lokasi |
+| `locationLabel` | string | - | Tidak | Label koordinat otomatis; tidak ada input manual |
+| `locationSource` | enum `gps`/`manual`/`none` | - | Ya | Sumber lokasi; `gps` bila koordinat tersedia, `none` bila tidak |
 | `ipAddress` | string | - | Tidak | Diisi server dari `REMOTE_ADDR` |
 | `userAgent` | string | - | Tidak | User agent browser |
 | `platform` | string | - | Tidak | Platform perangkat |
@@ -1249,6 +1278,10 @@ Absensi pribadi staf/admin yang dicatat dari dashboard Admin. Bukan presensi pes
 - Hanya Admin yang dapat membuat, membaca, dan menghapus catatan; server membatasi operasi pada `userId` milik aktor.
 - Foto wajib dan harus berupa data URL gambar valid (JPEG/PNG/WebP) dengan ukuran terbatas.
 - Koordinat harus lengkap berpasangan dan berada dalam rentang valid; `locationSource` diturunkan bila tidak konsisten.
+- Alur harian: dashboard hanya menampilkan tombol **Absen Masuk** bila belum ada catatan `in` hari ini, hanya **Absen Pulang** bila `in` sudah ada dan `out` belum, dan badge "Absensi hari ini lengkap" bila keduanya sudah ada. Tidak ada tombol saat lengkap.
+- Satu `in` dan satu `out` per admin per `attendanceDate` ditegakkan oleh UI (`allowedKind()`) dan diverifikasi ulang sebelum simpan; aturan ini **bukan** unique constraint database, sehingga API tetap menerima beberapa baris bila dipanggil langsung.
+- Tanggal, jam, dan lokasi dikunci otomatis saat tombol Simpan ditekan: `attendanceDate` = tanggal lokal hari ini, `takenAt` = waktu simpan, dan koordinat berasal dari GPS perangkat (tanpa input manual). Kegagalan GPS tidak memblokir simpan; `locationSource` menjadi `none`.
+- Modal ambil foto hanya berisi layar kamera, tombol Ambil Foto/Ulangi/Nyalakan Kamera/Unggah Foto, Catatan, Batal, dan Simpan Absensi. Setelah simpan, modal sukses menampilkan foto, identitas akun, dan seluruh metadata dengan satu tombol **Selesai**; modal sukses tidak dapat ditutup dengan Escape/backdrop.
 - Mode lokal menyimpan data URL terkompresi dan memangkas riwayat per pengguna menjadi 20 catatan; mode server menyimpan seluruh riwayat yang belum dihapus.
 - Snapshot bootstrap tidak memuat koleksi ini maupun foto; data dibaca lewat `staffAttendance.list`.
 
@@ -1298,7 +1331,7 @@ Absensi pribadi staf/admin yang dicatat dari dashboard Admin. Bukan presensi pes
 | R37 | `USERS` (aktor) → `ATTENDANCE_CORRECTIONS` | 1 — N | `attendance_corrections.actorId` | User dihapus: `actorId=null`, snapshot nama/role tetap | Audit historis |
 | R38 | `BRANCHES` → `CLASSES` | 1 — N | `classes.branchId` | Cabang dihapus: `branchId=null` (FK `SET NULL`) | Cabang opsional; hapus ditolak aplikasi bila masih dipakai |
 | R39 | `BRANCHES` → `CLASS_SESSIONS` | 1 — N | `class_sessions.branchId` (turunan) | Mengikuti kelas; bukan FK fisik | Mode lokal menyimpan `branchId` denormalisasi, mode server memakai JOIN kelas |
-| R40 | `USERS` (admin) -> `STAFF_ATTENDANCES` | 1 -> N | `staff_attendances.userId` | User dihapus: catatan absensi dihapus (`ON DELETE CASCADE`) | Absensi pribadi; hanya pemilik yang dapat mengakses |
+| R40 | `USERS` (admin) -> `STAFF_ATTENDANCES` | 1 -> N | `staff_attendances.userId` | User dihapus: catatan absensi dihapus (`ON DELETE CASCADE`) | Absensi harian pribadi (maks. 1 `in` + 1 `out` per hari di UI); hanya pemilik yang dapat mengakses |
 
 ### 6.1 Relasi Banyak-ke-Banyak
 
@@ -1875,6 +1908,7 @@ Skema fisik ada di `api/schema.sql` dan dibuat oleh `api/install.php`. Pemetaan 
 | `COMPLETED_LESSONS` | `completed_lessons` | `id` | UNIQUE(`student_id`, `lesson_id`); FK ke `users`, `courses`, `lessons` CASCADE |
 | `AUDIT_LOGS` | `audit_logs` | `id` | `actor_id` → `users.id` SET NULL (polimorfik `entity` + `entity_id`) |
 | `NOTIFICATIONS` | `notifications` | `id` | `recipient_id` → `users.id` SET NULL |
+| `STAFF_ATTENDANCES` | `staff_attendances` | `id` | `user_id` → `users.id` CASCADE; index (`user_id`, `attendance_date`), tidak ada unique harian |
 | `SESSION` | Sesi PHP native | — | Tidak ada tabel `sessions`; cookie sesi hanya menyimpan ID sesi |
 
 **Catatan implementasi:**
@@ -1933,6 +1967,7 @@ CLASSES            1 ─── N CLASS_LESSON_PROGRESS / CLASS_MATERIAL_PROGRESS
 LESSONS            1 ─── N CLASS_LESSON_PROGRESS
 USERS              1 ─── N CLASS_LESSON_PROGRESS / CLASS_MATERIAL_PROGRESS
 USERS              1 ─── N AUDIT_LOGS / NOTIFICATIONS
+USERS (admin)      1 ─── N STAFF_ATTENDANCES
 USERS              1 ─── 0..1 SESSION
 ```
 
@@ -1950,6 +1985,7 @@ Dengan demikian, inti model data ELIPS LMS adalah:
 - **Nilai** dan **Sertifikat** sebagai hasil akhir pembelajaran per enrollment (per angkatan).
 - **CompletedLessons** sebagai bukti progres legacy yang tetap dibaca untuk kompatibilitas.
 - **AuditLogs** dan **Notifications** sebagai catatan operasional yang bersifat historis.
+- **StaffAttendances** sebagai absensi harian pribadi admin (maks. satu `in` + satu `out` per hari di UI), lengkap dengan foto, lokasi GPS otomatis, dan metadata perangkat.
 
 ---
 
@@ -1983,7 +2019,7 @@ Bagian ini mendokumentasikan skema yang benar-benar dieksekusi oleh `api/schema.
 | 20 | `class_materials` | Materi tambahan kelas | `id`, `class_id`, `lesson_id`, `session_id`, `type`, `status`, `sort_order` | `class_id` → `classes.id`; `lesson_id` → `lessons.id`; `session_id` → `class_sessions.id` |
 | 21 | `class_lesson_progress` | Progres pelajaran per enrollment | `id`, `class_id`, `enrollment_id`, `lesson_id`, `completed_by` | `enrollment_id` → `enrollments.id`; `lesson_id` → `lessons.id`; unik(`enrollment_id`, `lesson_id`) |
 | 22 | `class_material_progress` | Progres materi tambahan per enrollment | `id`, `class_id`, `enrollment_id`, `material_id`, `completed_by` | `enrollment_id` → `enrollments.id`; `material_id` → `class_materials.id`; unik(`enrollment_id`, `material_id`) |
-| 23 | `staff_attendances` | Absensi pribadi staf/admin (kamera + metadata) | `id`, `user_id`, `kind`, `attendance_date`, `taken_at`, `photo`, `latitude`, `longitude` | `user_id` → `users.id` (`ON DELETE CASCADE`) |
+| 23 | `staff_attendances` | Absensi harian pribadi staf/admin (kamera + metadata) | `id`, `user_id`, `kind`, `attendance_date`, `taken_at`, `photo`, `latitude`, `longitude` | `user_id` → `users.id` (`ON DELETE CASCADE`) |
 
 Sesi login **tidak** memakai tabel: autentikasi memakai sesi PHP native (`$_SESSION`) dengan cookie `HttpOnly` dan `SameSite=Lax`.
 
@@ -2363,16 +2399,16 @@ Catatan: `uq_certificates_enrollment (enrollment_id)` memastikan satu sertifikat
 | `id` | `INT UNSIGNED` | tidak | AUTO_INCREMENT | Primary key |
 | `user_id` | `INT UNSIGNED` | tidak | - | Pemilik catatan (FK `users.id`) |
 | `kind` | `ENUM('in','out')` | tidak | `'in'` | Absensi masuk/pulang |
-| `attendance_date` | `DATE` | tidak | - | Tanggal kalender lokal |
-| `taken_at` | `DATETIME` | tidak | - | Waktu foto (UTC) |
+| `attendance_date` | `DATE` | tidak | - | Tanggal kalender lokal (otomatis hari ini, terkunci saat simpan) |
+| `taken_at` | `DATETIME` | tidak | - | Waktu simpan/foto (UTC, terkunci saat simpan) |
 | `timezone` | `VARCHAR(64)` | tidak | `''` | Zona waktu browser |
 | `photo` | `LONGTEXT` | ya | `NULL` | Base64 foto |
 | `photo_mime` | `VARCHAR(50)` | tidak | `'image/jpeg'` | MIME terdeteksi |
 | `latitude` | `DECIMAL(10,7)` | ya | `NULL` | Lintang |
 | `longitude` | `DECIMAL(10,7)` | ya | `NULL` | Bujur |
 | `accuracy_m` | `DECIMAL(10,2)` | ya | `NULL` | Akurasi GPS (meter) |
-| `location_label` | `VARCHAR(255)` | tidak | `''` | Label lokasi |
-| `location_source` | `ENUM('gps','manual','none')` | tidak | `'none'` | Sumber lokasi |
+| `location_label` | `VARCHAR(255)` | tidak | `''` | Label koordinat otomatis (tanpa input manual) |
+| `location_source` | `ENUM('gps','manual','none')` | tidak | `'none'` | Sumber lokasi; `gps` bila koordinat ada, `none` bila tidak |
 | `ip_address` | `VARCHAR(45)` | tidak | `''` | IP dari server |
 | `user_agent` | `VARCHAR(255)` | tidak | `''` | User agent |
 | `platform` | `VARCHAR(120)` | tidak | `''` | Platform perangkat |
@@ -2426,6 +2462,8 @@ Catatan: `uq_certificates_enrollment (enrollment_id)` memastikan satu sertifikat
 | `audit_logs` | `idx_audit_created (created_at)`, `idx_audit_actor (actor_id)`, `idx_audit_entity (entity)` | INDEX |
 | `notifications` | `idx_notifications_created (created_at)`, `idx_notifications_type (type)`, `idx_notifications_recipient (recipient_id)` | INDEX |
 | `staff_attendances` | `idx_staff_attendances_user_date (user_id, attendance_date)`, `idx_staff_attendances_date (attendance_date)`, `idx_staff_attendances_taken (taken_at)` | INDEX |
+
+Catatan: `staff_attendances` tidak memiliki unique index pada (`user_id`, `attendance_date`, `kind`). Aturan satu absen masuk dan satu absen pulang per admin per hari ditegakkan oleh UI dashboard (`allowedKind()` dan guard sebelum simpan); API `staffAttendance.create` tetap memvalidasi setiap baris secara independen.
 
 ### 16.4 Foreign Key dan Aturan Hapus
 
@@ -2532,7 +2570,7 @@ Snapshot API memakai nama koleksi yang sama dengan model `localStorage`, sehingg
 | `notifications` | `notifications` | `recipient_id`/`recipient_email` → camelCase; `created_at` → ISO |
 | Sesi PHP | `session` (cache di `api.js`) | `{ userId }` dari `$_SESSION`, bukan tabel |
 
-Snapshot hanya memuat modul/materi dari versi kurikulum aktif (non-`retired`) tiap kursus. Struktur versi lain diambil lewat aksi `curriculum.detail`. Sejak Phase 4, snapshot juga memuat `classMaterialSettings`, `classMaterials`, `classLessonProgress`, dan `classMaterialProgress`; `classMaterials` sengaja hanya berisi metadata tanpa `content`/`file_path`. Koleksi `staffAttendances` sengaja tidak dimasukkan ke snapshot bootstrap karena memuat foto pribadi dan metadata perangkat; data hanya dikembalikan oleh aksi `staffAttendance.list` milik admin yang login.
+Snapshot hanya memuat modul/materi dari versi kurikulum aktif (non-`retired`) tiap kursus. Struktur versi lain diambil lewat aksi `curriculum.detail`. Sejak Phase 4, snapshot juga memuat `classMaterialSettings`, `classMaterials`, `classLessonProgress`, dan `classMaterialProgress`; `classMaterials` sengaja hanya berisi metadata tanpa `content`/`file_path`. Koleksi `staffAttendances` sengaja tidak dimasukkan ke snapshot bootstrap karena memuat foto pribadi dan metadata perangkat; data hanya dikembalikan oleh aksi `staffAttendance.list` milik admin yang login. Pada UI, `attendance_date`, `taken_at`, dan koordinat diisi otomatis saat simpan (tanggal/jam hari ini dan GPS perangkat), sehingga pengguna tidak dapat mengubahnya; satu akun admin hanya dapat mencatat satu `in` dan satu `out` per hari melalui dashboard.
 
 ### 16.6 Catatan Operasional
 
