@@ -2,7 +2,7 @@
 
 **Versi dokumen:** 4.0  
 **Terakhir diperbarui:** 2026-11-11
-**Status proyek:** Dual-mode - PHP 8/MySQL 8 + fallback `localStorage`; v4.0 Phase 1-6 (kurikulum, kelas/angkatan, enrollment berbasis kelas, jadwal & presensi offline, materi tambahan & mode akses materi, tugas & ujian, skema penilaian/finalisasi/koreksi) plus cabang, kalender jadwal Admin, aksi langsung dan filter jadwal lanjutan, absensi staf berbasis kamera, serta fondasi server absensi karyawan (role `karyawan`, jam server, GPS wajib, aturan harian di database)
+**Status proyek:** Dual-mode - PHP 8/MySQL 8 + fallback `localStorage`; v4.0 Phase 1-6 (kurikulum, kelas/angkatan, enrollment berbasis kelas, jadwal & presensi offline, materi tambahan & mode akses materi, tugas & ujian, skema penilaian/finalisasi/koreksi) plus cabang, kalender jadwal Admin, aksi langsung dan filter jadwal lanjutan, absensi staf berbasis kamera, serta absensi karyawan (role `karyawan`, jam server, GPS wajib, aturan harian, modul bersama, dan halaman `employee/attendance.html`)
 **Dokumen terkait:** `prd.md`, `erd.md`, `ELIPS-LMS-PRD-v4.0.md`
 
 ---
@@ -88,6 +88,8 @@ ELIPS/
 │   ├── courses.html
 │   ├── certificates.html
 │   └── profile.html
+├── employee/
+│   └── attendance.html
 └── assets/
     ├── css/style.css
     └── js/
@@ -109,7 +111,8 @@ ELIPS/
         ├── crud-academic.js
         ├── crud-tasks.js
         ├── crud-grades.js
-        └── ui.js
+        ├── ui.js
+        └── attendance.js
 ```
 
 ### 2.1 Tanggung Jawab Modul JavaScript
@@ -119,7 +122,7 @@ Semua halaman memuat modul dengan urutan berikut:
 ```text
 config → core → api → utils → data → seed → sync → progress → auth → audit → notifications
 → crud-users → crud-courses → crud-enrollments
-→ crud-content → crud-academic → crud-tasks → crud-grades → ui
+→ crud-content → crud-academic → crud-tasks → crud-grades → ui → attendance
 ```
 
 | Modul | Tanggung jawab | API utama |
@@ -143,6 +146,7 @@ config → core → api → utils → data → seed → sync → progress → au
 | `crud-tasks.js` | CRUD tugas, lampiran, rubrik, submission peserta, review/revisi, ujian, peserta ujian, dan hasil ujian dengan validasi kepemilikan serta status; paritas server/lokal | `createAssignment`, `updateAssignment`, `setAssignmentStatus`, `deleteAssignment`, `submitAssignment`, `reviewSubmission`, `requestRevision`, `acceptSubmission`, `createExam`, `updateExam`, `setExamStatus`, `deleteExam`, `saveExamParticipants`, `saveExamResult` |
 | `crud-grades.js` | Skema penilaian, komponen berbobot, roster & nilai komponen, pengecualian, finalisasi, koreksi beraudit, transkrip, serta alur sertifikat Draft → Publish | `saveGrade`, `listPredicates`, `savePredicates`, `listGradeSchemes`, `saveGradeScheme`, `setGradeSchemeStatus`, `deleteGradeScheme`, `getGradeRoster`, `saveManualGrade`, `exemptGradeComponent`, `finalizeGrade`, `correctGrade`, `getGradeTranscript`, `createDraftCertificateForEnrollment`, `approveCertificate` |
 | `ui.js` | Perilaku UI bersama: navigasi mobile, sidebar dashboard, katalog beranda, login (email + password), logout, style toast | dijalankan pada `DOMContentLoaded` |
+| `attendance.js` | Modul absensi harian bersama untuk Admin dan Karyawan: hero status, kamera/unggah foto, GPS wajib, aturan masuk/pulang, riwayat pribadi, detail, modal berhasil, dan hapus oleh Admin dengan alasan | `ELIPS.attendance.init`, `ELIPS.attendance.refresh`, `openAttendanceModal`, `saveStaffAttendance`, `loadAttendanceHistory`, `openAttendanceDetail`, `deleteStaffAttendance` |
 
 Prinsip yang dipakai:
 
@@ -155,6 +159,38 @@ Prinsip yang dipakai:
 ---
 
 ## 3. Riwayat Perubahan
+
+### v4.0 - 2026-11-11 - Fase 2-3 absensi karyawan: modul bersama dan halaman karyawan
+
+**Tujuan:** menyelesaikan `PRD_karyawan.md` Fase 2-3 dengan memindahkan logika absensi ke modul bersama, menyelaraskan aturan mode lokal dengan server, lalu membuka halaman absensi khusus role `karyawan`.
+
+Perubahan frontend:
+
+- `assets/js/attendance.js` (baru) memuat seluruh alur absensi: hero status harian, kamera + unggah foto, GPS wajib, metadata perangkat, aturan maksimal satu `in` + satu `out` per hari, riwayat pribadi, detail, modal berhasil, dan hapus oleh Admin dengan alasan ≥5 karakter.
+- `admin/dashboard.html` tidak lagi menyimpan ±900 baris skrip inline; halaman memuat `attendance.js` dan memanggil `ELIPS.attendance.init({ role: 'admin' })`. Tampilan dan perilaku tetap sama.
+- `employee/attendance.html` (baru) memakai modul yang sama dengan role `karyawan`, tanpa sidebar admin dan tanpa tombol hapus.
+- `core.js`: `isValidRole` menerima `karyawan`; `auth.js`: prefix path `employee/` dan `dashboardPathForRole('karyawan')`; `config.js`/`api.js`: `apiBase` mendukung folder `employee/`; `ui.js`: login karyawan langsung ke halaman absensi.
+- `admin/users.html`: kartu pilihan role Karyawan, opsi role pada form, filter, badge, dan label.
+
+Penyelarasan mode lokal:
+
+- GPS wajib seperti server; absensi tanpa koordinat ditolak sebelum disimpan.
+- Tanggal acuan memakai `Asia/Jakarta` (bukan zona waktu perangkat) agar status hero konsisten dengan tanggal server.
+- Duplikat harian, absen pulang sebelum masuk, dan hapus hanya oleh Admin dengan alasan minimal 5 karakter diterapkan di `localStorage`; detail hapus tetap masuk Audit Trail.
+- Karyawan tidak melihat tombol hapus pada riwayat maupun modal detail.
+
+Pengujian:
+
+- `test-staff-attendance-page.js` diperbarui (84/84): GPS mock, tanggal Jakarta, alasan hapus, dan alur masuk/pulang/hapus.
+- `test-employee-attendance-page.js` (baru) 49/49: routing role, greeting, privasi riwayat, absensi masuk/pulang, detail tanpa hapus, data `out` lama, dan penolakan hapus oleh karyawan.
+- `test-all-pages.js` mencakup `employee/attendance.html` (28 halaman); `validate-scripts` melaporkan 28 HTML dan 20 JS valid.
+- Regresi lokal dan server (API Phase 1-6, v4, sesi, materi, presensi, jadwal, admin, instruktur, peserta, P0) tetap lulus. `test-server-mode` dan `test-sessions-server` dijalankan pada database segar agar hitungan seed valid.
+
+Batasan:
+
+- Remember-me, `user_devices`, PWA, retensi foto, dan uji perangkat nyata tetap menjadi pekerjaan Fase 4-6.
+
+---
 
 ### v4.0 - 2026-11-11 - Fase 1 absensi karyawan: role, validasi server, dan aturan harian
 
@@ -1027,7 +1063,7 @@ Tabel: `users`, `categories`, `branches`, `courses`, `curriculum_versions`, `cla
 | `elips_completedLessons` | Progres pelajaran legacy yang tetap dibaca untuk kompatibilitas |
 | `elips_auditLogs` | Jejak audit perubahan kursus, nilai, sertifikat, pengguna, penugasan, modul, materi, sesi, presensi, dan materi kelas |
 | `elips_notifications` | Outbox notifikasi email simulasi: penerima, subjek, isi, entitas, dan waktu |
-| `elips_staffAttendances` | Absensi harian pribadi staf/admin pada mode lokal: maks. satu masuk + satu pulang per hari, tanggal/waktu terisi otomatis, foto, lokasi GPS opsional, dan metadata perangkat |
+| `elips_staffAttendances` | Absensi harian pribadi admin/karyawan pada mode lokal: maks. satu masuk + satu pulang per hari, tanggal/waktu terisi otomatis, GPS wajib, foto, dan metadata perangkat |
 | `elips_session` | Sesi pengguna yang sedang login |
 
 Akun demo utama:
@@ -1173,8 +1209,8 @@ Keterbatasan saat ini:
 - Notifikasi email masih berupa simulasi/outbox di database; email belum benar-benar dikirim.
 - Finalisasi nilai tidak membuat sertifikat otomatis; sertifikasi/PDF tetap phase berikutnya.
 - Mode lokal tidak memiliki transaksi, sehingga finalisasi/koreksi yang gagal di tengah dapat meninggalkan data parsial.
-- Absensi staf satu masuk + satu pulang per hari sudah dijaga unique key database dan validasi server, tetapi mode lokal masih memakai aturan lama sampai Fase 2–3.
-- Role `karyawan` baru tersedia di API/DB; halaman `employee/attendance.html`, remember-me, dan PWA belum dibuat (Fase 3–5).
+- Absensi staf satu masuk + satu pulang per hari dijaga unique key database dan validasi server; mode lokal kini memakai aturan yang sama (GPS wajib, tanggal `Asia/Jakarta`, hapus beralasan oleh Admin).
+- Role `karyawan` tersedia di API/DB dan klien; halaman `employee/attendance.html` sudah ada. Remember-me dan PWA belum dibuat (Fase 4–5).
 - Belum ada migration tool, backup otomatis, atau monitoring produksi.
 
 Rencana lanjutan (opsional, sesuai `prd.md`):

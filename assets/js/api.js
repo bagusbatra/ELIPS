@@ -44,7 +44,7 @@
 
     function basePrefix() {
         const path = (window.location.pathname || '').replace(/\\/g, '/');
-        if (/\/(admin|instructor|student)\/[^/]*$/.test(path)) return '../';
+        if (/\/(admin|instructor|student|employee)\/[^/]*$/.test(path)) return '../';
         return '';
     }
 

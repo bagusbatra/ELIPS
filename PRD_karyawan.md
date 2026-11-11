@@ -171,21 +171,21 @@ Setiap fase bisa dirilis dan diuji sendiri. Kerjakan berurutan.
 - **Selesai bila:** keputusan tercatat dan backend bisa dijalankan di staging.
 
 ### Fase 1 — Fondasi server: role, validasi absen, migrasi *(1–1,5 hari)*
-- [ ] Migrasi DB: role `karyawan`, tabel `user_devices`, unique key absensi.
-- [ ] `staffAttendance.create`: validasi aturan bisnis + waktu server + kembalikan record lengkap.
-- [ ] `staffAttendance.list/delete`: batasan per role.
-- [ ] `core.js`: `isValidRole` + form pengguna menerima `karyawan`.
+- [x] Migrasi DB: role `karyawan` dan unique key absensi (`user_devices` ditunda ke Fase 4).
+- [x] `staffAttendance.create`: validasi aturan bisnis + waktu server + kembalikan record lengkap.
+- [x] `staffAttendance.list/delete`: batasan per role.
+- [x] `core.js`: `isValidRole` + form pengguna menerima `karyawan`.
 - **Selesai bila:** mencoba absen masuk dua kali di hari yang sama ditolak server; absen pulang tanpa masuk ditolak; jam yang tersimpan adalah jam server.
 
 ### Fase 2 — Refactor modul absensi bersama *(0,5–1 hari)*
-- [ ] Pindahkan logika absen dari `admin/dashboard.html` ke `assets/js/attendance.js`.
-- [ ] `admin/dashboard.html` memanggil modul; perilaku tetap identik.
+- [x] Pindahkan logika absen dari `admin/dashboard.html` ke `assets/js/attendance.js`.
+- [x] `admin/dashboard.html` memanggil modul; perilaku tetap identik.
 - **Selesai bila:** dashboard admin berfungsi seperti sebelum refactor (uji ulang 6 aturan absen admin).
 
 ### Fase 3 — Halaman & role Karyawan *(1–1,5 hari)*
-- [ ] Buat `employee/attendance.html` (F3.2) memakai `attendance.js`.
-- [ ] `auth.js`, `api.js`, `config.js`: dukung folder `employee/`; routing berdasarkan role.
-- [ ] `admin/users.html`: pilihan role Karyawan.
+- [x] Buat `employee/attendance.html` (F3.2) memakai `attendance.js`.
+- [x] `auth.js`, `api.js`, `config.js`: dukung folder `employee/`; routing berdasarkan role.
+- [x] `admin/users.html`: pilihan role Karyawan.
 - **Selesai bila:** akun karyawan login → langsung ke halaman absen → absen masuk dan pulang berjalan → tidak bisa membuka halaman admin.
 
 ### Fase 4 — Sesi diingat (login sekali) *(1,5–2 hari)*

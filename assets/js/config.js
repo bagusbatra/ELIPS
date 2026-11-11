@@ -10,7 +10,7 @@
     'use strict';
 
     const path = (window.location.pathname || '').replace(/\\/g, '/');
-    const prefix = /\/(admin|instructor|student)\/[^/]*$/.test(path) ? '../' : '';
+    const prefix = /\/(admin|instructor|student|employee)\/[^/]*$/.test(path) ? '../' : '';
 
     window.ELIPS_CONFIG = {
         apiBase: prefix + 'api/index.php'

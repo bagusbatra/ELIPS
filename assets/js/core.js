@@ -97,7 +97,8 @@
     }
 
     function isValidRole(role) {
-        return role === 'admin' || role === 'instruktur' || role === 'peserta';
+        return role === 'admin' || role === 'instruktur' || role === 'peserta'
+            || role === 'karyawan';
     }
 
     function isValidUserStatus(status) {

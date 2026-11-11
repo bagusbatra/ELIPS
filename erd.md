@@ -2,7 +2,7 @@
 
 **Versi dokumen:** 4.0  
 **Tanggal:** 2026-11-11  
-**Status:** Dual-mode — skema fisik MySQL 8 v4.0 Phase 1–6 + fondasi server absensi karyawan (role `karyawan`, unique key harian) + fallback koleksi `localStorage`  
+**Status:** Dual-mode - skema fisik MySQL 8 v4.0 Phase 1-6 + absensi karyawan (role `karyawan`, unique key harian, modul absensi bersama, halaman `employee/attendance.html`) + fallback koleksi `localStorage`  
 **Dokumen terkait:** `prd.md`, `log.md`, `api/schema.sql`
 
 ---
@@ -1841,7 +1841,7 @@ Bukan koleksi, melainkan **satu objek** yang merepresentasikan sesi login aktif 
 
 ### 5.12 STAFF_ATTENDANCES - `elips_staffAttendances`
 
-Absensi harian pribadi admin dan karyawan yang dicatat dari dashboard Admin atau (pada Fase 3) halaman absen karyawan. Bukan presensi peserta per sesi. Setiap pengguna memiliki paling banyak satu catatan `in` dan satu catatan `out` per hari; aturan ini dijaga unique key database dan validasi server.
+Absensi harian pribadi admin dan karyawan yang dicatat dari dashboard Admin atau halaman absen karyawan (`employee/attendance.html`) melalui modul bersama `assets/js/attendance.js`. Bukan presensi peserta per sesi. Setiap pengguna memiliki paling banyak satu catatan `in` dan satu catatan `out` per hari; aturan ini dijaga unique key database dan validasi server.
 
 | Field | Tipe | Key | Wajib | Keterangan |
 |---|---|---|---|---|
@@ -3807,11 +3807,11 @@ Snapshot API memakai nama koleksi yang sama dengan model `localStorage`, sehingg
 | `notifications` | `notifications` | `recipient_id`/`recipient_email` → camelCase; `created_at` → ISO |
 | Sesi PHP | `session` (cache di `api.js`) | `{ userId }` dari `$_SESSION`, bukan tabel |
 
-Snapshot hanya memuat modul/materi dari versi kurikulum aktif (non-`retired`) tiap kursus. Struktur versi lain diambil lewat aksi `curriculum.detail`. Sejak Phase 4, snapshot juga memuat `classMaterialSettings`, `classMaterials`, `classLessonProgress`, dan `classMaterialProgress`; `classMaterials` sengaja hanya berisi metadata tanpa `content`/`file_path`. Koleksi `staffAttendances` sengaja tidak dimasukkan ke snapshot bootstrap karena memuat foto pribadi dan metadata perangkat; data hanya dikembalikan oleh aksi `staffAttendance.list` milik admin yang login. Pada UI, `attendance_date`, `taken_at`, dan koordinat diisi otomatis saat simpan (tanggal/jam hari ini dan GPS perangkat), sehingga pengguna tidak dapat mengubahnya; satu akun admin hanya dapat mencatat satu `in` dan satu `out` per hari melalui dashboard.
+Snapshot hanya memuat modul/materi dari versi kurikulum aktif (non-`retired`) tiap kursus. Struktur versi lain diambil lewat aksi `curriculum.detail`. Sejak Phase 4, snapshot juga memuat `classMaterialSettings`, `classMaterials`, `classLessonProgress`, dan `classMaterialProgress`; `classMaterials` sengaja hanya berisi metadata tanpa `content`/`file_path`. Koleksi `staffAttendances` sengaja tidak dimasukkan ke snapshot bootstrap karena memuat foto pribadi dan metadata perangkat; data hanya dikembalikan oleh aksi `staffAttendance.list` milik pengguna yang login. Pada UI, `attendance_date`, `taken_at`, dan koordinat diisi otomatis saat simpan (tanggal/jam `Asia/Jakarta` dan GPS perangkat), sehingga pengguna tidak dapat mengubahnya; dashboard Admin dan halaman karyawan memakai modul bersama `attendance.js`, dan satu pengguna hanya dapat mencatat satu `in` dan satu `out` per hari.
 
 ### 16.6 Catatan Operasional
 
-- **Instalasi:** `php api/install.php --fresh` menghapus database lama, membuat ulang seluruh 37 tabel, dan mengisi data demo: 9 predikat, 7 pengguna, 4 kategori, 3 cabang, 4 kursus, 4 versi kurikulum, 25 modul, 75 materi, 1 kelas migrasi, 1 histori tentor, 3 enrollment, 4 sesi pertemuan, 9 baris presensi, 2 tugas, 3 rubrik, 1 submission, 2 riwayat review, 2 ujian, 6 peserta ujian, 6 hasil ujian, 1 skema penilaian, 3 komponen, dan 2 nilai komponen manual. Koleksi `grade_corrections` sengaja kosong pada seed. Tabel `staff_attendances` dibuat (tabel ke-37) tetapi tidak diisi data demo karena absensi bersifat pribadi dan dibuat dari dashboard. Password demo `elips123` di-hash saat seeding.
+- **Instalasi:** `php api/install.php --fresh` menghapus database lama, membuat ulang seluruh 37 tabel, dan mengisi data demo: 9 predikat, 7 pengguna, 4 kategori, 3 cabang, 4 kursus, 4 versi kurikulum, 25 modul, 75 materi, 1 kelas migrasi, 1 histori tentor, 3 enrollment, 4 sesi pertemuan, 9 baris presensi, 2 tugas, 3 rubrik, 1 submission, 2 riwayat review, 2 ujian, 6 peserta ujian, 6 hasil ujian, 1 skema penilaian, 3 komponen, dan 2 nilai komponen manual. Koleksi `grade_corrections` sengaja kosong pada seed. Tabel `staff_attendances` dibuat (tabel ke-37) tetapi tidak diisi data demo karena absensi bersifat pribadi dan dibuat dari dashboard Admin atau halaman karyawan. Password demo `elips123` di-hash saat seeding.
 - **Timezone:** koneksi PDO disetel UTC; kolom `DATE` untuk tanggal kalender dan `DATETIME` untuk timestamp.
 - **Transaksi:** operasi multi-tabel dijalankan dalam transaksi eksplisit:
   - pembuatan kelas + penguncian versi kurikulum (`curriculum_versions.status = 'locked'`) + histori tentor awal;

@@ -114,6 +114,7 @@
                             <button class="btn btn-ghost" id="filterAdmin" onclick="filterUsers('admin')">Admin</button>
                             <button class="btn btn-ghost" id="filterInstruktur" onclick="filterUsers('instruktur')">Instruktur</button>
                             <button class="btn btn-ghost" id="filterPeserta" onclick="filterUsers('peserta')">Peserta</button>
+                            <button class="btn btn-ghost" id="filterKaryawan" onclick="filterUsers('karyawan')">Karyawan</button>
                         </div>
                         <input type="text" id="searchUser" class="form-input" style="max-width: 250px;" placeholder="Cari pengguna..." onkeyup="searchUsers()">
                     </div>
@@ -180,6 +181,16 @@
                     </span>
                     <i class="bi bi-chevron-right" style="color: var(--text-light);"></i>
                 </button>
+                <button type="button" class="user-role-choice" onclick="chooseUserRole('karyawan')">
+                    <span class="user-role-choice-icon" style="background: #e0e7ff; color: #3730a3;">
+                        <i class="bi bi-person-badge"></i>
+                    </span>
+                    <span class="user-role-choice-info">
+                        <span class="user-role-choice-title">Karyawan</span>
+                        <span class="user-role-choice-desc">Hanya membuka halaman absensi harian dengan foto dan lokasi GPS.</span>
+                    </span>
+                    <i class="bi bi-chevron-right" style="color: var(--text-light);"></i>
+                </button>
             </div>
         </div>
     </div>
@@ -210,6 +221,7 @@
                     <label class="form-label">Role *</label>
                     <select id="userRole" class="form-input">
                         <option value="peserta">Peserta</option>
+                        <option value="karyawan">Karyawan</option>
                         <option value="instruktur">Instruktur</option>
                         <option value="admin">Admin</option>
                     </select>
@@ -282,12 +294,14 @@
         function roleBadge(role) {
             if (role === 'admin') return '<span class="badge" style="background: #fee2e2; color: #991b1b;">Admin</span>';
             if (role === 'instruktur') return '<span class="badge badge-warning">Instruktur</span>';
+            if (role === 'karyawan') return '<span class="badge" style="background: #e0e7ff; color: #3730a3;">Karyawan</span>';
             return '<span class="badge badge-primary">Peserta</span>';
         }
 
         function userRoleLabel(role) {
             if (role === 'admin') return 'Admin';
             if (role === 'instruktur') return 'Instruktur';
+            if (role === 'karyawan') return 'Karyawan';
             return 'Peserta';
         }
 
@@ -300,7 +314,7 @@
         }
 
         function chooseUserRole(role) {
-            if (['admin', 'instruktur', 'peserta'].indexOf(role) === -1) role = 'peserta';
+            if (['admin', 'instruktur', 'peserta', 'karyawan'].indexOf(role) === -1) role = 'peserta';
             closeUserTypeModal();
             openUserModal(null, role);
         }
@@ -472,7 +486,7 @@
 
         function filterUsers(role) {
             const rows = document.querySelectorAll('#usersTableBody tr');
-            const buttons = document.querySelectorAll('#filterAll, #filterAdmin, #filterInstruktur, #filterPeserta');
+            const buttons = document.querySelectorAll('#filterAll, #filterAdmin, #filterInstruktur, #filterPeserta, #filterKaryawan');
             buttons.forEach(function (btn) {
                 btn.classList.remove('btn-primary');
                 btn.classList.add('btn-ghost');
