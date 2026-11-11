@@ -431,7 +431,7 @@ function elips_action_user_create(array $p): array
     if (!filter_var($email, FILTER_VALIDATE_EMAIL)) return elips_fail('Email tidak valid.');
     if ($password === '') return elips_fail('Password wajib diisi.');
     if (strlen($password) < 8) return elips_fail('Password minimal 8 karakter.');
-    if (!in_array($role, ['admin', 'instruktur', 'peserta'], true)) return elips_fail('Role pengguna tidak valid.');
+    if (!in_array($role, ['admin', 'instruktur', 'peserta', 'karyawan'], true)) return elips_fail('Role pengguna tidak valid.');
     if (!in_array($status, ['aktif', 'nonaktif'], true)) return elips_fail('Status pengguna tidak valid.');
 
     $anonymous = $actor === null;
@@ -496,7 +496,7 @@ function elips_action_user_update(array $p): array
 
     if ($nextName === '') return elips_fail('Nama wajib diisi.');
     if (!filter_var($nextEmail, FILTER_VALIDATE_EMAIL)) return elips_fail('Email tidak valid.');
-    if (!in_array($nextRole, ['admin', 'instruktur', 'peserta'], true)) return elips_fail('Role pengguna tidak valid.');
+    if (!in_array($nextRole, ['admin', 'instruktur', 'peserta', 'karyawan'], true)) return elips_fail('Role pengguna tidak valid.');
     if (!in_array($nextStatus, ['aktif', 'nonaktif'], true)) return elips_fail('Status pengguna tidak valid.');
     if ($password !== '' && strlen($password) < 8) return elips_fail('Password minimal 8 karakter.');
 
@@ -6015,28 +6015,22 @@ function elips_action_progress_complete(array $p): array
 
 function elips_action_staff_attendance_create(array $p): array
 {
-    $actor = elips_require_admin();
+    $actor = elips_require_attendance_access();
     $kind = strtolower(trim((string) ($p['kind'] ?? 'in')));
     if (!in_array($kind, ['in', 'out'], true)) {
         return elips_fail('Jenis absensi tidak valid.');
     }
 
-    $takenRaw = trim((string) ($p['takenAt'] ?? ''));
+    // Tanggal dan jam absensi ditentukan server; nilai dari klien diabaikan
+    // agar jam perangkat tidak dapat dimanipulasi.
+    $timezoneName = elips_attendance_timezone();
     try {
-        $taken = new DateTimeImmutable($takenRaw !== '' ? $takenRaw : 'now');
+        $taken = new DateTimeImmutable('now', new DateTimeZone($timezoneName));
     } catch (Throwable $e) {
-        return elips_fail('Waktu absensi tidak valid.');
+        return elips_fail('Zona waktu absensi tidak valid.');
     }
     $takenUtc = $taken->setTimezone(new DateTimeZone('UTC'));
-
-    $attendanceDate = trim((string) ($p['attendanceDate'] ?? ''));
-    if ($attendanceDate === '') {
-        $attendanceDate = $taken->format('Y-m-d');
-    }
-    if (!preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $attendanceDate, $dateMatch)
-        || !checkdate((int) $dateMatch[2], (int) $dateMatch[3], (int) $dateMatch[1])) {
-        return elips_fail('Tanggal absensi tidak valid.');
-    }
+    $attendanceDate = $taken->format('Y-m-d');
 
     $photoRaw = trim((string) ($p['photo'] ?? ''));
     if ($photoRaw === '') {
@@ -6106,7 +6100,13 @@ function elips_action_staff_attendance_create(array $p): array
         $locationSource = 'manual';
     }
 
-    $timezone = mb_substr(trim((string) ($p['timezone'] ?? '')), 0, 64);
+    // GPS wajib untuk semua role agar lokasi absensi selalu tercatat.
+    if ($latitude === null || $longitude === null) {
+        return elips_fail('Lokasi GPS wajib aktif untuk melakukan absensi.');
+    }
+    $locationSource = 'gps';
+
+    $timezone = $timezoneName;
     $ipAddress = mb_substr(trim((string) ($_SERVER['REMOTE_ADDR'] ?? '')), 0, 45);
     $userAgent = mb_substr(trim((string) ($p['userAgent'] ?? '')), 0, 255);
     $platform = mb_substr(trim((string) ($p['platform'] ?? '')), 0, 120);
@@ -6126,6 +6126,25 @@ function elips_action_staff_attendance_create(array $p): array
     $notes = mb_substr(trim((string) ($p['notes'] ?? '')), 0, 2000);
 
     $db = elips_db();
+
+    // Aturan harian: maksimal satu absen masuk dan satu absen pulang.
+    // Unique key di database menjadi pengaman terakhir saat terjadi balapan.
+    $dayStmt = $db->prepare(
+        'SELECT kind FROM staff_attendances WHERE user_id = ? AND attendance_date = ?'
+    );
+    $dayStmt->execute([(int) $actor['id'], $attendanceDate]);
+    $existingKinds = array_map('strval', $dayStmt->fetchAll(PDO::FETCH_COLUMN));
+    if (in_array($kind, $existingKinds, true)) {
+        return elips_fail(
+            $kind === 'in'
+                ? 'Anda sudah mencatat absen masuk hari ini.'
+                : 'Anda sudah mencatat absen pulang hari ini.'
+        );
+    }
+    if ($kind === 'out' && !in_array('in', $existingKinds, true)) {
+        return elips_fail('Absen pulang hanya dapat dilakukan setelah absen masuk hari ini.');
+    }
+
     $stmt = $db->prepare(
         'INSERT INTO staff_attendances
             (user_id, kind, attendance_date, taken_at, timezone, photo, photo_mime,
@@ -6134,12 +6153,19 @@ function elips_action_staff_attendance_create(array $p): array
              hardware_concurrency, connection_type, online, notes, created_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP())'
     );
-    $stmt->execute([
-        (int) $actor['id'], $kind, $attendanceDate, $takenUtc->format('Y-m-d H:i:s'), $timezone,
-        $encoded, $photoMime, $latitude, $longitude, $accuracy, $locationLabel, $locationSource,
-        $ipAddress, $userAgent, $platform, $language, $screen, $deviceMemory,
-        $hardwareConcurrency, $connectionType, $online, $notes,
-    ]);
+    try {
+        $stmt->execute([
+            (int) $actor['id'], $kind, $attendanceDate, $takenUtc->format('Y-m-d H:i:s'), $timezone,
+            $encoded, $photoMime, $latitude, $longitude, $accuracy, $locationLabel, $locationSource,
+            $ipAddress, $userAgent, $platform, $language, $screen, $deviceMemory,
+            $hardwareConcurrency, $connectionType, $online, $notes,
+        ]);
+    } catch (PDOException $e) {
+        if ((string) $e->getCode() === '23000') {
+            return elips_fail('Absensi hari ini sudah tercatat. Muat ulang halaman lalu coba lagi.');
+        }
+        throw $e;
+    }
     $id = (int) $db->lastInsertId();
 
     $label = ($kind === 'in' ? 'Absensi Masuk' : 'Absensi Pulang') . ' — ' . $attendanceDate;
@@ -6162,9 +6188,17 @@ function elips_action_staff_attendance_create(array $p): array
 
 function elips_action_staff_attendance_list(array $p): array
 {
-    $actor = elips_require_admin();
+    $actor = elips_require_attendance_access();
     $limit = (int) ($p['limit'] ?? 30);
     $limit = max(1, min(100, $limit));
+
+    // Karyawan selalu melihat catatan sendiri. Admin dapat meminta catatan
+    // pengguna lain secara eksplisit melalui parameter userId.
+    $targetId = (int) ($p['userId'] ?? 0);
+    $userId = $actor['role'] === 'admin' && $targetId > 0
+        ? $targetId
+        : (int) $actor['id'];
+
     $stmt = elips_db()->prepare(
         'SELECT sa.*, u.name AS user_name
          FROM staff_attendances sa
@@ -6173,7 +6207,7 @@ function elips_action_staff_attendance_list(array $p): array
          ORDER BY sa.taken_at DESC, sa.id DESC
          LIMIT ' . $limit
     );
-    $stmt->execute([(int) $actor['id']]);
+    $stmt->execute([$userId]);
     $records = [];
     foreach ($stmt->fetchAll() as $row) {
         $records[] = elips_staff_attendance_public($row, true);
@@ -6183,7 +6217,16 @@ function elips_action_staff_attendance_list(array $p): array
 
 function elips_action_staff_attendance_delete(array $p): array
 {
-    $actor = elips_require_admin();
+    $actor = elips_require_attendance_access();
+    if ($actor['role'] !== 'admin') {
+        return elips_fail('Karyawan tidak dapat menghapus catatan absensi. Hubungi administrator.');
+    }
+
+    $reason = trim((string) ($p['reason'] ?? ''));
+    if (mb_strlen($reason) < 5) {
+        return elips_fail('Alasan penghapusan wajib diisi minimal 5 karakter.');
+    }
+
     $id = (int) ($p['id'] ?? 0);
     $stmt = elips_db()->prepare('SELECT * FROM staff_attendances WHERE id = ? LIMIT 1');
     $stmt->execute([$id]);
@@ -6191,16 +6234,23 @@ function elips_action_staff_attendance_delete(array $p): array
     if (!$row) {
         return elips_fail('Absensi tidak ditemukan.');
     }
-    if ((int) $row['user_id'] !== (int) $actor['id']) {
-        return elips_fail('Anda hanya dapat menghapus absensi milik sendiri.');
-    }
+
+    $owner = elips_user_row((int) $row['user_id']);
+    $ownerName = $owner['name'] ?? ('Pengguna #' . (int) $row['user_id']);
+    $local = (new DateTimeImmutable((string) $row['taken_at'], new DateTimeZone('UTC')))
+        ->setTimezone(new DateTimeZone(elips_attendance_timezone()));
 
     $delete = elips_db()->prepare('DELETE FROM staff_attendances WHERE id = ?');
     $delete->execute([$id]);
 
     $label = ($row['kind'] === 'in' ? 'Absensi Masuk' : 'Absensi Pulang')
         . ' — ' . elips_date_only($row['attendance_date']);
-    elips_audit('delete', 'staff_attendance', $id, $label, 'Menghapus catatan ' . $label . '.', $actor);
+    $detail = 'Menghapus catatan absensi '
+        . ($row['kind'] === 'in' ? 'masuk' : 'pulang')
+        . ' milik ' . $ownerName
+        . ' pada ' . $local->format('Y-m-d H:i')
+        . '. Alasan: ' . $reason . '.';
+    elips_audit('delete', 'staff_attendance', $id, $label, $detail, $actor);
     return elips_ok('Catatan absensi dihapus.');
 }
 

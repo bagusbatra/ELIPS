@@ -88,6 +88,25 @@ function elips_require_admin(): array
     return $user;
 }
 
+/**
+ * Guard absensi harian: hanya admin dan karyawan yang boleh mencatat
+ * absensi. Instruktur dan peserta tetap memakai alur LMS masing-masing.
+ */
+function elips_require_attendance_access(): array
+{
+    $user = elips_require_login();
+    if (!in_array($user['role'], ['admin', 'karyawan'], true)) {
+        throw new ElipsError('Anda tidak berhak mengakses absensi karyawan.');
+    }
+    return $user;
+}
+
+/** Zona waktu acuan absensi. Ubah di satu tempat bila kebijakan berubah. */
+function elips_attendance_timezone(): string
+{
+    return 'Asia/Jakarta';
+}
+
 // ---------- Query dasar ----------
 
 function elips_user_row(int $id): ?array

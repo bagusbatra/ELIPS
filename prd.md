@@ -2,7 +2,7 @@
 
 **Versi:** 4.0  
 **Tanggal:** 2026-11-11
-**Status:** Implemented Phase 1–6 (Dual-mode - PHP 8/MySQL 8 + fallback `localStorage`). v3.0 tetap menjadi baseline alur kursus; v4.0 menambahkan versi kurikulum, angkatan/kelas, penguncian kurikulum per kelas, histori tentor, enrollment berbasis kelas, jadwal pertemuan dan presensi offline, **cabang** dengan halaman kalender/jadwal admin, **materi tambahan kelas dan mode akses materi**, **tugas & ujian**, serta **skema penilaian, finalisasi nilai, predikat konfigurabel, dan koreksi beraudit**.
+**Status:** Implemented Phase 1–6 (Dual-mode - PHP 8/MySQL 8 + fallback `localStorage`). v3.0 tetap menjadi baseline alur kursus; v4.0 menambahkan versi kurikulum, angkatan/kelas, penguncian kurikulum per kelas, histori tentor, enrollment berbasis kelas, jadwal pertemuan dan presensi offline, **cabang** dengan halaman kalender/jadwal admin, **materi tambahan kelas dan mode akses materi**, **tugas & ujian**, **skema penilaian, finalisasi nilai, predikat konfigurabel, dan koreksi beraudit**, serta **fondasi server absensi karyawan** (role `karyawan`, jam server, GPS wajib, aturan harian di database).
 **Baseline v4.0 lengkap:** `ELIPS-LMS-PRD-v4.0.md`  
 **Log pengembangan:** `log.md`
 **ERD:** `erd.md`
@@ -308,7 +308,7 @@ Seluruh aturan di atas ditegakkan **di server** (`api/actions.php` + `api/helper
 | Notifikasi email simulasi | ✅ Selesai | `assets/js/notifications.js` dan tabel `notifications`; halaman `admin/notifications.html` |
 | Backend PHP + MySQL | ✅ Selesai | `api/` menyediakan autentikasi sesi, CRUD v3/v4, snapshot, audit, notifikasi, dan seeding data demo |
 | Dual-mode client | ✅ Selesai | `assets/js/api.js` memakai API saat tersedia dan otomatis fallback ke `localStorage`; `crud-academic.js` menyediakan aturan v4 di kedua mode |
-| Absensi staf dengan kamera di dashboard Admin | ✅ Selesai | Hero **Absensi Kehadiran** membuka kamera, mengambil foto, dan merekam waktu, lokasi GPS otomatis, serta metadata perangkat; tanggal/jam/lokasi dikunci saat simpan, dengan fallback unggah foto, riwayat pribadi, dan modal berhasil |
+| Absensi staf dengan kamera di dashboard Admin | ✅ Selesai | Hero **Absensi Kehadiran** membuka kamera, mengambil foto, dan merekam waktu, lokasi GPS otomatis, serta metadata perangkat; tanggal/jam ditentukan server, GPS wajib, dengan fallback unggah foto, riwayat pribadi, dan modal berhasil. Role `karyawan` sudah didukung API (halaman karyawan menyusul Fase 3) |
 | Tugas per kelas dengan lampiran & rubrik | ✅ Selesai | `assignments`, `assignment_files`, `assignment_rubrics`; `assignment.create/update/status/delete`; halaman instruktur & peserta |
 | Submission, review, dan revisi tugas | ✅ Selesai | `submissions`, `submission_files`, `submission_reviews`; `submission.submit/review/revision/accept`; unik per `(assignmentId, enrollmentId)` |
 | Ujian, peserta, dan hasil ujian | ✅ Selesai | `exams`, `exam_participants`, `exam_results`; `exam.create/update/status/delete/participants/result`; skor kosong tidak dianggap 0 |
@@ -590,23 +590,25 @@ Backend berada di folder `api/` dan terdiri dari front controller, konfigurasi, 
 | Laporan (Admin) | ✅ Selesai | `admin/reports.html` - progres per peserta, statistik per kursus |
 | Pengaturan (Admin) | ✅ Selesai | `admin/settings.html` - pengaturan umum, sertifikat, pembelajaran |
 
-### 6.5a Absensi Staf (Kamera + Metadata)
+### 6.5a Absensi Staf & Karyawan (Kamera + Metadata)
 
-Fitur utama pada `admin/dashboard.html` untuk mencatat kehadiran staf/admin sendiri.
+Fitur absensi harian di `admin/dashboard.html` dan API absensi yang kini melayani role `karyawan` (halaman khusus karyawan menyusul pada Fase 3).
 
 | Fitur | Status | Keterangan |
 |---|---|---|
 | Hero Absensi Kehadiran | Selesai | Hanya menampilkan **Absen Masuk** bila belum ada catatan hari ini, **Absen Pulang** setelah absen masuk, dan badge selesai bila masuk+pulang lengkap; status hari ini menampilkan jam masuk/pulang |
 | Ambil foto via kamera | Selesai | `getUserMedia` dengan pratinjau video, tombol Ambil Foto, dan Ulangi; foto dikompres menjadi JPEG sebelum disimpan |
 | Fallback unggah foto | Selesai | Kamera tidak tersedia/izin ditolak/konteks tidak aman (`file://` atau non-HTTPS) diarahkan ke tombol **Unggah Foto** |
-| Lokasi GPS otomatis | Selesai | Geolokasi opsional (lat/long/akurasi) diambil otomatis tanpa input manual; kegagalan GPS tidak memblokir absensi dan `locationSource` menjadi `none` |
-| Penguncian tanggal, jam, lokasi | Selesai | Tanggal = hari ini dan jam = waktu simpan diisi otomatis serta tidak dapat diedit pengguna; koordinat dikunci saat simpan |
+| Lokasi GPS wajib | Selesai | Server menolak absensi tanpa koordinat. Geolokasi (lat/long/akurasi) diambil otomatis, harus berpasangan, dan `locationSource` selalu `gps` untuk data baru |
+| Penguncian tanggal & jam | Selesai | Tanggal dan jam ditentukan server (`Asia/Jakarta`, disimpan UTC); nilai `attendanceDate`/`takenAt`/`timezone` dari klien diabaikan |
 | Modal berhasil | Selesai | Setelah simpan tampil foto, identitas akun, dan seluruh metadata; hanya satu tombol **Selesai** dan modal tidak dapat ditutup dengan Escape/backdrop |
-| Metadata perangkat | Selesai | Zona waktu, user agent, platform, bahasa, ukuran layar, memori perangkat, CPU core, tipe koneksi, status online, dan IP (server) |
+| Metadata perangkat | Selesai | User agent, platform, bahasa, ukuran layar, memori perangkat, CPU core, tipe koneksi, status online, dan IP (server) |
 | Riwayat absensi pribadi | Selesai | Daftar 30 catatan terbaru dengan foto, jenis masuk/pulang, tanggal, jam, lokasi, dan perangkat |
-| Detail & hapus catatan | Selesai | Modal detail menampilkan seluruh metadata dan foto; staf dapat menghapus catatan miliknya sendiri |
-| Mode server | Selesai | Aksi `staffAttendance.create`, `staffAttendance.list`, dan `staffAttendance.delete`; hanya Admin yang dapat mengakses dan hanya atas namanya sendiri |
-| Mode lokal | Selesai | Koleksi `elips_staffAttendances`; riwayat per pengguna dipangkas menjadi 20 catatan terbaru |
+| Detail & hapus catatan | Selesai | Modal detail menampilkan seluruh metadata dan foto. Hanya Admin yang dapat menghapus (miliknya atau karyawan) dengan alasan ≥5 karakter; karyawan tidak dapat menghapus |
+| Role `karyawan` (server) | Selesai | `users.role` menerima `karyawan`; API absensi hanya untuk `admin` + `karyawan`; instruktur/peserta ditolak. Klien dan halaman karyawan menyusul Fase 3 |
+| Aturan harian di server | Selesai | Maksimal 1 `in` + 1 `out` per pengguna per hari; absen pulang wajib didahului absen masuk; dijaga validasi API dan unique key `(user_id, attendance_date, kind)` |
+| Mode server | Selesai | Aksi `staffAttendance.create`, `staffAttendance.list`, dan `staffAttendance.delete`; karyawan hanya membaca miliknya, Admin dapat meminta `userId` lain |
+| Mode lokal | Selesai | Koleksi `elips_staffAttendances` masih memakai aturan lama (admin saja, GPS opsional) sampai modul bersama dibuat pada Fase 2–3 |
 
 ### 6.6 Manajemen Pengguna
 | Fitur | Status | Keterangan |
@@ -845,16 +847,17 @@ else                            -> student/dashboard.html
 - Outbox diurutkan terbaru lebih dulu, dibatasi 1000 entri, dan dapat difilter berdasarkan jenis, penerima, rentang tanggal, pencarian, serta limit.
 - Admin dapat mengekspor hasil filter ke CSV dan membersihkan seluruh outbox dari `admin/notifications.html`.
 
-### Absensi Staf (Kamera + Metadata)
-- Absensi pada dashboard Admin adalah **absensi pribadi staf/admin** yang sedang login, bukan presensi peserta per sesi. Staf hanya dapat membuat, membaca, dan menghapus catatan miliknya sendiri.
-- Dua jenis catatan: `in` (absen masuk) dan `out` (absen pulang). Setiap admin hanya memiliki maksimal satu catatan `in` dan satu `out` per hari; dashboard hanya menampilkan tombol aksi berikutnya (Absen Masuk → Absen Pulang → badge selesai) dan menolak aksi yang tidak sesuai status.
+### Absensi Staf & Karyawan (Kamera + Metadata)
+- Absensi adalah **absensi pribadi** admin/karyawan yang sedang login, bukan presensi peserta per sesi. Karyawan hanya dapat membuat dan membaca catatan miliknya; admin dapat membaca catatan pengguna lain secara eksplisit melalui `userId`.
+- Dua jenis catatan: `in` (absen masuk) dan `out` (absen pulang). Setiap pengguna hanya memiliki maksimal satu catatan `in` dan satu `out` per hari. Aturan ini dijaga validasi server dan unique key `(user_id, attendance_date, kind)`; absen pulang ditolak bila belum ada absen masuk.
 - Foto wajib ada. Server hanya menerima data URL `image/jpeg`, `image/png`, atau `image/webp`, memverifikasi isi biner dengan `getimagesizefromstring()`, dan membatasi ukuran foto (maks. 2 MB biner, 4 juta karakter data URL).
-- Waktu `takenAt` disimpan dalam UTC dan tanggal absensi (`attendanceDate`) memakai tanggal kalender lokal hari ini. Keduanya diisi otomatis saat tombol Simpan ditekan, tidak dapat diedit pengguna, dan tanggal divalidasi dengan `checkdate()`.
-- Koordinat harus dikirim berpasangan dan berada dalam rentang lat -90..90 / lng -180..180. UI mengambil koordinat GPS secara otomatis; bila tidak tersedia, `locationSource` menjadi `none` dan absensi tetap dapat disimpan.
+- Tanggal dan jam ditentukan **server**: `attendanceDate` memakai tanggal `Asia/Jakarta`, `takenAt` disimpan UTC, dan `timezone` diisi `Asia/Jakarta`. Nilai `attendanceDate`, `takenAt`, dan `timezone` dari klien diabaikan agar jam perangkat tidak dapat dimanipulasi.
+- GPS **wajib** untuk semua role. Koordinat harus dikirim berpasangan dan berada dalam rentang lat -90..90 / lng -180..180; absensi tanpa koordinat ditolak server dan `locationSource` data baru selalu `gps`.
 - IP diambil server dari `REMOTE_ADDR`; metadata perangkat lain berasal dari browser dan dibatasi panjangnya sebelum disimpan.
-- Kamera memerlukan secure context (`localhost` atau HTTPS). Bila kamera/geolokasi tidak tersedia, ditolak, atau halaman dibuka via `file://`, UI menampilkan pesan dan pengguna dapat mengunggah foto; lokasi tidak perlu diisi manual.
+- Kamera memerlukan secure context (`localhost` atau HTTPS). Bila kamera tidak tersedia atau ditolak, pengguna dapat mengunggah foto; lokasi tetap wajib diperoleh dari GPS.
 - Modal ambil foto hanya berisi layar kamera, tombol Ambil Foto/Ulangi/Nyalakan Kamera/Unggah Foto, Catatan, Batal, dan Simpan Absensi. Setelah berhasil, modal sukses menampilkan foto, identitas akun, dan seluruh metadata dengan satu tombol **Selesai** yang tidak dapat ditutup lewat Escape/backdrop.
-- Mode lokal menyimpan catatan di `elips_staffAttendances` dengan `photo` berupa data URL terkompresi dan memangkas riwayat per pengguna menjadi 20 catatan; mode server menyimpan foto base64 di `staff_attendances.photo` dengan `photo_mime`.
+- Hanya admin yang dapat menghapus catatan absensi (miliknya atau karyawan) dengan alasan minimal 5 karakter; detail penghapusan dan alasan dicatat di Audit Trail. Karyawan tidak memiliki aksi hapus.
+- Mode lokal masih memakai perilaku lama (admin saja, GPS opsional) sampai modul absensi bersama dibuat pada Fase 2–3; mode server adalah acuan aturan.
 - Snapshot bootstrap sengaja **tidak** memuat koleksi absensi staf maupun foto; dashboard memuat riwayat melalui `staffAttendance.list` agar foto tidak bocor ke halaman/role lain.
 - Setiap create/delete mencatat audit dengan entitas `staff_attendance`; pada mode server audit ditulis backend, pada mode lokal ditulis client.
 
@@ -955,7 +958,8 @@ else                            -> student/dashboard.html
 | Operasi gagal tidak membuat notifikasi | ✅ Lulus uji | Approval ulang dan publikasi tanpa perubahan status tidak menambah outbox |
 | Filter, ekspor & pembersihan outbox | ✅ Lulus uji | Filter jenis/penerima/tanggal/pencarian dan tombol CSV/bersihkan tersedia di `admin/notifications.html` |
 | Absensi staf dari dashboard Admin | Lulus uji | `test-staff-attendance-page` (80/80) memverifikasi tombol masuk/pulang sesuai status harian, modal kamera/fallback yang ringkas, penguncian tanggal, modal sukses dengan satu tombol Selesai, penyimpanan lokal, detail, audit, dan hapus catatan |
-| API absensi staf & privasi | Lulus uji | `test-staff-attendance-api` (41/41) memverifikasi guard role, validasi foto/koordinat/tanggal, persistensi metadata, kepemilikan hapus, dan snapshot tanpa foto |
+| API absensi staf & privasi | Lulus uji | `test-staff-attendance-api` (46/46) memverifikasi guard role, validasi foto/koordinat/GPS, jam server, duplikat harian, alasan hapus, persistensi metadata, dan snapshot tanpa foto |
+| Role karyawan & absensi server | Lulus uji | `api-employee-fase1` (34/34) memverifikasi role `karyawan` di API, login karyawan, absen masuk/pulang, duplikat, privasi riwayat, akses admin via `userId`, hapus beralasan + audit, dan penolakan instruktur/peserta |
 | Degradasi kamera & geolokasi | Lulus uji | Kamera tanpa dukungan/izin/secure context menampilkan fallback unggah; GPS gagal tidak memblokir penyimpanan |
 
 ---
@@ -969,7 +973,7 @@ else                            -> student/dashboard.html
 - **Responsive:** Menggunakan CSS custom yang responsif.
 - **UI Konsisten:** Menggunakan komponen seragam (navbar, sidebar, cards, tables, badges).
 - **Keamanan:** Pada mode server password di-hash, sesi memakai cookie `HttpOnly`/`SameSite=Lax`, dan otorisasi role/kepemilikan ditegakkan di server. Mode lokal tetap bersifat demo dan tidak boleh dianggap aman untuk produksi.
-- **Cakupan v4.0:** Increment ini mencakup **Phase 1–6** (versi kurikulum + kelas/angkatan + enrollment berbasis kelas + jadwal sesi/presensi offline + materi tambahan dan mode akses materi + cabang/kalender + absensi staf + tugas/ujian + skema penilaian/finalisasi/koreksi), dengan 37 tabel MySQL, 92 aksi API, 38 storage key, 19 modul JS, dan 27 halaman HTML. Pembayaran dan sertifikat PDF mengikuti phase berikutnya pada `ELIPS-LMS-PRD-v4.0.md`.
+- **Cakupan v4.0:** Increment ini mencakup **Phase 1–6** (versi kurikulum + kelas/angkatan + enrollment berbasis kelas + jadwal sesi/presensi offline + materi tambahan dan mode akses materi + cabang/kalender + absensi staf + tugas/ujian + skema penilaian/finalisasi/koreksi), ditambah **fondasi server absensi karyawan** (role `karyawan`, validasi aturan harian, jam server, GPS wajib), dengan 37 tabel MySQL, 92 aksi API, 38 storage key, 19 modul JS, dan 27 halaman HTML. Pembayaran dan sertifikat PDF mengikuti phase berikutnya pada `ELIPS-LMS-PRD-v4.0.md`.
 - **Kompatibilitas v3.0:** Struktur v3 tetap dipertahankan. Setiap kursus lama mendapat versi kurikulum `1.0`; enrollment lama dipetakan ke kelas migrasi (`legacy_import`) agar tidak ada data yang hilang. Alur nilai manual klasik tetap tersedia di samping skema penilaian Phase 6.
 
 ---

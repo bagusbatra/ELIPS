@@ -2,7 +2,7 @@
 
 **Versi dokumen:** 4.0  
 **Tanggal:** 2026-11-11  
-**Status:** Dual-mode — skema fisik MySQL 8 v4.0 Phase 1–6 + fallback koleksi `localStorage`  
+**Status:** Dual-mode — skema fisik MySQL 8 v4.0 Phase 1–6 + fondasi server absensi karyawan (role `karyawan`, unique key harian) + fallback koleksi `localStorage`  
 **Dokumen terkait:** `prd.md`, `log.md`, `api/schema.sql`
 
 ---
@@ -793,7 +793,7 @@ Menyimpan seluruh akun: Admin, Instruktur, dan Peserta.
 | `name` | string | — | Ya | — | Nama lengkap |
 | `email` | string | UK | Ya | — | Unik, dibandingkan case-insensitive |
 | `phone` | string | — | Tidak | `''` | Nomor telepon |
-| `role` | enum | — | Ya | `peserta` | `admin`, `instruktur`, `peserta` |
+| `role` | enum | — | Ya | `peserta` | `admin`, `instruktur`, `peserta`, `karyawan` (absensi saja) |
 | `status` | enum | — | Ya | `aktif` | `aktif`, `nonaktif` |
 | `password` | string | — | Ya | `elips123` untuk seed/akun lama | Mode lokal: disimpan apa adanya, minimal 8 karakter saat dibuat/diubah, diverifikasi `authenticateUser()`. Mode server: kolom `password_hash` di MySQL (bcrypt/argon2 via `password_hash()`), diverifikasi `password_verify()` di PHP, dan tidak pernah dikirim ke client |
 | `createdAt` | date | — | Ya | hari ini | `YYYY-MM-DD` |
@@ -1841,24 +1841,24 @@ Bukan koleksi, melainkan **satu objek** yang merepresentasikan sesi login aktif 
 
 ### 5.12 STAFF_ATTENDANCES - `elips_staffAttendances`
 
-Absensi harian pribadi staf/admin yang dicatat dari dashboard Admin. Bukan presensi peserta per sesi. Setiap hari setiap admin memiliki paling banyak satu catatan `in` dan satu catatan `out`.
+Absensi harian pribadi admin dan karyawan yang dicatat dari dashboard Admin atau (pada Fase 3) halaman absen karyawan. Bukan presensi peserta per sesi. Setiap pengguna memiliki paling banyak satu catatan `in` dan satu catatan `out` per hari; aturan ini dijaga unique key database dan validasi server.
 
 | Field | Tipe | Key | Wajib | Keterangan |
 |---|---|---|---|---|
 | `id` | number | PK | Ya | ID catatan |
-| `userId` | number | FK -> `users.id` | Ya | Pemilik catatan (admin yang login) |
+| `userId` | number | FK -> `users.id` | Ya | Pemilik catatan (`admin` atau `karyawan` yang login) |
 | `userName` | string | - | Tidak | Nama pemilik (hasil JOIN, bukan input client) |
 | `kind` | enum `in`/`out` | - | Ya | Jenis absensi masuk/pulang |
-| `attendanceDate` | date `YYYY-MM-DD` | - | Ya | Tanggal kalender lokal; diisi otomatis tanggal hari ini dan dikunci saat simpan |
-| `takenAt` | datetime ISO | - | Ya | Waktu simpan/foto (disimpan UTC di server); diisi otomatis dan dikunci saat simpan |
-| `timezone` | string | - | Tidak | Zona waktu browser |
+| `attendanceDate` | date `YYYY-MM-DD` | - | Ya | Tanggal kalender server (`Asia/Jakarta`); nilai dari klien diabaikan |
+| `takenAt` | datetime ISO | - | Ya | Waktu server (disimpan UTC); nilai dari klien diabaikan |
+| `timezone` | string | - | Tidak | Zona waktu server (`Asia/Jakarta`) |
 | `photo` | string (data URL) | - | Ya | Foto JPEG/PNG/WebP; base64 disimpan di MySQL |
 | `photoMime` | string | - | Ya | MIME foto terdeteksi |
-| `latitude` | number/null | - | Tidak | Lintang, harus berpasangan dengan `longitude` |
-| `longitude` | number/null | - | Tidak | Bujur, harus berpasangan dengan `latitude` |
+| `latitude` | number | - | Ya | Lintang; wajib berpasangan dengan `longitude` (GPS wajib) |
+| `longitude` | number | - | Ya | Bujur; wajib berpasangan dengan `latitude` (GPS wajib) |
 | `accuracyM` | number/null | - | Tidak | Akurasi GPS dalam meter |
 | `locationLabel` | string | - | Tidak | Label koordinat otomatis; tidak ada input manual |
-| `locationSource` | enum `gps`/`manual`/`none` | - | Ya | Sumber lokasi; `gps` bila koordinat tersedia, `none` bila tidak |
+| `locationSource` | enum `gps`/`manual`/`none` | - | Ya | Selalu `gps` untuk data baru; nilai lain hanya untuk data lama |
 | `ipAddress` | string | - | Tidak | Diisi server dari `REMOTE_ADDR` |
 | `userAgent` | string | - | Tidak | User agent browser |
 | `platform` | string | - | Tidak | Platform perangkat |
@@ -1930,7 +1930,7 @@ Absensi harian pribadi staf/admin yang dicatat dari dashboard Admin. Bukan prese
 | R37 | `USERS` (aktor) → `ATTENDANCE_CORRECTIONS` | 1 — N | `attendance_corrections.actorId` | User dihapus: `actorId=null`, snapshot nama/role tetap | Audit historis |
 | R38 | `BRANCHES` → `CLASSES` | 1 — N | `classes.branchId` | Cabang dihapus: `branchId=null` (FK `SET NULL`) | Cabang opsional; hapus ditolak aplikasi bila masih dipakai |
 | R39 | `BRANCHES` → `CLASS_SESSIONS` | 1 — N | `class_sessions.branchId` (turunan) | Mengikuti kelas; bukan FK fisik | Mode lokal menyimpan `branchId` denormalisasi, mode server memakai JOIN kelas |
-| R40 | `USERS` (admin) -> `STAFF_ATTENDANCES` | 1 -> N | `staff_attendances.userId` | User dihapus: catatan absensi dihapus (`ON DELETE CASCADE`) | Absensi harian pribadi (maks. 1 `in` + 1 `out` per hari di UI); hanya pemilik yang dapat mengakses |
+| R40 | `USERS` (admin/karyawan) -> `STAFF_ATTENDANCES` | 1 -> N | `staff_attendances.userId` | User dihapus: catatan absensi dihapus (`ON DELETE CASCADE`) | Absensi harian pribadi (maks. 1 `in` + 1 `out` per hari, dijaga unique key); pemilik membaca sendiri, admin dapat membaca/menghapus dengan alasan |
 | R41 | `CLASSES` → `ASSIGNMENTS` | 1 — N | `assignments.classId` | Kelas dihapus: tugas dihapus | Tugas milik satu kelas |
 | R42 | `CURRICULUM_VERSIONS` → `ASSIGNMENTS` | 1 — N | `assignments.curriculumVersionId` | Versi dihapus: tugas dihapus | Acuan versi kelas |
 | R43 | `MODULES`/`LESSONS` → `ASSIGNMENTS` | 1 — N | `assignments.moduleId`, `assignments.lessonId` | Modul/materi dihapus: FK `SET NULL` | Opsional |
@@ -2829,7 +2829,7 @@ Skema fisik ada di `api/schema.sql` dan dibuat oleh `api/install.php`. Pemetaan 
 | `COMPLETED_LESSONS` | `completed_lessons` | `id` | UNIQUE(`student_id`, `lesson_id`); FK ke `users`, `courses`, `lessons` CASCADE |
 | `AUDIT_LOGS` | `audit_logs` | `id` | `actor_id` → `users.id` SET NULL (polimorfik `entity` + `entity_id`) |
 | `NOTIFICATIONS` | `notifications` | `id` | `recipient_id` → `users.id` SET NULL |
-| `STAFF_ATTENDANCES` | `staff_attendances` | `id` | `user_id` → `users.id` CASCADE; index (`user_id`, `attendance_date`), tidak ada unique harian |
+| `STAFF_ATTENDANCES` | `staff_attendances` | `id` | `user_id` → `users.id` CASCADE; unique (`user_id`, `attendance_date`, `kind`); index (`user_id`, `attendance_date`) |
 | `SESSION` | Sesi PHP native | — | Tidak ada tabel `sessions`; cookie sesi hanya menyimpan ID sesi |
 
 **Catatan implementasi:**
@@ -2979,7 +2979,7 @@ Sesi login **tidak** memakai tabel: autentikasi memakai sesi PHP native (`$_SESS
 | `email` | `VARCHAR(190)` | tidak | — | Unik, dipakai login |
 | `phone` | `VARCHAR(40)` | tidak | `''` | Nomor telepon |
 | `password_hash` | `VARCHAR(255)` | tidak | — | `password_hash()`; tidak pernah masuk snapshot |
-| `role` | `ENUM('admin','instruktur','peserta')` | tidak | `'peserta'` | Role akun |
+| `role` | `ENUM('admin','instruktur','peserta','karyawan')` | tidak | `'peserta'` | Role akun; `karyawan` hanya untuk absensi |
 | `status` | `ENUM('aktif','nonaktif')` | tidak | `'aktif'` | Status akun |
 | `created_at` | `DATE` | tidak | `CURRENT_DATE` | Tanggal dibuat |
 | `updated_at` | `DATETIME` | ya | `NULL` | Waktu perubahan terakhir (UTC) |
@@ -3562,16 +3562,16 @@ Catatan: `uq_certificates_enrollment (enrollment_id)` memastikan satu sertifikat
 | `id` | `INT UNSIGNED` | tidak | AUTO_INCREMENT | Primary key |
 | `user_id` | `INT UNSIGNED` | tidak | - | Pemilik catatan (FK `users.id`) |
 | `kind` | `ENUM('in','out')` | tidak | `'in'` | Absensi masuk/pulang |
-| `attendance_date` | `DATE` | tidak | - | Tanggal kalender lokal (otomatis hari ini, terkunci saat simpan) |
-| `taken_at` | `DATETIME` | tidak | - | Waktu simpan/foto (UTC, terkunci saat simpan) |
-| `timezone` | `VARCHAR(64)` | tidak | `''` | Zona waktu browser |
+| `attendance_date` | `DATE` | tidak | - | Tanggal kalender server (`Asia/Jakarta`); nilai klien diabaikan |
+| `taken_at` | `DATETIME` | tidak | - | Waktu server (UTC); nilai klien diabaikan |
+| `timezone` | `VARCHAR(64)` | tidak | `''` | Zona waktu server (`Asia/Jakarta`) |
 | `photo` | `LONGTEXT` | ya | `NULL` | Base64 foto |
 | `photo_mime` | `VARCHAR(50)` | tidak | `'image/jpeg'` | MIME terdeteksi |
-| `latitude` | `DECIMAL(10,7)` | ya | `NULL` | Lintang |
-| `longitude` | `DECIMAL(10,7)` | ya | `NULL` | Bujur |
+| `latitude` | `DECIMAL(10,7)` | tidak | - | Lintang (wajib) |
+| `longitude` | `DECIMAL(10,7)` | tidak | - | Bujur (wajib) |
 | `accuracy_m` | `DECIMAL(10,2)` | ya | `NULL` | Akurasi GPS (meter) |
 | `location_label` | `VARCHAR(255)` | tidak | `''` | Label koordinat otomatis (tanpa input manual) |
-| `location_source` | `ENUM('gps','manual','none')` | tidak | `'none'` | Sumber lokasi; `gps` bila koordinat ada, `none` bila tidak |
+| `location_source` | `ENUM('gps','manual','none')` | tidak | `'none'` | Selalu `gps` untuk data baru |
 | `ip_address` | `VARCHAR(45)` | tidak | `''` | IP dari server |
 | `user_agent` | `VARCHAR(255)` | tidak | `''` | User agent |
 | `platform` | `VARCHAR(120)` | tidak | `''` | Platform perangkat |
@@ -3644,9 +3644,9 @@ Catatan: `uq_certificates_enrollment (enrollment_id)` memastikan satu sertifikat
 | `completed_lessons` | `idx_completed_course (course_id)` | INDEX |
 | `audit_logs` | `idx_audit_created (created_at)`, `idx_audit_actor (actor_id)`, `idx_audit_entity (entity)` | INDEX |
 | `notifications` | `idx_notifications_created (created_at)`, `idx_notifications_type (type)`, `idx_notifications_recipient (recipient_id)` | INDEX |
-| `staff_attendances` | `idx_staff_attendances_user_date (user_id, attendance_date)`, `idx_staff_attendances_date (attendance_date)`, `idx_staff_attendances_taken (taken_at)` | INDEX |
+| `staff_attendances` | `uq_staff_attendances_user_day_kind (user_id, attendance_date, kind)`, `idx_staff_attendances_user_date (user_id, attendance_date)`, `idx_staff_attendances_date (attendance_date)`, `idx_staff_attendances_taken (taken_at)` | UNIQUE + INDEX |
 
-Catatan: `staff_attendances` tidak memiliki unique index pada (`user_id`, `attendance_date`, `kind`). Aturan satu absen masuk dan satu absen pulang per admin per hari ditegakkan oleh UI dashboard (`allowedKind()` dan guard sebelum simpan); API `staffAttendance.create` tetap memvalidasi setiap baris secara independen.
+Catatan: `staff_attendances` memiliki unique key pada (`user_id`, `attendance_date`, `kind`), sehingga satu pengguna hanya dapat memiliki satu absen masuk dan satu absen pulang per hari. API `staffAttendance.create` juga memeriksa aturan ini sebelum insert, mewajibkan GPS, memakai jam server (`Asia/Jakarta`), dan menolak absen pulang sebelum absen masuk. Penghapusan hanya oleh admin dengan alasan minimal 5 karakter yang dicatat di Audit Trail.
 
 ### 16.4 Foreign Key dan Aturan Hapus
 
@@ -3803,7 +3803,7 @@ Snapshot API memakai nama koleksi yang sama dengan model `localStorage`, sehingg
 | `class_lesson_progress` | `classLessonProgress` | `class_id`/`enrollment_id`/`student_id`/`lesson_id`/`completed_by` → camelCase; `completed_at`/`created_at` → ISO |
 | `class_material_progress` | `classMaterialProgress` | `class_id`/`enrollment_id`/`student_id`/`material_id`/`completed_by` → camelCase; `completed_at`/`created_at` → ISO |
 | `audit_logs` | `auditLogs` | `actor_id`/`actor_name`/`actor_role` → camelCase; `created_at` → ISO |
-| `staff_attendances` | `staffAttendances` (tidak di snapshot) | Dibaca lewat `staffAttendance.list`; `user_id`/`attendance_date`/`taken_at`/`photo_mime`/`accuracy_m`/`location_label`/`location_source`/`ip_address`/`user_agent`/`device_memory`/`hardware_concurrency`/`connection_type`/`created_at` → camelCase; `photo` base64 tetap data URL |
+| `staff_attendances` | `staffAttendances` (tidak di snapshot) | Dibaca lewat `staffAttendance.list`; `user_id`/`attendance_date`/`taken_at`/`photo_mime`/`accuracy_m`/`location_label`/`location_source`/`ip_address`/`user_agent`/`device_memory`/`hardware_concurrency`/`connection_type`/`created_at` → camelCase; `photo` base64 tetap data URL. Karyawan hanya menerima baris miliknya; admin dapat meminta `userId` lain |
 | `notifications` | `notifications` | `recipient_id`/`recipient_email` → camelCase; `created_at` → ISO |
 | Sesi PHP | `session` (cache di `api.js`) | `{ userId }` dari `$_SESSION`, bukan tabel |
 

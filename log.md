@@ -2,7 +2,7 @@
 
 **Versi dokumen:** 4.0  
 **Terakhir diperbarui:** 2026-11-11
-**Status proyek:** Dual-mode - PHP 8/MySQL 8 + fallback `localStorage`; v4.0 Phase 1-6 (kurikulum, kelas/angkatan, enrollment berbasis kelas, jadwal & presensi offline, materi tambahan & mode akses materi, tugas & ujian, skema penilaian/finalisasi/koreksi) plus cabang, kalender jadwal Admin, aksi langsung dan filter jadwal lanjutan, serta absensi staf berbasis kamera di dashboard Admin dengan alur harian masuk/pulang
+**Status proyek:** Dual-mode - PHP 8/MySQL 8 + fallback `localStorage`; v4.0 Phase 1-6 (kurikulum, kelas/angkatan, enrollment berbasis kelas, jadwal & presensi offline, materi tambahan & mode akses materi, tugas & ujian, skema penilaian/finalisasi/koreksi) plus cabang, kalender jadwal Admin, aksi langsung dan filter jadwal lanjutan, absensi staf berbasis kamera, serta fondasi server absensi karyawan (role `karyawan`, jam server, GPS wajib, aturan harian di database)
 **Dokumen terkait:** `prd.md`, `erd.md`, `ELIPS-LMS-PRD-v4.0.md`
 
 ---
@@ -155,6 +155,47 @@ Prinsip yang dipakai:
 ---
 
 ## 3. Riwayat Perubahan
+
+### v4.0 - 2026-11-11 - Fase 1 absensi karyawan: role, validasi server, dan aturan harian
+
+**Tujuan:** menyiapkan fondasi server untuk absensi karyawan sesuai `PRD_karyawan.md` Fase 1, tanpa perubahan UI (halaman karyawan menyusul Fase 3).
+
+Perubahan skema:
+
+- `users.role` diperluas menjadi `ENUM('admin','instruktur','peserta','karyawan')`; role `karyawan` hanya untuk absensi dan belum dipakai klien.
+- `staff_attendances` mendapat unique key `uq_staff_attendances_user_day_kind (user_id, attendance_date, kind)` sehingga aturan satu absen masuk dan satu absen pulang per hari dijaga database.
+- `api/install.php` menambahkan migrasi additive: mengubah ENUM role dan, sebelum menambah unique key, merapikan duplikat lama dengan menyisakan baris ber-id terkecil.
+
+Perubahan backend:
+
+- `api/helpers.php`: guard `elips_require_attendance_access()` (hanya `admin` dan `karyawan`) serta helper `elips_attendance_timezone()` yang mengembalikan `Asia/Jakarta`.
+- `api/actions.php`:
+  - `staffAttendance.create` memakai jam dan tanggal **server** (`Asia/Jakarta`, disimpan UTC), mengabaikan `attendanceDate`/`takenAt`/`timezone` dari klien, mewajibkan GPS untuk semua role, menolak absen masuk/pulang ganda, menolak absen pulang sebelum absen masuk, dan menangani pelanggaran unique key sebagai pesan yang ramah.
+  - `staffAttendance.list` hanya mengembalikan catatan sendiri untuk karyawan; admin dapat meminta catatan pengguna lain dengan parameter `userId`.
+  - `staffAttendance.delete` hanya untuk admin, wajib alasan minimal 5 karakter, dan mencatat detail lama + alasan ke Audit Trail. Karyawan tidak dapat menghapus.
+  - `user.create`/`user.update` menerima role `karyawan`; pendaftaran mandiri tetap hanya boleh membuat `peserta`.
+- Snapshot tetap tidak memuat koleksi absensi maupun foto.
+
+Keputusan yang diambil:
+
+- Instruktur tidak memakai halaman absensi karyawan dan ditolak API.
+- GPS wajib untuk semua role; data lama tanpa GPS tetap dapat dibaca.
+- Tabel `user_devices` dan remember-me ditunda ke Fase 4.
+- Role `karyawan` baru diaktifkan di client pada Fase 3 agar login tidak diarahkan ke halaman yang belum ada.
+
+Pengujian:
+
+- `api-employee-fase1.js` 34/34 lulus: role karyawan, login, absen masuk/pulang, GPS wajib, duplikat, privasi, akses admin, hapus beralasan, audit, dan penolakan role lain.
+- `test-staff-attendance-api.js` diperbarui menjadi 46/46: jam server, GPS wajib, duplikat harian, dan alasan hapus.
+- Regresi: `test-staff-attendance-page` (80/80), `api-phase5` 52/52, `local-phase5` 34/34, `api-phase6` 44/44, `local-phase6` 34/34, `test-all-pages` 25 halaman, dan `validate-scripts` 27 HTML/19 JS tetap lulus.
+- `php api/install.php --fresh` berhasil; PHP lint bersih.
+
+Batasan:
+
+- UI client belum berubah: dashboard admin tetap memakai alur lama, sedangkan API server sudah menolak absensi tanpa GPS dan duplikat. Mode lokal masih memakai aturan lama sampai Fase 2–3.
+- Belum ada halaman `employee/attendance.html`, remember-me, atau PWA.
+
+---
 
 ### v4.0 - 2026-11-11 - Phase 6: skema penilaian, finalisasi nilai, predikat, dan koreksi beraudit
 
@@ -986,7 +1027,7 @@ Tabel: `users`, `categories`, `branches`, `courses`, `curriculum_versions`, `cla
 | `elips_completedLessons` | Progres pelajaran legacy yang tetap dibaca untuk kompatibilitas |
 | `elips_auditLogs` | Jejak audit perubahan kursus, nilai, sertifikat, pengguna, penugasan, modul, materi, sesi, presensi, dan materi kelas |
 | `elips_notifications` | Outbox notifikasi email simulasi: penerima, subjek, isi, entitas, dan waktu |
-| `elips_staffAttendances` | Absensi harian pribadi staf/admin: maks. satu masuk + satu pulang per hari, tanggal/waktu terisi otomatis, foto, lokasi GPS otomatis, dan metadata perangkat |
+| `elips_staffAttendances` | Absensi harian pribadi staf/admin pada mode lokal: maks. satu masuk + satu pulang per hari, tanggal/waktu terisi otomatis, foto, lokasi GPS opsional, dan metadata perangkat |
 | `elips_session` | Sesi pengguna yang sedang login |
 
 Akun demo utama:
@@ -1007,7 +1048,7 @@ Akun lama tanpa password otomatis dimigrasikan ke password demo `elips123` saat 
 
 ## 6. Hasil Pengujian Terakhir
 
-Pengujian dijalankan setelah backend PHP/MySQL, client dual-mode (v3.0), increment v4.0 Phase 1-6, penambahan cabang/kalender jadwal, aksi langsung/filter jadwal lanjutan, serta absensi staf dan penyempurnaan alur hariannya:
+Pengujian dijalankan setelah backend PHP/MySQL, client dual-mode (v3.0), increment v4.0 Phase 1-6, penambahan cabang/kalender jadwal, aksi langsung/filter jadwal lanjutan, absensi staf dan penyempurnaan alur hariannya, serta Fase 1 absensi karyawan (role, jam server, GPS wajib, aturan harian database):
 
 | Pemeriksaan | Hasil |
 |---|---|
@@ -1041,7 +1082,8 @@ Pengujian dijalankan setelah backend PHP/MySQL, client dual-mode (v3.0), increme
 | UI materi Admin/Instruktur/Peserta (`test-v4-material-ui`) | ✅ 25/25 |
 | Aksi langsung & filter kalender (`test-schedule-actions`) | ✅ Lulus |
 | Absensi staf halaman lokal (`test-staff-attendance-page`) | Lulus 80/80 |
-| API absensi staf (`test-staff-attendance-api`) | Lulus 41/41 |
+| API absensi staf (`test-staff-attendance-api`) | Lulus 46/46 |
+| API absensi karyawan Fase 1 (`api-employee-fase1`) | Lulus 34/34 |
 | UI akademik admin (`test-academic-page`) | ✅ Lulus |
 | UI cabang & kalender admin (`test-branch-pages`) | ✅ Lulus |
 | UI jadwal/presensi lokal (`test-sessions-page`) | ✅ 47/47 |
@@ -1104,14 +1146,18 @@ Catatan penting yang diuji:
 - Koreksi hanya untuk nilai finalized, wajib alasan ≥5 karakter, menulis `grade_corrections`, dan tidak mengubah status finalized.
 - Predikat default A–E dapat diubah Admin; rentang yang tidak menutup 0–100 tanpa celah/tumpang tindih ditolak.
 - Peserta hanya membaca transkrip nilainya sendiri; instruktur/Admin pengampu dapat membaca roster dan transkrip kelas yang dikelola.
-- Absensi staf hanya dapat dibuat/dibaca/dihapus oleh admin pemiliknya; instruktur dan peserta ditolak.
+- Absensi hanya dapat dibuat/dibaca oleh admin dan karyawan; instruktur dan peserta ditolak. Karyawan hanya membaca catatannya sendiri, sedangkan admin dapat membaca catatan pengguna lain lewat parameter `userId`.
 - Tombol hero mengikuti status harian: hanya Absen Masuk saat belum ada catatan, hanya Absen Pulang setelah absen masuk, dan badge selesai saat masuk+pulang lengkap.
 - Modal ambil foto hanya memuat kamera, tombol foto, catatan, batal, dan simpan; tanggal/jam/lokasi tidak dapat diedit dan dikunci otomatis saat simpan.
 - Modal berhasil menampilkan identitas akun dan seluruh metadata dengan satu tombol Selesai; Escape/backdrop tidak menutup modal tersebut.
-- Foto absensi wajib berupa gambar valid; data URL non-gambar, koordinat tidak lengkap, dan tanggal tidak valid ditolak server.
+- Foto absensi wajib berupa gambar valid; data URL non-gambar ditolak server.
+- Tanggal dan jam ditentukan server (`Asia/Jakarta`, disimpan UTC); `attendanceDate`/`takenAt`/`timezone` dari klien diabaikan.
+- GPS wajib untuk semua role; koordinat harus berpasangan dan dalam rentang valid, dan `locationSource` data baru selalu `gps`.
+- Satu pengguna maksimal memiliki satu absen masuk dan satu absen pulang per hari; duplikat ditolak validasi server dan unique key database, dan absen pulang wajib didahului absen masuk.
+- Penghapusan hanya oleh admin, wajib alasan minimal 5 karakter, dan mencatat detail lama + alasan di Audit Trail; karyawan tidak dapat menghapus.
 - Metadata absensi (zona waktu, lokasi, perangkat, koneksi, catatan, IP server) tersimpan konsisten dan muncul di detail.
 - Snapshot bootstrap tidak memuat koleksi/foto absensi staf; riwayat hanya dimuat lewat aksi khusus.
-- Kamera tanpa dukungan/izin/secure context menampilkan fallback unggah foto; GPS gagal tidak memblokir penyimpanan.
+- Kamera tanpa dukungan/izin/secure context menampilkan fallback unggah foto; GPS tetap wajib pada mode server.
 
 ---
 
@@ -1127,7 +1173,8 @@ Keterbatasan saat ini:
 - Notifikasi email masih berupa simulasi/outbox di database; email belum benar-benar dikirim.
 - Finalisasi nilai tidak membuat sertifikat otomatis; sertifikasi/PDF tetap phase berikutnya.
 - Mode lokal tidak memiliki transaksi, sehingga finalisasi/koreksi yang gagal di tengah dapat meninggalkan data parsial.
-- Absensi staf satu masuk + satu pulang per hari masih dijaga UI, bukan unique constraint database.
+- Absensi staf satu masuk + satu pulang per hari sudah dijaga unique key database dan validasi server, tetapi mode lokal masih memakai aturan lama sampai Fase 2–3.
+- Role `karyawan` baru tersedia di API/DB; halaman `employee/attendance.html`, remember-me, dan PWA belum dibuat (Fase 3–5).
 - Belum ada migration tool, backup otomatis, atau monitoring produksi.
 
 Rencana lanjutan (opsional, sesuai `prd.md`):
@@ -1138,6 +1185,7 @@ Rencana lanjutan (opsional, sesuai `prd.md`):
 | P0 | Pembatasan snapshot per role dan endpoint verifikasi sertifikat publik yang minim data |
 | P0 | Upload file materi dan generate PDF sertifikat |
 | P1 | Migration tool, backup otomatis, dan audit immutable dengan retensi |
+| P1 | Fase 2–5 absensi karyawan: modul `attendance.js` bersama, halaman `employee/attendance.html`, remember-me (`user_devices`), dan PWA |
 | P2 | Notifikasi email nyata saat kursus dipublikasikan atau sertifikat terbit |
 
 ---

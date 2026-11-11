@@ -113,6 +113,37 @@ try {
         }
     }
 
+    // ---------- Migrasi Fase 1 absensi karyawan ----------
+    // Role `karyawan` hanya untuk absensi; klien baru memakainya pada Fase 3.
+    $roleColumn = $db->query("SHOW COLUMNS FROM users LIKE 'role'")->fetch();
+    if ($roleColumn && strpos((string) $roleColumn['Type'], "'karyawan'") === false) {
+        $db->exec(
+            "ALTER TABLE users MODIFY role ENUM('admin', 'instruktur', 'peserta', 'karyawan')
+             NOT NULL DEFAULT 'peserta'"
+        );
+        echo "Role karyawan ditambahkan.\n";
+    }
+    // Aturan 1 masuk + 1 pulang per hari dijaga database. Duplikat lama
+    // dirapikan lebih dulu (menyisakan baris dengan id terkecil).
+    $hasAttendanceUnique = (bool) $db->query(
+        "SHOW INDEX FROM staff_attendances WHERE Key_name = 'uq_staff_attendances_user_day_kind'"
+    )->fetch();
+    if (!$hasAttendanceUnique) {
+        $db->exec(
+            'DELETE sa1 FROM staff_attendances sa1
+             INNER JOIN staff_attendances sa2
+               ON sa1.user_id = sa2.user_id
+              AND sa1.attendance_date = sa2.attendance_date
+              AND sa1.kind = sa2.kind
+              AND sa1.id > sa2.id'
+        );
+        $db->exec(
+            'ALTER TABLE staff_attendances
+             ADD UNIQUE KEY uq_staff_attendances_user_day_kind (user_id, attendance_date, kind)'
+        );
+        echo "Aturan absensi harian diterapkan di database.\n";
+    }
+
     // Rentang predikat default mengikuti pemetaan huruf yang sudah dipakai
     // versi sebelumnya, sehingga perilaku lama tetap konsisten.
     $predicateCount = (int) $db->query('SELECT COUNT(*) FROM predicate_ranges')->fetchColumn();
