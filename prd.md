@@ -1,8 +1,8 @@
 # PRD: Learning Management System (LMS) ELIPS
 
 **Versi:** 4.0  
-**Tanggal:** 2026-11-06
-**Status:** Implemented Phase 1–4 (Dual-mode - PHP 8/MySQL 8 + fallback `localStorage`). v3.0 tetap menjadi baseline alur kursus; v4.0 menambahkan versi kurikulum, angkatan/kelas, penguncian kurikulum per kelas, histori tentor, enrollment berbasis kelas, jadwal pertemuan dan presensi offline, **cabang** dengan halaman kalender/jadwal admin, serta **materi tambahan kelas dan mode akses materi**.
+**Tanggal:** 2026-11-11
+**Status:** Implemented Phase 1–6 (Dual-mode - PHP 8/MySQL 8 + fallback `localStorage`). v3.0 tetap menjadi baseline alur kursus; v4.0 menambahkan versi kurikulum, angkatan/kelas, penguncian kurikulum per kelas, histori tentor, enrollment berbasis kelas, jadwal pertemuan dan presensi offline, **cabang** dengan halaman kalender/jadwal admin, **materi tambahan kelas dan mode akses materi**, **tugas & ujian**, serta **skema penilaian, finalisasi nilai, predikat konfigurabel, dan koreksi beraudit**.
 **Baseline v4.0 lengkap:** `ELIPS-LMS-PRD-v4.0.md`  
 **Log pengembangan:** `log.md`
 **ERD:** `erd.md`
@@ -14,7 +14,7 @@
 
 Membangun sistem Learning Management System (LMS) berbasis web untuk pelatihan dan kursus. Aplikasi memakai vanilla HTML, CSS, dan JavaScript di sisi client, dengan backend PHP 8 + MySQL 8 sebagai penyimpanan utama dan `localStorage` sebagai fallback demo saat API tidak tersedia.
 
-### 1.1 Cakupan v4.0 Phase 1–4
+### 1.1 Cakupan v4.0 Phase 1–6
 
 Model akademik v4.0 memisahkan **Kursus** dari penyelenggaraannya:
 
@@ -28,6 +28,9 @@ Kursus
         └── Enrollment peserta
               └── Progres materi → Nilai → Sertifikat
         └── Materi Tambahan Kelas (di luar kurikulum)
+        └── Tugas & Ujian (instrumen penilaian)
+        └── Skema Penilaian → Komponen berbobot → Nilai komponen
+              └── Nilai akhir (draft/incomplete/finalized) → Koreksi beraudit
 ```
 
 Aturan inti yang sudah diterapkan:
@@ -45,6 +48,12 @@ Aturan inti yang sudah diterapkan:
 - Progres belajar dapat dicatat per kelas/enrollment (`class_lesson_progress`, `class_material_progress`), dan kelas dapat mewajibkan **konfirmasi instruktur** sebelum peserta menandai materi selesai.
 - Presensi dicatat per sesi dan per enrollment; koreksi presensi wajib menyimpan alasan, aktor, nilai lama, dan nilai baru.
 - Rekap kehadiran dihitung dari JP sesi yang dihitung dibagi JP wajib sesuai kebijakan kehadiran.
+- **Tugas** dan **ujian** terikat ke kelas dan versi kurikulum; submission peserta, review, peserta ujian, dan hasil ujian disimpan terpisah.
+- Satu kelas memiliki **satu skema penilaian** berisi komponen berbobot (`assignment`, `exam`, atau `manual`). Total bobot wajib 100% sebelum skema dipublikasikan.
+- Nilai akhir dihitung dari komponen (bukan rata-rata nilai mentah); komponen wajib yang belum dinilai membuat status **`incomplete`**, dan nilai kosong tidak pernah dianggap **0**.
+- Huruf mutu mengikuti **predikat A–E yang dapat dikonfigurasi** Admin, bukan tabel hardcoded.
+- Nilai yang sudah **finalized** terkunci; perubahan hanya melalui **koreksi** beralasan yang tercatat append-only di `grade_corrections`.
+- Sertifikat tetap mengikuti alur Draft → Publish Admin; finalisasi nilai Phase 6 **tidak** otomatis membuat sertifikat.
 - Nilai dan sertifikat unik per enrollment, sehingga peserta dapat mengikuti kursus yang sama pada angkatan berbeda.
 - Data akademik tidak dihapus permanen; kelas dengan enrollment tidak dapat dihapus dan versi terpakai harus dipensiunkan, bukan dihapus.
 
@@ -55,8 +64,8 @@ Aturan inti yang sudah diterapkan:
 | Role | Deskripsi | Kebutuhan Utama |
 |---|---|---|
 | **Admin** | Pengelola sistem | Menambah kursus (Draft), mengelola versi kurikulum, mengelola cabang, membuat angkatan/kelas, menugaskan 1 tentor per kelas, menyusun jadwal sesi, memantau kalender/presensi/rekap, mengatur mode akses materi dan override dengan alasan, menambah pengguna, mendaftarkan siswa ke kelas, menyetujui sertifikat Draft → Publish |
-| **Instruktur/Trainer** | Pengajar kursus/kelas | Login, melihat kelas yang diampu, mengelola modul/materi pada versi kurikulum yang masih dapat diubah, mengatur akses dan materi tambahan kelas, mengonfirmasi penyelesaian materi, menyusun jadwal, mencatat presensi dan koreksi, memantau progres, memberi nilai akhir |
-| **Peserta/Student** | Peserta pelatihan | Mengakses materi dari kelas yang diikuti sesuai mode akses, menandai pelajaran/materi selesai bila diizinkan, melihat status persetujuan instruktur, melihat rekap kehadiran sendiri, melihat sertifikat yang sudah Publish |
+| **Instruktur/Trainer** | Pengajar kursus/kelas | Login, melihat kelas yang diampu, mengelola modul/materi pada versi kurikulum yang masih dapat diubah, mengatur akses dan materi tambahan kelas, mengonfirmasi penyelesaian materi, menyusun jadwal, mencatat presensi dan koreksi, memantau progres, mengelola tugas/ujian, menyusun skema penilaian, memberi nilai komponen, memfinalisasi nilai, dan mengoreksi nilai dengan alasan |
+| **Peserta/Student** | Peserta pelatihan | Mengakses materi dari kelas yang diikuti sesuai mode akses, menandai pelajaran/materi selesai bila diizinkan, melihat status persetujuan instruktur, melihat rekap kehadiran sendiri, mengumpulkan tugas, melihat hasil ujian, melihat transkrip nilai sendiri, dan melihat sertifikat yang sudah Publish |
 
 ---
 
@@ -300,6 +309,15 @@ Seluruh aturan di atas ditegakkan **di server** (`api/actions.php` + `api/helper
 | Backend PHP + MySQL | ✅ Selesai | `api/` menyediakan autentikasi sesi, CRUD v3/v4, snapshot, audit, notifikasi, dan seeding data demo |
 | Dual-mode client | ✅ Selesai | `assets/js/api.js` memakai API saat tersedia dan otomatis fallback ke `localStorage`; `crud-academic.js` menyediakan aturan v4 di kedua mode |
 | Absensi staf dengan kamera di dashboard Admin | ✅ Selesai | Hero **Absensi Kehadiran** membuka kamera, mengambil foto, dan merekam waktu, lokasi GPS otomatis, serta metadata perangkat; tanggal/jam/lokasi dikunci saat simpan, dengan fallback unggah foto, riwayat pribadi, dan modal berhasil |
+| Tugas per kelas dengan lampiran & rubrik | ✅ Selesai | `assignments`, `assignment_files`, `assignment_rubrics`; `assignment.create/update/status/delete`; halaman instruktur & peserta |
+| Submission, review, dan revisi tugas | ✅ Selesai | `submissions`, `submission_files`, `submission_reviews`; `submission.submit/review/revision/accept`; unik per `(assignmentId, enrollmentId)` |
+| Ujian, peserta, dan hasil ujian | ✅ Selesai | `exams`, `exam_participants`, `exam_results`; `exam.create/update/status/delete/participants/result`; skor kosong tidak dianggap 0 |
+| Skema penilaian per kelas | ✅ Selesai | `grade_schemes` + `grade_scheme_components`; `gradeScheme.save/status/delete`; total bobot wajib 100% saat publish |
+| Roster & nilai komponen | ✅ Selesai | `grade.roster`, `grade.manualSave`, `grade.exempt`; komponen tugas/ujian/manual; pengecualian wajib alasan |
+| Finalisasi nilai | ✅ Selesai | `grade.finalize`; status `draft`/`incomplete`/`finalized`; snapshot komponen dan penguncian nilai |
+| Predikat A–E konfigurabel | ✅ Selesai | `predicate_ranges` + `predicate.list/save`; editor di `admin/settings.html`; validasi cakupan 0–100 tanpa celah/tumpang tindih |
+| Koreksi nilai beraudit | ✅ Selesai | `grade.correct` + `grade_corrections`; wajib alasan ≥5 karakter; koreksi komponen atau override nilai akhir |
+| Transkrip nilai peserta | ✅ Selesai | `grade.transcript`; panel transkrip di `learning.html`; peserta hanya melihat miliknya sendiri |
 
 ---
 
@@ -361,7 +379,7 @@ Backend berada di folder `api/` dan terdiri dari front controller, konfigurasi, 
 | `register.html` | ✅ Selesai | Halaman registrasi |
 | `verify-certificate.html` | ✅ Selesai | Verifikasi keaslian sertifikat publik |
 | `certificate-view.html` | ✅ Selesai | Tampilan sertifikat dinamis dari URL params dan snapshot/cache data |
-| `learning.html` | ✅ Selesai | Halaman belajar dengan tracking pelajaran selesai; mendukung mode pratinjau untuk instruktur/admin tanpa mengubah progres peserta |
+| `learning.html` | ✅ Selesai | Halaman belajar dengan tracking pelajaran selesai, materi tambahan kelas, panel tugas/ujian peserta, dan transkrip nilai pribadi; mendukung mode pratinjau untuk instruktur/admin tanpa mengubah progres peserta |
 
 ### Role Admin (`admin/`)
 | File | Status | Deskripsi |
@@ -376,14 +394,14 @@ Backend berada di folder `api/` dan terdiri dari front controller, konfigurasi, 
 | `admin/notifications.html` | ✅ Selesai | Outbox notifikasi email simulasi: statistik, filter jenis/penerima/tanggal/pencarian, detail isi, ekspor CSV, dan pembersihan outbox |
 | `admin/audit.html` | ✅ Selesai | Audit trail: statistik aktivitas, filter aktor/aksi/entitas/tanggal/pencarian, ekspor CSV, dan pembersihan log |
 | `admin/reports.html` | ✅ Selesai | Laporan progres peserta per kursus, statistik per kursus, export PDF/Excel (UI) |
-| `admin/settings.html` | ✅ Selesai | Pengaturan umum, manajemen cabang (tabel + modal tambah/edit/status/hapus), pengaturan sertifikat, pengaturan pembelajaran |
+| `admin/settings.html` | ✅ Selesai | Pengaturan umum, manajemen cabang (tabel + modal tambah/edit/status/hapus), editor predikat nilai A–E dengan validasi cakupan 0–100, pengaturan sertifikat, pengaturan pembelajaran |
 
 ### Role Instruktur (`instructor/`)
 | File | Status | Deskripsi |
 |---|---|---|
 | `instructor/dashboard.html` | ✅ Selesai | Dashboard dinamis: statistik kursus/peserta/pelajaran/sertifikat, notifikasi draft & penilaian tertunda, daftar kursus, aktivitas peserta terbaru, jadwal sesi kelas yang diampu, pencatatan presensi, dan rekap kehadiran |
 | `instructor/manage-course.html` | ✅ Selesai | Kelola struktur kursus: tambah/ubah/hapus modul dan materi (teks, video, file, link) dengan validasi kepemilikan kursus |
-| `instructor/students.html` | ✅ Selesai | Daftar peserta per kursus dengan filter status/pencarian, progres, riwayat nilai, serta modal penilaian yang otomatis membuat e-sertifikat Draft |
+| `instructor/students.html` | ✅ Selesai | Daftar peserta per kursus dengan filter status/pencarian, progres, editor skema penilaian dan komponen berbobot, roster nilai, finalisasi, koreksi beraudit, riwayat nilai, serta modal penilaian klasik yang otomatis membuat e-sertifikat Draft |
 | `instructor/certificates.html` | ✅ Selesai | Monitoring e-sertifikat peserta (Draft/Terbit), filter kursus & status, pengajuan sertifikat untuk peserta yang sudah dinilai namun belum memiliki sertifikat |
 | `instructor/profile.html` | ✅ Selesai | Profil instruktur: ringkasan statistik, informasi akun, pembaruan nama/no. telepon, dan sinkronisasi nama pada kursus yang diampu |
 
@@ -403,8 +421,8 @@ Backend berada di folder `api/` dan terdiri dari front controller, konfigurasi, 
 | `assets/js/api.js` | ✅ Selesai | Jembatan dual-mode: bootstrap snapshot, cache sinkron, panggilan aksi API, dan fallback lokal |
 | `assets/js/core.js` | ✅ Selesai | Namespace, storage helper, result object, dan validasi dasar |
 | `assets/js/utils.js` | ✅ Selesai | Helper grade, nomor sertifikat, escape HTML, format tanggal, toast |
-| `assets/js/data.js` | ✅ Selesai | Getter/setter seluruh koleksi data, termasuk cabang, sesi, presensi, dan audit koreksi |
-| `assets/js/seed.js` | ✅ Selesai | Data demo awal (termasuk cabang, sesi & presensi) dan normalisasi/migrasi data lama |
+| `assets/js/data.js` | ✅ Selesai | Getter/setter seluruh koleksi data, termasuk cabang, sesi, presensi, audit koreksi, tugas/ujian, predikat, skema penilaian, nilai komponen, dan koreksi nilai; mesin komputasi nilai lokal |
+| `assets/js/seed.js` | ✅ Selesai | Data demo awal (termasuk cabang, sesi & presensi, tugas/ujian, dan skema penilaian) serta normalisasi/migrasi data lama |
 | `assets/js/sync.js` | ✅ Selesai | Sinkronisasi nama instruktur, kepemilikan konten, counter kursus |
 | `assets/js/progress.js` | ✅ Selesai | Struktur kursus, progres belajar, overview siswa/instruktur |
 | `assets/js/auth.js` | ✅ Selesai | Session, user aktif, redirect, dan role guard |
@@ -415,7 +433,8 @@ Backend berada di folder `api/` dan terdiri dari front controller, konfigurasi, 
 | `assets/js/crud-enrollments.js` | ✅ Selesai | CRUD pendaftaran peserta ke kelas |
 | `assets/js/crud-content.js` | ✅ Selesai | CRUD modul dan materi dengan validasi kepemilikan dan versi kurikulum |
 | `assets/js/crud-academic.js` | ✅ Selesai | CRUD cabang, versi kurikulum, kelas/angkatan, histori tentor, roster, validasi kuota, jadwal sesi (tunggal/berulang), presensi, koreksi beralasan, dan rekap kehadiran |
-| `assets/js/crud-grades.js` | ✅ Selesai | Input nilai dan alur sertifikat Draft → Publish |
+| `assets/js/crud-tasks.js` | ✅ Selesai | CRUD tugas, lampiran, rubrik, submission, review/revisi, ujian, peserta, dan hasil ujian dengan validasi kepemilikan dan status |
+| `assets/js/crud-grades.js` | ✅ Selesai | Skema penilaian, komponen berbobot, roster & nilai komponen, pengecualian, finalisasi, koreksi beraudit, transkrip, serta alur sertifikat Draft → Publish (paritas server/lokal) |
 | `assets/js/ui.js` | ✅ Selesai | Perilaku UI bersama: navigasi, sidebar, katalog, login, logout |
 
 ### Backend (`api/`)
@@ -424,11 +443,11 @@ Backend berada di folder `api/` dan terdiri dari front controller, konfigurasi, 
 | `api/index.php` | ✅ Selesai | Front controller API dan pengaturan sesi PHP |
 | `api/config.php` | ✅ Selesai | Konfigurasi database (override via environment variable) |
 | `api/db.php` | ✅ Selesai | Koneksi PDO MySQL dan timezone UTC |
-| `api/helpers.php` | ✅ Selesai | Sesi, otorisasi, serializer (termasuk cabang, sesi/presensi/koreksi), kebijakan kehadiran, rekap, sanitasi HTML, audit, dan notifikasi |
-| `api/snapshot.php` | ✅ Selesai | Snapshot koleksi untuk cache client, termasuk `branches`, `classSessions`, `attendances`, dan `attendanceCorrections` |
-| `api/actions.php` | ✅ Selesai | Aksi bisnis dan validasi role/kepemilikan di server, termasuk aksi `branch.*`, `session.*`, dan `attendance.*` |
-| `api/schema.sql` | ✅ Selesai | Skema MySQL 8 (23 tabel), foreign key, dan index |
-| `api/install.php` | ✅ Selesai | Installer/seeder data demo (`--fresh` untuk reset), termasuk cabang, sesi, dan presensi; migrasi `branch_id` untuk database lama |
+| `api/helpers.php` | ✅ Selesai | Sesi, otorisasi, serializer (termasuk cabang, sesi/presensi/koreksi, tugas/ujian, predikat, skema, dan nilai), mesin komputasi nilai, kebijakan kehadiran, rekap, sanitasi HTML, audit, dan notifikasi |
+| `api/snapshot.php` | ✅ Selesai | Snapshot koleksi untuk cache client, termasuk `branches`, `classSessions`, `attendances`, `attendanceCorrections`, tugas/ujian, predikat, skema penilaian, nilai komponen, dan koreksi |
+| `api/actions.php` | ✅ Selesai | 92 aksi bisnis dan validasi role/kepemilikan di server, termasuk `branch.*`, `session.*`, `attendance.*`, `assignment.*`, `submission.*`, `exam.*`, `predicate.*`, `gradeScheme.*`, dan aksi nilai Phase 6 |
+| `api/schema.sql` | ✅ Selesai | Skema MySQL 8 (37 tabel), foreign key, dan index |
+| `api/install.php` | ✅ Selesai | Installer/seeder data demo (`--fresh` untuk reset), termasuk cabang, sesi, presensi, tugas/ujian, predikat, dan skema penilaian; migrasi kolom Phase 4–6 untuk database lama |
 
 ---
 
@@ -502,6 +521,39 @@ Backend berada di folder `api/` dan terdiri dari front controller, konfigurasi, 
 | Pratinjau staf | ✅ Selesai | Admin/instruktur pengampu dapat melihat materi terkunci tanpa mengubah progres peserta |
 | Snapshot aman | ✅ Selesai | Snapshot hanya menyimpan metadata materi; `content` dan `file_path` tidak dikirim |
 
+### 6.2d Tugas & Ujian (Phase 5)
+
+| Fitur | Status | Keterangan |
+|---|---|---|
+| CRUD tugas per kelas | ✅ Selesai | `assignments`; aksi `assignment.create/update/status/delete`; judul, instruksi, tipe, jendela waktu, skor maksimum, status |
+| Tipe tugas | ✅ Selesai | `file_upload`, `text_submission`, `in_class_practice`, `external_reference`; tipe tertentu tidak menerima submission daring |
+| Lampiran & rubrik tugas | ✅ Selesai | `assignment_files` dan `assignment_rubrics`; metadata file privat tidak diekspos ke peserta |
+| Submission peserta | ✅ Selesai | `submission.submit`; unik per `(assignmentId, enrollmentId)`; menolak sebelum `openAt`, menandai `late`, dan menolak setelah tugas ditutup |
+| Berkas jawaban | ✅ Selesai | `submission_files`; path privat tidak pernah masuk snapshot |
+| Review, revisi, dan penerimaan | ✅ Selesai | `submission.review/revision/accept`; `submission_reviews` menyimpan riwayat aksi; submission `accepted` terkunci |
+| CRUD ujian per kelas | ✅ Selesai | `exams`; aksi `exam.create/update/status/delete`; tipe tertulis/praktik/lisan/proyek/lainnya, jadwal, durasi, skor maksimum |
+| Roster peserta ujian | ✅ Selesai | `exam_participants`; aksi `exam.participants`; unik per `(examId, enrollmentId)`; status `registered/attended/absent/excused` |
+| Hasil ujian | ✅ Selesai | `exam_results`; aksi `exam.result`; unik per `(examId, enrollmentId)`; skor ≤ `maxScore`; nilai `missing` tidak menjadi 0 |
+| UI tugas & ujian | ✅ Selesai | Panel instruktur di `instructor/manage-course.html`/`instructor/students.html` dan panel peserta di `learning.html` |
+
+### 6.2e Skema Penilaian, Finalisasi & Koreksi (Phase 6)
+
+| Fitur | Status | Keterangan |
+|---|---|---|
+| Predikat nilai konfigurabel | ✅ Selesai | `predicate_ranges`; `predicate.list/save`; default A 90–100 … E 0–49.99; editor di `admin/settings.html`; hanya Admin |
+| Validasi cakupan predikat | ✅ Selesai | Rentang aktif wajib menutup 0–100 tanpa celah/tumpang tindih; penyimpanan ditolak bila tidak valid |
+| Satu skema per kelas | ✅ Selesai | `grade_schemes` dengan `classId` unik; `gradeScheme.list/save/status/delete`; hanya Admin/instruktur pengampu |
+| Komponen berbobot | ✅ Selesai | `grade_scheme_components`; tipe `assignment`, `exam`, `manual`; bobot, agregasi, `maxScore`, wajib/opsional, urutan |
+| Publikasi skema | ✅ Selesai | Wajib minimal satu komponen dan total bobot tepat 100%; skema `published`/`archived` tidak dapat kembali ke `draft` atau dihapus |
+| Roster nilai | ✅ Selesai | `grade.roster` mengembalikan peserta, komponen, nilai, status, dan hasil komputasi per enrollment |
+| Nilai komponen manual | ✅ Selesai | `grade.manualSave`; nilai 0–`maxScore`; tidak menimpa nilai finalized |
+| Pengecualian komponen | ✅ Selesai | `grade.exempt`; wajib alasan minimal 5 karakter; bobot komponen dikecualikan dan dinormalisasi ulang |
+| Komputasi nilai akhir | ✅ Selesai | `Σ(skor × bobot) / Σ(bobot)` dengan pembulatan skema; komponen wajib kosong => `incomplete`; skor 0 hanya bila diisi eksplisit |
+| Finalisasi nilai | ✅ Selesai | `grade.finalize`; menolak nilai `incomplete`, menulis snapshot komponen, mengisi `finalizedBy`/`finalizedAt`, dan mengunci nilai |
+| Koreksi nilai beraudit | ✅ Selesai | `grade.correct`; hanya nilai finalized; alasan ≥5 karakter; koreksi komponen atau override `finalScore`; baris append-only di `grade_corrections` |
+| Transkrip peserta | ✅ Selesai | `grade.transcript`; nilai akhir, huruf, status, komponen, peringatan komponen kosong, dan riwayat koreksi; peserta hanya melihat miliknya |
+| Paritas mode lokal | ✅ Selesai | `ELIPS.computeEnrollmentGrade()` dan aksi `crud-grades.js` meniru aturan server, termasuk kunci finalisasi dan validasi bobot |
+
 ### 6.3 Enrolment & Progres Belajar
 | Fitur | Status | Keterangan |
 |---|---|---|
@@ -520,7 +572,7 @@ Backend berada di folder `api/` dan terdiri dari front controller, konfigurasi, 
 | Fitur | Status | Keterangan |
 |---|---|---|
 | Alur e-sertifikat | ✅ Selesai | Instruktur memberi nilai → e-sertifikat otomatis dibuat berstatus **Draft** → Admin menyetujui di `admin/certificates.html` → status menjadi **Publish** |
-| Integrasi nilai → sertifikat | ✅ Selesai | Nilai/grade dari tabel `grades` (atau `elips_grades` pada mode lokal) disalin ke e-sertifikat saat penilaian disimpan |
+| Integrasi nilai → sertifikat | ✅ Selesai | Nilai/grade dari tabel `grades` (atau `elips_grades` pada mode lokal) disalin ke e-sertifikat saat penilaian klasik disimpan; finalisasi skema Phase 6 tidak otomatis membuat sertifikat |
 | Sertifikat Draft tidak tampil ke siswa | ✅ Selesai | `student/certificates.html` memakai `getPublishedCertificatesByStudent`; Draft tidak dirender dan notifikasinya dihapus dari dashboard |
 | Sertifikat peserta (Instruktur) | ✅ Selesai | `instructor/certificates.html` menampilkan Draft/Publish, filter kursus & status, serta pengajuan Draft untuk peserta yang sudah dinilai |
 | Tampilan sertifikat | ✅ Selesai | `certificate-view.html` menampilkan sertifikat dari URL params dan data snapshot/cache |
@@ -571,6 +623,8 @@ Fitur utama pada `admin/dashboard.html` untuk mencatat kehadiran staf/admin send
 |---|---|---|
 | Pencatatan perubahan kursus | ✅ Selesai | Create, update, delete, publish, dan unpublish kursus tercatat di `elips_auditLogs` |
 | Pencatatan nilai | ✅ Selesai | Setiap penyimpanan nilai mencatat aktor, skor, grade, catatan, peserta, dan kursus |
+| Pencatatan tugas & ujian | ✅ Selesai | Pembuatan/perubahan tugas, submission, review, ujian, dan hasil ujian tercatat dengan aktor dan entitas terkait |
+| Pencatatan skema & finalisasi | ✅ Selesai | Simpan skema, publikasi/arsip, nilai komponen, pengecualian, finalisasi, dan koreksi nilai tercatat dengan alasan/detail |
 | Pencatatan status sertifikat | ✅ Selesai | Pengajuan Draft dan persetujuan Draft → Publish tercatat |
 | Pencatatan domain lain | ✅ Selesai | Pengguna, penugasan peserta, modul, materi, sesi pertemuan, dan presensi juga tercatat |
 | Pencatatan koreksi presensi | ✅ Selesai | Koreksi menyimpan alasan, aktor, status lama/baru, dan waktu di `attendance_corrections` |
@@ -721,11 +775,45 @@ else                            -> student/dashboard.html
 - Materi terkunci mengikuti mode akses kelas; instruktur/Admin dapat melewati kunci saat pratinjau tanpa mengubah progres peserta.
 - Penyelesaian oleh peserta ditolak bila kelas mewajibkan persetujuan instruktur; staf dapat mengonfirmasi progres untuk enrollment terkait.
 
-### Penilaian & Sertifikat
-- Nilai disimpan di tabel `grades` (mode server) atau `localStorage` key `elips_grades` (mode lokal), dan hurufnya dihitung otomatis (A–E).
+### Tugas & Ujian
+- Data disimpan di tabel `assignments`/`assignment_files`/`assignment_rubrics` dan `exams`/`exam_participants`/`exam_results` (mode server), atau key `elips_assignments`, `elips_assignmentFiles`, `elips_assignmentRubrics`, `elips_exams`, `elips_examParticipants`, `elips_examResults` (mode lokal).
+- Tugas dan ujian hanya dapat dikelola Admin atau instruktur pemilik kelas; `curriculumVersionId` mengikuti versi kelas.
+- Submission unik per `(assignmentId, enrollmentId)`. Submission ditolak sebelum `openAt`, ditandai `late` setelah `dueAt`, dan ditolak saat tugas `closed`/`archived` atau sudah `accepted`.
+- Submission wajib berisi teks atau berkas sesuai konfigurasi tugas; berkas privat hanya disimpan sebagai metadata dan tidak diekspos ke peserta lain.
+- Review submission menulis `submission_reviews` (`submit`, `score`, `revision`, `accept`). Permintaan revisi membuka kembali pengiriman; `accepted` mengunci submission.
+- Peserta ujian unik per `(examId, enrollmentId)`; hasil ujian unik untuk pasangan yang sama dan skornya tidak boleh melebihi `maxScore`.
+- Hasil ujian berstatus `missing` **tidak** dikonversi menjadi 0; komponen wajib yang kosong membuat nilai akhir `incomplete`.
+- Peserta hanya dapat melihat tugas/ujian dan submission miliknya pada kelas yang diikuti.
+
+### Skema Penilaian & Komputasi
+- Predikat huruf disimpan di tabel `predicate_ranges` (mode server) atau key `elips_predicateRanges` (mode lokal). Default: A 90–100, A- 80–89.99, B+ 75–79.99, B 70–74.99, B- 65–69.99, C+ 60–64.99, C 55–59.99, D 50–54.99, E 0–49.99.
+- Hanya Admin yang dapat mengubah predikat. Himpunan rentang aktif wajib menutup 0–100 tanpa celah dan tanpa tumpang tindih; perubahan berlaku pada komputasi/transkrip berikutnya.
+- Satu kelas memiliki tepat satu `grade_schemes` (`classId` unik). Skema berisi satu atau banyak `grade_scheme_components` bertipe `assignment`, `exam`, atau `manual`.
+- Publikasi skema mensyaratkan minimal satu komponen dan total bobot tepat **100%**. Skema `published`/`archived` tidak dapat kembali ke `draft` atau dihapus; arsipkan lalu buat skema pengganti.
+- Nilai komponen disimpan per `(componentId, enrollmentId)` di `grade_component_scores`, dengan status `not_assessed`, `graded`, `excused`, atau `missing`.
+- Komponen `assignment`/`exam` mengambil nilai dari submission/hasil ujian yang dipetakan; komponen `manual` diisi melalui roster.
+- Komputasi nilai akhir:
+  - komponen wajib yang belum memiliki nilai => status nilai `incomplete`, bukan 0;
+  - komponen opsional kosong atau `excused` dikeluarkan dari perhitungan dan bobotnya dinormalisasi ulang;
+  - nilai `0` hanya dihitung bila benar-benar diisi;
+  - `finalScore = Σ(skor × bobot) / Σ(bobot)` menggunakan bobot komponen yang dihitung, lalu dibulatkan sesuai `rounding` skema (`half_up`, `half_down`, `floor`, `ceil`);
+  - huruf dihitung dari `predicate_ranges` aktif.
+- `grade.roster` mengembalikan komponen, nilai, status komponen, total bobot, nilai akhir, huruf, dan status per enrollment. Server dan mode lokal memakai aturan yang sama (`elips_grade_compute_enrollment()` dan `ELIPS.computeEnrollmentGrade()`).
+- `grade.exempt` mengecualikan komponen dengan alasan minimal 5 karakter dan mencatat audit; bobot komponen tersebut tidak dihitung.
+- Finalisasi (`grade.finalize`) menolak nilai yang masih `incomplete`, menulis `schemeId`, `finalScore`, `grade`, `status = finalized`, `componentsSnapshot`, `finalizedBy`, `finalizedAt`, dan `computedAt`.
+- Nilai `finalized` terkunci: `grade.save` dan `grade.manualSave` menolak perubahan. Satu-satunya jalur perubahan adalah `grade.correct`.
+
+### Koreksi Nilai
+- Koreksi hanya untuk nilai berstatus `finalized` dan wajib menyertakan alasan minimal 5 karakter.
+- Koreksi dapat berupa perubahan skor komponen (lalu dihitung ulang) atau override `finalScore` langsung; `finalScore` wajib 0–100 dan huruf dihitung ulang dari predikat aktif.
+- Koreksi berjalan dalam transaksi: `grades` diperbarui, snapshot komponen diperbarui, baris `grade_corrections` ditulis (`previousScore`, `newScore`, `previousLetter`, `newLetter`, `reason`, `actorId`), dan audit dicatat.
+- Koreksi tidak mengubah status `finalized`; setiap perubahan berikutnya memerlukan koreksi baru. Histori koreksi bersifat append-only.
+
+### Penilaian Klasik & Sertifikat
+- Nilai klasik/legacy tetap disimpan di tabel `grades` (mode server) atau `localStorage` key `elips_grades` (mode lokal), dan hurufnya dihitung dari predikat aktif (fallback A–E).
 - Nilai terhubung ke **enrollment**, sehingga peserta yang mengikuti kursus yang sama pada angkatan berbeda memiliki nilai terpisah.
 - Instruktur hanya dapat menilai peserta pada kelas/kursus yang diampu.
-- Saat instruktur menyimpan nilai, sistem membuat/memperbarui e-sertifikat untuk enrollment tersebut dengan status **Draft** dan menyalin nilai/grade ke sertifikat.
+- Saat instruktur menyimpan nilai klasik, sistem membuat/memperbarui e-sertifikat untuk enrollment tersebut dengan status **Draft** dan menyalin nilai/grade ke sertifikat. Finalisasi Phase 6 tidak membuat sertifikat otomatis.
 - Sertifikat **Draft**:
   - hanya terlihat oleh Admin dan Instruktur pengampu;
   - **tidak ditampilkan** di halaman siswa;
@@ -741,8 +829,8 @@ else                            -> student/dashboard.html
 - Entri audit menyimpan `action`, `entity`, `entityId`, `entityLabel`, `actorId`, `actorName`, `actorRole`, `detail`, dan `createdAt`.
 - Resolusi aktor: `actorId` eksplisit dari pemanggil → user sesi (`elips_session`) → "Sistem". Fallback `getCurrentUser()` tidak dipakai agar tidak salah atribusi saat tidak ada sesi.
 - Operasi yang gagal (validasi ditolak) tidak dicatat.
-- Aksi yang dicatat: `create`, `update`, `delete`, `publish`, `unpublish`, `grade`, `submit`, `approve`, `assign`, `status`, `attendance`, `correct`, dan `progress`.
-- Entitas yang dicatat: `course`, `branch`, `curriculum`, `class`, `grade`, `certificate`, `user`, `enrollment`, `module`, `lesson`, `session`, `attendance`, `class_material`, dan `class_material_settings`.
+- Aksi yang dicatat: `create`, `update`, `delete`, `publish`, `unpublish`, `grade`, `submit`, `review`, `revision`, `accept`, `approve`, `assign`, `status`, `attendance`, `correct`, `progress`, `finalize`, `exempt`, `predicate`, dan `grade_scheme`.
+- Entitas yang dicatat: `course`, `branch`, `curriculum`, `class`, `grade`, `certificate`, `user`, `enrollment`, `module`, `lesson`, `session`, `attendance`, `class_material`, `class_material_settings`, `assignment`, `submission`, `exam`, `predicate_range`, `grade_scheme`, `grade_component`, dan `staff_attendance`.
 - Log diurutkan terbaru lebih dulu, dibatasi 1000 entri, dan dapat difilter berdasarkan aktor, aksi, entitas, rentang tanggal, pencarian, serta limit.
 - Admin dapat mengekspor hasil filter ke CSV dan membersihkan seluruh log dari `admin/audit.html`.
 
@@ -816,6 +904,16 @@ else                            -> student/dashboard.html
 | UI jadwal & presensi instruktur | ✅ Lulus uji | Dashboard instruktur hanya menampilkan/mengelola kelas yang diampu |
 | Rekap kehadiran peserta | ✅ Lulus uji | Statistik, badge kebijakan, dan detail sesi tampil di `student/dashboard.html` |
 | Server-mode jadwal & presensi | ✅ Lulus uji | `test-sessions-server` 20/20 terhadap API PHP/MySQL |
+| CRUD tugas & submission (server) | ✅ Lulus uji | `api-phase5` 52/52: tugas, lampiran/rubrik, submission, review/revisi, accept, guard role, dan validasi status |
+| CRUD tugas & submission (lokal) | ✅ Lulus uji | `local-phase5` 34/34: paritas aturan tugas/submission/review pada `localStorage` |
+| Ujian, peserta & hasil ujian | ✅ Lulus uji | `api-phase5`/`local-phase5`: unik per pasangan, skor ≤ maksimum, status peserta, dan nilai `missing` tidak menjadi 0 |
+| Predikat nilai konfigurabel | ✅ Lulus uji | `api-phase6` 44/44 dan `local-phase6` 34/34: default A–E, validasi cakupan, guard Admin, dan pemetaan huruf |
+| Skema penilaian & bobot | ✅ Lulus uji | `api-phase6`/`local-phase6`: satu skema per kelas, komponen, total bobot 100%, guard published/archived, dan validasi role |
+| Komputasi nilai komponen | ✅ Lulus uji | `api-phase6`/`local-phase6`: nilai manual, pengecualian, normalisasi bobot, `incomplete`, dan skor 0 eksplisit |
+| Finalisasi & penguncian nilai | ✅ Lulus uji | `api-phase6`/`local-phase6`: finalisasi menolak `incomplete`, snapshot komponen, dan simpan biasa ditolak setelah finalized |
+| Koreksi nilai beraudit | ✅ Lulus uji | `api-phase6`/`local-phase6`: hanya finalized, alasan ≥5 karakter, override/komponen, dan baris `grade_corrections` |
+| Transkrip peserta & privasi | ✅ Lulus uji | `api-phase6`/`local-phase6`: peserta hanya membaca transkrip sendiri; instruktur/Admin pengampu dapat membaca roster |
+| Regresi halaman & skrip Phase 6 | ✅ Lulus uji | `test-all-pages` 25 halaman, `validate-scripts` 27 HTML/19 JS, dan `test-staff-attendance-*` tetap lulus |
 | Nilai & sertifikat per enrollment | ✅ Lulus uji | Unique per `enrollment_id`; angkatan berbeda terpisah |
 | Guard role aksi akademik | ✅ Lulus uji | Instruktur/peserta tidak dapat membuat kurikulum/kelas atau mendaftarkan peserta |
 | Halaman akademik admin | ✅ Lulus uji | `test-academic-page` memverifikasi statistik, tabel versi/kelas, modal, roster, histori tentor, dan detail kurikulum |
@@ -871,18 +969,18 @@ else                            -> student/dashboard.html
 - **Responsive:** Menggunakan CSS custom yang responsif.
 - **UI Konsisten:** Menggunakan komponen seragam (navbar, sidebar, cards, tables, badges).
 - **Keamanan:** Pada mode server password di-hash, sesi memakai cookie `HttpOnly`/`SameSite=Lax`, dan otorisasi role/kepemilikan ditegakkan di server. Mode lokal tetap bersifat demo dan tidak boleh dianggap aman untuk produksi.
-- **Cakupan v4.0:** Increment ini mencakup **Phase 1–4** (versi kurikulum + kelas/angkatan + enrollment berbasis kelas + jadwal sesi/presensi offline + materi tambahan dan mode akses materi) serta **cabang + kalender/jadwal admin** dengan aksi sesi langsung dan filter lanjutan, ditambah **absensi staf berbasis kamera** di dashboard Admin. Tugas/ujian, pembayaran, dan sertifikat PDF mengikuti phase berikutnya pada `ELIPS-LMS-PRD-v4.0.md`.
-- **Kompatibilitas v3.0:** Struktur v3 tetap dipertahankan. Setiap kursus lama mendapat versi kurikulum `1.0`; enrollment lama dipetakan ke kelas migrasi (`legacy_import`) agar tidak ada data yang hilang.
+- **Cakupan v4.0:** Increment ini mencakup **Phase 1–6** (versi kurikulum + kelas/angkatan + enrollment berbasis kelas + jadwal sesi/presensi offline + materi tambahan dan mode akses materi + cabang/kalender + absensi staf + tugas/ujian + skema penilaian/finalisasi/koreksi), dengan 37 tabel MySQL, 92 aksi API, 38 storage key, 19 modul JS, dan 27 halaman HTML. Pembayaran dan sertifikat PDF mengikuti phase berikutnya pada `ELIPS-LMS-PRD-v4.0.md`.
+- **Kompatibilitas v3.0:** Struktur v3 tetap dipertahankan. Setiap kursus lama mendapat versi kurikulum `1.0`; enrollment lama dipetakan ke kelas migrasi (`legacy_import`) agar tidak ada data yang hilang. Alur nilai manual klasik tetap tersedia di samping skema penilaian Phase 6.
 
 ---
 
 ## 10. Rencana Pengembangan Lanjutan (Opsional)
 
-Backend PHP/MySQL, autentikasi sesi, validasi role/kepemilikan, audit server-side, outbox notifikasi simulasi, serta Phase 1–4 v4.0 (kurikulum, kelas, enrollment, jadwal & presensi, materi & akses kelas) sudah diimplementasikan. Untuk production dan phase v4 berikutnya, pengembangan berikut masih diperlukan:
+Backend PHP/MySQL, autentikasi sesi, validasi role/kepemilikan, audit server-side, outbox notifikasi simulasi, serta Phase 1–6 v4.0 (kurikulum, kelas, enrollment, jadwal & presensi, materi & akses kelas, tugas & ujian, skema penilaian/finalisasi/koreksi) sudah diimplementasikan. Untuk production dan phase v4 berikutnya, pengembangan berikut masih diperlukan:
 
 | Fitur | Prioritas | Keterangan |
 |---|---|---|
-| Phase 5–10 v4.0 | P1 | Tugas/ujian, penilaian lanjutan, pembayaran, sertifikat PDF (lihat `ELIPS-LMS-PRD-v4.0.md`) |
+| Phase 7–10 v4.0 | P1 | Sertifikasi lanjutan/PDF, pembayaran, dan fitur lanjutan lain (lihat `ELIPS-LMS-PRD-v4.0.md`) |
 | Hardening API | P0 | Rate limiting login, CSRF token, HTTPS wajib, dan rotasi session ID |
 | Pembatasan baca snapshot | P0 | Snapshot publik saat ini memuat seluruh koleksi demo; produksi perlu proyeksi terbatas per role dan endpoint khusus verifikasi sertifikat |
 | Upload file materi | P0 | Upload PDF, video, gambar ke object storage |

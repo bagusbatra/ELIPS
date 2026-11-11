@@ -341,6 +341,9 @@
         if (!name) return failure('Nama skema penilaian wajib diisi.');
         const status = String(payload.status || (scheme ? scheme.status : 'draft'));
         if (['draft', 'published', 'archived'].indexOf(status) === -1) return failure('Status skema tidak valid.');
+        if (scheme && scheme.status === 'published' && status === 'draft') {
+            return failure('Skema yang sudah dipublikasikan tidak dapat dikembalikan ke draft. Arsipkan skema untuk menggantinya.');
+        }
         const rounding = String(payload.rounding || (scheme ? scheme.rounding : 'half_up'));
         if (['half_up', 'half_down', 'floor', 'ceil'].indexOf(rounding) === -1) return failure('Mode pembulatan tidak valid.');
         const passScore = payload.passScore === undefined || payload.passScore === null || payload.passScore === ''
@@ -473,6 +476,9 @@
         const schemes = ELIPS.getGradeSchemes();
         const scheme = schemes.find(function (s) { return Number(s.id) === Number(payload.id); });
         if (!scheme) return failure('Skema penilaian tidak ditemukan.');
+        if ((scheme.status === 'published' || scheme.status === 'archived') && status === 'draft') {
+            return failure('Skema yang sudah dipublikasikan tidak dapat dikembalikan ke draft. Arsipkan skema untuk menggantinya.');
+        }
         const classItem = ELIPS.getClassById(scheme.classId);
         if (!classItem) return failure('Kelas tidak ditemukan.');
         if (!actorCanManageClass(classItem, actorId)) return failure('Anda tidak berhak mengubah skema ini.');
@@ -531,8 +537,12 @@
         const classItem = ELIPS.getClassById(classId);
         if (!classItem) return failure('Kelas tidak ditemukan.');
         if (!actorCanManageClass(classItem, actorId)) return failure('Anda tidak berhak melihat nilai kelas ini.');
-        const scheme = ELIPS.getGradeSchemeByClass(classId);
-        const roster = ELIPS.getEnrollmentsByClass(classId)
+        const schemeRow = ELIPS.getGradeSchemeByClass(classId);
+        const scheme = schemeRow ? Object.assign({}, schemeRow, {
+            components: ELIPS.getGradeComponentsByScheme(schemeRow.id),
+            totalWeight: ELIPS.gradeWeightTotal(ELIPS.getGradeComponentsByScheme(schemeRow.id))
+        }) : null;
+        const roster = ELIPS.getClassEnrollments(classId)
             .filter(function (e) { return e.status === 'active' || e.status === 'pending'; })
             .map(function (enrollment) {
                 const student = ELIPS.getUserById(enrollment.studentId);
@@ -887,6 +897,7 @@
         ELIPS.setGrades(grades);
 
         const corrections = ELIPS.getGradeCorrections();
+        const actor = actorId ? ELIPS.getUserById(actorId) : null;
         const correction = {
             id: ELIPS.nextId(corrections),
             gradeId: Number(grade.id),
@@ -897,6 +908,7 @@
             newLetter: newLetter,
             reason: reason,
             actorId: actorId,
+            actorName: actor ? actor.name : '',
             createdAt: now
         };
         corrections.push(correction);
@@ -939,7 +951,10 @@
         }
         const computed = ELIPS.computeEnrollmentGrade(enrollment);
         const grade = ELIPS.getGrades().find(function (g) { return Number(g.enrollmentId) === Number(enrollment.id); }) || null;
-        const corrections = grade ? ELIPS.getGradeCorrectionsByGrade(grade.id) : [];
+        const corrections = grade ? ELIPS.getGradeCorrectionsByGrade(grade.id).map(function (row) {
+            const actor = row.actorId ? ELIPS.getUserById(row.actorId) : null;
+            return Object.assign({}, row, { actorName: row.actorName || (actor ? actor.name : '') });
+        }) : [];
         return success('', {
             enrollment: enrollment,
             grade: grade,

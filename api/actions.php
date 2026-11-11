@@ -5289,6 +5289,9 @@ function elips_action_grade_scheme_status(array $p): array
     if (!$scheme) return elips_fail('Skema penilaian tidak ditemukan.');
     $class = elips_class_row((int) $scheme['class_id']);
     if (!$class || !elips_can_manage_class($class, $actor)) return elips_fail('Anda tidak berhak mengubah skema ini.');
+    if (in_array($scheme['status'], ['published', 'archived'], true) && $status === 'draft') {
+        return elips_fail('Skema yang sudah dipublikasikan tidak dapat dikembalikan ke draft. Arsipkan skema untuk menggantinya.');
+    }
 
     if ($status === 'published') {
         $components = elips_grade_scheme_components($schemeId);

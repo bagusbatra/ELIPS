@@ -1,15 +1,15 @@
 # ERD — ELIPS LMS
 
 **Versi dokumen:** 4.0  
-**Tanggal:** 2026-11-06  
-**Status:** Dual-mode — skema fisik MySQL 8 v4.0 Phase 1–4 + fallback koleksi `localStorage`  
+**Tanggal:** 2026-11-11  
+**Status:** Dual-mode — skema fisik MySQL 8 v4.0 Phase 1–6 + fallback koleksi `localStorage`  
 **Dokumen terkait:** `prd.md`, `log.md`, `api/schema.sql`
 
 ---
 
 ## 1. Ringkasan
 
-ELIPS LMS adalah aplikasi Learning Management System dengan tiga role: **Admin**, **Instruktur**, dan **Peserta**. Pada mode server, data disimpan di **MySQL 8** dengan 23 tabel (20 domain inti + 3 operasional/pribadi) dan foreign key fisik (lihat §13 dan §16). Pada mode fallback, data disimpan sebagai koleksi JSON di `localStorage` dengan model logis yang sama. Sesi login pada mode server disimpan di sesi PHP native, bukan tabel database.
+ELIPS LMS adalah aplikasi Learning Management System dengan tiga role: **Admin**, **Instruktur**, dan **Peserta**. Pada mode server, data disimpan di **MySQL 8** dengan 37 tabel (34 domain inti + 3 operasional/pribadi) dan foreign key fisik (lihat §13 dan §16). Pada mode fallback, data disimpan sebagai koleksi JSON di `localStorage` dengan model logis yang sama. Sesi login pada mode server disimpan di sesi PHP native, bukan tabel database.
 
 Sejak v4.0, kursus dipisahkan dari penyelenggaraannya:
 
@@ -17,8 +17,10 @@ Sejak v4.0, kursus dipisahkan dari penyelenggaraannya:
 Kursus → Versi Kurikulum → Modul → Materi
 Kursus → Kelas/Angkatan → Sesi Pertemuan → Presensi
 Kursus → Kelas/Angkatan → Enrollment → Progres Materi → Nilai → Sertifikat
+Kursus → Kelas/Angkatan → Tugas/Submission dan Ujian/Hasil Ujian
 Kursus → Kelas/Angkatan → Materi Tambahan Kelas
 Cabang → Kelas/Angkatan → Sesi Pertemuan
+Kelas → Skema Penilaian → Komponen → Nilai Komponen → Finalisasi → Koreksi
 ```
 
 Relasi utama:
@@ -28,6 +30,8 @@ Admin ── mengelola ──► Pengguna, Kategori, Kursus, Versi Kurikulum, Ke
 Instruktur ── mengampu ──► Kelas ── memakai ──► Versi Kurikulum ── berisi ──► Modul ──► Materi
 Instruktur ── menyusun ──► Sesi Pertemuan ── mencatat ──► Presensi
 Instruktur ── mengatur ──► Pengaturan Akses Materi ── menaungi ──► Materi Tambahan Kelas
+Instruktur ── membuat ──► Tugas & Ujian ── menghasilkan ──► Submission & Hasil Ujian
+Instruktur ── menyusun ──► Skema Penilaian ── menghitung ──► Nilai Akhir ── finalisasi ──► Koreksi beralasan
 Peserta ── terdaftar melalui ──► Enrollment (kelas) ──► Progres Materi ──► Nilai ──► Sertifikat
 Peserta ── menyelesaikan ──► ClassLessonProgress / ClassMaterialProgress (dan CompletedLesson legacy)
 Semua aktivitas penting ── dicatat ──► AuditLog
@@ -38,12 +42,12 @@ Publikasi kursus / penerbitan sertifikat ── menghasilkan ──► Notificat
 
 | Termasuk ERD | Tidak termasuk |
 |---|---|
-| 20 tabel domain MySQL + tabel operasional (audit, notifikasi, absensi staf) dan koleksi `localStorage` yang setara | Halaman statis dan tampilan UI |
+| 34 tabel domain MySQL + 3 tabel operasional (audit, notifikasi, absensi staf) dan koleksi `localStorage` yang setara | Halaman statis dan tampilan UI |
 | Relasi, kardinalitas, foreign key, dan aturan hapus | Data pengaturan halaman Admin (belum dipersistensi) |
-| Enum status dan lifecycle (kursus, kurikulum, kelas, sesi, presensi, enrollment, akses materi, sertifikat) | Data laporan/statistik turunan (dihitung saat runtime) |
+| Enum status dan lifecycle (kursus, kurikulum, kelas, sesi, presensi, enrollment, akses materi, tugas, ujian, skema nilai, finalisasi, sertifikat) | Data laporan/statistik turunan (dihitung saat runtime) |
 | Sesi PHP native (bukan tabel) | Integrasi email nyata (masih simulasi/outbox) |
 
-Catatan: jumlah tabel domain inti adalah 20 (`categories`, `users`, `branches`, `courses`, `curriculum_versions`, `modules`, `lessons`, `classes`, `class_instructor_histories`, `class_material_settings`, `class_materials`, `enrollments`, `class_sessions`, `attendances`, `attendance_corrections`, `class_lesson_progress`, `class_material_progress`, `grades`, `certificates`, `completed_lessons`) ditambah tiga tabel operasional/pribadi (`audit_logs`, `notifications`, `staff_attendances`), sehingga total 23 tabel.
+Catatan: 34 tabel domain inti mencakup tabel akademik Phase 1–4, sembilan tabel Phase 5 (`assignments`, `assignment_files`, `assignment_rubrics`, `submissions`, `submission_files`, `submission_reviews`, `exams`, `exam_participants`, `exam_results`), dan lima tabel Phase 6 (`predicate_ranges`, `grade_schemes`, `grade_scheme_components`, `grade_component_scores`, `grade_corrections`). Tiga tabel operasional/pribadi adalah `audit_logs`, `notifications`, dan `staff_attendances`, sehingga total 37 tabel. Phase 5 dan Phase 6 sebelumnya belum tercatat pada dokumen ini; angka 23 tabel adalah dokumentasi lama yang sudah dikoreksi.
 
 ---
 
@@ -265,17 +269,93 @@ erDiagram
         datetime updatedAt
     }
 
+    PREDICATE_RANGES {
+        number id PK
+        string letter UK
+        string label
+        number minScore
+        number maxScore
+        number sortOrder
+        boolean isActive
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    GRADE_SCHEMES {
+        number id PK
+        number courseId FK
+        number classId FK, UK
+        string name
+        enum status
+        number passScore
+        enum rounding
+        text notes
+        number createdBy FK
+        number updatedBy FK
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    GRADE_SCHEME_COMPONENTS {
+        number id PK
+        number schemeId FK
+        enum type
+        string name
+        text description
+        number weight
+        enum aggregation
+        number maxScore
+        boolean isRequired
+        number sortOrder
+        datetime createdAt
+        datetime updatedAt
+    }
+
     GRADES {
         number id PK
-        number enrollmentId FK
+        number enrollmentId FK, UK
+        number schemeId FK
         number courseId FK
         number studentId FK
         number instructorId FK
         number score
-        enum grade
+        number finalScore
+        string grade
+        enum status
+        longtext componentsSnapshot
+        text note
+        number finalizedBy FK
+        datetime finalizedAt
+        datetime computedAt
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    GRADE_COMPONENT_SCORES {
+        number id PK
+        number componentId FK, UK
+        number enrollmentId FK, UK
+        number studentId FK
+        number score
+        enum status
+        number assessorId FK
+        datetime assessedAt
         text note
         datetime createdAt
         datetime updatedAt
+    }
+
+    GRADE_CORRECTIONS {
+        number id PK
+        number gradeId FK
+        number enrollmentId FK
+        number previousScore
+        number newScore
+        string previousLetter
+        string newLetter
+        text reason
+        number actorId FK
+        datetime createdAt
     }
 
     CERTIFICATES {
@@ -356,6 +436,133 @@ erDiagram
         number completedBy FK
         datetime completedAt
         datetime createdAt
+    }
+
+    ASSIGNMENTS {
+        number id PK
+        number classId FK
+        number curriculumVersionId FK
+        number moduleId FK
+        number lessonId FK
+        string title
+        longtext instructions
+        enum type
+        datetime openAt
+        datetime dueAt
+        number maxScore
+        number weight
+        boolean requireFile
+        string allowedTypes
+        number maxFileSize
+        enum status
+        number createdBy FK
+        number updatedBy FK
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    ASSIGNMENT_FILES {
+        number id PK
+        number assignmentId FK
+        string fileName
+        string filePath
+        number fileSize
+        string mimeType
+        datetime createdAt
+    }
+
+    ASSIGNMENT_RUBRICS {
+        number id PK
+        number assignmentId FK
+        string criterion
+        text description
+        number maxScore
+        number sortOrder
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    SUBMISSIONS {
+        number id PK
+        number assignmentId FK, UK
+        number enrollmentId FK, UK
+        number studentId FK
+        enum status
+        longtext textAnswer
+        datetime submittedAt
+        boolean isLate
+        number score
+        text feedback
+        number reviewedBy FK
+        datetime reviewedAt
+        number revisionCount
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    SUBMISSION_FILES {
+        number id PK
+        number submissionId FK
+        string fileName
+        string filePath
+        number fileSize
+        string mimeType
+        datetime createdAt
+    }
+
+    SUBMISSION_REVIEWS {
+        number id PK
+        number submissionId FK
+        number reviewerId FK
+        enum action
+        number score
+        text note
+        datetime createdAt
+    }
+
+    EXAMS {
+        number id PK
+        number classId FK
+        number curriculumVersionId FK
+        string title
+        text description
+        enum type
+        date examDate
+        string startTime
+        number durationMinutes
+        number maxScore
+        number weight
+        longtext instructions
+        enum status
+        number createdBy FK
+        number updatedBy FK
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    EXAM_PARTICIPANTS {
+        number id PK
+        number examId FK, UK
+        number enrollmentId FK, UK
+        number studentId FK
+        enum status
+        text note
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    EXAM_RESULTS {
+        number id PK
+        number examId FK, UK
+        number enrollmentId FK, UK
+        number studentId FK
+        number score
+        enum status
+        number gradedBy FK
+        datetime gradedAt
+        text note
+        datetime createdAt
+        datetime updatedAt
     }
 
     AUDIT_LOGS {
@@ -455,6 +662,20 @@ erDiagram
     ENROLLMENTS ||--o| CERTIFICATES : "menghasilkan sertifikat"
     USERS ||--o{ GRADES : "menerima nilai sebagai peserta"
     USERS |o--o{ GRADES : "memberi nilai sebagai instruktur"
+    COURSES ||--o{ GRADES : "memiliki nilai"
+    GRADE_SCHEMES |o--o{ GRADES : "menjadi dasar nilai"
+    USERS |o--o{ GRADES : "memfinalisasi nilai"
+    CLASSES ||--o| GRADE_SCHEMES : "memiliki satu skema nilai"
+    COURSES ||--o{ GRADE_SCHEMES : "memiliki skema nilai"
+    USERS |o--o{ GRADE_SCHEMES : "membuat/memperbarui skema"
+    GRADE_SCHEMES ||--o{ GRADE_SCHEME_COMPONENTS : "berisi komponen"
+    GRADE_SCHEME_COMPONENTS ||--o{ GRADE_COMPONENT_SCORES : "dinilai per enrollment"
+    ENROLLMENTS ||--o{ GRADE_COMPONENT_SCORES : "memiliki nilai komponen"
+    USERS ||--o{ GRADE_COMPONENT_SCORES : "menerima nilai komponen"
+    USERS |o--o{ GRADE_COMPONENT_SCORES : "menilai komponen"
+    GRADES ||--o{ GRADE_CORRECTIONS : "dikoreksi"
+    ENROLLMENTS ||--o{ GRADE_CORRECTIONS : "memiliki koreksi nilai"
+    USERS |o--o{ GRADE_CORRECTIONS : "melakukan koreksi nilai"
     USERS ||--o{ CERTIFICATES : "menerima sertifikat"
     USERS |o--o{ CERTIFICATES : "menyetujui sertifikat sebagai admin"
     USERS ||--o{ COMPLETED_LESSONS : "menyelesaikan materi"
@@ -481,9 +702,33 @@ erDiagram
     CERTIFICATES |o--o{ NOTIFICATIONS : "direferensikan notifikasi"
     USERS ||--o| SESSION : "memiliki sesi aktif"
     USERS ||--o{ STAFF_ATTENDANCES : "mencatat absensi pribadi"
+    CLASSES ||--o{ ASSIGNMENTS : "memiliki tugas"
+    CURRICULUM_VERSIONS ||--o{ ASSIGNMENTS : "menjadi acuan tugas"
+    MODULES |o--o{ ASSIGNMENTS : "menjadi modul tugas"
+    LESSONS |o--o{ ASSIGNMENTS : "menjadi materi tugas"
+    USERS |o--o{ ASSIGNMENTS : "membuat/memperbarui tugas"
+    ASSIGNMENTS ||--o{ ASSIGNMENT_FILES : "memiliki lampiran"
+    ASSIGNMENTS ||--o{ ASSIGNMENT_RUBRICS : "memiliki rubrik"
+    ASSIGNMENTS ||--o{ SUBMISSIONS : "menerima submission"
+    ENROLLMENTS ||--o{ SUBMISSIONS : "mengumpulkan submission"
+    USERS ||--o{ SUBMISSIONS : "mengumpulkan sebagai peserta"
+    USERS |o--o{ SUBMISSIONS : "meninjau submission"
+    SUBMISSIONS ||--o{ SUBMISSION_FILES : "memiliki berkas jawaban"
+    SUBMISSIONS ||--o{ SUBMISSION_REVIEWS : "memiliki riwayat review"
+    USERS |o--o{ SUBMISSION_REVIEWS : "menjadi reviewer"
+    CLASSES ||--o{ EXAMS : "memiliki ujian"
+    CURRICULUM_VERSIONS ||--o{ EXAMS : "menjadi acuan ujian"
+    USERS |o--o{ EXAMS : "membuat/memperbarui ujian"
+    EXAMS ||--o{ EXAM_PARTICIPANTS : "memiliki peserta"
+    ENROLLMENTS ||--o{ EXAM_PARTICIPANTS : "terdaftar sebagai peserta ujian"
+    USERS ||--o{ EXAM_PARTICIPANTS : "mengikuti ujian"
+    EXAMS ||--o{ EXAM_RESULTS : "memiliki hasil"
+    ENROLLMENTS ||--o{ EXAM_RESULTS : "memperoleh hasil ujian"
+    USERS ||--o{ EXAM_RESULTS : "menerima hasil ujian"
+    USERS |o--o{ EXAM_RESULTS : "menilai hasil ujian"
 ```
 
-> **Cara membaca:** `USERS |o--o{ CLASSES` berarti satu instruktur dapat mengampu nol atau banyak kelas, sedangkan satu kelas memiliki nol atau satu instruktur (boleh `null` saat draft atau setelah dilepas). Relasi peserta ke kelas bersifat **N—N** dan dipecah melalui `ENROLLMENTS`. Setiap kelas menunjuk tepat satu `curriculum_versions`; begitu kelas dibuat, versi tersebut berstatus `locked`. Sejak Phase 4, setiap kelas dapat memiliki satu pengaturan akses materi dan banyak materi tambahan; progres materi disimpan per enrollment agar peserta yang mengikuti beberapa kelas tidak saling menimpa. Notasi `|o` di sisi `USERS` menandai FK yang boleh `null`; `||` menandai FK yang wajib terisi.
+> **Cara membaca:** `USERS |o--o{ CLASSES` berarti satu instruktur dapat mengampu nol atau banyak kelas, sedangkan satu kelas memiliki nol atau satu instruktur (boleh `null` saat draft atau setelah dilepas). Relasi peserta ke kelas bersifat **N—N** dan dipecah melalui `ENROLLMENTS`. Setiap kelas menunjuk tepat satu `curriculum_versions`; begitu kelas dibuat, versi tersebut berstatus `locked`. Sejak Phase 4, setiap kelas dapat memiliki satu pengaturan akses materi dan banyak materi tambahan; progres materi disimpan per enrollment agar peserta yang mengikuti beberapa kelas tidak saling menimpa. Sejak Phase 5, tugas (`assignments`) dan ujian (`exams`) terikat ke kelas dan versi kurikulum, dengan submission/review dan peserta/hasil ujian sebagai entitas turunan. Sejak Phase 6, satu kelas memiliki tepat satu skema penilaian (`grade_schemes`), skema berisi komponen berbobot, nilai komponen disimpan per enrollment, dan nilai akhir yang telah difinalisasi dapat dikoreksi melalui `grade_corrections` beralasan. Notasi `|o` di sisi `USERS` menandai FK yang boleh `null`; `||` menandai FK yang wajib terisi.
 
 ---
 
@@ -498,27 +743,41 @@ Pada mode server, entitas yang sama disimpan di tabel MySQL bernama snake_case (
 | 3 | `BRANCHES` | `elips_branches` | Array of object | Cabang penyelenggara kelas dan konteks jadwal |
 | 4 | `COURSES` | `elips_courses` | Array of object | Kategori, instruktur, versi, kelas, enrollment |
 | 5 | `CURRICULUM_VERSIONS` | `elips_curriculumVersions` | Array of object | Milik kursus, berisi modul/materi, dipakai kelas |
-| 6 | `CLASSES` | `elips_classes` | Array of object | Kursus, versi kurikulum, cabang, tentor, roster, sesi |
-| 7 | `CLASS_INSTRUCTOR_HISTORIES` | `elips_classInstructorHistories` | Array of object | Histori tentor per kelas |
-| 8 | `ENROLLMENTS` | `elips_enrollments` | Array of object | Penghubung peserta ↔ kelas/kursus |
-| 9 | `CLASS_SESSIONS` | `elips_classSessions` | Array of object | Kelas, modul, tentor, sesi pengganti |
-| 10 | `ATTENDANCES` | `elips_attendances` | Array of object | Sesi, enrollment, peserta, pencatat |
-| 11 | `ATTENDANCE_CORRECTIONS` | `elips_attendanceCorrections` | Array of object | Presensi, sesi, enrollment, aktor koreksi |
-| 12 | `MODULES` | `elips_modules` | Array of object | Milik versi kursus, berisi materi |
-| 13 | `LESSONS` | `elips_lessons` | Array of object | Milik modul dan versi |
-| 14 | `GRADES` | `elips_grades` | Array of object | Milik enrollment/peserta/kursus |
-| 15 | `CERTIFICATES` | `elips_certificates` | Array of object | Milik peserta/kursus/enrollment |
-| 16 | `COMPLETED_LESSONS` | `elips_completedLessons` | Array of object (tanpa `id` di mode lokal) | Progres peserta per materi (legacy) |
-| 17 | `CLASS_MATERIAL_SETTINGS` | `elips_classMaterialSettings` | Array of object | Pengaturan akses materi per kelas |
-| 18 | `CLASS_MATERIALS` | `elips_classMaterials` | Array of object | Materi tambahan per kelas |
-| 19 | `CLASS_LESSON_PROGRESS` | `elips_classLessonProgress` | Array of object | Progres pelajaran per enrollment |
-| 20 | `CLASS_MATERIAL_PROGRESS` | `elips_classMaterialProgress` | Array of object | Progres materi tambahan per enrollment |
-| 21 | `AUDIT_LOGS` | `elips_auditLogs` | Array of object | Aktor dan entitas polimorfik |
-| 22 | `NOTIFICATIONS` | `elips_notifications` | Array of object | Penerima dan entitas polimorfik |
-| 23 | `SESSION` | `elips_session` | Object tunggal | Sesi user yang sedang login (mode server: sesi PHP) |
-| 24 | `STAFF_ATTENDANCES` | `elips_staffAttendances` | Array of object | Absensi harian pribadi staf/admin: maks. satu `in` + satu `out` per hari, foto, lokasi, dan metadata perangkat |
+| 6 | `MODULES` | `elips_modules` | Array of object | Milik versi kursus, berisi materi |
+| 7 | `LESSONS` | `elips_lessons` | Array of object | Milik modul dan versi |
+| 8 | `CLASSES` | `elips_classes` | Array of object | Kursus, versi kurikulum, cabang, tentor, roster, sesi |
+| 9 | `CLASS_INSTRUCTOR_HISTORIES` | `elips_classInstructorHistories` | Array of object | Histori tentor per kelas |
+| 10 | `ENROLLMENTS` | `elips_enrollments` | Array of object | Penghubung peserta ↔ kelas/kursus |
+| 11 | `CLASS_SESSIONS` | `elips_classSessions` | Array of object | Kelas, modul, tentor, sesi pengganti |
+| 12 | `ATTENDANCES` | `elips_attendances` | Array of object | Sesi, enrollment, peserta, pencatat |
+| 13 | `ATTENDANCE_CORRECTIONS` | `elips_attendanceCorrections` | Array of object | Presensi, sesi, enrollment, aktor koreksi |
+| 14 | `CLASS_MATERIAL_SETTINGS` | `elips_classMaterialSettings` | Array of object | Pengaturan akses materi per kelas |
+| 15 | `CLASS_MATERIALS` | `elips_classMaterials` | Array of object | Materi tambahan per kelas |
+| 16 | `CLASS_LESSON_PROGRESS` | `elips_classLessonProgress` | Array of object | Progres pelajaran per enrollment |
+| 17 | `CLASS_MATERIAL_PROGRESS` | `elips_classMaterialProgress` | Array of object | Progres materi tambahan per enrollment |
+| 18 | `ASSIGNMENTS` | `elips_assignments` | Array of object | Kelas, versi, modul/materi, pembuat |
+| 19 | `ASSIGNMENT_FILES` | `elips_assignmentFiles` | Array of object | Lampiran tugas |
+| 20 | `ASSIGNMENT_RUBRICS` | `elips_assignmentRubrics` | Array of object | Rubrik penilaian tugas |
+| 21 | `SUBMISSIONS` | `elips_submissions` | Array of object | Tugas, enrollment, peserta, reviewer |
+| 22 | `SUBMISSION_FILES` | `elips_submissionFiles` | Array of object | Berkas jawaban submission |
+| 23 | `SUBMISSION_REVIEWS` | `elips_submissionReviews` | Array of object | Riwayat review submission |
+| 24 | `EXAMS` | `elips_exams` | Array of object | Kelas, versi, pembuat |
+| 25 | `EXAM_PARTICIPANTS` | `elips_examParticipants` | Array of object | Ujian, enrollment, peserta |
+| 26 | `EXAM_RESULTS` | `elips_examResults` | Array of object | Ujian, enrollment, peserta, penilai |
+| 27 | `PREDICATE_RANGES` | `elips_predicateRanges` | Array of object | Rentang nilai huruf global (tanpa relasi) |
+| 28 | `GRADE_SCHEMES` | `elips_gradeSchemes` | Array of object | Kelas, kursus, pembuat/pembaru |
+| 29 | `GRADE_SCHEME_COMPONENTS` | `elips_gradeSchemeComponents` | Array of object | Skema dan komponen berbobot |
+| 30 | `GRADES` | `elips_grades` | Array of object | Enrollment/peserta/kursus, skema, finalisasi |
+| 31 | `GRADE_COMPONENT_SCORES` | `elips_gradeComponentScores` | Array of object | Komponen, enrollment, peserta, penilai |
+| 32 | `GRADE_CORRECTIONS` | `elips_gradeCorrections` | Array of object | Nilai, enrollment, aktor koreksi |
+| 33 | `CERTIFICATES` | `elips_certificates` | Array of object | Milik peserta/kursus/enrollment |
+| 34 | `COMPLETED_LESSONS` | `elips_completedLessons` | Array of object (tanpa `id` di mode lokal) | Progres peserta per materi (legacy) |
+| 35 | `AUDIT_LOGS` | `elips_auditLogs` | Array of object | Aktor dan entitas polimorfik |
+| 36 | `NOTIFICATIONS` | `elips_notifications` | Array of object | Penerima dan entitas polimorfik |
+| 37 | `STAFF_ATTENDANCES` | `elips_staffAttendances` | Array of object | Absensi harian pribadi staf/admin: maks. satu `in` + satu `out` per hari, foto, lokasi, dan metadata perangkat |
+| 38 | `SESSION` | `elips_session` | Object tunggal | Sesi user yang sedang login (mode server: sesi PHP) |
 
-Key lama yang dimigrasikan: `elips_enrolled` (self-enrollment) dipindahkan ke `elips_enrollments` oleh `seed.js`, lalu dihapus. Pada migrasi v3 → v4, `seed.js` membuat entri `elips_categories`/`elips_curriculumVersions`/`elips_classes`/`elips_branches` bila belum ada, mengisi `curriculumVersionId` pada modul/materi lama, lalu menambahkan sesi dan presensi demo untuk kelas migrasi. Kelas lama tanpa cabang diberi `branchId = null` agar tetap kompatibel. Sejak Phase 4, `seed.js` juga menormalisasi empat koleksi materi/progres; kelas yang belum memiliki pengaturan akses **tidak** dibuatkan baris, sehingga default implisit `open` tetap sama dengan mode server.
+Key lama yang dimigrasikan: `elips_enrolled` (self-enrollment) dipindahkan ke `elips_enrollments` oleh `seed.js`, lalu dihapus. Pada migrasi v3 → v4, `seed.js` membuat entri `elips_categories`/`elips_curriculumVersions`/`elips_classes`/`elips_branches` bila belum ada, mengisi `curriculumVersionId` pada modul/materi lama, lalu menambahkan sesi dan presensi demo untuk kelas migrasi. Kelas lama tanpa cabang diberi `branchId = null` agar tetap kompatibel. Sejak Phase 4, `seed.js` juga menormalisasi empat koleksi materi/progres; kelas yang belum memiliki pengaturan akses **tidak** dibuatkan baris, sehingga default implisit `open` tetap sama dengan mode server. Sejak Phase 5, `seed.js` menambahkan koleksi tugas/ujian beserta submission, review, peserta, dan hasil ujian demo. Sejak Phase 6, `seed.js` menambahkan sembilan predikat default, satu skema penilaian demo untuk kelas 1, tiga komponen (tugas 30%, ujian 40%, manual 30%), nilai komponen manual, dan koleksi koreksi kosong.
 
 ---
 
@@ -933,36 +1192,236 @@ Materi/pelajaran di dalam modul pada versi kurikulum tertentu.
 
 ---
 
+### 5.5a ASSIGNMENTS — `elips_assignments`
+
+Tugas per kelas yang menjadi salah satu sumber nilai Phase 5/6.
+
+| Field | Tipe | Key | Wajib | Default | Keterangan |
+|---|---|---|---|---|---|
+| `id` | number | PK | Ya | `max(id)+1` | ID unik tugas |
+| `classId` | number | FK → `classes.id` | Ya | — | Kelas pemilik tugas |
+| `curriculumVersionId` | number | FK → `curriculum_versions.id` | Ya | dari kelas | Versi kurikulum acuan |
+| `moduleId` | number | FK → `modules.id` | Tidak | `null` | Modul terkait |
+| `lessonId` | number | FK → `lessons.id` | Tidak | `null` | Materi terkait |
+| `title` | string | — | Ya | — | Judul tugas |
+| `instructions` | longtext | — | Ya | — | Instruksi tugas |
+| `type` | enum | — | Ya | `text_submission` | `file_upload`, `text_submission`, `in_class_practice`, `external_reference` |
+| `openAt` | datetime | — | Tidak | `null` | Waktu buka |
+| `dueAt` | datetime | — | Tidak | `null` | Tenggat; wajib setelah `openAt` |
+| `maxScore` | number | — | Ya | `100` | Skor maksimum |
+| `weight` | number | — | Ya | `0` | Bobot legacy (skema Phase 6 menyimpan bobot komponen) |
+| `requireFile` | boolean | — | Ya | `false` | Wajib lampiran |
+| `allowedTypes` | string | — | Tidak | `''` | Ekstensi yang diizinkan |
+| `maxFileSize` | number | — | Tidak | `null` | Ukuran maksimum berkas |
+| `status` | enum | — | Ya | `draft` | `draft`, `published`, `closed`, `archived` |
+| `createdBy` / `updatedBy` | number | FK → `users.id` | Tidak | aktor | Pembuat/pembaru |
+| `createdAt` / `updatedAt` | datetime | — | Ya/Tidak | sekarang/`null` | ISO 8601 |
+
+**Aturan:**
+
+- Hanya Admin atau instruktur pemilik kelas yang dapat membuat/mengubah/menghapus.
+- `in_class_practice` tidak menerima submission daring; `external_reference` hanya menautkan sumber luar.
+- Submission ditolak sebelum `openAt`, setelah `dueAt` dianggap terlambat, dan setelah status `closed`/`archived`.
+
+---
+
+### 5.5b ASSIGNMENT_FILES — `elips_assignmentFiles`
+
+Lampiran berkas milik tugas.
+
+| Field | Tipe | Key | Wajib | Default | Keterangan |
+|---|---|---|---|---|---|
+| `id` | number | PK | Ya | `max(id)+1` | ID unik |
+| `assignmentId` | number | FK → `assignments.id` | Ya | — | Tugas pemilik |
+| `fileName` | string | — | Ya | — | Nama tampil |
+| `filePath` | string | — | Ya | — | Lokasi penyimpanan; tidak diekspos ke peserta |
+| `fileSize` | number | — | Tidak | `null` | Ukuran byte |
+| `mimeType` | string | — | Tidak | `''` | MIME |
+| `createdAt` | datetime | — | Ya | sekarang | ISO 8601 |
+
+---
+
+### 5.5c ASSIGNMENT_RUBRICS — `elips_assignmentRubrics`
+
+Rubrik/kriteria penilaian tugas.
+
+| Field | Tipe | Key | Wajib | Default | Keterangan |
+|---|---|---|---|---|---|
+| `id` | number | PK | Ya | `max(id)+1` | ID unik |
+| `assignmentId` | number | FK → `assignments.id` | Ya | — | Tugas pemilik |
+| `criterion` | string | — | Ya | — | Nama kriteria |
+| `description` | text | — | Tidak | `''` | Penjelasan |
+| `maxScore` | number | — | Ya | `100` | Skor maksimum kriteria |
+| `sortOrder` | number | — | Ya | urutan input | Urutan tampil |
+| `createdAt` / `updatedAt` | datetime | — | Ya/Tidak | sekarang/`null` | ISO 8601 |
+
+---
+
+### 5.5d SUBMISSIONS — `elips_submissions`
+
+Jawaban peserta untuk satu tugas; satu baris per (tugas, enrollment).
+
+| Field | Tipe | Key | Wajib | Default | Keterangan |
+|---|---|---|---|---|---|
+| `id` | number | PK | Ya | `max(id)+1` | ID unik submission |
+| `assignmentId` | number | FK → `assignments.id`, UK | Ya | — | Tugas |
+| `enrollmentId` | number | FK → `enrollments.id`, UK | Ya | — | Enrollment |
+| `studentId` | number | FK → `users.id` | Ya | — | Denormalisasi peserta |
+| `status` | enum | — | Ya | `submitted` | `submitted`, `late`, `reviewed`, `revision_requested`, `resubmitted`, `accepted` |
+| `textAnswer` | longtext | — | Tidak | `''` | Jawaban teks |
+| `submittedAt` | datetime | — | Ya | sekarang | Waktu kirim |
+| `isLate` | boolean | — | Ya | `false` | Ditandai terlambat |
+| `score` | number | — | Tidak | `null` | Nilai 0–`maxScore` |
+| `feedback` | text | — | Tidak | `''` | Umpan balik |
+| `reviewedBy` | number | FK → `users.id` | Tidak | `null` | Peninjau |
+| `reviewedAt` | datetime | — | Tidak | `null` | Waktu review |
+| `revisionCount` | number | — | Ya | `0` | Jumlah revisi |
+| `createdAt` / `updatedAt` | datetime | — | Ya/Tidak | sekarang/`null` | ISO 8601 |
+
+**Aturan:**
+
+- Submission ulang diizinkan sebelum diterima atau saat status `revision_requested`.
+- `accepted` mengunci submission; pengiriman berikutnya ditolak.
+- Submission wajib memiliki isi teks atau berkas sesuai konfigurasi tugas.
+- Hanya Admin/instruktur pemilik kelas yang dapat menilai atau meminta revisi.
+
+---
+
+### 5.5e SUBMISSION_FILES — `elips_submissionFiles`
+
+Berkas jawaban peserta.
+
+| Field | Tipe | Key | Wajib | Default | Keterangan |
+|---|---|---|---|---|---|
+| `id` | number | PK | Ya | `max(id)+1` | ID unik |
+| `submissionId` | number | FK → `submissions.id` | Ya | — | Submission pemilik |
+| `fileName` | string | — | Ya | — | Nama tampil |
+| `filePath` | string | — | Ya | — | Lokasi penyimpanan privat |
+| `fileSize` | number | — | Tidak | `null` | Ukuran byte |
+| `mimeType` | string | — | Tidak | `''` | MIME |
+| `createdAt` | datetime | — | Ya | sekarang | ISO 8601 |
+
+---
+
+### 5.5f SUBMISSION_REVIEWS — `elips_submissionReviews`
+
+Riwayat aksi review submission (submit, score, revision, accept).
+
+| Field | Tipe | Key | Wajib | Default | Keterangan |
+|---|---|---|---|---|---|
+| `id` | number | PK | Ya | `max(id)+1` | ID unik |
+| `submissionId` | number | FK → `submissions.id` | Ya | — | Submission |
+| `reviewerId` | number | FK → `users.id` | Tidak | `null` | Aktor |
+| `action` | enum | — | Ya | `submit` | `submit`, `score`, `revision`, `accept` |
+| `score` | number | — | Tidak | `null` | Nilai saat aksi |
+| `note` | text | — | Tidak | `''` | Catatan |
+| `createdAt` | datetime | — | Ya | sekarang | ISO 8601 |
+
+---
+
+### 5.5g EXAMS — `elips_exams`
+
+Ujian per kelas; sumber nilai ujian Phase 5/6.
+
+| Field | Tipe | Key | Wajib | Default | Keterangan |
+|---|---|---|---|---|---|
+| `id` | number | PK | Ya | `max(id)+1` | ID unik ujian |
+| `classId` | number | FK → `classes.id` | Ya | — | Kelas pemilik |
+| `curriculumVersionId` | number | FK → `curriculum_versions.id` | Ya | dari kelas | Versi acuan |
+| `title` | string | — | Ya | — | Judul ujian |
+| `description` | text | — | Tidak | `''` | Deskripsi |
+| `type` | enum | — | Ya | `written` | `written`, `practical`, `oral`, `project`, `other` |
+| `examDate` | date | — | Tidak | `null` | Tanggal ujian |
+| `startTime` | string | — | Tidak | `null` | Waktu mulai |
+| `durationMinutes` | number | — | Tidak | `null` | Durasi |
+| `maxScore` | number | — | Ya | `100` | Skor maksimum |
+| `weight` | number | — | Ya | `0` | Bobot legacy |
+| `instructions` | longtext | — | Tidak | `''` | Instruksi |
+| `status` | enum | — | Ya | `draft` | `draft`, `published`, `closed`, `archived` |
+| `createdBy` / `updatedBy` | number | FK → `users.id` | Tidak | aktor | Pembuat/pembaru |
+| `createdAt` / `updatedAt` | datetime | — | Ya/Tidak | sekarang/`null` | ISO 8601 |
+
+---
+
+### 5.5h EXAM_PARTICIPANTS — `elips_examParticipants`
+
+Roster peserta ujian; satu baris per (ujian, enrollment).
+
+| Field | Tipe | Key | Wajib | Default | Keterangan |
+|---|---|---|---|---|---|
+| `id` | number | PK | Ya | `max(id)+1` | ID unik |
+| `examId` | number | FK → `exams.id`, UK | Ya | — | Ujian |
+| `enrollmentId` | number | FK → `enrollments.id`, UK | Ya | — | Enrollment |
+| `studentId` | number | FK → `users.id` | Ya | — | Denormalisasi peserta |
+| `status` | enum | — | Ya | `registered` | `registered`, `attended`, `absent`, `excused` |
+| `note` | text | — | Tidak | `''` | Catatan |
+| `createdAt` / `updatedAt` | datetime | — | Ya/Tidak | sekarang/`null` | ISO 8601 |
+
+---
+
+### 5.5i EXAM_RESULTS — `elips_examResults`
+
+Hasil ujian per peserta; sumber nilai komponen ujian.
+
+| Field | Tipe | Key | Wajib | Default | Keterangan |
+|---|---|---|---|---|---|
+| `id` | number | PK | Ya | `max(id)+1` | ID unik hasil |
+| `examId` | number | FK → `exams.id`, UK | Ya | — | Ujian |
+| `enrollmentId` | number | FK → `enrollments.id`, UK | Ya | — | Enrollment |
+| `studentId` | number | FK → `users.id` | Ya | — | Denormalisasi peserta |
+| `score` | number | — | Tidak | `null` | Nilai 0–`maxScore` |
+| `status` | enum | — | Ya | `not_assessed` | `not_assessed`, `excused`, `missing`, `graded` |
+| `gradedBy` | number | FK → `users.id` | Tidak | `null` | Penilai |
+| `gradedAt` | datetime | — | Tidak | `null` | Waktu penilaian |
+| `note` | text | — | Tidak | `''` | Catatan |
+| `createdAt` / `updatedAt` | datetime | — | Ya/Tidak | sekarang/`null` | ISO 8601 |
+
+**Aturan:**
+
+- Nilai `missing` **tidak** dikonversi menjadi 0; komponen wajib yang `missing` membuat nilai akhir `incomplete`.
+- `excused` mengeluarkan komponen dari perhitungan dan menormalisasi ulang bobot.
+
+---
+
 ### 5.6 GRADES — `elips_grades`
 
-Nilai akhir peserta per kursus.
+Nilai akhir peserta per enrollment. Sejak Phase 6, baris ini menyimpan hasil komputasi skema penilaian dan status finalisasi; alur manual legacy (`grade.save`) tetap didukung dan menulis `score`/`finalScore` yang sama.
 
 | Field | Tipe | Key | Wajib | Default | Keterangan |
 |---|---|---|---|---|---|
 | `id` | number | PK | Ya | `max(id)+1` | ID unik nilai |
-| `enrollmentId` | number | FK → `enrollments.id` | Ya | — | Penugasan yang dinilai |
+| `enrollmentId` | number | FK → `enrollments.id`, UK | Ya | — | Penugasan yang dinilai |
+| `schemeId` | number | FK → `grade_schemes.id` | Tidak | `null` | Skema penilaian yang dipakai saat komputasi/finalisasi |
 | `courseId` | number | FK → `courses.id` | Ya | — | Denormalisasi untuk query |
 | `studentId` | number | FK → `users.id` | Ya | — | Denormalisasi peserta |
-| `instructorId` | number | FK → `users.id` | Tidak | `course.instructorId` | Instruktur pemberi nilai |
-| `score` | number | — | Ya | — | Rentang 0–100 |
-| `grade` | enum | — | Ya | turunan skor | `A`, `A-`, `B+`, `B`, `B-`, `C+`, `C`, `D`, `E` |
+| `instructorId` | number | FK → `users.id` | Tidak | `course.instructorId` | Instruktur pemberi nilai/finalisasi |
+| `score` | number | — | Ya | — | Nilai legacy 0–100 (dibulatkan) |
+| `finalScore` | number | — | Tidak | `null` | Nilai akhir desimal hasil komputasi skema (0–100) |
+| `grade` | string(2) | — | Ya | turunan skor | Huruf predikat dari `predicate_ranges` (default `A`–`E`) |
+| `status` | enum | — | Ya | `draft` | `draft`, `incomplete`, `finalized` |
+| `componentsSnapshot` | longtext | — | Tidak | `null` | JSON komponen dan bobot saat finalisasi dikunci |
 | `note` | text | — | Tidak | `''` | Catatan instruktur |
+| `finalizedBy` | number | FK → `users.id` | Tidak | `null` | Aktor finalisasi |
+| `finalizedAt` | datetime | — | Tidak | `null` | Waktu finalisasi |
+| `computedAt` | datetime | — | Tidak | `null` | Waktu komputasi terakhir |
 | `createdAt` | datetime | — | Ya | sekarang | ISO 8601 |
 | `updatedAt` | datetime | — | Tidak | — | ISO 8601 |
 
-**Konversi grade:**
+**Konversi grade default:**
 
 | Skor | Grade |
 |---|---|
-| ≥ 90 | A |
-| 80–89 | A- |
-| 75–79 | B+ |
-| 70–74 | B |
-| 65–69 | B- |
-| 60–64 | C+ |
-| 55–59 | C |
-| 50–54 | D |
-| < 50 | E |
+| 90–100 | A |
+| 80–89.99 | A- |
+| 75–79.99 | B+ |
+| 70–74.99 | B |
+| 65–69.99 | B- |
+| 60–64.99 | C+ |
+| 55–59.99 | C |
+| 50–54.99 | D |
+| 0–49.99 | E |
+
+Huruf tidak lagi hardcoded di UI: `predicateLetter(score)` memilih rentang aktif dari `predicate_ranges`. Admin dapat mengganti label/rentang selama seluruh skor 0–100 tercakup tanpa celah/tumpang tindih.
 
 **Aturan:**
 
@@ -970,8 +1429,148 @@ Nilai akhir peserta per kursus.
 - Instruktur tidak dapat menilai kelas/kursus yang bukan miliknya.
 - Kombinasi `enrollmentId` **unik**; penyimpanan ulang memperbarui nilai yang sama.
 - Peserta yang mengikuti kursus yang sama pada kelas berbeda memiliki nilai terpisah.
-- Menyimpan nilai otomatis membuat/memperbarui e-sertifikat **Draft** untuk enrollment tersebut.
+- `grade.finalize` menolak baris yang masih `incomplete` dan mengunci nilai (`status = finalized`).
+- Nilai yang sudah `finalized` tidak dapat diubah lewat `grade.save` maupun `grade.manualSave`; perubahan hanya lewat `grade.correct` dengan alasan minimal 5 karakter.
+- Menyimpan nilai legacy tetap membuat/memperbarui e-sertifikat **Draft** untuk enrollment tersebut; finalisasi Phase 6 **tidak** otomatis membuat sertifikat (sertifikasi tetap Phase 7).
 - Jika sertifikat sudah `publish`, perubahan nilai memperbarui data sertifikat tetapi **tidak** mengembalikan status ke Draft.
+
+---
+
+### 5.6a PREDICATE_RANGES — `elips_predicateRanges`
+
+Rentang predikat nilai huruf global yang dapat dikonfigurasi Admin.
+
+| Field | Tipe | Key | Wajib | Default | Keterangan |
+|---|---|---|---|---|---|
+| `id` | number | PK | Ya | `max(id)+1` | ID unik rentang |
+| `letter` | string(4) | UK | Ya | — | Huruf predikat, mis. `A`, `A-`, `B+` |
+| `label` | string | — | Tidak | `''` | Deskripsi, mis. `Sangat Baik` |
+| `minScore` | number | — | Ya | — | Batas bawah inklusif (0–100) |
+| `maxScore` | number | — | Ya | — | Batas atas inklusif (0–100) |
+| `sortOrder` | number | — | Ya | urutan input | Urutan tampil |
+| `isActive` | boolean | — | Ya | `true` | Rentang nonaktif diabaikan saat pemetaan |
+| `createdAt` | datetime | — | Ya | sekarang | ISO 8601 |
+| `updatedAt` | datetime | — | Tidak | `null` | ISO 8601 |
+
+**Aturan:**
+
+- Hanya Admin yang boleh menyimpan; Instruktur/Peserta ditolak di server dan mode lokal.
+- Himpunan rentang aktif wajib menutup 0–100 tanpa celah dan tanpa tumpang tindih; validasi dilakukan sebelum menyimpan.
+- Default seed: A 90–100, A- 80–89.99, B+ 75–79.99, B 70–74.99, B- 65–69.99, C+ 60–64.99, C 55–59.99, D 50–54.99, E 0–49.99.
+- Perubahan predikat berlaku saat komputasi/transkrip berikutnya; nilai yang sudah difinalisasi tetap menyimpan huruf hasil finalisasi sampai dikoreksi.
+
+---
+
+### 5.6b GRADE_SCHEMES — `elips_gradeSchemes`
+
+Skema penilaian per kelas; satu kelas memiliki tepat satu skema.
+
+| Field | Tipe | Key | Wajib | Default | Keterangan |
+|---|---|---|---|---|---|
+| `id` | number | PK | Ya | `max(id)+1` | ID unik skema |
+| `courseId` | number | FK → `courses.id` | Ya | dari kelas | Denormalisasi kursus |
+| `classId` | number | FK → `classes.id`, UK | Ya | — | Kelas pemilik skema |
+| `name` | string | — | Ya | `Skema Penilaian Kelas` | Nama skema |
+| `status` | enum | — | Ya | `draft` | `draft`, `published`, `archived` |
+| `passScore` | number | — | Ya | `60` | Ambang lulus 0–100 |
+| `rounding` | enum | — | Ya | `half_up` | `half_up`, `half_down`, `floor`, `ceil` |
+| `notes` | text | — | Tidak | `''` | Catatan |
+| `createdBy` | number | FK → `users.id` | Tidak | aktor | Pembuat |
+| `updatedBy` | number | FK → `users.id` | Tidak | aktor | Pembaru terakhir |
+| `createdAt` | datetime | — | Ya | sekarang | ISO 8601 |
+| `updatedAt` | datetime | — | Tidak | `null` | ISO 8601 |
+
+**Aturan:**
+
+- Hanya Admin atau instruktur pemilik kelas yang dapat menyimpan/mengubah status/menghapus skema.
+- `classId` unik; menyimpan skema untuk kelas yang sama memperbarui baris yang ada.
+- Publikasi (`status = published`) mensyaratkan minimal satu komponen dan total bobot tepat 100%.
+- Skema `published`/`archived` **tidak dapat** dikembalikan ke `draft`; arsipkan lalu buat skema pengganti.
+- Skema `published`/`archived` tidak dapat dihapus.
+- Komponen dikirim bersama simpanan skema; komponen lama diganti dalam transaksi yang sama.
+
+---
+
+### 5.6c GRADE_SCHEME_COMPONENTS — `elips_gradeSchemeComponents`
+
+Komponen penilaian berbobot milik satu skema.
+
+| Field | Tipe | Key | Wajib | Default | Keterangan |
+|---|---|---|---|---|---|
+| `id` | number | PK | Ya | `max(id)+1` | ID unik komponen |
+| `schemeId` | number | FK → `grade_schemes.id` | Ya | — | Skema pemilik |
+| `type` | enum | — | Ya | `manual` | `assignment`, `exam`, `manual` |
+| `name` | string | — | Ya | — | Nama komponen, mis. `Tugas`, `Ujian`, `Praktik` |
+| `description` | text | — | Tidak | `''` | Deskripsi |
+| `weight` | number | — | Ya | `0` | Bobot 0–100; total wajib 100 saat publish |
+| `aggregation` | enum | — | Ya | `weighted` | `weighted` atau `average` untuk komponen bertipe tugas/ujian dengan banyak sumber |
+| `maxScore` | number | — | Ya | `100` | Skor maksimum komponen |
+| `isRequired` | boolean | — | Ya | `true` | Komponen wajib; bila kosong => `incomplete` |
+| `sortOrder` | number | — | Ya | urutan input | Urutan tampil |
+| `createdAt` | datetime | — | Ya | sekarang | ISO 8601 |
+| `updatedAt` | datetime | — | Tidak | `null` | ISO 8601 |
+
+**Aturan:**
+
+- Tipe `assignment`/`exam` mengambil nilai dari submission/hasil ujian yang dipetakan; tipe `manual` diisi langsung pada roster.
+- Bobot boleh 0 pada draft, tetapi publikasi menolak total ≠ 100.
+- Komponen `isRequired = false` yang tidak memiliki nilai dikeluarkan dari perhitungan dan bobotnya dinormalisasi ulang.
+- Komponen `excused` juga dikeluarkan dan bobotnya dinormalisasi ulang.
+- Skor `0` hanya dihitung bila benar-benar diisi; nilai kosong tidak pernah dianggap nol implisit.
+
+---
+
+### 5.6d GRADE_COMPONENT_SCORES — `elips_gradeComponentScores`
+
+Nilai per komponen per enrollment, termasuk status pengecualian.
+
+| Field | Tipe | Key | Wajib | Default | Keterangan |
+|---|---|---|---|---|---|
+| `id` | number | PK | Ya | `max(id)+1` | ID unik nilai komponen |
+| `componentId` | number | FK → `grade_scheme_components.id`, UK | Ya | — | Komponen |
+| `enrollmentId` | number | FK → `enrollments.id`, UK | Ya | — | Enrollment |
+| `studentId` | number | FK → `users.id` | Ya | — | Denormalisasi peserta |
+| `score` | number | — | Tidak | `null` | 0–`maxScore`; `null` = belum dinilai |
+| `status` | enum | — | Ya | `not_assessed` | `not_assessed`, `graded`, `excused`, `missing` |
+| `assessorId` | number | FK → `users.id` | Tidak | aktor | Penilai |
+| `assessedAt` | datetime | — | Tidak | `null` | Waktu penilaian |
+| `note` | text | — | Tidak | `''` | Catatan/alasan pengecualian |
+| `createdAt` | datetime | — | Ya | sekarang | ISO 8601 |
+| `updatedAt` | datetime | — | Tidak | `null` | ISO 8601 |
+
+**Aturan:**
+
+- Pasangan (`componentId`, `enrollmentId`) unik; penyimpanan ulang memperbarui baris yang sama.
+- Nilai tidak dapat disimpan bila enrollment sudah difinalisasi.
+- Pengecualian (`grade.exempt`) membutuhkan alasan minimal 5 karakter, menulis status `excused`, dan mencatat audit.
+- Nilai komponen tugas/ujian dapat disinkronkan dari submission/hasil ujian; nilai manual diisi melalui `grade.manualSave`.
+
+---
+
+### 5.6e GRADE_CORRECTIONS — `elips_gradeCorrections`
+
+Jejak audit koreksi nilai yang sudah difinalisasi.
+
+| Field | Tipe | Key | Wajib | Default | Keterangan |
+|---|---|---|---|---|---|
+| `id` | number | PK | Ya | `max(id)+1` | ID unik koreksi |
+| `gradeId` | number | FK → `grades.id` | Ya | — | Nilai yang dikoreksi |
+| `enrollmentId` | number | FK → `enrollments.id` | Tidak | dari nilai | Denormalisasi |
+| `previousScore` | number | — | Tidak | `null` | Nilai akhir sebelum koreksi |
+| `newScore` | number | — | Tidak | `null` | Nilai akhir sesudah koreksi |
+| `previousLetter` | string(4) | — | Tidak | `null` | Huruf sebelum koreksi |
+| `newLetter` | string(4) | — | Tidak | `null` | Huruf sesudah koreksi |
+| `reason` | text | — | Ya | — | Alasan koreksi, minimal 5 karakter |
+| `actorId` | number | FK → `users.id` | Tidak | aktor | Pelaku koreksi |
+| `createdAt` | datetime | — | Ya | sekarang | ISO 8601 |
+
+**Aturan:**
+
+- Hanya nilai berstatus `finalized` yang dapat dikoreksi.
+- Koreksi dapat berupa perubahan skor komponen (lalu dihitung ulang) atau override `finalScore` langsung.
+- `finalScore` wajib 0–100; huruf dihitung ulang dari predikat aktif.
+- Koreksi berjalan dalam transaksi: nilai diperbarui, snapshot komponen diperbarui, dan baris koreksi ditulis.
+- Koreksi tidak mengubah status `finalized`; nilai tetap terkunci dan setiap perubahan berikutnya memerlukan koreksi baru.
 
 ---
 
@@ -1332,6 +1931,34 @@ Absensi harian pribadi staf/admin yang dicatat dari dashboard Admin. Bukan prese
 | R38 | `BRANCHES` → `CLASSES` | 1 — N | `classes.branchId` | Cabang dihapus: `branchId=null` (FK `SET NULL`) | Cabang opsional; hapus ditolak aplikasi bila masih dipakai |
 | R39 | `BRANCHES` → `CLASS_SESSIONS` | 1 — N | `class_sessions.branchId` (turunan) | Mengikuti kelas; bukan FK fisik | Mode lokal menyimpan `branchId` denormalisasi, mode server memakai JOIN kelas |
 | R40 | `USERS` (admin) -> `STAFF_ATTENDANCES` | 1 -> N | `staff_attendances.userId` | User dihapus: catatan absensi dihapus (`ON DELETE CASCADE`) | Absensi harian pribadi (maks. 1 `in` + 1 `out` per hari di UI); hanya pemilik yang dapat mengakses |
+| R41 | `CLASSES` → `ASSIGNMENTS` | 1 — N | `assignments.classId` | Kelas dihapus: tugas dihapus | Tugas milik satu kelas |
+| R42 | `CURRICULUM_VERSIONS` → `ASSIGNMENTS` | 1 — N | `assignments.curriculumVersionId` | Versi dihapus: tugas dihapus | Acuan versi kelas |
+| R43 | `MODULES`/`LESSONS` → `ASSIGNMENTS` | 1 — N | `assignments.moduleId`, `assignments.lessonId` | Modul/materi dihapus: FK `SET NULL` | Opsional |
+| R44 | `ASSIGNMENTS` → `ASSIGNMENT_FILES` | 1 — N | `assignment_files.assignmentId` | Tugas dihapus: lampiran dihapus | — |
+| R45 | `ASSIGNMENTS` → `ASSIGNMENT_RUBRICS` | 1 — N | `assignment_rubrics.assignmentId` | Tugas dihapus: rubrik dihapus | — |
+| R46 | `ASSIGNMENTS` → `SUBMISSIONS` | 1 — N | `submissions.assignmentId` | Tugas dihapus: submission dihapus | Unik per (tugas, enrollment) |
+| R47 | `ENROLLMENTS` → `SUBMISSIONS` | 1 — N | `submissions.enrollmentId` | Enrollment dihapus: submission dihapus | — |
+| R48 | `USERS` (peserta) → `SUBMISSIONS` | 1 — N | `submissions.studentId` | Peserta dihapus: submission dihapus | Denormalisasi |
+| R49 | `USERS` (reviewer) → `SUBMISSIONS` | 1 — N | `submissions.reviewedBy` | User dihapus: FK `SET NULL` | — |
+| R50 | `SUBMISSIONS` → `SUBMISSION_FILES` | 1 — N | `submission_files.submissionId` | Submission dihapus: berkas dihapus | — |
+| R51 | `SUBMISSIONS` → `SUBMISSION_REVIEWS` | 1 — N | `submission_reviews.submissionId` | Submission dihapus: review dihapus | — |
+| R52 | `USERS` (reviewer) → `SUBMISSION_REVIEWS` | 1 — N | `submission_reviews.reviewerId` | User dihapus: FK `SET NULL` | — |
+| R53 | `CLASSES` → `EXAMS` | 1 — N | `exams.classId` | Kelas dihapus: ujian dihapus | Ujian milik satu kelas |
+| R54 | `CURRICULUM_VERSIONS` → `EXAMS` | 1 — N | `exams.curriculumVersionId` | Versi dihapus: ujian dihapus | — |
+| R55 | `EXAMS` → `EXAM_PARTICIPANTS` | 1 — N | `exam_participants.examId` | Ujian dihapus: peserta dihapus | Unik per (ujian, enrollment) |
+| R56 | `ENROLLMENTS` → `EXAM_PARTICIPANTS` | 1 — N | `exam_participants.enrollmentId` | Enrollment dihapus: peserta dihapus | — |
+| R57 | `EXAMS` → `EXAM_RESULTS` | 1 — N | `exam_results.examId` | Ujian dihapus: hasil dihapus | Unik per (ujian, enrollment) |
+| R58 | `ENROLLMENTS` → `EXAM_RESULTS` | 1 — N | `exam_results.enrollmentId` | Enrollment dihapus: hasil dihapus | — |
+| R59 | `USERS` (penilai) → `EXAM_RESULTS` | 1 — N | `exam_results.gradedBy` | User dihapus: FK `SET NULL` | — |
+| R60 | `CLASSES` → `GRADE_SCHEMES` | 1 — 0..1 | `grade_schemes.classId` | Kelas dihapus: skema dan komponennya dihapus | Satu skema per kelas |
+| R61 | `COURSES` → `GRADE_SCHEMES` | 1 — N | `grade_schemes.courseId` | Kursus dihapus: skema dihapus | Denormalisasi |
+| R62 | `GRADE_SCHEMES` → `GRADE_SCHEME_COMPONENTS` | 1 — N | `grade_scheme_components.schemeId` | Skema dihapus: komponen dihapus | Bobot total 100 saat publish |
+| R63 | `GRADE_SCHEME_COMPONENTS` → `GRADE_COMPONENT_SCORES` | 1 — N | `grade_component_scores.componentId` | Komponen dihapus: nilai komponen dihapus | Unik per (komponen, enrollment) |
+| R64 | `ENROLLMENTS` → `GRADE_COMPONENT_SCORES` | 1 — N | `grade_component_scores.enrollmentId` | Enrollment dihapus: nilai komponen dihapus | — |
+| R65 | `GRADES` → `GRADE_SCHEMES` | N — 0..1 | `grades.schemeId` | Skema dihapus: FK `SET NULL` | Jejak skema saat finalisasi |
+| R66 | `GRADES` → `GRADE_CORRECTIONS` | 1 — N | `grade_corrections.gradeId` | Nilai dihapus: koreksi dihapus | Koreksi hanya untuk nilai finalized |
+| R67 | `ENROLLMENTS` → `GRADE_CORRECTIONS` | 1 — N | `grade_corrections.enrollmentId` | Enrollment dihapus: koreksi dihapus | Denormalisasi |
+| R68 | `USERS` (aktor) → `GRADE_CORRECTIONS` | 1 — N | `grade_corrections.actorId` | User dihapus: FK `SET NULL` | Audit koreksi |
 
 ### 6.1 Relasi Banyak-ke-Banyak
 
@@ -1339,6 +1966,8 @@ Absensi harian pribadi staf/admin yang dicatat dari dashboard Admin. Bukan prese
 |---|---|---|---|
 | Peserta ↔ Kelas | `ENROLLMENTS` | `status`, `enrolledAt`, `enrolledBy` | `(studentId, classId)` |
 | Peserta ↔ Materi (progres) | `COMPLETED_LESSONS` | `completedAt` | `(studentId, courseId, lessonId)` |
+| Peserta ↔ Komponen Nilai | `GRADE_COMPONENT_SCORES` | `score`, `status`, `assessedAt` | `(componentId, enrollmentId)` |
+| Peserta ↔ Ujian | `EXAM_PARTICIPANTS` + `EXAM_RESULTS` | `status`, `score` | `(examId, enrollmentId)` |
 
 ---
 
@@ -1379,16 +2008,32 @@ Absensi harian pribadi staf/admin yang dicatat dari dashboard Admin. Bukan prese
 | Sertifikat hanya untuk peserta bernilai | `crud-grades.js` |
 | Approve hanya untuk sertifikat Draft | `crud-grades.js` |
 | Sertifikat Publish yang terlihat peserta | `data.js` + filter halaman peserta |
+| Rentang predikat menutup 0–100 tanpa celah/tumpang tindih | `admin/settings.html` + `api/actions.php` (`predicate.save`) |
+| Hanya Admin yang dapat mengubah predikat | `api/actions.php`, `crud-grades.js` |
+| Satu skema penilaian per kelas | unique `(class_id)` + `classId` |
+| Publikasi skema wajib ≥1 komponen dan total bobot 100% | `api/actions.php`, `crud-grades.js`, `gradeWeightTotal` |
+| Skema published/archived tidak boleh kembali ke draft atau dihapus | `api/actions.php`, `crud-grades.js` |
+| Nilai komponen hanya untuk komponen + enrollment valid | `api/actions.php`, `crud-grades.js` |
+| Nilai komponen/tugas/ujian kosong tidak dianggap 0 | `elips_grade_compute_enrollment`, `computeEnrollmentGrade` |
+| Komponen wajib kosong → status `incomplete` | engine server + lokal |
+| Finalisasi hanya untuk nilai lengkap dan mengunci nilai | `grade.finalize` |
+| Nilai finalized tidak dapat diubah lewat simpan biasa | `grade.save`, `grade.manualSave` |
+| Koreksi hanya untuk nilai finalized, alasan ≥5 karakter, tercatat | `grade.correct`, `grade_corrections` |
+| Tugas/ujian hanya dikelola Admin atau instruktur pemilik kelas | `api/actions.php`, `crud-tasks.js` |
+| Submission unik per (tugas, enrollment) dan tunduk pada status tugas | `api/actions.php`, `crud-tasks.js` |
+| Submission `accepted` tidak dapat dikirim ulang | `api/actions.php`, `crud-tasks.js` |
+| Hasil ujian unik per (ujian, enrollment) dan skor ≤ `maxScore` | `api/actions.php`, `crud-tasks.js` |
+| Nilai `missing` pada ujian tidak dikonversi menjadi 0 | engine grading |
 
 ### 7.2 Integritas pada Mode Fallback
 
 Pada mode fallback `localStorage` tidak ada database relasional, sehingga hal berikut hanya dijaga oleh kode dan dapat rusak jika penyimpanan diedit manual:
 
-- Referensi `instructorId`, `courseId`, `moduleId`, `lessonId`, `studentId`, `enrollmentId` tidak memiliki constraint FK.
-- Tidak ada `ON DELETE CASCADE` otomatis; cascade dilakukan manual di fungsi CRUD.
-- Tidak ada transaksi; operasi multi-koleksi dapat berhenti di tengah jika terjadi error.
+- Referensi `instructorId`, `courseId`, `moduleId`, `lessonId`, `studentId`, `enrollmentId`, `schemeId`, `componentId`, `assignmentId`, `examId` tidak memiliki constraint FK.
+- Tidak ada `ON DELETE CASCADE` otomatis; cascade dilakukan manual di fungsi CRUD, termasuk komponen skema, nilai komponen, submission, hasil ujian, dan koreksi.
+- Tidak ada transaksi; operasi multi-koleksi (mis. finalisasi/koreksi nilai) dapat berhenti di tengah jika terjadi error. Mode server memakai transaksi untuk komputasi dan koreksi.
 - ID dapat dipakai ulang setelah record ber-ID terbesar dihapus.
-- Tipe data tidak dipaksa saat data dibaca dari `localStorage`.
+- Tipe data tidak dipaksa saat data dibaca dari `localStorage`; validasi bobot/predikat murni dilakukan kode.
 
 Pada mode server, integritas referensial ditegakkan MySQL melalui foreign key dan `ON DELETE` (lihat §16.4), sedangkan operasi multi-tabel memakai transaksi eksplisit di `api/actions.php`.
 
@@ -1406,6 +2051,10 @@ Sertifikat hanya terlihat jika `status = publish` dan milik peserta yang sedang 
 
 Presensi dan rekap kehadiran hanya dapat dibaca peserta untuk enrollment miliknya sendiri; `attendance.myRecap` memfilter berdasarkan sesi kelas yang diikuti dan menolak permintaan kelas lain. Admin dan Instruktur pengampu dapat membaca rekap seluruh peserta pada kelas yang dikelolanya.
 
+Peserta dapat membaca transkrip nilainya sendiri melalui `grade.transcript`: skor akhir, huruf, status, komponen, dan riwayat koreksi. Peserta lain dan pengguna tanpa hak ditolak. Instruktur/Admin pengampu kelas dapat membaca transkrip peserta pada kelas yang dikelolanya. Peserta tidak dapat membaca nilai komponen mentah kelas lain maupun daftar roster.
+
+Tugas (`assignment.classroom`/`detail`/`submit`) dan ujian (`exam.classroom`/`detail`) hanya dapat diakses peserta yang memiliki enrollment aktif pada kelas terkait. Submission milik peserta lain tidak pernah dikirim ke client; path berkas privat tidak diekspos.
+
 ---
 
 ## 8. Status Lifecycle
@@ -1421,8 +2070,16 @@ Presensi dan rekap kehadiran hanya dapat dibaca peserta untuk enrollment milikny
 | Sesi Pertemuan | `status` | `scheduled`, `confirmed`, `completed`, `rescheduled`, `cancelled`, `no_show` | scheduled → confirmed/completed/cancelled/no_show/rescheduled; confirmed → completed/cancelled/no_show/rescheduled; completed final |
 | Presensi | `status` | `present`, `late`, `permission`, `sick`, `absent`, `excused` | Dapat berubah melalui koreksi beralasan |
 | Enrollment | `status` | `pending`, `active`, `completed`, `withdrawn`, `suspended`, `cancelled`, `dihentikan` | pending → active; active → completed/withdrawn/suspended/cancelled; withdrawn → active |
+| Tugas | `status` | `draft`, `published`, `closed`, `archived` | draft → published → closed → archived; published → draft selama belum ada submission |
+| Submission | `status` | `submitted`, `late`, `reviewed`, `revision_requested`, `resubmitted`, `accepted` | submitted/late → reviewed/revision_requested; revision_requested → resubmitted; reviewed/resubmitted → accepted; accepted final |
+| Ujian | `status` | `draft`, `published`, `closed`, `archived` | draft → published → closed → archived; published → draft selama belum ada hasil |
+| Peserta Ujian | `status` | `registered`, `attended`, `absent`, `excused` | registered → attended/absent/excused; attended final |
+| Hasil Ujian | `status` | `not_assessed`, `graded`, `excused`, `missing` | not_assessed → graded/excused/missing; graded dapat dinilai ulang sebelum nilai difinalisasi |
+| Skema Nilai | `status` | `draft`, `published`, `archived` | draft → published; published → archived; published/archived tidak dapat kembali ke draft |
+| Nilai | `status` | `draft`, `incomplete`, `finalized` | draft ↔ incomplete (hasil komputasi); draft/incomplete → finalized; finalized hanya berubah melalui koreksi |
+| Nilai | `grade` | A … E (konfigurabel) | Dihitung ulang dari `predicate_ranges` setiap skor/komputasi berubah |
+| Koreksi Nilai | — | append-only | Setiap koreksi menambah baris, tidak menghapus histori |
 | Sertifikat | `status` | `draft`, `publish` | draft → publish; publish tidak kembali ke draft |
-| Nilai | `grade` | A … E | Dihitung ulang setiap skor disimpan |
 | Notifikasi | `status` | `sent` | Tidak berubah (simulasi) |
 
 ---
@@ -1444,6 +2101,15 @@ Presensi dan rekap kehadiran hanya dapat dibaca peserta untuk enrollment milikny
 | `enrollments.courseId` | Kursus enrollment | `classes.courseId` | Diset saat pendaftaran kelas |
 | `grades.studentId`, `grades.courseId` | Pasangan peserta+kursus | `enrollments` | Diset saat nilai disimpan |
 | `grades.enrollmentId` | Enrollment | `enrollments` | Diset saat nilai disimpan |
+| `grades.schemeId` | Skema saat komputasi/finalisasi | `grade_schemes` | Diset saat finalisasi/koreksi |
+| `grades.finalScore`, `grades.grade`, `grades.status` | Hasil komputasi | `grade_component_scores` + `predicate_ranges` | Dihitung ulang saat skor berubah; dikunci saat finalisasi |
+| `grades.componentsSnapshot` | Komponen + bobot saat finalisasi | `grade_scheme_components` | Snapshot JSON saat finalisasi; diperbarui saat koreksi |
+| `grades.finalizedBy`, `grades.finalizedAt` | Aktor/waktu finalisasi | aktor | Snapshot historis |
+| `gradeComponentScores.studentId` | Peserta | `enrollments.studentId` | Diset saat nilai komponen disimpan |
+| `gradeCorrections.previousScore`, `newScore`, `previousLetter`, `newLetter` | Nilai sebelum/sesudah | `grades` | Snapshot saat koreksi |
+| `assignments.curriculumVersionId` | Versi kelas | `classes.curriculumVersionId` | Diset saat create/update |
+| `submissions.studentId` | Peserta | `enrollments.studentId` | Diset saat submission disimpan |
+| `examParticipants.studentId`, `examResults.studentId` | Peserta | `enrollments.studentId` | Diset saat peserta/hasil dibuat |
 | `certificates.studentId`, `certificates.courseId` | Pasangan peserta+kursus | `enrollments` | Diset saat sertifikat dibuat |
 | `certificates.enrollmentId` | Enrollment | `enrollments` | Diset saat sertifikat dibuat |
 | `certificates.grade`, `certificates.score` | Nilai saat terbit | `grades` | Snapshot; diperbarui saat nilai disimpan ulang |
@@ -1504,6 +2170,37 @@ Keterangan:
 | Hapus **User instruktur** | `instructorId` → `null` | `recordedBy` → `null` | `actorId` → `null`, snapshot tetap | Riwayat tetap terbaca |
 | **Koreksi presensi** | — | `status`, `correctedAt`, `correctionReason` diperbarui | Tambah baris baru | Baris koreksi append-only |
 | **Reschedule** | Sesi asal → `rescheduled`; sesi baru dibuat | — | — | Sesi baru menyimpan `rescheduledFromId` |
+
+---
+
+### 10.2 Cascade Tugas, Submission, dan Ujian
+
+| Operasi | ASSIGNMENTS | ASSIGNMENT_FILES | ASSIGNMENT_RUBRICS | SUBMISSIONS | SUBMISSION_FILES | SUBMISSION_REVIEWS | EXAMS | EXAM_PARTICIPANTS | EXAM_RESULTS | Catatan |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Hapus **Kelas** | Dihapus | Dihapus | Dihapus | Dihapus | Dihapus | Dihapus | Dihapus | Dihapus | Dihapus | Aplikasi menolak hapus kelas berisi enrollment |
+| Hapus **Tugas** | Dihapus | Dihapus | Dihapus | Dihapus | Dihapus | Dihapus | — | — | — | Hanya saat tugas belum dipakai atau sesuai aturan status |
+| Hapus **Submission** | — | — | — | Dihapus | Dihapus | Dihapus | — | — | — | Nilai komponen terkait dihitung ulang |
+| Hapus **Ujian** | — | — | — | — | — | — | Dihapus | Dihapus | Dihapus | Hasil ujian ikut hilang |
+| Hapus **Enrollment** | — | — | — | Dihapus milik enrollment | Dihapus | Dihapus | — | Dihapus milik enrollment | Dihapus milik enrollment | Nilai komponen/koreksi juga dihapus |
+| Hapus **User peserta** | — | — | — | Dihapus milik peserta | Dihapus | Dihapus | — | Dihapus milik peserta | Dihapus milik peserta | Cascade melalui student/enrollment |
+| Hapus **User instruktur** | Tetap | — | — | `reviewedBy` → `null` | — | `reviewerId` → `null` | Tetap | — | `gradedBy` → `null` | Riwayat tetap terbaca |
+| Hapus **Versi kurikulum** | Dihapus | Dihapus | Dihapus | Dihapus | Dihapus | Dihapus | Dihapus | Dihapus | Dihapus | Versi terkunci tidak dapat dihapus |
+
+---
+
+### 10.3 Cascade Nilai dan Koreksi
+
+| Operasi | GRADE_SCHEMES | GRADE_SCHEME_COMPONENTS | GRADE_COMPONENT_SCORES | GRADES | GRADE_CORRECTIONS | PREDICATE_RANGES | Catatan |
+|---|---|---|---|---|---|---|---|
+| Hapus **Kelas** | Dihapus | Dihapus | Dihapus | Dihapus | Dihapus | — | Aplikasi menolak hapus kelas berisi enrollment |
+| Hapus **Kursus** | Dihapus | Dihapus | Dihapus | Dihapus | Dihapus | — | — |
+| Hapus **Enrollment** | — | — | Dihapus milik enrollment | Dihapus | Dihapus | — | — |
+| Hapus **Skema** | Dihapus | Dihapus | Dihapus | `schemeId` → `null` | Tetap (via grade) | — | Skema published/archived tidak dapat dihapus |
+| Hapus **Komponen** | — | Dihapus | Dihapus | Snapshot tetap | — | — | Hanya lewat simpan ulang skema |
+| Hapus **Nilai** | — | — | — | Dihapus | Dihapus | — | — |
+| Hapus **Predikat** | — | — | — | — | — | Dihapus | Huruf tersimpan tetap ada pada nilai finalized |
+| **Finalisasi** | — | — | — | `status` → `finalized`, snapshot ditulis | — | — | Tidak membuat sertifikat otomatis |
+| **Koreksi** | — | — | Opsional diperbarui | `finalScore`/`grade` diperbarui | Tambah baris | — | Append-only, alasan wajib |
 
 ---
 
@@ -1723,18 +2420,205 @@ Keterangan:
 
 ### 11.5 Nilai
 
+Nilai legacy/manual (kompatibel Phase 1–5):
+
 ```json
 {
   "id": 1,
   "enrollmentId": 1,
+  "schemeId": null,
   "courseId": 1,
   "studentId": 5,
   "instructorId": 2,
   "score": 88,
+  "finalScore": 88,
   "grade": "A-",
+  "status": "draft",
+  "componentsSnapshot": null,
   "note": "Pemahaman materi baik.",
+  "finalizedBy": null,
+  "finalizedAt": null,
+  "computedAt": "2026-11-10T09:00:00.000Z",
   "createdAt": "2026-11-03T07:25:19.822Z",
   "updatedAt": "2026-11-03T07:25:19.822Z"
+}
+```
+
+Nilai hasil finalisasi skema (enrollment 1 setelah komponen Tugas dikecualikan):
+
+```json
+{
+  "id": 7,
+  "enrollmentId": 1,
+  "schemeId": 1,
+  "courseId": 1,
+  "studentId": 5,
+  "instructorId": 2,
+  "score": 89,
+  "finalScore": 88.86,
+  "grade": "A-",
+  "status": "finalized",
+  "componentsSnapshot": "[{\"componentId\":2,\"name\":\"Ujian\",\"weight\":40,\"score\":88},{\"componentId\":3,\"name\":\"Penilaian Manual\",\"weight\":30,\"score\":90}]",
+  "note": "Difinalisasi dari skema penilaian kelas.",
+  "finalizedBy": 2,
+  "finalizedAt": "2026-11-10T09:05:00.000Z",
+  "computedAt": "2026-11-10T09:05:00.000Z",
+  "createdAt": "2026-11-10T09:05:00.000Z",
+  "updatedAt": null
+}
+```
+
+### 11.5a Predikat dan Skema Penilaian
+
+```json
+{
+  "id": 1,
+  "letter": "A",
+  "label": "Sangat Baik",
+  "minScore": 90,
+  "maxScore": 100,
+  "sortOrder": 1,
+  "isActive": true
+}
+```
+
+```json
+{
+  "id": 1,
+  "courseId": 1,
+  "classId": 1,
+  "name": "Skema Penilaian Pelatihan Manajemen Dasar",
+  "status": "published",
+  "passScore": 60,
+  "rounding": "half_up",
+  "notes": "",
+  "createdBy": 2,
+  "updatedBy": 2
+}
+```
+
+```json
+[
+  {
+    "id": 1,
+    "schemeId": 1,
+    "type": "assignment",
+    "name": "Tugas",
+    "weight": 30,
+    "aggregation": "weighted",
+    "maxScore": 100,
+    "isRequired": true,
+    "sortOrder": 1
+  },
+  {
+    "id": 2,
+    "schemeId": 1,
+    "type": "exam",
+    "name": "Ujian",
+    "weight": 40,
+    "aggregation": "weighted",
+    "maxScore": 100,
+    "isRequired": true,
+    "sortOrder": 2
+  },
+  {
+    "id": 3,
+    "schemeId": 1,
+    "type": "manual",
+    "name": "Penilaian Manual",
+    "weight": 30,
+    "aggregation": "weighted",
+    "maxScore": 100,
+    "isRequired": true,
+    "sortOrder": 3
+  }
+]
+```
+
+```json
+{
+  "id": 5,
+  "componentId": 3,
+  "enrollmentId": 1,
+  "studentId": 5,
+  "score": 90,
+  "status": "graded",
+  "assessorId": 2,
+  "assessedAt": "2026-11-10T08:30:00.000Z",
+  "note": ""
+}
+```
+
+```json
+{
+  "id": 1,
+  "gradeId": 7,
+  "enrollmentId": 1,
+  "previousScore": 88.86,
+  "newScore": 92,
+  "previousLetter": "A-",
+  "newLetter": "A",
+  "reason": "Verifikasi ulang nilai praktik oleh tim akademik.",
+  "actorId": 2,
+  "createdAt": "2026-11-10T10:00:00.000Z"
+}
+```
+
+### 11.5b Tugas, Submission, dan Ujian
+
+```json
+{
+  "id": 1,
+  "classId": 1,
+  "curriculumVersionId": 1,
+  "title": "Studi Kasus Manajemen",
+  "type": "text_submission",
+  "openAt": "2026-10-01T00:00:00.000Z",
+  "dueAt": "2026-10-20T23:59:00.000Z",
+  "maxScore": 100,
+  "status": "published"
+}
+```
+
+```json
+{
+  "id": 1,
+  "assignmentId": 1,
+  "enrollmentId": 1,
+  "studentId": 5,
+  "status": "reviewed",
+  "textAnswer": "Analisis studi kasus...",
+  "score": 85,
+  "reviewedBy": 2,
+  "reviewedAt": "2026-10-21T09:00:00.000Z",
+  "revisionCount": 0
+}
+```
+
+```json
+{
+  "id": 1,
+  "classId": 1,
+  "curriculumVersionId": 1,
+  "title": "Ujian Akhir",
+  "type": "written",
+  "examDate": "2026-10-25",
+  "maxScore": 100,
+  "status": "published"
+}
+```
+
+```json
+{
+  "id": 1,
+  "examId": 1,
+  "enrollmentId": 1,
+  "studentId": 5,
+  "score": 88,
+  "status": "graded",
+  "gradedBy": 2,
+  "gradedAt": "2026-10-25T10:00:00.000Z",
+  "note": "Pemahaman konsep baik."
 }
 ```
 
@@ -1848,6 +2732,17 @@ Keterangan:
 | Progres materi tambahan | `CLASS_MATERIAL_PROGRESS` | Filter `enrollmentId` atau `materialId`; unik per enrollment+material |
 | Progres gabungan | `CLASS_LESSON_PROGRESS` + `COMPLETED_LESSONS` | Baca keduanya agar data lama tetap terhitung |
 | Nilai peserta | `GRADES` | Filter `enrollmentId` (atau `studentId` + `courseId`) |
+| Roster nilai kelas | `GRADES` + `ENROLLMENTS` | Filter `enrollments.classId`, lalu komputasi per enrollment |
+| Skema per kelas | `GRADE_SCHEMES` | Cari `classId` unik |
+| Komponen skema | `GRADE_SCHEME_COMPONENTS` | Filter `schemeId`, urut `sortOrder` |
+| Nilai komponen | `GRADE_COMPONENT_SCORES` | Filter `enrollmentId` atau `componentId`; unik per pasangan |
+| Predikat nilai | `PREDICATE_RANGES` | Filter `isActive`, urut `sortOrder`, cari rentang skor |
+| Koreksi nilai | `GRADE_CORRECTIONS` | Filter `gradeId`/`enrollmentId`, urut `createdAt` |
+| Tugas per kelas | `ASSIGNMENTS` | Filter `classId` + `status`, urut `dueAt` |
+| Submission per tugas | `SUBMISSIONS` | Filter `assignmentId`, atau `enrollmentId`/`studentId` |
+| Riwayat review | `SUBMISSION_REVIEWS` | Filter `submissionId`, urut `createdAt` |
+| Ujian per kelas | `EXAMS` | Filter `classId` + `status`, urut `examDate` |
+| Hasil ujian | `EXAM_RESULTS` | Filter `examId` atau `enrollmentId`; unik per pasangan |
 | Sertifikat peserta | `CERTIFICATES` | Filter `enrollmentId` (atau `studentId` + `courseId`) |
 | Verifikasi sertifikat | `CERTIFICATES` | Cari `certificateNumber` (uppercase), cek `publish` |
 | Progres | `COMPLETED_LESSONS` | Kombinasi `studentId` + `courseId` + `lessonId` |
@@ -1868,7 +2763,19 @@ Keterangan:
 - `attendance_corrections(attendance_id)`, `attendance_corrections(session_id)`, `attendance_corrections(enrollment_id)`
 - `modules(course_id, sort_order)`, `modules(curriculum_version_id, sort_order)`, `modules(instructor_id)`
 - `lessons(module_id, sort_order)`, `lessons(course_id)`, `lessons(curriculum_version_id, sort_order)`, `lessons(instructor_id)`
-- `grades(enrollment_id)` unik, `grades(student_id, course_id)`, `grades(instructor_id)`
+- `grades(enrollment_id)` unik, `grades(student_id, course_id)`, `grades(instructor_id)`, `grades(scheme_id)`, `grades(status)`
+- `predicate_ranges(letter)` unik, `predicate_ranges(sort_order, min_score)`
+- `grade_schemes(class_id)` unik, `grade_schemes(course_id)`, `grade_schemes(status)`
+- `grade_scheme_components(scheme_id, sort_order)`, `grade_scheme_components(type)`
+- `grade_component_scores(component_id, enrollment_id)` unik, `grade_component_scores(enrollment_id)`, `grade_component_scores(student_id)`, `grade_component_scores(status)`
+- `grade_corrections(grade_id)`, `grade_corrections(enrollment_id)`
+- `assignments(class_id, status)`, `assignments(curriculum_version_id)`, `assignments(module_id)`, `assignments(lesson_id)`, `assignments(created_by)`
+- `assignment_files(assignment_id)`, `assignment_rubrics(assignment_id, sort_order)`
+- `submissions(assignment_id, enrollment_id)` unik, `submissions(student_id)`, `submissions(status)`
+- `submission_files(submission_id)`, `submission_reviews(submission_id, created_at)`
+- `exams(class_id, status)`, `exams(curriculum_version_id)`, `exams(exam_date)`
+- `exam_participants(exam_id, enrollment_id)` unik, `exam_participants(student_id)`
+- `exam_results(exam_id, enrollment_id)` unik, `exam_results(student_id)`, `exam_results(status)`
 - `certificates(certificate_number)` unik, `certificates(enrollment_id)` unik, `certificates(student_id, course_id)`, `certificates(status)`
 - `completed_lessons(student_id, lesson_id)` unik, `completed_lessons(course_id)`
 - `class_material_settings(class_id)` unik, `class_material_settings(updated_by)`
@@ -1903,7 +2810,21 @@ Skema fisik ada di `api/schema.sql` dan dibuat oleh `api/install.php`. Pemetaan 
 | `ATTENDANCE_CORRECTIONS` | `attendance_corrections` | `id` | `attendance_id` → `attendances.id` CASCADE; `session_id` → `class_sessions.id` CASCADE; `enrollment_id` → `enrollments.id` CASCADE; `actor_id` → `users.id` SET NULL |
 | `MODULES` | `modules` | `id` | `course_id` → `courses.id` CASCADE; `curriculum_version_id` → `curriculum_versions.id` CASCADE; `instructor_id` → `users.id` SET NULL |
 | `LESSONS` | `lessons` | `id` | `module_id` → `modules.id` CASCADE; `course_id` → `courses.id` CASCADE; `curriculum_version_id` → `curriculum_versions.id` CASCADE; `instructor_id` SET NULL |
-| `GRADES` | `grades` | `id` | `enrollment_id` → `enrollments.id` CASCADE; `student_id`/`course_id` CASCADE; `instructor_id` SET NULL; UNIQUE(`enrollment_id`) |
+| `GRADES` | `grades` | `id` | `enrollment_id` → `enrollments.id` CASCADE; `scheme_id` → `grade_schemes.id` SET NULL; `student_id`/`course_id` CASCADE; `instructor_id`/`finalized_by` → `users.id` SET NULL; UNIQUE(`enrollment_id`) |
+| `PREDICATE_RANGES` | `predicate_ranges` | `id` | `letter` UNIQUE; index (`sort_order`, `min_score`) |
+| `GRADE_SCHEMES` | `grade_schemes` | `id` | `class_id` → `classes.id` CASCADE, UNIQUE; `course_id` → `courses.id` CASCADE; `created_by`/`updated_by` → `users.id` SET NULL |
+| `GRADE_SCHEME_COMPONENTS` | `grade_scheme_components` | `id` | `scheme_id` → `grade_schemes.id` CASCADE |
+| `GRADE_COMPONENT_SCORES` | `grade_component_scores` | `id` | `component_id` → `grade_scheme_components.id` CASCADE; `enrollment_id`/`student_id` CASCADE; `assessor_id` → `users.id` SET NULL; UNIQUE(`component_id`, `enrollment_id`) |
+| `GRADE_CORRECTIONS` | `grade_corrections` | `id` | `grade_id` → `grades.id` CASCADE; `enrollment_id` → `enrollments.id` CASCADE; `actor_id` → `users.id` SET NULL |
+| `ASSIGNMENTS` | `assignments` | `id` | `class_id`/`curriculum_version_id` CASCADE; `module_id`/`lesson_id`/`created_by`/`updated_by` SET NULL |
+| `ASSIGNMENT_FILES` | `assignment_files` | `id` | `assignment_id` → `assignments.id` CASCADE |
+| `ASSIGNMENT_RUBRICS` | `assignment_rubrics` | `id` | `assignment_id` → `assignments.id` CASCADE |
+| `SUBMISSIONS` | `submissions` | `id` | `assignment_id`/`enrollment_id`/`student_id` CASCADE; `reviewed_by` SET NULL; UNIQUE(`assignment_id`, `enrollment_id`) |
+| `SUBMISSION_FILES` | `submission_files` | `id` | `submission_id` → `submissions.id` CASCADE |
+| `SUBMISSION_REVIEWS` | `submission_reviews` | `id` | `submission_id` CASCADE; `reviewer_id` SET NULL |
+| `EXAMS` | `exams` | `id` | `class_id`/`curriculum_version_id` CASCADE; `created_by`/`updated_by` SET NULL |
+| `EXAM_PARTICIPANTS` | `exam_participants` | `id` | `exam_id`/`enrollment_id`/`student_id` CASCADE; UNIQUE(`exam_id`, `enrollment_id`) |
+| `EXAM_RESULTS` | `exam_results` | `id` | `exam_id`/`enrollment_id`/`student_id` CASCADE; `graded_by` SET NULL; UNIQUE(`exam_id`, `enrollment_id`) |
 | `CERTIFICATES` | `certificates` | `id` | `enrollment_id` → `enrollments.id` CASCADE; `student_id`/`course_id` CASCADE; `approved_by_admin_id` SET NULL; UNIQUE(`enrollment_id`), `certificate_number` UNIQUE |
 | `COMPLETED_LESSONS` | `completed_lessons` | `id` | UNIQUE(`student_id`, `lesson_id`); FK ke `users`, `courses`, `lessons` CASCADE |
 | `AUDIT_LOGS` | `audit_logs` | `id` | `actor_id` → `users.id` SET NULL (polimorfik `entity` + `entity_id`) |
@@ -1930,7 +2851,7 @@ Skema fisik ada di `api/schema.sql` dan dibuat oleh `api/install.php`. Pemetaan 
 | Pembacaan | `ELIPS.read(key, fallback)` melakukan `JSON.parse`; error dikembalikan sebagai fallback |
 | Penulisan | `ELIPS.write(key, value)` melakukan `JSON.stringify` |
 | ID | `ELIPS.nextId(list)` = `max(id)+1` per koleksi |
-| Normalisasi | `seed.js` menjalankan migrasi saat modul dimuat, termasuk normalisasi sertifikat, migrasi v3 → v4 (kategori, versi kurikulum, kelas migrasi, `curriculumVersionId` pada modul/materi), dan normalisasi Phase 4 (`classMaterialSettings`, `classMaterials`, `classLessonProgress`, `classMaterialProgress`); dilewati pada mode server |
+| Normalisasi | `seed.js` menjalankan migrasi saat modul dimuat, termasuk normalisasi sertifikat, migrasi v3 → v4 (kategori, versi kurikulum, kelas migrasi, `curriculumVersionId` pada modul/materi), normalisasi Phase 4 (`classMaterialSettings`, `classMaterials`, `classLessonProgress`, `classMaterialProgress`), seed Phase 5 (tugas/ujian beserta submission, review, peserta, hasil), dan seed Phase 6 (`predicateRanges`, `gradeSchemes`, `gradeSchemeComponents`, `gradeComponentScores`, `gradeCorrections`); dilewati pada mode server |
 | Default akses materi | Kelas tanpa baris pengaturan memakai default implisit `open`; `seed.js` tidak membuat baris untuk setiap kelas |
 | File privat | Mode lokal tidak menyimpan file biner; hanya metadata. Path/konten materi tetap mengikuti aturan akses yang sama |
 | Batas log | Audit dan notifikasi maksimal 1000 entri, terbaru di depan |
@@ -1955,10 +2876,17 @@ ENROLLMENTS        1 ─── N ATTENDANCES
 USERS (peserta)    1 ─── N ATTENDANCES
 USERS (peserta)    1 ─── N ENROLLMENTS N ─── 1 CLASSES
 USERS (peserta)    1 ─── N ENROLLMENTS N ─── 1 COURSES
-ENROLLMENTS        1 ─── 0..1 GRADES
+ENROLLMENTS        1 ─── 0..1 GRADES N ─── 0..1 GRADE_SCHEMES
+CLASSES            1 ─── 0..1 GRADE_SCHEMES 1 ─── N GRADE_SCHEME_COMPONENTS 1 ─── N GRADE_COMPONENT_SCORES
+ENROLLMENTS        1 ─── N GRADE_COMPONENT_SCORES / GRADE_CORRECTIONS
+GRADES             1 ─── N GRADE_CORRECTIONS
 ENROLLMENTS        1 ─── 0..1 CERTIFICATES
 USERS (peserta)    1 ─── N GRADES / CERTIFICATES / COMPLETED_LESSONS
 LESSONS            1 ─── N COMPLETED_LESSONS
+CLASSES            1 ─── N ASSIGNMENTS 1 ─── N SUBMISSIONS 1 ─── N SUBMISSION_FILES / SUBMISSION_REVIEWS
+CLASSES            1 ─── N EXAMS 1 ─── N EXAM_PARTICIPANTS / EXAM_RESULTS
+ASSIGNMENTS        1 ─── N ASSIGNMENT_FILES / ASSIGNMENT_RUBRICS
+ENROLLMENTS        1 ─── N SUBMISSIONS / EXAM_PARTICIPANTS / EXAM_RESULTS
 CLASSES            1 ─── 0..1 CLASS_MATERIAL_SETTINGS
 CLASSES            1 ─── N CLASS_MATERIALS
 CLASS_MATERIALS    1 ─── N CLASS_MATERIAL_PROGRESS
@@ -1982,7 +2910,10 @@ Dengan demikian, inti model data ELIPS LMS adalah:
 - **Pengaturan Akses Materi** sebagai kebijakan per kelas (`open`/`sequential`/`scheduled`/`conditional`) dan kontrol persetujuan instruktur.
 - **Materi Tambahan Kelas** sebagai bahan pendukung di luar kurikulum, dengan file privat dan status wajib/opsional/referensi.
 - **Progres Kelas** (`ClassLessonProgress`/`ClassMaterialProgress`) sebagai bukti penyelesaian per enrollment.
-- **Nilai** dan **Sertifikat** sebagai hasil akhir pembelajaran per enrollment (per angkatan).
+- **Tugas** dan **Ujian** sebagai instrumen penilaian per kelas, dengan submission/review dan peserta/hasil ujian sebagai entitas turunan.
+- **Predikat Nilai** sebagai konfigurasi global rentang huruf A–E yang dapat diubah Admin.
+- **Skema Penilaian** sebagai konfigurasi bobot per kelas; **Komponen** mendefinisikan sumber nilai (tugas/ujian/manual), dan **Nilai Komponen** menyimpan skor per enrollment.
+- **Nilai** dan **Sertifikat** sebagai hasil akhir pembelajaran per enrollment (per angkatan); nilai memiliki status `draft`/`incomplete`/`finalized` dan **Koreksi Nilai** append-only untuk perubahan setelah finalisasi.
 - **CompletedLessons** sebagai bukti progres legacy yang tetap dibaca untuk kompatibilitas.
 - **AuditLogs** dan **Notifications** sebagai catatan operasional yang bersifat historis.
 - **StaffAttendances** sebagai absensi harian pribadi admin (maks. satu `in` + satu `out` per hari di UI), lengkap dengan foto, lokasi GPS otomatis, dan metadata perangkat.
@@ -2002,24 +2933,38 @@ Bagian ini mendokumentasikan skema yang benar-benar dieksekusi oleh `api/schema.
 | 3 | `branches` | Cabang/unit penyelenggara | `id`, `code`, `name`, `city`, `status` | — |
 | 4 | `courses` | Kursus dan instruktur pengampu | `id`, `title`, `category_id`, `instructor_id`, `status` | `category_id` → `categories.id`; `instructor_id` → `users.id` |
 | 5 | `curriculum_versions` | Versi kurikulum per kursus | `id`, `course_id`, `code`, `status` | `course_id` → `courses.id`; `created_by`/`updated_by` → `users.id` |
-| 6 | `classes` | Kelas/angkatan | `id`, `code`, `course_id`, `curriculum_version_id`, `branch_id`, `instructor_id`, `status` | `course_id` → `courses.id`; `curriculum_version_id` → `curriculum_versions.id`; `branch_id` → `branches.id`; `instructor_id` → `users.id` |
-| 7 | `class_instructor_histories` | Histori pergantian tentor | `id`, `class_id`, `instructor_id`, `started_at`, `ended_at` | `class_id` → `classes.id`; `instructor_id`/`actor_id` → `users.id` |
-| 8 | `modules` | Modul di dalam versi kurikulum | `id`, `course_id`, `curriculum_version_id`, `instructor_id`, `sort_order` | `course_id` → `courses.id`; `curriculum_version_id` → `curriculum_versions.id` |
-| 9 | `lessons` | Materi di dalam modul | `id`, `module_id`, `course_id`, `curriculum_version_id`, `type`, `content`, `sort_order` | `module_id` → `modules.id`; `course_id` → `courses.id`; `curriculum_version_id` → `curriculum_versions.id` |
-| 10 | `enrollments` | Pendaftaran peserta ke kelas | `id`, `student_id`, `course_id`, `class_id`, `enrolled_at`, `status` | `student_id` → `users.id`; `course_id` → `courses.id`; `class_id` → `classes.id` |
-| 11 | `grades` | Nilai akhir per enrollment | `id`, `enrollment_id`, `student_id`, `course_id`, `score`, `grade` | `enrollment_id` → `enrollments.id` |
-| 12 | `certificates` | E-sertifikat Draft/Publish | `id`, `enrollment_id`, `student_id`, `course_id`, `certificate_number`, `status` | `enrollment_id` → `enrollments.id`; `approved_by_admin_id` → `users.id` |
-| 13 | `completed_lessons` | Progres materi per peserta | `id`, `student_id`, `course_id`, `lesson_id`, `completed_at` | `student_id` → `users.id`; `lesson_id` → `lessons.id` |
-| 14 | `audit_logs` | Jejak audit operasional | `id`, `action`, `entity`, `entity_id`, `actor_id`, `created_at` | `actor_id` → `users.id` |
-| 15 | `notifications` | Outbox notifikasi email simulasi | `id`, `type`, `recipient_id`, `recipient_email`, `subject`, `created_at` | `recipient_id` → `users.id` |
-| 16 | `class_sessions` | Sesi pertemuan per kelas | `id`, `class_id`, `session_number`, `session_date`, `planned_jp`, `actual_jp`, `status` | `class_id` → `classes.id`; `module_id` → `modules.id`; `instructor_id` → `users.id`; `rescheduled_from_id` → `class_sessions.id` |
-| 17 | `attendances` | Presensi peserta per sesi | `id`, `session_id`, `enrollment_id`, `student_id`, `status` | `session_id` → `class_sessions.id`; `enrollment_id` → `enrollments.id`; `student_id` → `users.id`; `recorded_by` → `users.id` |
-| 18 | `attendance_corrections` | Audit koreksi presensi | `id`, `attendance_id`, `old_status`, `new_status`, `reason`, `corrected_at` | `attendance_id` → `attendances.id`; `session_id`/`enrollment_id` → tabel terkait; `actor_id` → `users.id` |
-| 19 | `class_material_settings` | Pengaturan akses materi per kelas | `id`, `class_id`, `access_mode`, `require_instructor_approval` | `class_id` → `classes.id` (unik); `updated_by` → `users.id` |
-| 20 | `class_materials` | Materi tambahan kelas | `id`, `class_id`, `lesson_id`, `session_id`, `type`, `status`, `sort_order` | `class_id` → `classes.id`; `lesson_id` → `lessons.id`; `session_id` → `class_sessions.id` |
-| 21 | `class_lesson_progress` | Progres pelajaran per enrollment | `id`, `class_id`, `enrollment_id`, `lesson_id`, `completed_by` | `enrollment_id` → `enrollments.id`; `lesson_id` → `lessons.id`; unik(`enrollment_id`, `lesson_id`) |
-| 22 | `class_material_progress` | Progres materi tambahan per enrollment | `id`, `class_id`, `enrollment_id`, `material_id`, `completed_by` | `enrollment_id` → `enrollments.id`; `material_id` → `class_materials.id`; unik(`enrollment_id`, `material_id`) |
-| 23 | `staff_attendances` | Absensi harian pribadi staf/admin (kamera + metadata) | `id`, `user_id`, `kind`, `attendance_date`, `taken_at`, `photo`, `latitude`, `longitude` | `user_id` → `users.id` (`ON DELETE CASCADE`) |
+| 6 | `modules` | Modul di dalam versi kurikulum | `id`, `course_id`, `curriculum_version_id`, `instructor_id`, `sort_order` | `course_id` → `courses.id`; `curriculum_version_id` → `curriculum_versions.id` |
+| 7 | `lessons` | Materi di dalam modul | `id`, `module_id`, `course_id`, `curriculum_version_id`, `type`, `content`, `sort_order` | `module_id` → `modules.id`; `course_id` → `courses.id`; `curriculum_version_id` → `curriculum_versions.id` |
+| 8 | `classes` | Kelas/angkatan | `id`, `code`, `course_id`, `curriculum_version_id`, `branch_id`, `instructor_id`, `status` | `course_id` → `courses.id`; `curriculum_version_id` → `curriculum_versions.id`; `branch_id` → `branches.id`; `instructor_id` → `users.id` |
+| 9 | `enrollments` | Pendaftaran peserta ke kelas | `id`, `student_id`, `course_id`, `class_id`, `enrolled_at`, `status` | `student_id` → `users.id`; `course_id` → `courses.id`; `class_id` → `classes.id` |
+| 10 | `class_instructor_histories` | Histori pergantian tentor | `id`, `class_id`, `instructor_id`, `started_at`, `ended_at` | `class_id` → `classes.id`; `instructor_id`/`actor_id` → `users.id` |
+| 11 | `predicate_ranges` | Rentang predikat nilai huruf global | `id`, `letter`, `min_score`, `max_score`, `is_active` | `letter` UNIQUE |
+| 12 | `grade_schemes` | Skema penilaian per kelas | `id`, `course_id`, `class_id`, `status`, `pass_score`, `rounding` | `class_id` → `classes.id` (unik); `course_id` → `courses.id`; `created_by`/`updated_by` → `users.id` |
+| 13 | `grade_scheme_components` | Komponen berbobot skema | `id`, `scheme_id`, `type`, `name`, `weight`, `is_required` | `scheme_id` → `grade_schemes.id` |
+| 14 | `grades` | Nilai akhir per enrollment + status finalisasi | `id`, `enrollment_id`, `scheme_id`, `score`, `final_score`, `grade`, `status` | `enrollment_id` → `enrollments.id` (unik); `scheme_id` → `grade_schemes.id`; `finalized_by` → `users.id` |
+| 15 | `grade_component_scores` | Nilai komponen per enrollment | `id`, `component_id`, `enrollment_id`, `score`, `status` | `component_id` → `grade_scheme_components.id`; `enrollment_id` → `enrollments.id`; unik(`component_id`, `enrollment_id`) |
+| 16 | `grade_corrections` | Audit koreksi nilai finalized | `id`, `grade_id`, `previous_score`, `new_score`, `reason`, `actor_id` | `grade_id` → `grades.id`; `enrollment_id` → `enrollments.id`; `actor_id` → `users.id` |
+| 17 | `certificates` | E-sertifikat Draft/Publish | `id`, `enrollment_id`, `student_id`, `course_id`, `certificate_number`, `status` | `enrollment_id` → `enrollments.id`; `approved_by_admin_id` → `users.id` |
+| 18 | `completed_lessons` | Progres materi per peserta (legacy) | `id`, `student_id`, `course_id`, `lesson_id`, `completed_at` | `student_id` → `users.id`; `lesson_id` → `lessons.id` |
+| 19 | `audit_logs` | Jejak audit operasional | `id`, `action`, `entity`, `entity_id`, `actor_id`, `created_at` | `actor_id` → `users.id` |
+| 20 | `class_sessions` | Sesi pertemuan per kelas | `id`, `class_id`, `session_number`, `session_date`, `planned_jp`, `actual_jp`, `status` | `class_id` → `classes.id`; `module_id` → `modules.id`; `instructor_id` → `users.id`; `rescheduled_from_id` → `class_sessions.id` |
+| 21 | `attendances` | Presensi peserta per sesi | `id`, `session_id`, `enrollment_id`, `student_id`, `status` | `session_id` → `class_sessions.id`; `enrollment_id` → `enrollments.id`; `student_id` → `users.id`; `recorded_by` → `users.id` |
+| 22 | `attendance_corrections` | Audit koreksi presensi | `id`, `attendance_id`, `old_status`, `new_status`, `reason`, `corrected_at` | `attendance_id` → `attendances.id`; `session_id`/`enrollment_id` → tabel terkait; `actor_id` → `users.id` |
+| 23 | `class_material_settings` | Pengaturan akses materi per kelas | `id`, `class_id`, `access_mode`, `require_instructor_approval` | `class_id` → `classes.id` (unik); `updated_by` → `users.id` |
+| 24 | `class_materials` | Materi tambahan kelas | `id`, `class_id`, `lesson_id`, `session_id`, `type`, `status`, `sort_order` | `class_id` → `classes.id`; `lesson_id` → `lessons.id`; `session_id` → `class_sessions.id` |
+| 25 | `class_lesson_progress` | Progres pelajaran per enrollment | `id`, `class_id`, `enrollment_id`, `lesson_id`, `completed_by` | `enrollment_id` → `enrollments.id`; `lesson_id` → `lessons.id`; unik(`enrollment_id`, `lesson_id`) |
+| 26 | `class_material_progress` | Progres materi tambahan per enrollment | `id`, `class_id`, `enrollment_id`, `material_id`, `completed_by` | `enrollment_id` → `enrollments.id`; `material_id` → `class_materials.id`; unik(`enrollment_id`, `material_id`) |
+| 27 | `assignments` | Tugas per kelas | `id`, `class_id`, `curriculum_version_id`, `title`, `type`, `status` | `class_id` → `classes.id`; `curriculum_version_id` → `curriculum_versions.id`; `module_id`/`lesson_id` → tabel terkait |
+| 28 | `assignment_files` | Lampiran tugas | `id`, `assignment_id`, `file_name`, `file_path` | `assignment_id` → `assignments.id` |
+| 29 | `assignment_rubrics` | Rubrik penilaian tugas | `id`, `assignment_id`, `criterion`, `max_score`, `sort_order` | `assignment_id` → `assignments.id` |
+| 30 | `submissions` | Submission peserta per tugas | `id`, `assignment_id`, `enrollment_id`, `student_id`, `status`, `score` | `assignment_id`/`enrollment_id`/`student_id` → tabel terkait; unik(`assignment_id`, `enrollment_id`) |
+| 31 | `submission_files` | Berkas jawaban submission | `id`, `submission_id`, `file_name`, `file_path` | `submission_id` → `submissions.id` |
+| 32 | `submission_reviews` | Riwayat review submission | `id`, `submission_id`, `reviewer_id`, `action`, `score` | `submission_id` → `submissions.id`; `reviewer_id` → `users.id` |
+| 33 | `exams` | Ujian per kelas | `id`, `class_id`, `curriculum_version_id`, `title`, `type`, `status` | `class_id` → `classes.id`; `curriculum_version_id` → `curriculum_versions.id` |
+| 34 | `exam_participants` | Roster peserta ujian | `id`, `exam_id`, `enrollment_id`, `student_id`, `status` | `exam_id`/`enrollment_id`/`student_id` → tabel terkait; unik(`exam_id`, `enrollment_id`) |
+| 35 | `exam_results` | Hasil ujian per peserta | `id`, `exam_id`, `enrollment_id`, `student_id`, `score`, `status` | `exam_id`/`enrollment_id`/`student_id` → tabel terkait; unik(`exam_id`, `enrollment_id`) |
+| 36 | `notifications` | Outbox notifikasi email simulasi | `id`, `type`, `recipient_id`, `recipient_email`, `subject`, `created_at` | `recipient_id` → `users.id` |
+| 37 | `staff_attendances` | Absensi harian pribadi staf/admin (kamera + metadata) | `id`, `user_id`, `kind`, `attendance_date`, `taken_at`, `photo`, `latitude`, `longitude` | `user_id` → `users.id` (`ON DELETE CASCADE`) |
 
 Sesi login **tidak** memakai tabel: autentikasi memakai sesi PHP native (`$_SESSION`) dengan cookie `HttpOnly` dan `SameSite=Lax`.
 
@@ -2251,16 +3196,104 @@ Catatan: `uq_attendances_session_enrollment (session_id, enrollment_id)` mencega
 |---|---|---|---|---|
 | `id` | `INT UNSIGNED` | tidak | AUTO_INCREMENT | Primary key |
 | `enrollment_id` | `INT UNSIGNED` | ya | `NULL` | Enrollment terkait; unik per enrollment |
+| `scheme_id` | `INT UNSIGNED` | ya | `NULL` | Skema penilaian saat komputasi/finalisasi |
 | `course_id` | `INT UNSIGNED` | tidak | — | Kursus |
 | `student_id` | `INT UNSIGNED` | tidak | — | Peserta |
 | `instructor_id` | `INT UNSIGNED` | ya | `NULL` | Instruktur penilai |
-| `score` | `TINYINT UNSIGNED` | tidak | — | Nilai 0–100 |
-| `grade` | `CHAR(2)` | tidak | — | Huruf mutu (A, A-, B+, …) |
+| `score` | `TINYINT UNSIGNED` | tidak | — | Nilai legacy 0–100 (dibulatkan) |
+| `final_score` | `DECIMAL(6,2)` | ya | `NULL` | Nilai akhir desimal hasil komputasi skema |
+| `grade` | `CHAR(2)` | tidak | — | Huruf predikat (default A, A-, B+, …) |
+| `status` | `ENUM('draft','incomplete','finalized')` | tidak | `'draft'` | Status komputasi/finalisasi |
+| `components_snapshot` | `LONGTEXT` | ya | `NULL` | JSON komponen+bobot saat finalisasi |
 | `note` | `TEXT` | tidak | — | Catatan penilaian |
+| `finalized_by` | `INT UNSIGNED` | ya | `NULL` | Aktor finalisasi |
+| `finalized_at` | `DATETIME` | ya | `NULL` | Waktu finalisasi |
+| `computed_at` | `DATETIME` | ya | `NULL` | Waktu komputasi terakhir |
 | `created_at` | `DATETIME` | tidak | `CURRENT_TIMESTAMP` | Waktu dibuat |
 | `updated_at` | `DATETIME` | ya | `NULL` | Waktu perubahan terakhir |
 
-Catatan: `uq_grades_enrollment (enrollment_id)` menggantikan keunikan lama `(student_id, course_id)`, sehingga nilai untuk angkatan berbeda tersimpan terpisah.
+Catatan: `uq_grades_enrollment (enrollment_id)` menggantikan keunikan lama `(student_id, course_id)`, sehingga nilai untuk angkatan berbeda tersimpan terpisah. `status = finalized` mengunci nilai; perubahan hanya lewat `grade_corrections`.
+
+**`predicate_ranges`**
+
+| Kolom | Tipe | Null | Default | Keterangan |
+|---|---|---|---|---|
+| `id` | `INT UNSIGNED` | tidak | AUTO_INCREMENT | Primary key |
+| `letter` | `VARCHAR(4)` | tidak | — | Huruf predikat; UNIQUE |
+| `label` | `VARCHAR(60)` | tidak | `''` | Deskripsi |
+| `min_score` | `DECIMAL(5,2)` | tidak | — | Batas bawah inklusif |
+| `max_score` | `DECIMAL(5,2)` | tidak | — | Batas atas inklusif |
+| `sort_order` | `INT UNSIGNED` | tidak | `0` | Urutan tampil |
+| `is_active` | `TINYINT(1)` | tidak | `1` | Aktif/tidak |
+| `created_at` | `DATETIME` | tidak | `CURRENT_TIMESTAMP` | Waktu dibuat |
+| `updated_at` | `DATETIME` | ya | `NULL` | Waktu diperbarui |
+
+**`grade_schemes`**
+
+| Kolom | Tipe | Null | Default | Keterangan |
+|---|---|---|---|---|
+| `id` | `INT UNSIGNED` | tidak | AUTO_INCREMENT | Primary key |
+| `course_id` | `INT UNSIGNED` | tidak | — | Kursus (denormalisasi) |
+| `class_id` | `INT UNSIGNED` | tidak | — | Kelas; UNIQUE (satu skema per kelas) |
+| `name` | `VARCHAR(150)` | tidak | — | Nama skema |
+| `status` | `ENUM('draft','published','archived')` | tidak | `'draft'` | Lifecycle skema |
+| `pass_score` | `DECIMAL(5,2)` | tidak | `60.00` | Ambang lulus |
+| `rounding` | `ENUM('half_up','half_down','floor','ceil')` | tidak | `'half_up'` | Mode pembulatan nilai akhir |
+| `notes` | `TEXT` | tidak | — | Catatan |
+| `created_by` | `INT UNSIGNED` | ya | `NULL` | Pembuat |
+| `updated_by` | `INT UNSIGNED` | ya | `NULL` | Pengubah terakhir |
+| `created_at` | `DATETIME` | tidak | `CURRENT_TIMESTAMP` | Waktu dibuat |
+| `updated_at` | `DATETIME` | ya | `NULL` | Waktu diperbarui |
+
+**`grade_scheme_components`**
+
+| Kolom | Tipe | Null | Default | Keterangan |
+|---|---|---|---|---|
+| `id` | `INT UNSIGNED` | tidak | AUTO_INCREMENT | Primary key |
+| `scheme_id` | `INT UNSIGNED` | tidak | — | Skema pemilik |
+| `type` | `ENUM('assignment','exam','manual')` | tidak | `'manual'` | Sumber nilai |
+| `name` | `VARCHAR(150)` | tidak | — | Nama komponen |
+| `description` | `TEXT` | tidak | — | Deskripsi |
+| `weight` | `DECIMAL(5,2)` | tidak | `0.00` | Bobot; total 100 saat publish |
+| `aggregation` | `ENUM('weighted','average')` | tidak | `'weighted'` | Agregasi sumber |
+| `max_score` | `DECIMAL(6,2)` | tidak | `100.00` | Skor maksimum |
+| `is_required` | `TINYINT(1)` | tidak | `1` | Wajib/nilai opsional |
+| `sort_order` | `INT UNSIGNED` | tidak | `1` | Urutan tampil |
+| `created_at` | `DATETIME` | tidak | `CURRENT_TIMESTAMP` | Waktu dibuat |
+| `updated_at` | `DATETIME` | ya | `NULL` | Waktu diperbarui |
+
+**`grade_component_scores`**
+
+| Kolom | Tipe | Null | Default | Keterangan |
+|---|---|---|---|---|
+| `id` | `INT UNSIGNED` | tidak | AUTO_INCREMENT | Primary key |
+| `component_id` | `INT UNSIGNED` | tidak | — | Komponen; unik bersama enrollment |
+| `enrollment_id` | `INT UNSIGNED` | tidak | — | Enrollment |
+| `student_id` | `INT UNSIGNED` | tidak | — | Peserta |
+| `score` | `DECIMAL(6,2)` | ya | `NULL` | Skor; `NULL` = belum dinilai |
+| `status` | `ENUM('not_assessed','graded','excused','missing')` | tidak | `'not_assessed'` | Status nilai komponen |
+| `assessor_id` | `INT UNSIGNED` | ya | `NULL` | Penilai |
+| `assessed_at` | `DATETIME` | ya | `NULL` | Waktu dinilai |
+| `note` | `TEXT` | tidak | — | Catatan/alasan pengecualian |
+| `created_at` | `DATETIME` | tidak | `CURRENT_TIMESTAMP` | Waktu dibuat |
+| `updated_at` | `DATETIME` | ya | `NULL` | Waktu diperbarui |
+
+Catatan: `uq_grade_component_scores_component_enrollment (component_id, enrollment_id)` memastikan satu nilai per komponen per enrollment.
+
+**`grade_corrections`**
+
+| Kolom | Tipe | Null | Default | Keterangan |
+|---|---|---|---|---|
+| `id` | `INT UNSIGNED` | tidak | AUTO_INCREMENT | Primary key |
+| `grade_id` | `INT UNSIGNED` | tidak | — | Nilai yang dikoreksi |
+| `enrollment_id` | `INT UNSIGNED` | ya | `NULL` | Enrollment (denormalisasi) |
+| `previous_score` | `DECIMAL(6,2)` | ya | `NULL` | Nilai akhir sebelum koreksi |
+| `new_score` | `DECIMAL(6,2)` | ya | `NULL` | Nilai akhir sesudah koreksi |
+| `previous_letter` | `VARCHAR(4)` | ya | `NULL` | Huruf sebelum koreksi |
+| `new_letter` | `VARCHAR(4)` | ya | `NULL` | Huruf sesudah koreksi |
+| `reason` | `TEXT` | tidak | — | Alasan, minimal 5 karakter |
+| `actor_id` | `INT UNSIGNED` | ya | `NULL` | Aktor koreksi |
+| `created_at` | `DATETIME` | tidak | `CURRENT_TIMESTAMP` | Waktu koreksi |
 
 **`certificates`**
 
@@ -2392,6 +3425,136 @@ Catatan: `uq_certificates_enrollment (enrollment_id)` memastikan satu sertifikat
 | `completed_at` | `DATETIME` | tidak | `CURRENT_TIMESTAMP` | Waktu selesai |
 | `created_at` | `DATETIME` | tidak | `CURRENT_TIMESTAMP` | Waktu dibuat |
 
+**`assignments`**
+
+| Kolom | Tipe | Null | Default | Keterangan |
+|---|---|---|---|---|
+| `id` | `INT UNSIGNED` | tidak | AUTO_INCREMENT | Primary key |
+| `class_id` | `INT UNSIGNED` | tidak | — | Kelas pemilik |
+| `curriculum_version_id` | `INT UNSIGNED` | tidak | — | Versi kurikulum acuan |
+| `module_id` / `lesson_id` | `INT UNSIGNED` | ya | `NULL` | Modul/materi terkait |
+| `title` | `VARCHAR(200)` | tidak | — | Judul tugas |
+| `instructions` | `LONGTEXT` | tidak | — | Instruksi |
+| `type` | `ENUM('file_upload','text_submission','in_class_practice','external_reference')` | tidak | `'text_submission'` | Jenis tugas |
+| `open_at` / `due_at` | `DATETIME` | ya | `NULL` | Jendela pengumpulan |
+| `max_score` | `DECIMAL(6,2)` | tidak | `100.00` | Skor maksimum |
+| `weight` | `DECIMAL(5,2)` | tidak | `0.00` | Bobot legacy |
+| `require_file` | `TINYINT(1)` | tidak | `0` | Wajib lampiran |
+| `allowed_types` | `VARCHAR(255)` | tidak | `''` | Ekstensi diizinkan |
+| `max_file_size` | `INT UNSIGNED` | ya | `NULL` | Ukuran maksimum |
+| `status` | `ENUM('draft','published','closed','archived')` | tidak | `'draft'` | Lifecycle tugas |
+| `created_by` / `updated_by` | `INT UNSIGNED` | ya | `NULL` | Aktor |
+| `created_at` / `updated_at` | `DATETIME` | tidak/ya | `CURRENT_TIMESTAMP`/`NULL` | Waktu |
+
+**`assignment_files`**
+
+| Kolom | Tipe | Null | Default | Keterangan |
+|---|---|---|---|---|
+| `id` | `INT UNSIGNED` | tidak | AUTO_INCREMENT | Primary key |
+| `assignment_id` | `INT UNSIGNED` | tidak | — | Tugas |
+| `file_name` / `file_path` | `VARCHAR` | tidak | `''` | Nama & path privat |
+| `file_size` | `BIGINT UNSIGNED` | ya | `NULL` | Ukuran byte |
+| `mime_type` | `VARCHAR(120)` | tidak | `''` | MIME |
+| `created_at` | `DATETIME` | tidak | `CURRENT_TIMESTAMP` | Waktu dibuat |
+
+**`assignment_rubrics`**
+
+| Kolom | Tipe | Null | Default | Keterangan |
+|---|---|---|---|---|
+| `id` | `INT UNSIGNED` | tidak | AUTO_INCREMENT | Primary key |
+| `assignment_id` | `INT UNSIGNED` | tidak | — | Tugas |
+| `criterion` | `VARCHAR(200)` | tidak | — | Kriteria |
+| `description` | `TEXT` | tidak | — | Penjelasan |
+| `max_score` | `DECIMAL(6,2)` | tidak | `100.00` | Skor maksimum |
+| `sort_order` | `INT UNSIGNED` | tidak | `1` | Urutan |
+| `created_at` / `updated_at` | `DATETIME` | tidak/ya | `CURRENT_TIMESTAMP`/`NULL` | Waktu |
+
+**`submissions`**
+
+| Kolom | Tipe | Null | Default | Keterangan |
+|---|---|---|---|---|
+| `id` | `INT UNSIGNED` | tidak | AUTO_INCREMENT | Primary key |
+| `assignment_id` | `INT UNSIGNED` | tidak | — | Tugas; unik bersama enrollment |
+| `enrollment_id` | `INT UNSIGNED` | tidak | — | Enrollment |
+| `student_id` | `INT UNSIGNED` | tidak | — | Peserta |
+| `status` | `ENUM('submitted','late','reviewed','revision_requested','resubmitted','accepted')` | tidak | `'submitted'` | Status submission |
+| `text_answer` | `LONGTEXT` | tidak | — | Jawaban teks |
+| `submitted_at` | `DATETIME` | tidak | `CURRENT_TIMESTAMP` | Waktu kirim |
+| `is_late` | `TINYINT(1)` | tidak | `0` | Penanda terlambat |
+| `score` | `DECIMAL(6,2)` | ya | `NULL` | Nilai |
+| `feedback` | `TEXT` | tidak | — | Umpan balik |
+| `reviewed_by` / `reviewed_at` | `INT UNSIGNED`/`DATETIME` | ya | `NULL` | Peninjau & waktu |
+| `revision_count` | `INT UNSIGNED` | tidak | `0` | Jumlah revisi |
+| `created_at` / `updated_at` | `DATETIME` | tidak/ya | `CURRENT_TIMESTAMP`/`NULL` | Waktu |
+
+**`submission_files`**
+
+| Kolom | Tipe | Null | Default | Keterangan |
+|---|---|---|---|---|
+| `id` | `INT UNSIGNED` | tidak | AUTO_INCREMENT | Primary key |
+| `submission_id` | `INT UNSIGNED` | tidak | — | Submission |
+| `file_name` / `file_path` | `VARCHAR` | tidak | `''` | Nama & path privat |
+| `file_size` | `BIGINT UNSIGNED` | ya | `NULL` | Ukuran byte |
+| `mime_type` | `VARCHAR(120)` | tidak | `''` | MIME |
+| `created_at` | `DATETIME` | tidak | `CURRENT_TIMESTAMP` | Waktu dibuat |
+
+**`submission_reviews`**
+
+| Kolom | Tipe | Null | Default | Keterangan |
+|---|---|---|---|---|
+| `id` | `INT UNSIGNED` | tidak | AUTO_INCREMENT | Primary key |
+| `submission_id` | `INT UNSIGNED` | tidak | — | Submission |
+| `reviewer_id` | `INT UNSIGNED` | ya | `NULL` | Aktor |
+| `action` | `ENUM('submit','score','revision','accept')` | tidak | `'submit'` | Jenis aksi |
+| `score` | `DECIMAL(6,2)` | ya | `NULL` | Nilai saat aksi |
+| `note` | `TEXT` | tidak | — | Catatan |
+| `created_at` | `DATETIME` | tidak | `CURRENT_TIMESTAMP` | Waktu aksi |
+
+**`exams`**
+
+| Kolom | Tipe | Null | Default | Keterangan |
+|---|---|---|---|---|
+| `id` | `INT UNSIGNED` | tidak | AUTO_INCREMENT | Primary key |
+| `class_id` | `INT UNSIGNED` | tidak | — | Kelas pemilik |
+| `curriculum_version_id` | `INT UNSIGNED` | tidak | — | Versi acuan |
+| `title` | `VARCHAR(200)` | tidak | — | Judul ujian |
+| `description` | `TEXT` | tidak | — | Deskripsi |
+| `type` | `ENUM('written','practical','oral','project','other')` | tidak | `'written'` | Jenis ujian |
+| `exam_date` / `start_time` | `DATE`/`TIME` | ya | `NULL` | Jadwal |
+| `duration_minutes` | `INT UNSIGNED` | ya | `NULL` | Durasi |
+| `max_score` | `DECIMAL(6,2)` | tidak | `100.00` | Skor maksimum |
+| `weight` | `DECIMAL(5,2)` | tidak | `0.00` | Bobot legacy |
+| `instructions` | `LONGTEXT` | tidak | — | Instruksi |
+| `status` | `ENUM('draft','published','closed','archived')` | tidak | `'draft'` | Lifecycle ujian |
+| `created_by` / `updated_by` | `INT UNSIGNED` | ya | `NULL` | Aktor |
+| `created_at` / `updated_at` | `DATETIME` | tidak/ya | `CURRENT_TIMESTAMP`/`NULL` | Waktu |
+
+**`exam_participants`**
+
+| Kolom | Tipe | Null | Default | Keterangan |
+|---|---|---|---|---|
+| `id` | `INT UNSIGNED` | tidak | AUTO_INCREMENT | Primary key |
+| `exam_id` | `INT UNSIGNED` | tidak | — | Ujian; unik bersama enrollment |
+| `enrollment_id` | `INT UNSIGNED` | tidak | — | Enrollment |
+| `student_id` | `INT UNSIGNED` | tidak | — | Peserta |
+| `status` | `ENUM('registered','attended','absent','excused')` | tidak | `'registered'` | Status keikutsertaan |
+| `note` | `TEXT` | tidak | — | Catatan |
+| `created_at` / `updated_at` | `DATETIME` | tidak/ya | `CURRENT_TIMESTAMP`/`NULL` | Waktu |
+
+**`exam_results`**
+
+| Kolom | Tipe | Null | Default | Keterangan |
+|---|---|---|---|---|
+| `id` | `INT UNSIGNED` | tidak | AUTO_INCREMENT | Primary key |
+| `exam_id` | `INT UNSIGNED` | tidak | — | Ujian; unik bersama enrollment |
+| `enrollment_id` | `INT UNSIGNED` | tidak | — | Enrollment |
+| `student_id` | `INT UNSIGNED` | tidak | — | Peserta |
+| `score` | `DECIMAL(6,2)` | ya | `NULL` | Nilai; `NULL` = belum ada |
+| `status` | `ENUM('not_assessed','excused','missing','graded')` | tidak | `'not_assessed'` | Status hasil |
+| `graded_by` / `graded_at` | `INT UNSIGNED`/`DATETIME` | ya | `NULL` | Penilai & waktu |
+| `note` | `TEXT` | tidak | — | Catatan |
+| `created_at` / `updated_at` | `DATETIME` | tidak/ya | `CURRENT_TIMESTAMP`/`NULL` | Waktu |
+
 **`staff_attendances`**
 
 | Kolom | Tipe | Null | Default | Keterangan |
@@ -2454,7 +3617,27 @@ Catatan: `uq_certificates_enrollment (enrollment_id)` memastikan satu sertifikat
 | `modules` | `idx_modules_course (course_id, sort_order)`, `idx_modules_version (curriculum_version_id, sort_order)`, `idx_modules_instructor (instructor_id)` | INDEX |
 | `lessons` | `idx_lessons_module (module_id, sort_order)`, `idx_lessons_course (course_id)`, `idx_lessons_version (curriculum_version_id, sort_order)`, `idx_lessons_instructor (instructor_id)` | INDEX |
 | `grades` | `uq_grades_enrollment (enrollment_id)` | UNIQUE |
-| `grades` | `idx_grades_student_course (student_id, course_id)`, `idx_grades_instructor (instructor_id)` | INDEX |
+| `grades` | `idx_grades_student_course (student_id, course_id)`, `idx_grades_instructor (instructor_id)`, `idx_grades_scheme (scheme_id)`, `idx_grades_status (status)` | INDEX |
+| `predicate_ranges` | `uq_predicate_ranges_letter (letter)` | UNIQUE |
+| `predicate_ranges` | `idx_predicate_ranges_order (sort_order, min_score)` | INDEX |
+| `grade_schemes` | `uq_grade_schemes_class (class_id)` | UNIQUE |
+| `grade_schemes` | `idx_grade_schemes_course (course_id)`, `idx_grade_schemes_status (status)` | INDEX |
+| `grade_scheme_components` | `idx_grade_scheme_components_scheme (scheme_id, sort_order)`, `idx_grade_scheme_components_type (type)` | INDEX |
+| `grade_component_scores` | `uq_grade_component_scores_component_enrollment (component_id, enrollment_id)` | UNIQUE |
+| `grade_component_scores` | `idx_grade_component_scores_enrollment (enrollment_id)`, `idx_grade_component_scores_student (student_id)`, `idx_grade_component_scores_status (status)` | INDEX |
+| `grade_corrections` | `idx_grade_corrections_grade (grade_id)`, `idx_grade_corrections_enrollment (enrollment_id)` | INDEX |
+| `assignments` | `idx_assignments_class_status (class_id, status)`, `idx_assignments_version (curriculum_version_id)`, `idx_assignments_module (module_id)`, `idx_assignments_lesson (lesson_id)`, `idx_assignments_created_by (created_by)` | INDEX |
+| `assignment_files` | `idx_assignment_files_assignment (assignment_id)` | INDEX |
+| `assignment_rubrics` | `idx_assignment_rubrics_assignment (assignment_id, sort_order)` | INDEX |
+| `submissions` | `uq_submissions_assignment_enrollment (assignment_id, enrollment_id)` | UNIQUE |
+| `submissions` | `idx_submissions_student (student_id)`, `idx_submissions_status (status)` | INDEX |
+| `submission_files` | `idx_submission_files_submission (submission_id)` | INDEX |
+| `submission_reviews` | `idx_submission_reviews_submission (submission_id, created_at)` | INDEX |
+| `exams` | `idx_exams_class_status (class_id, status)`, `idx_exams_version (curriculum_version_id)`, `idx_exams_date (exam_date)` | INDEX |
+| `exam_participants` | `uq_exam_participants_exam_enrollment (exam_id, enrollment_id)` | UNIQUE |
+| `exam_participants` | `idx_exam_participants_student (student_id)` | INDEX |
+| `exam_results` | `uq_exam_results_exam_enrollment (exam_id, enrollment_id)` | UNIQUE |
+| `exam_results` | `idx_exam_results_student (student_id)`, `idx_exam_results_status (status)` | INDEX |
 | `certificates` | `uq_certificates_number (certificate_number)`, `uq_certificates_enrollment (enrollment_id)` | UNIQUE |
 | `certificates` | `idx_certificates_student_course (student_id, course_id)`, `idx_certificates_course (course_id)`, `idx_certificates_status (status)` | INDEX |
 | `completed_lessons` | `uq_completed_student_lesson (student_id, lesson_id)` | UNIQUE |
@@ -2525,9 +3708,49 @@ Catatan: `staff_attendances` tidak memiliki unique index pada (`user_id`, `atten
 | `fk_class_material_progress_material` | `class_material_progress.material_id` | `class_materials.id` | `CASCADE` |
 | `fk_class_material_progress_completed_by` | `class_material_progress.completed_by` | `users.id` | `SET NULL` |
 | `fk_grades_enrollment` | `grades.enrollment_id` | `enrollments.id` | `CASCADE` |
+| `fk_grades_scheme` | `grades.scheme_id` | `grade_schemes.id` | `SET NULL` |
 | `fk_grades_student` | `grades.student_id` | `users.id` | `CASCADE` |
 | `fk_grades_course` | `grades.course_id` | `courses.id` | `CASCADE` |
 | `fk_grades_instructor` | `grades.instructor_id` | `users.id` | `SET NULL` |
+| `fk_grades_finalized_by` | `grades.finalized_by` | `users.id` | `SET NULL` |
+| `fk_grade_schemes_course` | `grade_schemes.course_id` | `courses.id` | `CASCADE` |
+| `fk_grade_schemes_class` | `grade_schemes.class_id` | `classes.id` | `CASCADE` |
+| `fk_grade_schemes_created_by` | `grade_schemes.created_by` | `users.id` | `SET NULL` |
+| `fk_grade_schemes_updated_by` | `grade_schemes.updated_by` | `users.id` | `SET NULL` |
+| `fk_grade_scheme_components_scheme` | `grade_scheme_components.scheme_id` | `grade_schemes.id` | `CASCADE` |
+| `fk_grade_component_scores_component` | `grade_component_scores.component_id` | `grade_scheme_components.id` | `CASCADE` |
+| `fk_grade_component_scores_enrollment` | `grade_component_scores.enrollment_id` | `enrollments.id` | `CASCADE` |
+| `fk_grade_component_scores_student` | `grade_component_scores.student_id` | `users.id` | `CASCADE` |
+| `fk_grade_component_scores_assessor` | `grade_component_scores.assessor_id` | `users.id` | `SET NULL` |
+| `fk_grade_corrections_grade` | `grade_corrections.grade_id` | `grades.id` | `CASCADE` |
+| `fk_grade_corrections_enrollment` | `grade_corrections.enrollment_id` | `enrollments.id` | `CASCADE` |
+| `fk_grade_corrections_actor` | `grade_corrections.actor_id` | `users.id` | `SET NULL` |
+| `fk_assignments_class` | `assignments.class_id` | `classes.id` | `CASCADE` |
+| `fk_assignments_version` | `assignments.curriculum_version_id` | `curriculum_versions.id` | `CASCADE` |
+| `fk_assignments_module` | `assignments.module_id` | `modules.id` | `SET NULL` |
+| `fk_assignments_lesson` | `assignments.lesson_id` | `lessons.id` | `SET NULL` |
+| `fk_assignments_created_by` | `assignments.created_by` | `users.id` | `SET NULL` |
+| `fk_assignments_updated_by` | `assignments.updated_by` | `users.id` | `SET NULL` |
+| `fk_assignment_files_assignment` | `assignment_files.assignment_id` | `assignments.id` | `CASCADE` |
+| `fk_assignment_rubrics_assignment` | `assignment_rubrics.assignment_id` | `assignments.id` | `CASCADE` |
+| `fk_submissions_assignment` | `submissions.assignment_id` | `assignments.id` | `CASCADE` |
+| `fk_submissions_enrollment` | `submissions.enrollment_id` | `enrollments.id` | `CASCADE` |
+| `fk_submissions_student` | `submissions.student_id` | `users.id` | `CASCADE` |
+| `fk_submissions_reviewed_by` | `submissions.reviewed_by` | `users.id` | `SET NULL` |
+| `fk_submission_files_submission` | `submission_files.submission_id` | `submissions.id` | `CASCADE` |
+| `fk_submission_reviews_submission` | `submission_reviews.submission_id` | `submissions.id` | `CASCADE` |
+| `fk_submission_reviews_reviewer` | `submission_reviews.reviewer_id` | `users.id` | `SET NULL` |
+| `fk_exams_class` | `exams.class_id` | `classes.id` | `CASCADE` |
+| `fk_exams_version` | `exams.curriculum_version_id` | `curriculum_versions.id` | `CASCADE` |
+| `fk_exams_created_by` | `exams.created_by` | `users.id` | `SET NULL` |
+| `fk_exams_updated_by` | `exams.updated_by` | `users.id` | `SET NULL` |
+| `fk_exam_participants_exam` | `exam_participants.exam_id` | `exams.id` | `CASCADE` |
+| `fk_exam_participants_enrollment` | `exam_participants.enrollment_id` | `enrollments.id` | `CASCADE` |
+| `fk_exam_participants_student` | `exam_participants.student_id` | `users.id` | `CASCADE` |
+| `fk_exam_results_exam` | `exam_results.exam_id` | `exams.id` | `CASCADE` |
+| `fk_exam_results_enrollment` | `exam_results.enrollment_id` | `enrollments.id` | `CASCADE` |
+| `fk_exam_results_student` | `exam_results.student_id` | `users.id` | `CASCADE` |
+| `fk_exam_results_graded_by` | `exam_results.graded_by` | `users.id` | `SET NULL` |
 | `fk_certificates_enrollment` | `certificates.enrollment_id` | `enrollments.id` | `CASCADE` |
 | `fk_certificates_student` | `certificates.student_id` | `users.id` | `CASCADE` |
 | `fk_certificates_course` | `certificates.course_id` | `courses.id` | `CASCADE` |
@@ -2558,7 +3781,21 @@ Snapshot API memakai nama koleksi yang sama dengan model `localStorage`, sehingg
 | `attendance_corrections` | `attendanceCorrections` | `attendance_id`/`session_id`/`enrollment_id`/`old_status`/`new_status`/`actor_id`/`actor_name`/`actor_role` → camelCase; `corrected_at`/`created_at` → ISO |
 | `modules` | `modules` | `course_id`/`curriculum_version_id` → camelCase; `sort_order` → `order` |
 | `lessons` | `lessons` | `course_id`/`module_id`/`curriculum_version_id` → camelCase; `sort_order` → `order` |
-| `grades` | `grades` | `enrollment_id` → `enrollmentId`; `student_id`/`course_id` → camelCase |
+| `grades` | `grades` | `enrollment_id`/`scheme_id`/`finalized_by` → camelCase; `final_score`/`finalized_at`/`computed_at` → camelCase/ISO; `components_snapshot` → `componentsSnapshot` (JSON string); nilai dibaca via `grade.roster`/`transcript` |
+| `predicate_ranges` | `predicateRanges` | `min_score`/`max_score`/`sort_order`/`is_active` → camelCase |
+| `grade_schemes` | `gradeSchemes` | `course_id`/`class_id`/`pass_score`/`created_by`/`updated_by` → camelCase; label kelas/kursus dan komponen dari JOIN/agregasi |
+| `grade_scheme_components` | `gradeSchemeComponents` | `scheme_id`/`max_score`/`is_required`/`sort_order` → camelCase |
+| `grade_component_scores` | `gradeComponentScores` | `component_id`/`enrollment_id`/`student_id`/`assessor_id`/`assessed_at` → camelCase/ISO |
+| `grade_corrections` | `gradeCorrections` | `grade_id`/`enrollment_id`/`previous_score`/`new_score`/`previous_letter`/`new_letter`/`actor_id` → camelCase; `actorName` dari JOIN/agregasi |
+| `assignments` | `assignments` | `class_id`/`curriculum_version_id`/`module_id`/`lesson_id`/`open_at`/`due_at`/`max_score`/`require_file`/`allowed_types`/`max_file_size`/`created_by`/`updated_by` → camelCase/ISO |
+| `assignment_files` | `assignmentFiles` | `assignment_id`/`file_name`/`file_path`/`file_size`/`mime_type` → camelCase; `file_path` tidak diekspos ke peserta |
+| `assignment_rubrics` | `assignmentRubrics` | `assignment_id`/`max_score`/`sort_order` → camelCase |
+| `submissions` | `submissions` | `assignment_id`/`enrollment_id`/`student_id`/`text_answer`/`submitted_at`/`is_late`/`reviewed_by`/`reviewed_at`/`revision_count` → camelCase/ISO |
+| `submission_files` | `submissionFiles` | `submission_id`/`file_name`/`file_path`/`file_size`/`mime_type` → camelCase; path privat tidak diekspos |
+| `submission_reviews` | `submissionReviews` | `submission_id`/`reviewer_id` → camelCase; `created_at` → ISO |
+| `exams` | `exams` | `class_id`/`curriculum_version_id`/`exam_date`/`start_time`/`duration_minutes`/`max_score`/`created_by`/`updated_by` → camelCase/format tanggal-jam |
+| `exam_participants` | `examParticipants` | `exam_id`/`enrollment_id`/`student_id` → camelCase |
+| `exam_results` | `examResults` | `exam_id`/`enrollment_id`/`student_id`/`graded_by`/`graded_at`/`graded_by_name` → camelCase; snapshot peserta tidak memuat roster ujian |
 | `certificates` | `certificates` | `approved_by_admin_id` → `approvedByAdminId`; `approved_at` → ISO |
 | `completed_lessons` | `completedLessons` | `student_id`/`course_id`/`lesson_id` → camelCase |
 | `class_material_settings` | `classMaterialSettings` | `class_id`/`access_mode`/`require_instructor_approval`/`updated_by` → camelCase; `updated_at` → ISO |
@@ -2574,19 +3811,23 @@ Snapshot hanya memuat modul/materi dari versi kurikulum aktif (non-`retired`) ti
 
 ### 16.6 Catatan Operasional
 
-- **Instalasi:** `php api/install.php --fresh` menghapus database lama, membuat ulang skema, dan mengisi data demo (7 pengguna, 4 kategori, 3 cabang, 4 kursus, 4 versi kurikulum, 25 modul, 75 materi, 1 kelas migrasi, 1 histori tentor, 3 enrollment, 4 sesi pertemuan, dan 9 baris presensi). Tabel `staff_attendances` dibuat (tabel ke-23) tetapi tidak diisi data demo karena absensi bersifat pribadi dan dibuat dari dashboard. Password demo `elips123` di-hash saat seeding.
+- **Instalasi:** `php api/install.php --fresh` menghapus database lama, membuat ulang seluruh 37 tabel, dan mengisi data demo: 9 predikat, 7 pengguna, 4 kategori, 3 cabang, 4 kursus, 4 versi kurikulum, 25 modul, 75 materi, 1 kelas migrasi, 1 histori tentor, 3 enrollment, 4 sesi pertemuan, 9 baris presensi, 2 tugas, 3 rubrik, 1 submission, 2 riwayat review, 2 ujian, 6 peserta ujian, 6 hasil ujian, 1 skema penilaian, 3 komponen, dan 2 nilai komponen manual. Koleksi `grade_corrections` sengaja kosong pada seed. Tabel `staff_attendances` dibuat (tabel ke-37) tetapi tidak diisi data demo karena absensi bersifat pribadi dan dibuat dari dashboard. Password demo `elips123` di-hash saat seeding.
 - **Timezone:** koneksi PDO disetel UTC; kolom `DATE` untuk tanggal kalender dan `DATETIME` untuk timestamp.
 - **Transaksi:** operasi multi-tabel dijalankan dalam transaksi eksplisit:
   - pembuatan kelas + penguncian versi kurikulum (`curriculum_versions.status = 'locked'`) + histori tentor awal;
   - pergantian tentor (tutup histori lama, buka histori baru, update `classes.instructor_id`);
   - clone kurikulum (versi baru + salinan modul/materi);
-  - hapus enrollment (nilai + sertifikat + progres terkait);
-  - simpan nilai (nilai + sertifikat Draft);
+  - hapus enrollment (nilai + sertifikat + progres + submission/hasil ujian + nilai komponen + koreksi terkait);
+  - simpan nilai legacy (nilai + sertifikat Draft);
   - simpan presensi massal (upsert `attendances` + audit koreksi bila status berubah);
   - reschedule (buat sesi baru + tandai sesi asal `rescheduled`);
   - simpan progres materi (upsert `class_lesson_progress`/`class_material_progress` + audit bila dikonfirmasi staf);
-  - hapus materi tambahan (progres terkait ikut terhapus via cascade).
+  - hapus materi tambahan (progres terkait ikut terhapus via cascade);
+  - simpan skema penilaian (upsert skema + ganti komponen dalam satu transaksi);
+  - finalisasi nilai (komputasi + upsert `grades` + snapshot komponen + audit);
+  - koreksi nilai (update `grades` + tulis `grade_corrections` + audit).
 - **Penguncian versi:** `class.create` membaca versi dengan `FOR UPDATE` di dalam transaksi; setelah kelas tersimpan, versi tidak dapat diubah/dihapus. `classes` memakai FK `RESTRICT` sebagai pengaman terakhir.
+- **Penguncian nilai:** nilai berstatus `finalized` tidak dapat diubah lewat simpan biasa; koreksi wajib beralasan dan selalu menulis baris `grade_corrections`. Finalisasi tidak membuat sertifikat otomatis.
 - **Retensi:** backend memangkas `audit_logs` dan `notifications` ke 1000 baris terbaru setelah penulisan.
 - **Seed migrasi:** hanya satu kelas migrasi (`ANG-2026-MNJ-01`, `legacy_import = 1`) yang di-seed; seluruh enrollment v3 dipetakan ke kelas tersebut agar setiap kelas selalu merujuk versi kurikulum yang terkunci.
 - **Ekstensi:** seluruh tabel memakai `InnoDB` dan `utf8mb4`; `AUTO_INCREMENT` dipakai untuk ID numerik yang juga dipakai client.
