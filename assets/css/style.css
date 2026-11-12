@@ -3631,3 +3631,122 @@ body.pwa-sheet-open {
         grid-template-columns: 1fr;
     }
 }
+
+/* ---------- Surat menyurat ---------- */
+.letter-modal-card {
+    max-width: 860px;
+}
+
+.letter-modal-body {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.letter-modal-body .form-group {
+    margin: 0;
+}
+
+.letter-span-2 {
+    grid-column: 1 / -1;
+}
+
+.letter-textarea {
+    resize: vertical;
+    min-height: 80px;
+    line-height: 1.5;
+}
+
+.letter-route {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+    font-size: 0.875rem;
+    color: var(--text-primary);
+}
+
+.letter-route i {
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+}
+
+.letter-badge-masuk {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.letter-badge-keluar {
+    background: #ffedd5;
+    color: #9a3412;
+}
+
+.letter-badge-biasa {
+    background: #e2e8f0;
+    color: #334155;
+}
+
+.letter-badge-rahasia {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.letter-badge-arsip {
+    background: #f1f5f9;
+    color: #475569;
+}
+
+.letter-detail-card {
+    max-width: 760px;
+}
+
+.letter-detail-body {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem 1.25rem;
+    padding: 1.5rem;
+}
+
+.letter-detail-item {
+    min-width: 0;
+}
+
+.letter-detail-wide {
+    grid-column: 1 / -1;
+}
+
+.letter-detail-label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--text-secondary);
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+}
+
+.letter-detail-value {
+    font-size: 0.9375rem;
+    color: var(--text-primary);
+    line-height: 1.55;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.letter-detail-value a {
+    color: var(--primary);
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.letter-detail-value a:hover {
+    text-decoration: underline;
+}
+
+@media (max-width: 640px) {
+    .letter-modal-body,
+    .letter-detail-body {
+        grid-template-columns: 1fr;
+    }
+
+    .letter-detail-wide {
+        grid-column: auto;
+    }
+}

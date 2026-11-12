@@ -156,6 +156,17 @@
             });
     }
 
+    // ---------- Surat menyurat ----------
+    function getLetters() { return read(KEYS.letters, []); }
+    function setLetters(list) { return write(KEYS.letters, list); }
+    function getLettersByDirection(direction) {
+        return getLetters()
+            .filter(function (letter) { return letter.direction === direction; })
+            .sort(function (a, b) {
+                return String(b.letterDate || '').localeCompare(String(a.letterDate || ''));
+            });
+    }
+
     // ---------- Modules ----------
     function getModules() { return read(KEYS.modules, []); }
     function setModules(list) { return write(KEYS.modules, list); }
@@ -684,6 +695,9 @@
         getStaffShifts: getStaffShifts,
         setStaffShifts: setStaffShifts,
         getStaffShiftsByUser: getStaffShiftsByUser,
+        getLetters: getLetters,
+        setLetters: setLetters,
+        getLettersByDirection: getLettersByDirection,
         getModules: getModules,
         setModules: setModules,
         getModulesByCourse: getModulesByCourse,

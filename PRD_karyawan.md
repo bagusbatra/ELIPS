@@ -197,7 +197,7 @@ CREATE TABLE staff_shifts (
 | `assets/js/shift-schedule.js` *(baru)* | Modul jadwal shift Admin: filter, preset Pagi/Sore, jam Custom, CRUD server/lokal, validasi konflik, dan audit `staff_shift` |
 | `admin/shifts.html` *(baru)* | Halaman **Shift Karyawan**: filter, ringkasan, tabel shift, dan modal tambah/ubah |
 | `assets/css/style.css` | Gaya halaman karyawan, banner pasang aplikasi, sheet iOS, bilah offline, dan tabel/badge shift |
-| 30 halaman aplikasi | Tag manifest, `theme-color`, meta mobile/apple, favicon, apple-touch-icon, dan `pwa.js` (`defer`) |
+| 31 halaman aplikasi | Tag manifest, `theme-color`, meta mobile/apple, favicon, apple-touch-icon, dan `pwa.js` (`defer`) |
 
 ## 8. Keamanan & privasi
 
@@ -262,7 +262,7 @@ Catatan implementasi:
 - `sw.js` memakai strategi **network-first**: halaman HTML aplikasi dan seluruh `/api/` tidak pernah disimpan ke cache, sehingga perubahan file baru langsung terlihat. Hanya `offline.html` + ikon yang di-precache, sedangkan aset statis (CSS/JS/gambar/font/webmanifest/JSON) dipakai sebagai fallback saat offline.
 - `assets/js/pwa.js` mendaftarkan service worker (skip waiting + `clients.claim`, reload sekali saat ada versi baru), menampilkan banner pemasangan Android lewat `beforeinstallprompt`, sheet 3 langkah "Tambahkan ke Layar Utama" untuk iOS Safari, dan bilah offline dengan tombol coba lagi. Penolakan banner diingat 7 hari dan prompt dibatasi sekali per sesi.
 - `attendance.js` menolak penyimpanan saat offline, baik sebelum validasi maupun di dalam `persistAttendance` (menutup celah GPS yang selesai setelah koneksi putus).
-- `offline.html` berdiri sendiri (tanpa bundle aplikasi) dengan tombol muat ulang. Semua 30 halaman aplikasi memuat manifest, meta mobile/apple, favicon, apple-touch-icon, dan `pwa.js` (`defer`); server PHP bawaan menyajikan `.webmanifest` sebagai `application/manifest+json`.
+- `offline.html` berdiri sendiri (tanpa bundle aplikasi) dengan tombol muat ulang. Semua 31 halaman aplikasi memuat manifest, meta mobile/apple, favicon, apple-touch-icon, dan `pwa.js` (`defer`); server PHP bawaan menyajikan `.webmanifest` sebagai `application/manifest+json`.
 
 ### Fase 5b — Jadwal shift karyawan *(selesai)*
 - [x] Tabel `staff_shifts` + unique key `(user_id, shift_date)`.

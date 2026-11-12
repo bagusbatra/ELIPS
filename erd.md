@@ -9,7 +9,7 @@
 
 ## 1. Ringkasan
 
-ELIPS LMS adalah aplikasi Learning Management System dengan empat role: **Admin**, **Instruktur**, **Peserta**, dan **Karyawan**. Pada mode server, data disimpan di **MySQL 8** dengan 39 tabel (34 domain inti + 5 operasional/pribadi) dan foreign key fisik (lihat §13 dan §16). Pada mode fallback, data disimpan sebagai koleksi JSON di `localStorage` dengan model logis yang sama. Sesi login pada mode server disimpan di sesi PHP native; token **"ingat saya"** disimpan sebagai hash di tabel `user_devices`, bukan di `localStorage`.
+ELIPS LMS adalah aplikasi Learning Management System dengan empat role: **Admin**, **Instruktur**, **Peserta**, dan **Karyawan**. Pada mode server, data disimpan di **MySQL 8** dengan 40 tabel (35 domain inti + 5 operasional/pribadi) dan foreign key fisik (lihat §13 dan §16). Pada mode fallback, data disimpan sebagai koleksi JSON di `localStorage` dengan model logis yang sama. Sesi login pada mode server disimpan di sesi PHP native; token **"ingat saya"** disimpan sebagai hash di tabel `user_devices`, bukan di `localStorage`.
 
 Sejak v4.0, kursus dipisahkan dari penyelenggaraannya:
 
@@ -42,12 +42,12 @@ Publikasi kursus / penerbitan sertifikat ── menghasilkan ──► Notificat
 
 | Termasuk ERD | Tidak termasuk |
 |---|---|
-| 34 tabel domain MySQL + 5 tabel operasional (audit, notifikasi, absensi staf, jadwal shift, perangkat pengguna) dan koleksi `localStorage` yang setara | Halaman statis dan tampilan UI |
+| 35 tabel domain MySQL + 5 tabel operasional (audit, notifikasi, absensi staf, jadwal shift, perangkat pengguna) dan koleksi `localStorage` yang setara | Halaman statis dan tampilan UI |
 | Relasi, kardinalitas, foreign key, dan aturan hapus | Data pengaturan halaman Admin (belum dipersistensi) |
 | Enum status dan lifecycle (kursus, kurikulum, kelas, sesi, presensi, enrollment, akses materi, tugas, ujian, skema nilai, finalisasi, sertifikat) | Data laporan/statistik turunan (dihitung saat runtime) |
 | Sesi PHP native (bukan tabel) | Integrasi email nyata (masih simulasi/outbox) |
 
-Catatan: 34 tabel domain inti mencakup tabel akademik Phase 1-4, sembilan tabel Phase 5 (`assignments`, `assignment_files`, `assignment_rubrics`, `submissions`, `submission_files`, `submission_reviews`, `exams`, `exam_participants`, `exam_results`), dan lima tabel Phase 6 (`predicate_ranges`, `grade_schemes`, `grade_scheme_components`, `grade_component_scores`, `grade_corrections`). Lima tabel operasional/pribadi adalah `audit_logs`, `notifications`, `staff_attendances`, `staff_shifts`, dan `user_devices` (token "ingat saya" per perangkat), sehingga total 39 tabel. Phase 5 dan Phase 6 sebelumnya belum tercatat pada dokumen ini; angka 23 tabel adalah dokumentasi lama yang sudah dikoreksi.
+Catatan: 35 tabel domain inti mencakup tabel akademik Phase 1-4, sembilan tabel Phase 5 (`assignments`, `assignment_files`, `assignment_rubrics`, `submissions`, `submission_files`, `submission_reviews`, `exams`, `exam_participants`, `exam_results`), lima tabel Phase 6 (`predicate_ranges`, `grade_schemes`, `grade_scheme_components`, `grade_component_scores`, `grade_corrections`), dan tabel administrasi `letters` (surat masuk/keluar). Lima tabel operasional/pribadi adalah `audit_logs`, `notifications`, `staff_attendances`, `staff_shifts`, dan `user_devices` (token "ingat saya" per perangkat), sehingga total 40 tabel. Phase 5 dan Phase 6 sebelumnya belum tercatat pada dokumen ini; angka 23 tabel adalah dokumentasi lama yang sudah dikoreksi.
 
 ---
 
@@ -657,6 +657,26 @@ erDiagram
         datetime updatedAt
     }
 
+    LETTERS {
+        number id PK
+        enum direction
+        string letterNumber
+        string subject
+        string sender
+        string recipient
+        date letterDate
+        date handledDate
+        string category
+        enum classification
+        enum status
+        text summary
+        string attachmentUrl
+        string notes
+        number createdBy FK
+        datetime createdAt
+        datetime updatedAt
+    }
+
     CATEGORIES |o--o{ COURSES : "mengklasifikasikan"
     USERS |o--o{ COURSES : "mengampu sebagai instruktur"
     COURSES ||--o{ CURRICULUM_VERSIONS : "memiliki versi"
@@ -732,6 +752,7 @@ erDiagram
     USERS ||--o{ STAFF_ATTENDANCES : "mencatat absensi pribadi"
     USERS ||--o{ STAFF_SHIFTS : "dijadwalkan shift"
     USERS |o--o{ STAFF_SHIFTS : "membuat jadwal shift"
+    USERS |o--o{ LETTERS : "mencatat surat"
     USERS ||--o{ USER_DEVICES : "mengingat perangkat"
     CLASSES ||--o{ ASSIGNMENTS : "memiliki tugas"
     CURRICULUM_VERSIONS ||--o{ ASSIGNMENTS : "menjadi acuan tugas"
@@ -807,7 +828,8 @@ Pada mode server, entitas yang sama disimpan di tabel MySQL bernama snake_case (
 | 36 | `NOTIFICATIONS` | `elips_notifications` | Array of object | Penerima dan entitas polimorfik |
 | 37 | `STAFF_ATTENDANCES` | `elips_staffAttendances` | Array of object | Absensi harian pribadi staf/admin: maks. satu `in` + satu `out` per hari, foto, lokasi, dan metadata perangkat |
 | 38 | `STAFF_SHIFTS` | `elips_staffShifts` | Array of object | Jadwal shift per karyawan per tanggal: preset Pagi/Sore atau jam custom, satu shift per tanggal |
-| 39 | `SESSION` | `elips_session` | Object tunggal | Sesi user yang sedang login (mode server: sesi PHP) |
+| 39 | `LETTERS` | `elips_letters` | Array of object | Surat masuk/keluar beserta nomor, perihal, pengirim, penerima, tanggal, sifat, dan pembuat; kolom status/ringkasan/lampiran/catatan dipertahankan untuk kompatibilitas |
+| 40 | `SESSION` | `elips_session` | Object tunggal | Sesi user yang sedang login (mode server: sesi PHP) |
 
 Key lama yang dimigrasikan: `elips_enrolled` (self-enrollment) dipindahkan ke `elips_enrollments` oleh `seed.js`, lalu dihapus. Pada migrasi v3 → v4, `seed.js` membuat entri `elips_categories`/`elips_curriculumVersions`/`elips_classes`/`elips_branches` bila belum ada, mengisi `curriculumVersionId` pada modul/materi lama, lalu menambahkan sesi dan presensi demo untuk kelas migrasi. Kelas lama tanpa cabang diberi `branchId = null` agar tetap kompatibel. Sejak Phase 4, `seed.js` juga menormalisasi empat koleksi materi/progres; kelas yang belum memiliki pengaturan akses **tidak** dibuatkan baris, sehingga default implisit `open` tetap sama dengan mode server. Sejak Phase 5, `seed.js` menambahkan koleksi tugas/ujian beserta submission, review, peserta, dan hasil ujian demo. Sejak Phase 6, `seed.js` menambahkan sembilan predikat default, satu skema penilaian demo untuk kelas 1, tiga komponen (tugas 30%, ujian 40%, manual 30%), nilai komponen manual, dan koleksi koreksi kosong.
 
@@ -1949,6 +1971,42 @@ Jadwal shift per karyawan per tanggal yang dikelola Admin melalui halaman `admin
 
 ---
 
+### 5.12b LETTERS - `elips_letters`
+
+Pencatatan surat masuk dan surat keluar yang dikelola Admin melalui halaman `admin/letters.html` dan modul `assets/js/letter-archive.js`. Setiap baris adalah satu dokumen surat; nomor surat tidak dibuat unik karena surat dari pengirim berbeda dapat memiliki nomor yang sama. Sejak penyederhanaan UI, `status`, `summary`, `attachmentUrl`, dan `notes` tetap disimpan untuk kompatibilitas data lama, tetapi tidak lagi diisi atau ditampilkan di halaman.
+
+| Field | Tipe | Key | Wajib | Keterangan |
+|---|---|---|---|---|
+| `id` | number | PK | Ya | ID surat |
+| `direction` | enum `masuk`/`keluar` | - | Ya | Jenis surat; default `masuk` |
+| `letterNumber` | string | - | Ya | Nomor surat (maks. 100 karakter) |
+| `subject` | string | - | Ya | Perihal surat (maks. 255 karakter) |
+| `sender` | string | - | Ya | Nama pengirim (maks. 150 karakter) |
+| `recipient` | string | - | Ya | Nama penerima (maks. 150 karakter) |
+| `letterDate` | date (`YYYY-MM-DD`) | - | Ya | Tanggal surat |
+| `handledDate` | date/null | - | Tidak | Tanggal diterima (surat masuk) atau dikirim (surat keluar) |
+| `category` | string | - | Tidak | Kategori surat (maks. 80 karakter) |
+| `classification` | enum `biasa`/`penting`/`segera`/`rahasia` | - | Ya | Sifat surat; default `biasa` |
+| `status` | enum `baru`/`diproses`/`selesai`/`arsip` | - | Ya | Warisan kompatibilitas; default `baru`, tidak diisi/ditampilkan lagi di UI |
+| `summary` | text/null | - | Tidak | Warisan kompatibilitas; tidak diisi/ditampilkan lagi di UI |
+| `attachmentUrl` | string | - | Tidak | Warisan kompatibilitas; tidak diisi/ditampilkan lagi di UI |
+| `notes` | string | - | Tidak | Warisan kompatibilitas; tidak diisi/ditampilkan lagi di UI |
+| `createdBy` | number/null | FK -> `users.id` | Tidak | Admin pembuat catatan; `ON DELETE SET NULL` |
+| `createdByName` | string | - | Tidak | Nama pembuat (hasil JOIN, bukan input client) |
+| `createdAt` | datetime ISO | - | Ya | Waktu dibuat |
+| `updatedAt` | datetime/null | - | Tidak | Waktu diperbarui |
+
+**Aturan:**
+
+- Hanya role `admin` yang dapat membaca dan mengubah surat. Instruktur, peserta, dan karyawan ditolak oleh API.
+- Field wajib divalidasi di server: jenis, nomor surat, perihal, pengirim, penerima, tanggal surat, dan sifat. `status`, `summary`, `attachmentUrl`, dan `notes` dipertahankan untuk kompatibilitas; surat baru memakai `status = 'baru'` dan field lainnya kosong, sedangkan perubahan surat lama mempertahankan nilai sebelumnya.
+- Tanggal surat dan tanggal diterima/dikirim harus tanggal kalender valid; tanggal seperti `2026-02-31` ditolak.
+- Nomor surat tidak unik; duplikat tetap tersimpan sebagai dokumen terpisah dan dibedakan dari pengirim/tanggal.
+- Surat tidak dimasukkan ke snapshot bootstrap; data dibaca lewat `letter.list` dan ditulis lewat `letter.save`/`letter.delete`. Mode lokal memakai key `elips_letters`.
+- Setiap create/update/delete dicatat sebagai audit entitas `letter`.
+
+---
+
 ### 5.13 USER_DEVICES — tabel server `user_devices` (tanpa key `localStorage`)
 
 Menyimpan token **"ingat saya"** per perangkat. Hanya tersedia di mode server; mode lokal mengabaikan token dan tidak memiliki koleksi `localStorage` yang setara. Token mentah tidak pernah disimpan—yang disimpan adalah hash SHA-256.
@@ -2024,6 +2082,7 @@ Menyimpan token **"ingat saya"** per perangkat. Hanya tersedia di mode server; m
 | R40 | `USERS` (admin/karyawan) -> `STAFF_ATTENDANCES` | 1 -> N | `staff_attendances.userId` | User dihapus: catatan absensi dihapus (`ON DELETE CASCADE`) | Absensi harian pribadi (maks. 1 `in` + 1 `out` per hari, dijaga unique key); pemilik membaca sendiri, admin dapat membaca/menghapus dengan alasan |
 | R40a | `USERS` → `USER_DEVICES` | 1 — N | `user_devices.userId` | User dihapus: seluruh token perangkat dihapus (`ON DELETE CASCADE`) | Token "ingat saya" dirotasi dan dicabut; hash token unik |
 | R40b | `USERS` (admin/karyawan) → `STAFF_SHIFTS` | 1 — N | `staff_shifts.userId` | User dihapus: seluruh jadwal shift dihapus (`ON DELETE CASCADE`) | Satu shift per karyawan per tanggal, dijaga unique key (`user_id`, `shift_date`); pembuat jadwal (`createdBy`) menjadi `NULL` bila admin dihapus |
+| R40c | `USERS` (admin) → `LETTERS` | 1 — N | `letters.createdBy` | User dihapus: `createdBy` menjadi `NULL`, catatan surat tetap tersimpan | Nomor surat tidak unik; pembuat dicatat untuk audit, bukan pemilik dokumen |
 | R41 | `CLASSES` → `ASSIGNMENTS` | 1 — N | `assignments.classId` | Kelas dihapus: tugas dihapus | Tugas milik satu kelas |
 | R42 | `CURRICULUM_VERSIONS` → `ASSIGNMENTS` | 1 — N | `assignments.curriculumVersionId` | Versi dihapus: tugas dihapus | Acuan versi kelas |
 | R43 | `MODULES`/`LESSONS` → `ASSIGNMENTS` | 1 — N | `assignments.moduleId`, `assignments.lessonId` | Modul/materi dihapus: FK `SET NULL` | Opsional |
@@ -2841,6 +2900,7 @@ Nilai hasil finalisasi skema (enrollment 1 setelah komponen Tugas dikecualikan):
 | Progres | `COMPLETED_LESSONS` | Kombinasi `studentId` + `courseId` + `lessonId` |
 | Audit | `AUDIT_LOGS` | Urut `createdAt` desc, filter aksi/entitas/aktor/tanggal |
 | Notifikasi | `NOTIFICATIONS` | Urut `createdAt` desc, filter tipe/penerima/tanggal |
+| Surat menyurat | `LETTERS` | Urut `letterDate` desc lalu `id` desc; filter `direction`, rentang `letterDate`, pencarian nomor/perihal/pengirim/penerima/kategori |
 
 ### 12.1 Index yang Dipakai di MySQL
 
@@ -2877,6 +2937,7 @@ Nilai hasil finalisasi skema (enrollment 1 setelah komponen Tugas dikecualikan):
 - `class_material_progress(enrollment_id, material_id)` unik, `class_material_progress(class_id)`, `class_material_progress(student_id)`, `class_material_progress(material_id)`
 - `audit_logs(created_at)`, `audit_logs(actor_id)`, `audit_logs(entity)`
 - `notifications(created_at)`, `notifications(type)`, `notifications(recipient_id)`
+- `letters(direction)`, `letters(letter_date)`, `letters(status)`, `letters(letter_number)`
 
 ---
 
@@ -2924,6 +2985,7 @@ Skema fisik ada di `api/schema.sql` dan dibuat oleh `api/install.php`. Pemetaan 
 | `NOTIFICATIONS` | `notifications` | `id` | `recipient_id` → `users.id` SET NULL |
 | `STAFF_ATTENDANCES` | `staff_attendances` | `id` | `user_id` → `users.id` CASCADE; unique (`user_id`, `attendance_date`, `kind`); index (`user_id`, `attendance_date`) |
 | `STAFF_SHIFTS` | `staff_shifts` | `id` | `user_id` → `users.id` CASCADE; `created_by` → `users.id` SET NULL; unique (`user_id`, `shift_date`); index (`shift_date`), (`shift_type`) |
+| `LETTERS` | `letters` | `id` | `created_by` → `users.id` SET NULL; index (`direction`), (`letter_date`), (`status`), (`letter_number`) |
 | `USER_DEVICES` | `user_devices` | `id` | `user_id` → `users.id` CASCADE; `token_hash` UNIQUE; index (`user_id`), (`expires_at`) |
 | `SESSION` | Sesi PHP native | — | Tidak ada tabel `sessions`; cookie sesi hanya menyimpan ID sesi |
 
@@ -2992,6 +3054,7 @@ USERS              1 ─── N CLASS_LESSON_PROGRESS / CLASS_MATERIAL_PROGRESS
 USERS              1 ─── N AUDIT_LOGS / NOTIFICATIONS
 USERS (admin)      1 ─── N STAFF_ATTENDANCES
 USERS (admin)      1 ─── N STAFF_SHIFTS
+USERS (admin)      1 ─── N LETTERS
 USERS              1 ─── N USER_DEVICES
 USERS              1 ─── 0..1 SESSION
 ```
@@ -3014,6 +3077,7 @@ Dengan demikian, inti model data ELIPS LMS adalah:
 - **CompletedLessons** sebagai bukti progres legacy yang tetap dibaca untuk kompatibilitas.
 - **AuditLogs** dan **Notifications** sebagai catatan operasional yang bersifat historis.
 - **StaffAttendances** sebagai absensi harian pribadi admin (maks. satu `in` + satu `out` per hari di UI), lengkap dengan foto, lokasi GPS otomatis, dan metadata perangkat.
+- **Letters** sebagai arsip surat masuk/keluar dengan detail lengkap, sifat, status, dan pembuat; dikelola khusus Admin.
 
 ---
 
@@ -3063,7 +3127,8 @@ Bagian ini mendokumentasikan skema yang benar-benar dieksekusi oleh `api/schema.
 | 36 | `notifications` | Outbox notifikasi email simulasi | `id`, `type`, `recipient_id`, `recipient_email`, `subject`, `created_at` | `recipient_id` → `users.id` |
 | 37 | `staff_attendances` | Absensi harian pribadi staf/admin (kamera + metadata) | `id`, `user_id`, `kind`, `attendance_date`, `taken_at`, `photo`, `latitude`, `longitude` | `user_id` → `users.id` (`ON DELETE CASCADE`) |
 | 38 | `staff_shifts` | Jadwal shift per karyawan per tanggal (Pagi/Sore/custom) | `id`, `user_id`, `shift_date`, `shift_type`, `start_time`, `end_time`, `note` | `user_id` → `users.id` (`ON DELETE CASCADE`); `created_by` → `users.id` (`SET NULL`); unik(`user_id`, `shift_date`) |
-| 39 | `user_devices` | Token "ingat saya" per perangkat (hash SHA-256) | `id`, `user_id`, `token_hash`, `device_label`, `expires_at`, `revoked_at`, `revoked_reason` | `user_id` → `users.id` (`ON DELETE CASCADE`); `token_hash` UNIQUE |
+| 39 | `letters` | Arsip surat masuk/keluar beserta detail dan sifat; kolom status/ringkasan/lampiran/catatan dipertahankan untuk kompatibilitas | `id`, `direction`, `letter_number`, `subject`, `sender`, `recipient`, `letter_date`, `classification` | `created_by` → `users.id` (`SET NULL`); index(`direction`), (`letter_date`), (`status`), (`letter_number`) |
+| 40 | `user_devices` | Token "ingat saya" per perangkat (hash SHA-256) | `id`, `user_id`, `token_hash`, `device_label`, `expires_at`, `revoked_at`, `revoked_reason` | `user_id` → `users.id` (`ON DELETE CASCADE`); `token_hash` UNIQUE |
 
 Sesi login **tidak** memakai tabel: autentikasi memakai sesi PHP native (`$_SESSION`) dengan cookie `HttpOnly` dan `SameSite=Lax`. Token "ingat saya" disimpan di `user_devices` (hanya hash) dan dikirim sebagai cookie `elips_remember` yang juga `HttpOnly` (+ `Secure` saat HTTPS).
 
@@ -3700,6 +3765,28 @@ Catatan: `uq_certificates_enrollment (enrollment_id)` memastikan satu sertifikat
 | `created_at` | `DATETIME` | tidak | `CURRENT_TIMESTAMP` | Waktu dibuat |
 | `updated_at` | `DATETIME` | ya | `NULL` | Waktu diperbarui |
 
+**`letters`**
+
+| Kolom | Tipe | Null | Default | Keterangan |
+|---|---|---|---|---|
+| `id` | `INT UNSIGNED` | tidak | AUTO_INCREMENT | Primary key |
+| `direction` | `ENUM('masuk','keluar')` | tidak | `'masuk'` | Jenis surat |
+| `letter_number` | `VARCHAR(100)` | tidak | - | Nomor surat; tidak unik |
+| `subject` | `VARCHAR(255)` | tidak | - | Perihal surat |
+| `sender` | `VARCHAR(150)` | tidak | - | Nama pengirim |
+| `recipient` | `VARCHAR(150)` | tidak | - | Nama penerima |
+| `letter_date` | `DATE` | tidak | - | Tanggal surat |
+| `handled_date` | `DATE` | ya | `NULL` | Tanggal diterima/dikirim |
+| `category` | `VARCHAR(80)` | tidak | `''` | Kategori surat |
+| `classification` | `ENUM('biasa','penting','segera','rahasia')` | tidak | `'biasa'` | Sifat surat |
+| `status` | `ENUM('baru','diproses','selesai','arsip')` | tidak | `'baru'` | Status tindak lanjut |
+| `summary` | `TEXT` | ya | `NULL` | Ringkasan/isi surat |
+| `attachment_url` | `VARCHAR(500)` | tidak | `''` | Tautan lampiran (`http`/`https`/relatif) |
+| `notes` | `VARCHAR(1000)` | tidak | `''` | Catatan/disposisi |
+| `created_by` | `INT UNSIGNED` | ya | `NULL` | Admin pembuat (FK `users.id`, SET NULL) |
+| `created_at` | `DATETIME` | tidak | `CURRENT_TIMESTAMP` | Waktu dibuat |
+| `updated_at` | `DATETIME` | ya | `NULL` | Waktu diperbarui |
+
 **`user_devices`**
 
 | Kolom | Tipe | Null | Default | Keterangan |
@@ -3778,6 +3865,7 @@ Catatan: `uq_certificates_enrollment (enrollment_id)` memastikan satu sertifikat
 | `staff_attendances` | `uq_staff_attendances_user_day_kind (user_id, attendance_date, kind)`, `idx_staff_attendances_user_date (user_id, attendance_date)`, `idx_staff_attendances_date (attendance_date)`, `idx_staff_attendances_taken (taken_at)` | UNIQUE + INDEX |
 | `staff_shifts` | `uq_staff_shifts_user_date (user_id, shift_date)` | UNIQUE |
 | `staff_shifts` | `idx_staff_shifts_date (shift_date)`, `idx_staff_shifts_type (shift_type)` | INDEX |
+| `letters` | `idx_letters_direction (direction)`, `idx_letters_date (letter_date)`, `idx_letters_status (status)`, `idx_letters_number (letter_number)` | INDEX |
 | `user_devices` | `uq_user_devices_token (token_hash)` | UNIQUE |
 | `user_devices` | `idx_user_devices_user (user_id)`, `idx_user_devices_expires (expires_at)` | INDEX |
 
@@ -3896,6 +3984,7 @@ Catatan: `staff_attendances` memiliki unique key pada (`user_id`, `attendance_da
 | `fk_staff_attendances_user` | `staff_attendances.user_id` | `users.id` | `CASCADE` |
 | `fk_staff_shifts_user` | `staff_shifts.user_id` | `users.id` | `CASCADE` |
 | `fk_staff_shifts_created_by` | `staff_shifts.created_by` | `users.id` | `SET NULL` |
+| `fk_letters_created_by` | `letters.created_by` | `users.id` | `SET NULL` |
 | `fk_user_devices_user` | `user_devices.user_id` | `users.id` | `CASCADE` |
 
 Catatan: `audit_logs` dan `notifications` sengaja tidak memiliki foreign key fisik ke `users`. Keduanya menyimpan snapshot nama/role/email agar riwayat tetap terbaca meski akun asal dihapus, dan penghapusan pengguna tidak terblokir oleh riwayat. `classes.course_id` dan `classes.curriculum_version_id` memakai `RESTRICT` agar penghapusan kursus/versi yang sudah dipakai kelas ditolak di level database, bukan hanya di level aplikasi.
@@ -3943,15 +4032,16 @@ Snapshot API memakai nama koleksi yang sama dengan model `localStorage`, sehingg
 | `audit_logs` | `auditLogs` | `actor_id`/`actor_name`/`actor_role` → camelCase; `created_at` → ISO |
 | `staff_attendances` | `staffAttendances` (tidak di snapshot) | Dibaca lewat `staffAttendance.list`; `user_id`/`attendance_date`/`taken_at`/`photo_mime`/`accuracy_m`/`location_label`/`location_source`/`ip_address`/`user_agent`/`device_memory`/`hardware_concurrency`/`connection_type`/`created_at` → camelCase; `photo` base64 tetap data URL. Karyawan hanya menerima baris miliknya; admin dapat meminta `userId` lain |
 | `staff_shifts` | `staffShifts` (tidak di snapshot) | Dibaca lewat `staffShift.list`; `user_id`/`shift_date`/`shift_type`/`start_time`/`end_time`/`created_by`/`created_at`/`updated_at` → camelCase/ISO; `userName`/`userEmail`/`userRole` dari JOIN. Khusus Admin |
+| `letters` | `letters` (tidak di snapshot) | Dibaca lewat `letter.list`; `letter_number`/`letter_date`/`handled_date`/`attachment_url`/`created_by`/`created_at`/`updated_at` → camelCase/ISO; `createdByName` dari JOIN. Khusus Admin |
 | `user_devices` | — (tidak ada koleksi client) | Server-only; token/hash tidak pernah masuk snapshot, cookie, atau `localStorage` |
 | `notifications` | `notifications` | `recipient_id`/`recipient_email` → camelCase; `created_at` → ISO |
 | Sesi PHP | `session` (cache di `api.js`) | `{ userId }` dari `$_SESSION`, bukan tabel |
 
-Snapshot hanya memuat modul/materi dari versi kurikulum aktif (non-`retired`) tiap kursus. Struktur versi lain diambil lewat aksi `curriculum.detail`. Sejak Phase 4, snapshot juga memuat `classMaterialSettings`, `classMaterials`, `classLessonProgress`, dan `classMaterialProgress`; `classMaterials` sengaja hanya berisi metadata tanpa `content`/`file_path`. Koleksi `staffAttendances` sengaja tidak dimasukkan ke snapshot bootstrap karena memuat foto pribadi dan metadata perangkat; data hanya dikembalikan oleh aksi `staffAttendance.list` milik pengguna yang login. Koleksi `staffShifts` juga tidak masuk snapshot; jadwal dibaca khusus Admin lewat aksi `staffShift.list` agar data shift tidak terekspos ke role lain. Pada UI, `attendance_date`, `taken_at`, dan koordinat diisi otomatis saat simpan (tanggal/jam `Asia/Jakarta` dan GPS perangkat), sehingga pengguna tidak dapat mengubahnya; dashboard Admin dan halaman karyawan memakai modul bersama `attendance.js`, dan satu pengguna hanya dapat mencatat satu `in` dan satu `out` per hari. Tabel `user_devices` tidak pernah masuk snapshot: token mentah hanya ada di cookie `elips_remember`, sedangkan server menyimpan hash-nya dan mengelola rotasi/pencabutan sepenuhnya di backend.
+Snapshot hanya memuat modul/materi dari versi kurikulum aktif (non-`retired`) tiap kursus. Struktur versi lain diambil lewat aksi `curriculum.detail`. Sejak Phase 4, snapshot juga memuat `classMaterialSettings`, `classMaterials`, `classLessonProgress`, dan `classMaterialProgress`; `classMaterials` sengaja hanya berisi metadata tanpa `content`/`file_path`. Koleksi `staffAttendances` sengaja tidak dimasukkan ke snapshot bootstrap karena memuat foto pribadi dan metadata perangkat; data hanya dikembalikan oleh aksi `staffAttendance.list` milik pengguna yang login. Koleksi `staffShifts` juga tidak masuk snapshot; jadwal dibaca khusus Admin lewat aksi `staffShift.list` agar data shift tidak terekspos ke role lain. Koleksi `letters` juga tidak masuk snapshot; surat dibaca khusus Admin lewat aksi `letter.list`. Pada UI, `attendance_date`, `taken_at`, dan koordinat diisi otomatis saat simpan (tanggal/jam `Asia/Jakarta` dan GPS perangkat), sehingga pengguna tidak dapat mengubahnya; dashboard Admin dan halaman karyawan memakai modul bersama `attendance.js`, dan satu pengguna hanya dapat mencatat satu `in` dan satu `out` per hari. Tabel `user_devices` tidak pernah masuk snapshot: token mentah hanya ada di cookie `elips_remember`, sedangkan server menyimpan hash-nya dan mengelola rotasi/pencabutan sepenuhnya di backend.
 
 ### 16.6 Catatan Operasional
 
-- **Instalasi:** `php api/install.php --fresh` menghapus database lama, membuat ulang seluruh 39 tabel, dan mengisi data demo: 9 predikat, 7 pengguna, 4 kategori, 3 cabang, 4 kursus, 4 versi kurikulum, 25 modul, 75 materi, 1 kelas migrasi, 1 histori tentor, 3 enrollment, 4 sesi pertemuan, 9 baris presensi, 2 tugas, 3 rubrik, 1 submission, 2 riwayat review, 2 ujian, 6 peserta ujian, 6 hasil ujian, 1 skema penilaian, 3 komponen, dan 2 nilai komponen manual. Koleksi `grade_corrections` sengaja kosong pada seed. Tabel `staff_attendances` dibuat (tabel ke-37) tetapi tidak diisi data demo karena absensi bersifat pribadi dan dibuat dari dashboard Admin atau halaman karyawan. Tabel `staff_shifts` dibuat (tabel ke-38) dan sengaja kosong karena jadwal shift diisi Admin melalui halaman jadwal shift. Tabel `user_devices` dibuat (tabel ke-39) dan sengaja kosong sampai ada login dengan "Ingat saya". Password demo `elips123` di-hash saat seeding.
+- **Instalasi:** `php api/install.php --fresh` menghapus database lama, membuat ulang seluruh 40 tabel, dan mengisi data demo: 9 predikat, 7 pengguna, 4 kategori, 3 cabang, 4 kursus, 4 versi kurikulum, 25 modul, 75 materi, 1 kelas migrasi, 1 histori tentor, 3 enrollment, 4 sesi pertemuan, 9 baris presensi, 2 tugas, 3 rubrik, 1 submission, 2 riwayat review, 2 ujian, 6 peserta ujian, 6 hasil ujian, 1 skema penilaian, 3 komponen, dan 2 nilai komponen manual. Koleksi `grade_corrections` sengaja kosong pada seed. Tabel `staff_attendances` dibuat (tabel ke-37) tetapi tidak diisi data demo karena absensi bersifat pribadi dan dibuat dari dashboard Admin atau halaman karyawan. Tabel `staff_shifts` dibuat (tabel ke-38) dan sengaja kosong karena jadwal shift diisi Admin melalui halaman jadwal shift. Tabel `letters` dibuat (tabel ke-39) dan tetap kosong setelah `install.php`; 14 surat dummy (7 masuk + 7 keluar) diisi terpisah secara idempoten lewat `php api/seed-letters.php`, yang mencocokkan `direction` + `letter_number` + `letter_date`. Tabel `user_devices` dibuat (tabel ke-40) dan sengaja kosong sampai ada login dengan "Ingat saya". Password demo `elips123` di-hash saat seeding.
 - **Timezone:** koneksi PDO disetel UTC; kolom `DATE` untuk tanggal kalender dan `DATETIME` untuk timestamp.
 - **Transaksi:** operasi multi-tabel dijalankan dalam transaksi eksplisit:
   - pembuatan kelas + penguncian versi kurikulum (`curriculum_versions.status = 'locked'`) + histori tentor awal;

@@ -112,6 +112,12 @@ function elips_dispatch(string $action, array $payload): array
             return elips_action_staff_shift_save($payload);
         case 'staffShift.delete':
             return elips_action_staff_shift_delete($payload);
+        case 'letter.list':
+            return elips_action_letter_list($payload);
+        case 'letter.save':
+            return elips_action_letter_save($payload);
+        case 'letter.delete':
+            return elips_action_letter_delete($payload);
         case 'module.create':
             return elips_action_module_create($payload);
         case 'module.update':
@@ -6732,6 +6738,266 @@ function elips_action_staff_shift_delete(array $p): array
         . '–' . substr((string) $row['end_time'], 0, 5) . ').';
     elips_audit('delete', 'staff_shift', $id, $label, $detail, $actor);
     return elips_ok('Jadwal shift dihapus.');
+}
+
+// ---------- Surat menyurat ----------
+
+function elips_letter_direction_label(string $direction): string
+{
+    $labels = ['masuk' => 'Surat Masuk', 'keluar' => 'Surat Keluar'];
+    return $labels[$direction] ?? ucfirst($direction);
+}
+
+function elips_letter_row(int $id): ?array
+{
+    $stmt = elips_db()->prepare(
+        'SELECT l.*, u.name AS created_by_name
+         FROM letters l
+         LEFT JOIN users u ON u.id = l.created_by
+         WHERE l.id = ? LIMIT 1'
+    );
+    $stmt->execute([$id]);
+    $row = $stmt->fetch();
+    return $row ?: null;
+}
+
+function elips_action_letter_list(array $p): array
+{
+    elips_require_admin();
+
+    $direction = strtolower(trim((string) ($p['direction'] ?? '')));
+    if ($direction !== '' && !in_array($direction, ['masuk', 'keluar'], true)) {
+        return elips_fail('Filter jenis surat tidak valid.');
+    }
+
+    $status = strtolower(trim((string) ($p['status'] ?? '')));
+    if ($status !== '' && !in_array($status, ['baru', 'diproses', 'selesai', 'arsip'], true)) {
+        return elips_fail('Filter status surat tidak valid.');
+    }
+
+    $fromRaw = trim((string) ($p['from'] ?? ''));
+    $toRaw = trim((string) ($p['to'] ?? ''));
+    $from = $fromRaw === '' ? null : elips_normalize_date($fromRaw);
+    $to = $toRaw === '' ? null : elips_normalize_date($toRaw);
+    if ($fromRaw !== '' && $from === null) {
+        return elips_fail('Tanggal awal tidak valid.');
+    }
+    if ($toRaw !== '' && $to === null) {
+        return elips_fail('Tanggal akhir tidak valid.');
+    }
+    if ($from !== null && $to !== null && $from > $to) {
+        return elips_fail('Tanggal awal tidak boleh setelah tanggal akhir.');
+    }
+
+    $search = trim((string) ($p['search'] ?? ''));
+    if (mb_strlen($search) > 100) {
+        return elips_fail('Kata kunci pencarian maksimal 100 karakter.');
+    }
+
+    $where = [];
+    $args = [];
+    if ($direction !== '') {
+        $where[] = 'l.direction = ?';
+        $args[] = $direction;
+    }
+    if ($status !== '') {
+        $where[] = 'l.status = ?';
+        $args[] = $status;
+    }
+    if ($from !== null) {
+        $where[] = 'l.letter_date >= ?';
+        $args[] = $from;
+    }
+    if ($to !== null) {
+        $where[] = 'l.letter_date <= ?';
+        $args[] = $to;
+    }
+    if ($search !== '') {
+        $like = '%' . $search . '%';
+        $where[] = '(l.letter_number LIKE ? OR l.subject LIKE ? OR l.sender LIKE ?'
+            . ' OR l.recipient LIKE ? OR l.category LIKE ?)';
+        for ($i = 0; $i < 5; $i++) {
+            $args[] = $like;
+        }
+    }
+
+    $sql = 'SELECT l.*, u.name AS created_by_name
+            FROM letters l
+            LEFT JOIN users u ON u.id = l.created_by';
+    if ($where) {
+        $sql .= ' WHERE ' . implode(' AND ', $where);
+    }
+    $sql .= ' ORDER BY l.letter_date DESC, l.id DESC';
+
+    $stmt = elips_db()->prepare($sql);
+    $stmt->execute($args);
+    $rows = [];
+    foreach ($stmt->fetchAll() as $row) {
+        $rows[] = elips_letter_public($row);
+    }
+
+    return elips_ok('Daftar surat dimuat.', ['rows' => $rows]);
+}
+
+function elips_action_letter_save(array $p): array
+{
+    $actor = elips_require_admin();
+
+    $id = (int) ($p['id'] ?? 0);
+    $direction = strtolower(trim((string) ($p['direction'] ?? '')));
+    $letterNumber = trim((string) ($p['letterNumber'] ?? ''));
+    $subject = trim((string) ($p['subject'] ?? ''));
+    $sender = trim((string) ($p['sender'] ?? ''));
+    $recipient = trim((string) ($p['recipient'] ?? ''));
+    $letterDate = elips_normalize_date($p['letterDate'] ?? '');
+    $handledRaw = trim((string) ($p['handledDate'] ?? ''));
+    $handledDate = $handledRaw === '' ? null : elips_normalize_date($handledRaw);
+    $category = trim((string) ($p['category'] ?? ''));
+    $classification = strtolower(trim((string) ($p['classification'] ?? 'biasa')));
+    $status = strtolower(trim((string) ($p['status'] ?? 'baru')));
+    $summary = trim((string) ($p['summary'] ?? ''));
+    $attachmentUrl = trim((string) ($p['attachmentUrl'] ?? ''));
+    $notes = trim((string) ($p['notes'] ?? ''));
+
+    if (!in_array($direction, ['masuk', 'keluar'], true)) {
+        return elips_fail('Jenis surat wajib dipilih (masuk atau keluar).');
+    }
+    if ($letterNumber === '') {
+        return elips_fail('Nomor surat wajib diisi.');
+    }
+    if (mb_strlen($letterNumber) > 100) {
+        return elips_fail('Nomor surat maksimal 100 karakter.');
+    }
+    if ($subject === '') {
+        return elips_fail('Perihal surat wajib diisi.');
+    }
+    if (mb_strlen($subject) > 255) {
+        return elips_fail('Perihal surat maksimal 255 karakter.');
+    }
+    if ($sender === '') {
+        return elips_fail('Pengirim surat wajib diisi.');
+    }
+    if (mb_strlen($sender) > 150) {
+        return elips_fail('Nama pengirim maksimal 150 karakter.');
+    }
+    if ($recipient === '') {
+        return elips_fail('Penerima surat wajib diisi.');
+    }
+    if (mb_strlen($recipient) > 150) {
+        return elips_fail('Nama penerima maksimal 150 karakter.');
+    }
+    if ($letterDate === null) {
+        return elips_fail('Tanggal surat wajib diisi dengan format yang valid.');
+    }
+    if ($handledRaw !== '' && $handledDate === null) {
+        return elips_fail('Tanggal diterima/dikirim tidak valid.');
+    }
+    if (mb_strlen($category) > 80) {
+        return elips_fail('Kategori surat maksimal 80 karakter.');
+    }
+    if (!in_array($classification, ['biasa', 'penting', 'segera', 'rahasia'], true)) {
+        return elips_fail('Sifat surat tidak valid.');
+    }
+    if (!in_array($status, ['baru', 'diproses', 'selesai', 'arsip'], true)) {
+        return elips_fail('Status surat tidak valid.');
+    }
+    if (mb_strlen($summary) > 5000) {
+        return elips_fail('Ringkasan surat maksimal 5000 karakter.');
+    }
+    if (mb_strlen($attachmentUrl) > 500) {
+        return elips_fail('Tautan lampiran maksimal 500 karakter.');
+    }
+    if ($attachmentUrl !== '') {
+        $parsed = parse_url($attachmentUrl);
+        if ($parsed === false) {
+            return elips_fail('Tautan lampiran tidak valid.');
+        }
+        $scheme = isset($parsed['scheme']) ? strtolower((string) $parsed['scheme']) : '';
+        if ($scheme !== '' && !in_array($scheme, ['http', 'https'], true)) {
+            return elips_fail('Tautan lampiran harus memakai http:// atau https://.');
+        }
+    }
+    if (mb_strlen($notes) > 1000) {
+        return elips_fail('Catatan surat maksimal 1000 karakter.');
+    }
+
+    $existing = null;
+    if ($id > 0) {
+        $existing = elips_letter_row($id);
+        if (!$existing) {
+            return elips_fail('Surat tidak ditemukan.');
+        }
+    }
+
+    $db = elips_db();
+    if ($id > 0) {
+        $stmt = $db->prepare(
+            'UPDATE letters
+             SET direction = ?, letter_number = ?, subject = ?, sender = ?, recipient = ?,
+                 letter_date = ?, handled_date = ?, category = ?, classification = ?, status = ?,
+                 summary = ?, attachment_url = ?, notes = ?, updated_at = UTC_TIMESTAMP()
+             WHERE id = ?'
+        );
+        $stmt->execute([
+            $direction, $letterNumber, $subject, $sender, $recipient,
+            $letterDate, $handledDate, $category, $classification, $status,
+            $summary, $attachmentUrl, $notes, $id,
+        ]);
+    } else {
+        $stmt = $db->prepare(
+            'INSERT INTO letters
+                (direction, letter_number, subject, sender, recipient, letter_date, handled_date,
+                 category, classification, status, summary, attachment_url, notes, created_by, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP())'
+        );
+        $stmt->execute([
+            $direction, $letterNumber, $subject, $sender, $recipient,
+            $letterDate, $handledDate, $category, $classification, $status,
+            $summary, $attachmentUrl, $notes, (int) $actor['id'],
+        ]);
+        $id = (int) $db->lastInsertId();
+    }
+
+    $label = elips_letter_direction_label($direction) . ' — ' . $letterNumber;
+    $detail = ($existing ? 'Mengubah' : 'Menambahkan')
+        . ' ' . strtolower(elips_letter_direction_label($direction))
+        . ' nomor ' . $letterNumber
+        . ' perihal ' . $subject
+        . ' dari ' . $sender
+        . ' kepada ' . $recipient
+        . ' tanggal ' . $letterDate
+        . '. Status: ' . $status . '.';
+    elips_audit($existing ? 'update' : 'create', 'letter', $id, $label, $detail, $actor);
+
+    $row = elips_letter_row($id);
+    return elips_ok(
+        $existing ? 'Surat diperbarui.' : 'Surat ditambahkan.',
+        $row ? elips_letter_public($row) : null
+    );
+}
+
+function elips_action_letter_delete(array $p): array
+{
+    $actor = elips_require_admin();
+    $id = (int) ($p['id'] ?? 0);
+    $row = elips_letter_row($id);
+    if (!$row) {
+        return elips_fail('Surat tidak ditemukan.');
+    }
+
+    $delete = elips_db()->prepare('DELETE FROM letters WHERE id = ?');
+    $delete->execute([$id]);
+
+    $label = elips_letter_direction_label((string) $row['direction'])
+        . ' — ' . $row['letter_number'];
+    $detail = 'Menghapus ' . strtolower(elips_letter_direction_label((string) $row['direction']))
+        . ' nomor ' . $row['letter_number']
+        . ' perihal ' . $row['subject']
+        . ' dari ' . $row['sender']
+        . ' kepada ' . $row['recipient']
+        . ' tanggal ' . elips_date_only($row['letter_date']) . '.';
+    elips_audit('delete', 'letter', $id, $label, $detail, $actor);
+    return elips_ok('Surat dihapus.');
 }
 
 // ---------- Admin housekeeping ----------

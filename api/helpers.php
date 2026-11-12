@@ -1707,6 +1707,35 @@ function elips_staff_shift_public(array $row): array
 }
 
 /**
+ * Serialisasi surat masuk/keluar untuk halaman Admin. Semua field
+ * detail dikembalikan agar form ubah dan tampilan detail tidak perlu
+ * permintaan tambahan.
+ */
+function elips_letter_public(array $row): array
+{
+    return [
+        'id' => (int) $row['id'],
+        'direction' => $row['direction'],
+        'letterNumber' => $row['letter_number'],
+        'subject' => $row['subject'],
+        'sender' => $row['sender'],
+        'recipient' => $row['recipient'],
+        'letterDate' => elips_date_only($row['letter_date']),
+        'handledDate' => $row['handled_date'] === null ? null : elips_date_only($row['handled_date']),
+        'category' => $row['category'],
+        'classification' => $row['classification'],
+        'status' => $row['status'],
+        'summary' => $row['summary'] ?? '',
+        'attachmentUrl' => $row['attachment_url'],
+        'notes' => $row['notes'],
+        'createdBy' => $row['created_by'] === null ? null : (int) $row['created_by'],
+        'createdByName' => $row['created_by_name'] ?? '',
+        'createdAt' => elips_iso($row['created_at']),
+        'updatedAt' => elips_iso($row['updated_at']),
+    ];
+}
+
+/**
  * Rekap kehadiran berbasis JP. Hanya sesi yang memenuhi kebijakan
  * yang dihitung sebagai JP wajib; status di luar kebijakan tetap
  * dilaporkan terpisah.

@@ -52,6 +52,7 @@
         notifications: 'elips_notifications',
         staffAttendances: 'elips_staffAttendances',
         staffShifts: 'elips_staffShifts',
+        letters: 'elips_letters',
         session: 'elips_session'
     };
 

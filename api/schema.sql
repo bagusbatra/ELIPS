@@ -851,3 +851,29 @@ CREATE TABLE IF NOT EXISTS `staff_shifts` (
     CONSTRAINT `fk_staff_shifts_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
     CONSTRAINT `fk_staff_shifts_created_by` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `letters` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `direction` ENUM('masuk', 'keluar') NOT NULL DEFAULT 'masuk',
+    `letter_number` VARCHAR(100) NOT NULL,
+    `subject` VARCHAR(255) NOT NULL,
+    `sender` VARCHAR(150) NOT NULL,
+    `recipient` VARCHAR(150) NOT NULL,
+    `letter_date` DATE NOT NULL,
+    `handled_date` DATE NULL,
+    `category` VARCHAR(80) NOT NULL DEFAULT '',
+    `classification` ENUM('biasa', 'penting', 'segera', 'rahasia') NOT NULL DEFAULT 'biasa',
+    `status` ENUM('baru', 'diproses', 'selesai', 'arsip') NOT NULL DEFAULT 'baru',
+    `summary` TEXT NULL,
+    `attachment_url` VARCHAR(500) NOT NULL DEFAULT '',
+    `notes` VARCHAR(1000) NOT NULL DEFAULT '',
+    `created_by` INT UNSIGNED NULL,
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NULL,
+    PRIMARY KEY (`id`),
+    KEY `idx_letters_direction` (`direction`),
+    KEY `idx_letters_date` (`letter_date`),
+    KEY `idx_letters_status` (`status`),
+    KEY `idx_letters_number` (`letter_number`),
+    CONSTRAINT `fk_letters_created_by` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
