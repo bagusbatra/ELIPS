@@ -150,7 +150,7 @@ CREATE TABLE user_devices (
 | `admin/users.html` + `crud-users.js` | Role "Karyawan" di modal tambah/ubah; tombol "Reset Perangkat" |
 | `manifest.webmanifest`, `sw.js`, `offline.html`, `assets/js/pwa.js`, `assets/icons/*` *(baru)* | PWA (F2.1–F2.3): manifest, service worker network-first, halaman offline, banner pemasangan, dan ikon |
 | `assets/css/style.css` | Gaya halaman karyawan, banner pasang aplikasi, sheet iOS, dan bilah offline |
-| 28 halaman aplikasi | Tag manifest, `theme-color`, meta mobile/apple, favicon, apple-touch-icon, dan `pwa.js` (`defer`) |
+| 29 halaman aplikasi | Tag manifest, `theme-color`, meta mobile/apple, favicon, apple-touch-icon, dan `pwa.js` (`defer`) |
 
 ## 8. Keamanan & privasi
 
@@ -215,7 +215,7 @@ Catatan implementasi:
 - `sw.js` memakai strategi **network-first**: halaman HTML aplikasi dan seluruh `/api/` tidak pernah disimpan ke cache, sehingga perubahan file baru langsung terlihat. Hanya `offline.html` + ikon yang di-precache, sedangkan aset statis (CSS/JS/gambar/font/webmanifest/JSON) dipakai sebagai fallback saat offline.
 - `assets/js/pwa.js` mendaftarkan service worker (skip waiting + `clients.claim`, reload sekali saat ada versi baru), menampilkan banner pemasangan Android lewat `beforeinstallprompt`, sheet 3 langkah "Tambahkan ke Layar Utama" untuk iOS Safari, dan bilah offline dengan tombol coba lagi. Penolakan banner diingat 7 hari dan prompt dibatasi sekali per sesi.
 - `attendance.js` menolak penyimpanan saat offline, baik sebelum validasi maupun di dalam `persistAttendance` (menutup celah GPS yang selesai setelah koneksi putus).
-- `offline.html` berdiri sendiri (tanpa bundle aplikasi) dengan tombol muat ulang. Semua 28 halaman aplikasi memuat manifest, meta mobile/apple, favicon, apple-touch-icon, dan `pwa.js` (`defer`); server PHP bawaan menyajikan `.webmanifest` sebagai `application/manifest+json`.
+- `offline.html` berdiri sendiri (tanpa bundle aplikasi) dengan tombol muat ulang. Semua 29 halaman aplikasi memuat manifest, meta mobile/apple, favicon, apple-touch-icon, dan `pwa.js` (`defer`); server PHP bawaan menyajikan `.webmanifest` sebagai `application/manifest+json`.
 
 ### Fase 6 — Uji menyeluruh & peluncuran *(1 hari)*
 - [ ] Jalankan seluruh skenario uji (bagian 10) di Android, iOS, dan desktop.
@@ -248,7 +248,7 @@ Catatan implementasi:
 - QR code harian di lokasi kerja (bukti hadir fisik) dan/atau pembatasan radius GPS (geofence).
 - Login biometrik (passkey / sidik jari / Face ID).
 - Mode kiosk: tablet bersama dengan NIK + PIN + selfie.
-- Rekap absensi untuk admin (siapa belum absen hari ini, ekspor Excel/PDF), keterlambatan, jam kerja, izin/cuti/lembur.
+- Rekap absensi lanjutan: keterlambatan, jam kerja, izin/cuti/lembur, serta ekspor Excel/PDF. Rekap dasar per karyawan per hari dan ekspor CSV sudah tersedia sebagai perluasan di halaman Admin **Rekap Absensi** (`admin/attendance-recap.html`).
 - Absen offline dengan antrean sinkronisasi.
 - Notifikasi pengingat absen (push).
 

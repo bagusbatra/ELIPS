@@ -3529,3 +3529,43 @@ body.pwa-sheet-open {
         display: none !important;
     }
 }
+
+/* ---------- Rekap absensi karyawan ---------- */
+.recap-filter {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 1rem;
+    align-items: end;
+}
+
+.recap-filter .form-group {
+    margin: 0;
+}
+
+.recap-filter-actions {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+.recap-range-label {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.25rem 0.75rem;
+    border-radius: 999px;
+    background: var(--primary-light);
+    color: var(--primary);
+    font-size: 0.8125rem;
+    font-weight: 500;
+}
+
+@media (max-width: 640px) {
+    .recap-filter-actions {
+        justify-content: stretch;
+    }
+
+    .recap-filter-actions .btn {
+        flex: 1;
+    }
+}

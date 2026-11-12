@@ -2,7 +2,7 @@
 
 **Versi dokumen:** 4.0  
 **Terakhir diperbarui:** 2026-11-12
-**Status proyek:** Dual-mode - PHP 8/MySQL 8 + fallback `localStorage`; v4.0 Phase 1-6 (kurikulum, kelas/angkatan, enrollment berbasis kelas, jadwal & presensi offline, materi tambahan & mode akses materi, tugas & ujian, skema penilaian/finalisasi/koreksi) plus cabang, kalender jadwal Admin, aksi langsung dan filter jadwal lanjutan, absensi staf berbasis kamera, absensi karyawan (role `karyawan`, jam server, GPS wajib, aturan harian, modul bersama, halaman `employee/attendance.html`, dan sesi diingat dengan rotasi token per perangkat), serta PWA (manifest, service worker network-first, banner pemasangan, dan mode offline)
+**Status proyek:** Dual-mode - PHP 8/MySQL 8 + fallback `localStorage`; v4.0 Phase 1-6 (kurikulum, kelas/angkatan, enrollment berbasis kelas, jadwal & presensi offline, materi tambahan & mode akses materi, tugas & ujian, skema penilaian/finalisasi/koreksi) plus cabang, kalender jadwal Admin, aksi langsung dan filter jadwal lanjutan, absensi staf berbasis kamera, absensi karyawan (role `karyawan`, jam server, GPS wajib, aturan harian, modul bersama, halaman `employee/attendance.html`, dan sesi diingat dengan rotasi token per perangkat), PWA (manifest, service worker network-first, banner pemasangan, dan mode offline), serta rekap absensi karyawan untuk Admin (filter, ringkasan status, dan ekspor CSV)
 **Dokumen terkait:** `prd.md`, `erd.md`, `ELIPS-LMS-PRD-v4.0.md`
 
 ---
@@ -173,6 +173,44 @@ Prinsip yang dipakai:
 ---
 
 ## 3. Riwayat Perubahan
+
+### v4.0 - 2026-11-12 - Rekap absensi karyawan untuk Admin
+
+**Tujuan:** memberi Admin satu halaman untuk melihat rekapitulasi kehadiran karyawan dan admin per hari, memfilter data, lalu mengekspornya ke CSV.
+
+Perubahan file:
+
+- `admin/attendance-recap.html` (baru, halaman aplikasi ke-29): sidebar **Rekap Absensi** setelah **Laporan**, filter tanggal/karyawan/role, kartu ringkasan staf-hari-status, tabel harian, serta tombol Muat Ulang, Bulan Ini, dan Ekspor CSV.
+- `assets/js/staff-recap.js` (baru, modul JS ke-22): agregasi per karyawan + tanggal, klasifikasi `lengkap`/`belum_pulang`/`tanpa_masuk`, ekspor CSV, dan paritas mode server/lokal.
+- `api/actions.php`: aksi `staffAttendance.recap` (aksi API ke-95) khusus Admin; default bulan berjalan sampai hari ini, maksimal 366 hari, filter `userId`/`role`, dan respons tanpa foto.
+- 11 halaman admin lain: menu **Rekap Absensi** ditambahkan setelah **Laporan**.
+- `assets/css/style.css`: gaya filter rekap dan label rentang tanggal.
+- `prd.md`, `log.md`, `PRD_karyawan.md`: dokumentasi fitur dan angka cakupan.
+
+Perilaku:
+
+- Rekap hanya dapat dibuka Admin. Instruktur/peserta ditolak guard akses, sedangkan karyawan yang boleh mengakses absensi tetap ditolak oleh guard khusus rekap.
+- Server menentukan rentang default (`Asia/Jakarta`, awal bulan sampai hari ini) dan menolak tanggal awal setelah tanggal akhir atau rentang lebih dari 366 hari.
+- Setiap baris rekap menggabungkan absen masuk/pulang per karyawan per hari, menampilkan jam, durasi, lokasi, dan status; foto sengaja tidak diambil agar respons ringan.
+- Mode lokal menghitung rekap dari `elips_staffAttendances` yang di-join dengan data pengguna, memakai aturan dan label status yang sama.
+- Ekspor CSV memakai BOM UTF-8, seluruh sel dikutip, dan nama file mengikuti rentang tanggal yang dipilih.
+
+Pengujian:
+
+- `api-staff-recap` (baru) 33/33: guard Admin-only, rentang default, batas 366 hari, filter karyawan/role, validasi tanggal, dan respons tanpa foto.
+- `test-admin-attendance-recap` (baru) 53/53: render agregasi, kartu ringkasan, filter, shortcut bulan ini, empty state, status, dan ekspor CSV.
+- `test-admin-recap-server` (baru) 19/19: alur login server, rekap dari API, filter role, refresh, ekspor CSV, dan pengalihan non-admin.
+- Regresi: `validate-scripts` 30 HTML/23 JS, `test-all-pages` 29 halaman, `test-admin-pages`, `test-pwa` 50/50, `test-pwa-server` 16/16, `api-employee-fase1` 34/34, dan `test-employee-server` lulus.
+- `php api/install.php --fresh` tetap menghasilkan 38 tabel tanpa perubahan skema.
+
+Dampak angka: 38 tabel MySQL, 95 aksi API, 38 storage key, 22 modul JS di `assets/js/`, 30 halaman HTML, dan 23 file JavaScript (termasuk `sw.js`).
+
+Batasan:
+
+- Belum ada perhitungan keterlambatan, jam kerja terjadwal, izin/cuti/lembur, atau penandaan alpha untuk hari tanpa catatan.
+- Ekspor masih CSV; ekspor Excel/PDF menunggu kebutuhan lanjutan.
+
+---
 
 ### v4.0 - 2026-11-12 - Fase 5 absensi karyawan: PWA, pemasangan, dan mode offline
 
@@ -1178,11 +1216,11 @@ Akun lama tanpa password otomatis dimigrasikan ke password demo `elips123` saat 
 
 ## 6. Hasil Pengujian Terakhir
 
-Pengujian dijalankan setelah backend PHP/MySQL, client dual-mode (v3.0), increment v4.0 Phase 1-6, penambahan cabang/kalender jadwal, aksi langsung/filter jadwal lanjutan, absensi staf dan penyempurnaan alur hariannya, Fase 1 absensi karyawan (role, jam server, GPS wajib, aturan harian database), serta Fase 4-5 (sesi diingat, perangkat aktif, dan PWA):
+Pengujian dijalankan setelah backend PHP/MySQL, client dual-mode (v3.0), increment v4.0 Phase 1-6, penambahan cabang/kalender jadwal, aksi langsung/filter jadwal lanjutan, absensi staf dan penyempurnaan alur hariannya, Fase 1 absensi karyawan (role, jam server, GPS wajib, aturan harian database), Fase 4-5 (sesi diingat, perangkat aktif, dan PWA), serta rekap absensi karyawan untuk Admin:
 
 | Pemeriksaan | Hasil |
 |---|---|
-| Syntax 29 HTML + 22 JS + 7 PHP | ✅ Lulus |
+| Syntax 30 HTML + 23 JS + 7 PHP | ✅ Lulus |
 | Guard sesi, password, sanitasi (`test-p0`) | ✅ Lulus |
 | Notifikasi email (`test-notifications`) | ✅ Lulus |
 | Audit trail (`test-audit`) | ✅ Lulus |
@@ -1217,6 +1255,9 @@ Pengujian dijalankan setelah backend PHP/MySQL, client dual-mode (v3.0), increme
 | Sesi diingat & perangkat aktif (`test-remember-login`) | Lulus 37/37 |
 | PWA manifest & service worker (`test-pwa`) | Lulus 50/50 |
 | PWA mode server (`test-pwa-server`) | Lulus 16/16 |
+| API rekap absensi Admin (`api-staff-recap`) | Lulus 33/33 |
+| UI rekap absensi lokal (`test-admin-attendance-recap`) | Lulus 53/53 |
+| Rekap absensi mode server (`test-admin-recap-server`) | Lulus 19/19 |
 | UI akademik admin (`test-academic-page`) | ✅ Lulus |
 | UI cabang & kalender admin (`test-branch-pages`) | ✅ Lulus |
 | UI jadwal/presensi lokal (`test-sessions-page`) | ✅ 47/47 |
@@ -1291,11 +1332,15 @@ Catatan penting yang diuji:
 - Metadata absensi (zona waktu, lokasi, perangkat, koneksi, catatan, IP server) tersimpan konsisten dan muncul di detail.
 - Snapshot bootstrap tidak memuat koleksi/foto absensi staf; riwayat hanya dimuat lewat aksi khusus.
 - Kamera tanpa dukungan/izin/secure context menampilkan fallback unggah foto; GPS tetap wajib pada mode server.
-- Manifest PWA memakai `start_url` halaman absen, `scope` root, dan `display: standalone`; seluruh 28 halaman aplikasi memuat manifest, ikon, dan `pwa.js`.
+- Manifest PWA memakai `start_url` halaman absen, `scope` root, dan `display: standalone`; seluruh 29 halaman aplikasi memuat manifest, ikon, dan `pwa.js`.
 - Service worker network-first tidak menyimpan halaman HTML aplikasi maupun `/api/`, sehingga perubahan file langsung terlihat; hanya aset statis dan `offline.html` yang menjadi fallback.
 - Banner Android memakai `beforeinstallprompt`; iOS Safari menampilkan sheet 3 langkah; penolakan diingat 7 hari dan prompt dibatasi sekali per sesi.
 - Penyimpanan absensi ditolak saat offline sebelum validasi maupun saat GPS selesai setelah koneksi putus.
 - Server PHP bawaan menyajikan `.webmanifest` sebagai `application/manifest+json`, dan seluruh ikon dapat diunduh.
+- Rekap absensi hanya dapat dibuka Admin; instruktur/peserta ditolak guard akses dan karyawan ditolak guard khusus rekap.
+- Rentang rekap default adalah awal bulan berjalan sampai hari ini; tanggal awal setelah tanggal akhir dan rentang lebih dari 366 hari ditolak.
+- Rekap menggabungkan absen masuk/pulang per karyawan per hari dan menandai `lengkap`, `belum_pulang`, atau `tanpa_masuk`, tanpa mengambil foto.
+- Filter karyawan dan role bekerja di server maupun lokal, dan ekspor CSV memakai BOM UTF-8 dengan seluruh sel dikutip.
 
 ---
 
@@ -1313,6 +1358,7 @@ Keterbatasan saat ini:
 - Mode lokal tidak memiliki transaksi, sehingga finalisasi/koreksi yang gagal di tengah dapat meninggalkan data parsial.
 - Absensi staf satu masuk + satu pulang per hari dijaga unique key database dan validasi server; mode lokal kini memakai aturan yang sama (GPS wajib, tanggal `Asia/Jakarta`, hapus beralasan oleh Admin).
 - Role `karyawan`, halaman `employee/attendance.html`, remember-me (`user_devices`), dan PWA sudah dibuat (Fase 1–5). Retensi foto, kapasitas penyimpanan, uji perangkat Android/iOS nyata, panduan karyawan, dan pilot tersisa untuk Fase 6.
+- Rekap absensi Admin sudah tersedia (filter tanggal/karyawan/role, ringkasan status, dan ekspor CSV); keterlambatan, jam kerja terjadwal, izin/cuti/lembur, alpha otomatis, serta ekspor Excel/PDF belum dibuat.
 - Belum ada migration tool, backup otomatis, atau monitoring produksi.
 
 Rencana lanjutan (opsional, sesuai `prd.md`):

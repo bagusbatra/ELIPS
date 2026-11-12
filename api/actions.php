@@ -102,6 +102,8 @@ function elips_dispatch(string $action, array $payload): array
             return elips_action_staff_attendance_create($payload);
         case 'staffAttendance.list':
             return elips_action_staff_attendance_list($payload);
+        case 'staffAttendance.recap':
+            return elips_action_staff_attendance_recap($payload);
         case 'staffAttendance.delete':
             return elips_action_staff_attendance_delete($payload);
         case 'module.create':
@@ -6385,6 +6387,75 @@ function elips_action_staff_attendance_list(array $p): array
         $records[] = elips_staff_attendance_public($row, true);
     }
     return elips_ok('Riwayat absensi dimuat.', $records);
+}
+
+function elips_action_staff_attendance_recap(array $p): array
+{
+    $actor = elips_require_attendance_access();
+    if ($actor['role'] !== 'admin') {
+        return elips_fail('Hanya administrator yang dapat melihat rekap absensi karyawan.');
+    }
+
+    // Rentang tanggal mengikuti zona waktu absensi. Bila tidak diisi, rekap
+    // menampilkan bulan berjalan sampai hari ini.
+    $today = new DateTimeImmutable('now', new DateTimeZone(elips_attendance_timezone()));
+    $defaultFrom = $today->modify('first day of this month')->format('Y-m-d');
+    $defaultTo = $today->format('Y-m-d');
+
+    $from = elips_normalize_date($p['from'] ?? '');
+    $to = elips_normalize_date($p['to'] ?? '');
+    if ($from === null) $from = $defaultFrom;
+    if ($to === null) $to = $defaultTo;
+    if ($from > $to) {
+        return elips_fail('Tanggal awal tidak boleh setelah tanggal akhir.');
+    }
+    $span = (new DateTimeImmutable($from, new DateTimeZone('UTC')))
+        ->diff(new DateTimeImmutable($to, new DateTimeZone('UTC')))->days;
+    if ($span > 366) {
+        return elips_fail('Rentang rekap maksimal 366 hari.');
+    }
+
+    $targetId = (int) ($p['userId'] ?? 0);
+    $role = strtolower(trim((string) ($p['role'] ?? '')));
+    if ($role !== '' && !in_array($role, ['admin', 'karyawan'], true)) {
+        return elips_fail('Filter role rekap tidak valid.');
+    }
+
+    $where = ['sa.attendance_date BETWEEN ? AND ?'];
+    $args = [$from, $to];
+    if ($targetId > 0) {
+        $where[] = 'sa.user_id = ?';
+        $args[] = $targetId;
+    }
+    if ($role !== '') {
+        $where[] = 'u.role = ?';
+        $args[] = $role;
+    }
+
+    // Foto sengaja tidak disertakan pada rekap: tabel rekap hanya butuh
+    // metadata kehadiran, sehingga respons tetap ringan dan foto pribadi
+    // hanya diambil lewat aksi riwayat per pengguna.
+    $stmt = elips_db()->prepare(
+        'SELECT sa.*, u.name AS user_name, u.email AS user_email, u.role AS user_role
+         FROM staff_attendances sa
+         INNER JOIN users u ON u.id = sa.user_id
+         WHERE ' . implode(' AND ', $where) . '
+         ORDER BY sa.attendance_date DESC, u.name ASC, sa.taken_at ASC, sa.id ASC'
+    );
+    $stmt->execute($args);
+    $rows = [];
+    foreach ($stmt->fetchAll() as $row) {
+        $item = elips_staff_attendance_public($row, false);
+        $item['userEmail'] = (string) ($row['user_email'] ?? '');
+        $item['userRole'] = (string) ($row['user_role'] ?? '');
+        $rows[] = $item;
+    }
+
+    return elips_ok('Rekap absensi dimuat.', [
+        'from' => $from,
+        'to' => $to,
+        'rows' => $rows,
+    ]);
 }
 
 function elips_action_staff_attendance_delete(array $p): array

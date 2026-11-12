@@ -1891,15 +1891,15 @@ Absensi harian pribadi admin dan karyawan yang dicatat dari dashboard Admin atau
 
 **Aturan:**
 
-- Hanya Admin yang dapat membuat, membaca, dan menghapus catatan; server membatasi operasi pada `userId` milik aktor.
+- Hanya role `admin` dan `karyawan` yang dapat membuat/membaca absensi. Karyawan hanya dapat membaca catatannya sendiri, sedangkan Admin dapat membaca catatan pengguna lain lewat parameter `userId` dan menghapus catatan mana pun dengan alasan.
 - Foto wajib dan harus berupa data URL gambar valid (JPEG/PNG/WebP) dengan ukuran terbatas.
-- Koordinat harus lengkap berpasangan dan berada dalam rentang valid; `locationSource` diturunkan bila tidak konsisten.
+- Koordinat harus lengkap berpasangan dan berada dalam rentang valid; GPS wajib untuk data baru dan `locationSource` selalu `gps`.
 - Alur harian: dashboard hanya menampilkan tombol **Absen Masuk** bila belum ada catatan `in` hari ini, hanya **Absen Pulang** bila `in` sudah ada dan `out` belum, dan badge "Absensi hari ini lengkap" bila keduanya sudah ada. Tidak ada tombol saat lengkap.
-- Satu `in` dan satu `out` per admin per `attendanceDate` ditegakkan oleh UI (`allowedKind()`) dan diverifikasi ulang sebelum simpan; aturan ini **bukan** unique constraint database, sehingga API tetap menerima beberapa baris bila dipanggil langsung.
-- Tanggal, jam, dan lokasi dikunci otomatis saat tombol Simpan ditekan: `attendanceDate` = tanggal lokal hari ini, `takenAt` = waktu simpan, dan koordinat berasal dari GPS perangkat (tanpa input manual). Kegagalan GPS tidak memblokir simpan; `locationSource` menjadi `none`.
+- Satu `in` dan satu `out` per pengguna per `attendanceDate` ditegakkan oleh validasi API dan unique key database `uq_staff_attendances_user_day_kind` (`user_id`, `attendance_date`, `kind`).
+- Tanggal, jam, dan lokasi dikunci otomatis saat tombol Simpan ditekan: `attendanceDate` = tanggal server (`Asia/Jakarta`), `takenAt` = waktu server, dan koordinat berasal dari GPS perangkat (tanpa input manual). Absensi tanpa GPS ditolak.
 - Modal ambil foto hanya berisi layar kamera, tombol Ambil Foto/Ulangi/Nyalakan Kamera/Unggah Foto, Catatan, Batal, dan Simpan Absensi. Setelah simpan, modal sukses menampilkan foto, identitas akun, dan seluruh metadata dengan satu tombol **Selesai**; modal sukses tidak dapat ditutup dengan Escape/backdrop.
 - Mode lokal menyimpan data URL terkompresi dan memangkas riwayat per pengguna menjadi 20 catatan; mode server menyimpan seluruh riwayat yang belum dihapus.
-- Snapshot bootstrap tidak memuat koleksi ini maupun foto; data dibaca lewat `staffAttendance.list`.
+- Snapshot bootstrap tidak memuat koleksi ini maupun foto; data dibaca lewat `staffAttendance.list` atau, untuk rekap Admin, `staffAttendance.recap` (per rentang tanggal, tanpa foto).
 
 ---
 
