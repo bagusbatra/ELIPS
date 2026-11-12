@@ -9,7 +9,7 @@
 
 ## 1. Ringkasan
 
-ELIPS LMS adalah aplikasi Learning Management System dengan tiga role: **Admin**, **Instruktur**, dan **Peserta**. Pada mode server, data disimpan di **MySQL 8** dengan 37 tabel (34 domain inti + 3 operasional/pribadi) dan foreign key fisik (lihat §13 dan §16). Pada mode fallback, data disimpan sebagai koleksi JSON di `localStorage` dengan model logis yang sama. Sesi login pada mode server disimpan di sesi PHP native, bukan tabel database.
+ELIPS LMS adalah aplikasi Learning Management System dengan tiga role: **Admin**, **Instruktur**, dan **Peserta**. Pada mode server, data disimpan di **MySQL 8** dengan 38 tabel (34 domain inti + 4 operasional/pribadi) dan foreign key fisik (lihat §13 dan §16). Pada mode fallback, data disimpan sebagai koleksi JSON di `localStorage` dengan model logis yang sama. Sesi login pada mode server disimpan di sesi PHP native; token **"ingat saya"** disimpan sebagai hash di tabel `user_devices`, bukan di `localStorage`.
 
 Sejak v4.0, kursus dipisahkan dari penyelenggaraannya:
 
@@ -42,12 +42,12 @@ Publikasi kursus / penerbitan sertifikat ── menghasilkan ──► Notificat
 
 | Termasuk ERD | Tidak termasuk |
 |---|---|
-| 34 tabel domain MySQL + 3 tabel operasional (audit, notifikasi, absensi staf) dan koleksi `localStorage` yang setara | Halaman statis dan tampilan UI |
+| 34 tabel domain MySQL + 4 tabel operasional (audit, notifikasi, absensi staf, perangkat pengguna) dan koleksi `localStorage` yang setara | Halaman statis dan tampilan UI |
 | Relasi, kardinalitas, foreign key, dan aturan hapus | Data pengaturan halaman Admin (belum dipersistensi) |
 | Enum status dan lifecycle (kursus, kurikulum, kelas, sesi, presensi, enrollment, akses materi, tugas, ujian, skema nilai, finalisasi, sertifikat) | Data laporan/statistik turunan (dihitung saat runtime) |
 | Sesi PHP native (bukan tabel) | Integrasi email nyata (masih simulasi/outbox) |
 
-Catatan: 34 tabel domain inti mencakup tabel akademik Phase 1–4, sembilan tabel Phase 5 (`assignments`, `assignment_files`, `assignment_rubrics`, `submissions`, `submission_files`, `submission_reviews`, `exams`, `exam_participants`, `exam_results`), dan lima tabel Phase 6 (`predicate_ranges`, `grade_schemes`, `grade_scheme_components`, `grade_component_scores`, `grade_corrections`). Tiga tabel operasional/pribadi adalah `audit_logs`, `notifications`, dan `staff_attendances`, sehingga total 37 tabel. Phase 5 dan Phase 6 sebelumnya belum tercatat pada dokumen ini; angka 23 tabel adalah dokumentasi lama yang sudah dikoreksi.
+Catatan: 34 tabel domain inti mencakup tabel akademik Phase 1–4, sembilan tabel Phase 5 (`assignments`, `assignment_files`, `assignment_rubrics`, `submissions`, `submission_files`, `submission_reviews`, `exams`, `exam_participants`, `exam_results`), dan lima tabel Phase 6 (`predicate_ranges`, `grade_schemes`, `grade_scheme_components`, `grade_component_scores`, `grade_corrections`). Empat tabel operasional/pribadi adalah `audit_logs`, `notifications`, `staff_attendances`, dan `user_devices` (token "ingat saya" per perangkat), sehingga total 38 tabel. Phase 5 dan Phase 6 sebelumnya belum tercatat pada dokumen ini; angka 23 tabel adalah dokumentasi lama yang sudah dikoreksi.
 
 ---
 
@@ -93,9 +93,24 @@ erDiagram
         string phone
         enum role
         enum status
+        number sessionVersion
         string password
         date createdAt
         datetime updatedAt
+    }
+
+    USER_DEVICES {
+        number id PK
+        number userId FK
+        string tokenHash UK
+        string deviceLabel
+        string userAgent
+        string ipAddress
+        datetime createdAt
+        datetime lastUsedAt
+        datetime expiresAt
+        datetime revokedAt
+        string revokedReason
     }
 
     BRANCHES {
@@ -702,6 +717,7 @@ erDiagram
     CERTIFICATES |o--o{ NOTIFICATIONS : "direferensikan notifikasi"
     USERS ||--o| SESSION : "memiliki sesi aktif"
     USERS ||--o{ STAFF_ATTENDANCES : "mencatat absensi pribadi"
+    USERS ||--o{ USER_DEVICES : "mengingat perangkat"
     CLASSES ||--o{ ASSIGNMENTS : "memiliki tugas"
     CURRICULUM_VERSIONS ||--o{ ASSIGNMENTS : "menjadi acuan tugas"
     MODULES |o--o{ ASSIGNMENTS : "menjadi modul tugas"
@@ -795,6 +811,7 @@ Menyimpan seluruh akun: Admin, Instruktur, dan Peserta.
 | `phone` | string | — | Tidak | `''` | Nomor telepon |
 | `role` | enum | — | Ya | `peserta` | `admin`, `instruktur`, `peserta`, `karyawan` (absensi saja) |
 | `status` | enum | — | Ya | `aktif` | `aktif`, `nonaktif` |
+| `sessionVersion` | number | — | Ya | `0` di mode server | Dinaikkan saat login baru, ganti password, akun dinonaktifkan, atau reset perangkat; sesi PHP lama dengan versi berbeda otomatis tidak berlaku. Tidak dipakai mode lokal. |
 | `password` | string | — | Ya | `elips123` untuk seed/akun lama | Mode lokal: disimpan apa adanya, minimal 8 karakter saat dibuat/diubah, diverifikasi `authenticateUser()`. Mode server: kolom `password_hash` di MySQL (bcrypt/argon2 via `password_hash()`), diverifikasi `password_verify()` di PHP, dan tidak pernah dikirim ke client |
 | `createdAt` | date | — | Ya | hari ini | `YYYY-MM-DD` |
 | `updatedAt` | datetime | — | Tidak | — | ISO 8601 saat diubah |
@@ -1886,6 +1903,34 @@ Absensi harian pribadi admin dan karyawan yang dicatat dari dashboard Admin atau
 
 ---
 
+### 5.13 USER_DEVICES — tabel server `user_devices` (tanpa key `localStorage`)
+
+Menyimpan token **"ingat saya"** per perangkat. Hanya tersedia di mode server; mode lokal mengabaikan token dan tidak memiliki koleksi `localStorage` yang setara. Token mentah tidak pernah disimpan—yang disimpan adalah hash SHA-256.
+
+| Field | Tipe | Key | Wajib | Keterangan |
+|---|---|---|---|---|
+| `id` | number | PK | Ya | ID baris perangkat |
+| `userId` | number | FK → `users.id` | Ya | Pemilik token; `ON DELETE CASCADE` |
+| `tokenHash` | string (64) | UK | Ya | SHA-256 token mentah; unik |
+| `deviceLabel` | string | - | Tidak | Label ringkas, mis. `Android • Chrome` |
+| `userAgent` | string | - | Tidak | User agent saat token dibuat |
+| `ipAddress` | string | - | Tidak | IP saat token dibuat |
+| `createdAt` | datetime | - | Ya | Waktu token dibuat (UTC) |
+| `lastUsedAt` | datetime | - | Ya | Waktu token terakhir dipakai/dirotasi |
+| `expiresAt` | datetime | - | Ya | Batas sliding 30 hari |
+| `revokedAt` | datetime/null | - | Tidak | Waktu token dicabut |
+| `revokedReason` | string | - | Ya | `rotated`, `superseded`, `logout`, `admin`, `security`, `expired`, atau `reuse` |
+
+**Aturan:**
+
+- Satu perangkat aktif per pengguna: login baru mencabut token lama dengan alasan `superseded`.
+- Setiap `auth.resume` merotasi token: baris lama dicabut (`rotated`), baris baru diterbitkan untuk label perangkat yang sama.
+- Token berstatus `rotated` yang dipakai ulang dianggap pencurian: semua perangkat pengguna dicabut (`reuse`), `users.session_version` dinaikkan, dan percobaan dicatat di Audit Trail.
+- Token yang dicabut karena `logout`, `admin`, `security`, atau `expired` hanya ditolak tanpa mencabut perangkat baru.
+- Baris yang sudah dicabut lebih dari 30 hari dipangkas otomatis. Token dan hash tidak pernah masuk snapshot bootstrap.
+
+---
+
 ## 6. Relasi Lengkap
 
 | No | Relasi | Kardinalitas | FK | Perilaku saat data induk dihapus | Catatan |
@@ -1931,6 +1976,7 @@ Absensi harian pribadi admin dan karyawan yang dicatat dari dashboard Admin atau
 | R38 | `BRANCHES` → `CLASSES` | 1 — N | `classes.branchId` | Cabang dihapus: `branchId=null` (FK `SET NULL`) | Cabang opsional; hapus ditolak aplikasi bila masih dipakai |
 | R39 | `BRANCHES` → `CLASS_SESSIONS` | 1 — N | `class_sessions.branchId` (turunan) | Mengikuti kelas; bukan FK fisik | Mode lokal menyimpan `branchId` denormalisasi, mode server memakai JOIN kelas |
 | R40 | `USERS` (admin/karyawan) -> `STAFF_ATTENDANCES` | 1 -> N | `staff_attendances.userId` | User dihapus: catatan absensi dihapus (`ON DELETE CASCADE`) | Absensi harian pribadi (maks. 1 `in` + 1 `out` per hari, dijaga unique key); pemilik membaca sendiri, admin dapat membaca/menghapus dengan alasan |
+| R40a | `USERS` → `USER_DEVICES` | 1 — N | `user_devices.userId` | User dihapus: seluruh token perangkat dihapus (`ON DELETE CASCADE`) | Token "ingat saya" dirotasi dan dicabut; hash token unik |
 | R41 | `CLASSES` → `ASSIGNMENTS` | 1 — N | `assignments.classId` | Kelas dihapus: tugas dihapus | Tugas milik satu kelas |
 | R42 | `CURRICULUM_VERSIONS` → `ASSIGNMENTS` | 1 — N | `assignments.curriculumVersionId` | Versi dihapus: tugas dihapus | Acuan versi kelas |
 | R43 | `MODULES`/`LESSONS` → `ASSIGNMENTS` | 1 — N | `assignments.moduleId`, `assignments.lessonId` | Modul/materi dihapus: FK `SET NULL` | Opsional |
@@ -2830,6 +2876,7 @@ Skema fisik ada di `api/schema.sql` dan dibuat oleh `api/install.php`. Pemetaan 
 | `AUDIT_LOGS` | `audit_logs` | `id` | `actor_id` → `users.id` SET NULL (polimorfik `entity` + `entity_id`) |
 | `NOTIFICATIONS` | `notifications` | `id` | `recipient_id` → `users.id` SET NULL |
 | `STAFF_ATTENDANCES` | `staff_attendances` | `id` | `user_id` → `users.id` CASCADE; unique (`user_id`, `attendance_date`, `kind`); index (`user_id`, `attendance_date`) |
+| `USER_DEVICES` | `user_devices` | `id` | `user_id` → `users.id` CASCADE; `token_hash` UNIQUE; index (`user_id`), (`expires_at`) |
 | `SESSION` | Sesi PHP native | — | Tidak ada tabel `sessions`; cookie sesi hanya menyimpan ID sesi |
 
 **Catatan implementasi:**
@@ -2896,6 +2943,7 @@ LESSONS            1 ─── N CLASS_LESSON_PROGRESS
 USERS              1 ─── N CLASS_LESSON_PROGRESS / CLASS_MATERIAL_PROGRESS
 USERS              1 ─── N AUDIT_LOGS / NOTIFICATIONS
 USERS (admin)      1 ─── N STAFF_ATTENDANCES
+USERS              1 ─── N USER_DEVICES
 USERS              1 ─── 0..1 SESSION
 ```
 
@@ -2965,8 +3013,9 @@ Bagian ini mendokumentasikan skema yang benar-benar dieksekusi oleh `api/schema.
 | 35 | `exam_results` | Hasil ujian per peserta | `id`, `exam_id`, `enrollment_id`, `student_id`, `score`, `status` | `exam_id`/`enrollment_id`/`student_id` → tabel terkait; unik(`exam_id`, `enrollment_id`) |
 | 36 | `notifications` | Outbox notifikasi email simulasi | `id`, `type`, `recipient_id`, `recipient_email`, `subject`, `created_at` | `recipient_id` → `users.id` |
 | 37 | `staff_attendances` | Absensi harian pribadi staf/admin (kamera + metadata) | `id`, `user_id`, `kind`, `attendance_date`, `taken_at`, `photo`, `latitude`, `longitude` | `user_id` → `users.id` (`ON DELETE CASCADE`) |
+| 38 | `user_devices` | Token "ingat saya" per perangkat (hash SHA-256) | `id`, `user_id`, `token_hash`, `device_label`, `expires_at`, `revoked_at`, `revoked_reason` | `user_id` → `users.id` (`ON DELETE CASCADE`); `token_hash` UNIQUE |
 
-Sesi login **tidak** memakai tabel: autentikasi memakai sesi PHP native (`$_SESSION`) dengan cookie `HttpOnly` dan `SameSite=Lax`.
+Sesi login **tidak** memakai tabel: autentikasi memakai sesi PHP native (`$_SESSION`) dengan cookie `HttpOnly` dan `SameSite=Lax`. Token "ingat saya" disimpan di `user_devices` (hanya hash) dan dikirim sebagai cookie `elips_remember` yang juga `HttpOnly` (+ `Secure` saat HTTPS).
 
 ### 16.2 Definisi Kolom
 
@@ -2981,6 +3030,7 @@ Sesi login **tidak** memakai tabel: autentikasi memakai sesi PHP native (`$_SESS
 | `password_hash` | `VARCHAR(255)` | tidak | — | `password_hash()`; tidak pernah masuk snapshot |
 | `role` | `ENUM('admin','instruktur','peserta','karyawan')` | tidak | `'peserta'` | Role akun; `karyawan` hanya untuk absensi |
 | `status` | `ENUM('aktif','nonaktif')` | tidak | `'aktif'` | Status akun |
+| `session_version` | `INT UNSIGNED` | tidak | `0` | Versi sesi; naik saat login baru/ganti password/nonaktif/reset perangkat |
 | `created_at` | `DATE` | tidak | `CURRENT_DATE` | Tanggal dibuat |
 | `updated_at` | `DATETIME` | ya | `NULL` | Waktu perubahan terakhir (UTC) |
 
@@ -3585,6 +3635,22 @@ Catatan: `uq_certificates_enrollment (enrollment_id)` memastikan satu sertifikat
 | `created_at` | `DATETIME` | tidak | `CURRENT_TIMESTAMP` | Waktu dibuat |
 | `updated_at` | `DATETIME` | ya | `NULL` | Waktu diperbarui |
 
+**`user_devices`**
+
+| Kolom | Tipe | Null | Default | Keterangan |
+|---|---|---|---|---|
+| `id` | `INT UNSIGNED` | tidak | AUTO_INCREMENT | Primary key |
+| `user_id` | `INT UNSIGNED` | tidak | - | Pemilik token (FK `users.id`, CASCADE) |
+| `token_hash` | `CHAR(64)` | tidak | - | SHA-256 token mentah; UNIQUE |
+| `device_label` | `VARCHAR(120)` | tidak | `''` | Label ringkas perangkat |
+| `user_agent` | `VARCHAR(255)` | tidak | `''` | User agent saat dibuat |
+| `ip_address` | `VARCHAR(45)` | tidak | `''` | IP saat dibuat |
+| `created_at` | `DATETIME` | tidak | - | Waktu token dibuat (UTC) |
+| `last_used_at` | `DATETIME` | tidak | - | Waktu terakhir dipakai/dirotasi |
+| `expires_at` | `DATETIME` | tidak | - | Batas sliding 30 hari |
+| `revoked_at` | `DATETIME` | ya | `NULL` | Waktu dicabut |
+| `revoked_reason` | `VARCHAR(40)` | tidak | `''` | `rotated`/`superseded`/`logout`/`admin`/`security`/`expired`/`reuse` |
+
 ### 16.3 Index dan Constraint
 
 | Tabel | Index / Constraint | Tipe |
@@ -3645,6 +3711,8 @@ Catatan: `uq_certificates_enrollment (enrollment_id)` memastikan satu sertifikat
 | `audit_logs` | `idx_audit_created (created_at)`, `idx_audit_actor (actor_id)`, `idx_audit_entity (entity)` | INDEX |
 | `notifications` | `idx_notifications_created (created_at)`, `idx_notifications_type (type)`, `idx_notifications_recipient (recipient_id)` | INDEX |
 | `staff_attendances` | `uq_staff_attendances_user_day_kind (user_id, attendance_date, kind)`, `idx_staff_attendances_user_date (user_id, attendance_date)`, `idx_staff_attendances_date (attendance_date)`, `idx_staff_attendances_taken (taken_at)` | UNIQUE + INDEX |
+| `user_devices` | `uq_user_devices_token (token_hash)` | UNIQUE |
+| `user_devices` | `idx_user_devices_user (user_id)`, `idx_user_devices_expires (expires_at)` | INDEX |
 
 Catatan: `staff_attendances` memiliki unique key pada (`user_id`, `attendance_date`, `kind`), sehingga satu pengguna hanya dapat memiliki satu absen masuk dan satu absen pulang per hari. API `staffAttendance.create` juga memeriksa aturan ini sebelum insert, mewajibkan GPS, memakai jam server (`Asia/Jakarta`), dan menolak absen pulang sebelum absen masuk. Penghapusan hanya oleh admin dengan alasan minimal 5 karakter yang dicatat di Audit Trail.
 
@@ -3759,6 +3827,7 @@ Catatan: `staff_attendances` memiliki unique key pada (`user_id`, `attendance_da
 | `fk_completed_course` | `completed_lessons.course_id` | `courses.id` | `CASCADE` |
 | `fk_completed_lesson` | `completed_lessons.lesson_id` | `lessons.id` | `CASCADE` |
 | `fk_staff_attendances_user` | `staff_attendances.user_id` | `users.id` | `CASCADE` |
+| `fk_user_devices_user` | `user_devices.user_id` | `users.id` | `CASCADE` |
 
 Catatan: `audit_logs` dan `notifications` sengaja tidak memiliki foreign key fisik ke `users`. Keduanya menyimpan snapshot nama/role/email agar riwayat tetap terbaca meski akun asal dihapus, dan penghapusan pengguna tidak terblokir oleh riwayat. `classes.course_id` dan `classes.curriculum_version_id` memakai `RESTRICT` agar penghapusan kursus/versi yang sudah dipakai kelas ditolak di level database, bukan hanya di level aplikasi.
 
@@ -3804,14 +3873,15 @@ Snapshot API memakai nama koleksi yang sama dengan model `localStorage`, sehingg
 | `class_material_progress` | `classMaterialProgress` | `class_id`/`enrollment_id`/`student_id`/`material_id`/`completed_by` → camelCase; `completed_at`/`created_at` → ISO |
 | `audit_logs` | `auditLogs` | `actor_id`/`actor_name`/`actor_role` → camelCase; `created_at` → ISO |
 | `staff_attendances` | `staffAttendances` (tidak di snapshot) | Dibaca lewat `staffAttendance.list`; `user_id`/`attendance_date`/`taken_at`/`photo_mime`/`accuracy_m`/`location_label`/`location_source`/`ip_address`/`user_agent`/`device_memory`/`hardware_concurrency`/`connection_type`/`created_at` → camelCase; `photo` base64 tetap data URL. Karyawan hanya menerima baris miliknya; admin dapat meminta `userId` lain |
+| `user_devices` | — (tidak ada koleksi client) | Server-only; token/hash tidak pernah masuk snapshot, cookie, atau `localStorage` |
 | `notifications` | `notifications` | `recipient_id`/`recipient_email` → camelCase; `created_at` → ISO |
 | Sesi PHP | `session` (cache di `api.js`) | `{ userId }` dari `$_SESSION`, bukan tabel |
 
-Snapshot hanya memuat modul/materi dari versi kurikulum aktif (non-`retired`) tiap kursus. Struktur versi lain diambil lewat aksi `curriculum.detail`. Sejak Phase 4, snapshot juga memuat `classMaterialSettings`, `classMaterials`, `classLessonProgress`, dan `classMaterialProgress`; `classMaterials` sengaja hanya berisi metadata tanpa `content`/`file_path`. Koleksi `staffAttendances` sengaja tidak dimasukkan ke snapshot bootstrap karena memuat foto pribadi dan metadata perangkat; data hanya dikembalikan oleh aksi `staffAttendance.list` milik pengguna yang login. Pada UI, `attendance_date`, `taken_at`, dan koordinat diisi otomatis saat simpan (tanggal/jam `Asia/Jakarta` dan GPS perangkat), sehingga pengguna tidak dapat mengubahnya; dashboard Admin dan halaman karyawan memakai modul bersama `attendance.js`, dan satu pengguna hanya dapat mencatat satu `in` dan satu `out` per hari.
+Snapshot hanya memuat modul/materi dari versi kurikulum aktif (non-`retired`) tiap kursus. Struktur versi lain diambil lewat aksi `curriculum.detail`. Sejak Phase 4, snapshot juga memuat `classMaterialSettings`, `classMaterials`, `classLessonProgress`, dan `classMaterialProgress`; `classMaterials` sengaja hanya berisi metadata tanpa `content`/`file_path`. Koleksi `staffAttendances` sengaja tidak dimasukkan ke snapshot bootstrap karena memuat foto pribadi dan metadata perangkat; data hanya dikembalikan oleh aksi `staffAttendance.list` milik pengguna yang login. Pada UI, `attendance_date`, `taken_at`, dan koordinat diisi otomatis saat simpan (tanggal/jam `Asia/Jakarta` dan GPS perangkat), sehingga pengguna tidak dapat mengubahnya; dashboard Admin dan halaman karyawan memakai modul bersama `attendance.js`, dan satu pengguna hanya dapat mencatat satu `in` dan satu `out` per hari. Tabel `user_devices` tidak pernah masuk snapshot: token mentah hanya ada di cookie `elips_remember`, sedangkan server menyimpan hash-nya dan mengelola rotasi/pencabutan sepenuhnya di backend.
 
 ### 16.6 Catatan Operasional
 
-- **Instalasi:** `php api/install.php --fresh` menghapus database lama, membuat ulang seluruh 37 tabel, dan mengisi data demo: 9 predikat, 7 pengguna, 4 kategori, 3 cabang, 4 kursus, 4 versi kurikulum, 25 modul, 75 materi, 1 kelas migrasi, 1 histori tentor, 3 enrollment, 4 sesi pertemuan, 9 baris presensi, 2 tugas, 3 rubrik, 1 submission, 2 riwayat review, 2 ujian, 6 peserta ujian, 6 hasil ujian, 1 skema penilaian, 3 komponen, dan 2 nilai komponen manual. Koleksi `grade_corrections` sengaja kosong pada seed. Tabel `staff_attendances` dibuat (tabel ke-37) tetapi tidak diisi data demo karena absensi bersifat pribadi dan dibuat dari dashboard Admin atau halaman karyawan. Password demo `elips123` di-hash saat seeding.
+- **Instalasi:** `php api/install.php --fresh` menghapus database lama, membuat ulang seluruh 38 tabel, dan mengisi data demo: 9 predikat, 7 pengguna, 4 kategori, 3 cabang, 4 kursus, 4 versi kurikulum, 25 modul, 75 materi, 1 kelas migrasi, 1 histori tentor, 3 enrollment, 4 sesi pertemuan, 9 baris presensi, 2 tugas, 3 rubrik, 1 submission, 2 riwayat review, 2 ujian, 6 peserta ujian, 6 hasil ujian, 1 skema penilaian, 3 komponen, dan 2 nilai komponen manual. Koleksi `grade_corrections` sengaja kosong pada seed. Tabel `staff_attendances` dibuat (tabel ke-37) tetapi tidak diisi data demo karena absensi bersifat pribadi dan dibuat dari dashboard Admin atau halaman karyawan. Tabel `user_devices` dibuat (tabel ke-38) dan sengaja kosong sampai ada login dengan "Ingat saya". Password demo `elips123` di-hash saat seeding.
 - **Timezone:** koneksi PDO disetel UTC; kolom `DATE` untuk tanggal kalender dan `DATETIME` untuk timestamp.
 - **Transaksi:** operasi multi-tabel dijalankan dalam transaksi eksplisit:
   - pembuatan kelas + penguncian versi kurikulum (`curriculum_versions.status = 'locked'`) + histori tentor awal;

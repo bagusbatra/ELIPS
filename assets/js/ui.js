@@ -148,8 +148,11 @@
                 const passwordInput = document.getElementById('password');
                 const email = (emailInput ? emailInput.value : '').trim().toLowerCase();
                 const password = passwordInput ? passwordInput.value : '';
+                const rememberInput = document.getElementById('remember');
 
-                const result = ELIPS.authenticateUser(email, password);
+                const result = ELIPS.authenticateUser(email, password, {
+                    remember: rememberInput ? rememberInput.checked : false
+                });
                 if (!result.ok) {
                     ELIPS.toast(result.message);
                     return;

@@ -33,7 +33,8 @@
         revision: 'Minta Revisi',
         finalize: 'Finalisasi',
         exempt: 'Pengecualian',
-        predicate: 'Predikat'
+        predicate: 'Predikat',
+        revoke: 'Cabut Perangkat'
     };
 
     const ENTITY_LABELS = {
@@ -59,7 +60,8 @@
         staff_attendance: 'Absensi Staf',
         predicate: 'Rentang Predikat',
         grade_scheme: 'Skema Penilaian',
-        grade_component: 'Komponen Nilai'
+        grade_component: 'Komponen Nilai',
+        user_device: 'Perangkat Pengguna'
     };
 
     function actionLabel(action) {

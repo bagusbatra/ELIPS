@@ -189,11 +189,18 @@ Setiap fase bisa dirilis dan diuji sendiri. Kerjakan berurutan.
 - **Selesai bila:** akun karyawan login → langsung ke halaman absen → absen masuk dan pulang berjalan → tidak bisa membuka halaman admin.
 
 ### Fase 4 — Sesi diingat (login sekali) *(1,5–2 hari)*
-- [ ] `auth.login` dengan `remember`, `auth.resume`, rotasi token, cabut saat logout/ganti password/nonaktif.
-- [ ] Satu perangkat aktif per karyawan; `users.resetDevice` + tombol admin.
-- [ ] Checkbox "Ingat saya" di `login.html`; resume otomatis di `auth.js`.
-- [ ] Rate limit dan catatan Audit Trail.
+- [x] `auth.login` dengan `remember`, `auth.resume`, rotasi token, cabut saat logout/ganti password/nonaktif.
+- [x] Satu perangkat aktif per karyawan; `users.resetDevice` + tombol admin.
+- [x] Checkbox "Ingat saya" di `login.html`; resume otomatis di `auth.js`.
+- [x] Rate limit dan catatan Audit Trail.
 - **Selesai bila:** karyawan menutup browser, membuka lagi esok hari → langsung masuk tanpa login; login di HP kedua mencabut HP pertama; reset perangkat oleh admin bekerja.
+
+Catatan implementasi:
+- Tabel `user_devices` menyimpan **hash SHA-256** token (bukan token mentah), label perangkat, user agent, IP, waktu dibuat/dipakai/kedaluwarsa, serta `revoked_at` + `revoked_reason`.
+- Rotasi token membuat baris baru dan mencabut baris lama dengan alasan `rotated`; pemakaian ulang token hasil rotasi mencabut **semua** perangkat pengguna dan menaikkan `users.session_version`. Token yang dicabut karena `superseded`/`logout`/`admin`/`security`/`expired` hanya ditolak tanpa mencabut perangkat baru.
+- `users.session_version` membatalkan sesi PHP lama saat login baru, ganti password, akun dinonaktifkan, atau admin mereset perangkat.
+- Rate limit 10 percobaan gagal per 60 detik per IP+email (`auth.login`) atau per hash token (`auth.resume`), disimpan di direktori temporer server.
+- Mode lokal `localStorage` tetap kompatibel: `auth.resume` diabaikan dan Reset Perangkat hanya mencatat audit demo.
 
 ### Fase 5 — PWA *(0,5–1 hari)*
 - [ ] `manifest.webmanifest`, ikon, `sw.js` (network-first, tanpa cache halaman/API).

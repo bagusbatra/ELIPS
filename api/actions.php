@@ -13,6 +13,8 @@ function elips_dispatch(string $action, array $payload): array
     switch ($action) {
         case 'auth.login':
             return elips_action_auth_login($payload);
+        case 'auth.resume':
+            return elips_action_auth_resume();
         case 'auth.logout':
             return elips_action_auth_logout();
         case 'branch.create':
@@ -29,6 +31,9 @@ function elips_dispatch(string $action, array $payload): array
             return elips_action_user_update($payload);
         case 'user.delete':
             return elips_action_user_delete($payload);
+        case 'user.resetDevice':
+        case 'users.resetDevice':
+            return elips_action_user_reset_device($payload);
         case 'user.assignCourses':
             return elips_action_user_assign_courses($payload);
         case 'course.create':
@@ -211,24 +216,143 @@ function elips_action_auth_login(array $p): array
 {
     $email = strtolower(trim((string) ($p['email'] ?? '')));
     $password = (string) ($p['password'] ?? '');
+    $remember = filter_var($p['remember'] ?? false, FILTER_VALIDATE_BOOLEAN);
+    $limitKey = elips_request_ip() . '|' . $email;
+
+    $wait = elips_rate_limit_blocked('login', $limitKey);
+    if ($wait > 0) {
+        return elips_fail('Terlalu banyak percobaan masuk. Coba lagi dalam ' . $wait . ' detik.');
+    }
 
     if ($email === '') return elips_fail('Email wajib diisi.');
     if ($password === '') return elips_fail('Password wajib diisi.');
 
     $user = elips_user_by_email($email);
-    if (!$user) return elips_fail('Email tidak terdaftar. Gunakan akun demo yang tersedia.');
-    if ($user['status'] === 'nonaktif') return elips_fail('Akun Anda nonaktif. Hubungi administrator.');
-    if (!password_verify($password, $user['password_hash'])) return elips_fail('Password salah.');
+    if (!$user) {
+        elips_rate_limit_hit('login', $limitKey);
+        return elips_fail('Email tidak terdaftar. Gunakan akun demo yang tersedia.');
+    }
+    if ($user['status'] === 'nonaktif') {
+        elips_rate_limit_hit('login', $limitKey);
+        return elips_fail('Akun Anda nonaktif. Hubungi administrator.');
+    }
+    if (!password_verify($password, $user['password_hash'])) {
+        elips_rate_limit_hit('login', $limitKey);
+        return elips_fail('Password salah.');
+    }
+    elips_rate_limit_clear('login', $limitKey);
 
-    $_SESSION['user_id'] = (int) $user['id'];
-    $_SESSION['logged_in_at'] = gmdate('c');
+    // Login baru menjadi satu-satunya perangkat aktif: sesi PHP lama
+    // dibatalkan lewat versi sesi, token perangkat lama dicabut.
+    $db = elips_db();
+    $stmt = $db->prepare('UPDATE users SET session_version = session_version + 1 WHERE id = ?');
+    $stmt->execute([(int) $user['id']]);
+    $user = elips_user_row((int) $user['id']) ?? $user;
+
+    elips_remember_revoke_all((int) $user['id'], 'Login baru di perangkat lain.', $user, true, 'superseded');
+
+    if ($remember) {
+        elips_remember_set_cookie(elips_remember_issue((int) $user['id'], $user));
+    } elseif (isset($_COOKIE[elips_remember_cookie_name()])) {
+        // Jangan tinggalkan cookie lama yang sudah tidak berlaku.
+        elips_remember_clear_cookie();
+    }
+
+    elips_session_apply($user);
 
     return elips_ok('Login berhasil.', elips_serialize_user($user));
 }
 
+/**
+ * Pulihkan sesi dari cookie "ingat saya". Token selalu dirotasi dan
+ * pemakaian token lama dianggap percobaan pencurian.
+ */
+function elips_action_auth_resume(): array
+{
+    $raw = elips_remember_current_token();
+    if ($raw === '') {
+        return elips_fail('Sesi perangkat tidak ditemukan.');
+    }
+
+    $limitKey = hash('sha256', $raw);
+    $wait = elips_rate_limit_blocked('resume', $limitKey);
+    if ($wait > 0) {
+        return elips_fail('Terlalu banyak percobaan. Coba lagi dalam ' . $wait . ' detik.');
+    }
+
+    $found = elips_remember_find($raw);
+    if (!$found) {
+        elips_remember_clear_cookie();
+        return elips_fail('Sesi perangkat tidak berlaku. Silakan masuk kembali.');
+    }
+
+    $device = $found['device'];
+    $user = $found['user'];
+
+    if ($found['reused']) {
+        // Token hasil rotasi dipakai lagi: cabut semua perangkat pengguna ini.
+        elips_rate_limit_hit('resume', $limitKey);
+        $db = elips_db();
+        $db->prepare('UPDATE users SET session_version = session_version + 1 WHERE id = ?')
+            ->execute([(int) $user['id']]);
+        elips_remember_revoke_all(
+            (int) $user['id'],
+            'Token perangkat lama dipakai ulang.',
+            $user,
+            true,
+            'reuse'
+        );
+        elips_audit(
+            'revoke',
+            'user_device',
+            (int) $device['id'],
+            $user['name'],
+            'Token perangkat "' . $device['device_label'] . '" dipakai ulang; semua perangkat dicabut.',
+            $user
+        );
+        elips_remember_clear_cookie();
+        elips_session_forget();
+        return elips_fail('Sesi perangkat tidak berlaku. Silakan masuk kembali.');
+    }
+
+    if ($found['revoked']) {
+        // Token lama yang sudah dicabut karena logout/reset/ganti perangkat
+        // cukup ditolak; jangan mencabut perangkat baru yang sah.
+        elips_remember_clear_cookie();
+        elips_session_forget();
+        return elips_fail('Sesi perangkat tidak berlaku. Silakan masuk kembali.');
+    }
+
+    if ($user['status'] !== 'aktif') {
+        elips_rate_limit_hit('resume', $limitKey);
+        elips_remember_clear_cookie();
+        elips_session_forget();
+        return elips_fail('Akun Anda nonaktif. Hubungi administrator.');
+    }
+
+    $expiresAt = strtotime((string) $device['expires_at'] . ' UTC');
+    if ($expiresAt === false || $expiresAt <= time()) {
+        elips_rate_limit_hit('resume', $limitKey);
+        elips_db()->prepare(
+            "UPDATE user_devices SET revoked_at = UTC_TIMESTAMP(), revoked_reason = 'expired' WHERE id = ?"
+        )->execute([(int) $device['id']]);
+        elips_remember_clear_cookie();
+        return elips_fail('Sesi perangkat sudah kedaluwarsa. Silakan masuk kembali.');
+    }
+
+    elips_rate_limit_clear('resume', $limitKey);
+    elips_remember_set_cookie(elips_remember_rotate($device, $user));
+    elips_session_apply($user);
+
+    return elips_ok('Sesi perangkat dipulihkan.', elips_serialize_user($user));
+}
+
 function elips_action_auth_logout(): array
 {
-    $_SESSION = [];
+    $user = elips_session_user();
+    elips_remember_revoke_current($user);
+    elips_remember_clear_cookie();
+    elips_session_forget();
     if (session_status() === PHP_SESSION_ACTIVE) {
         session_destroy();
     }
@@ -456,8 +580,10 @@ function elips_action_user_create(array $p): array
     $id = (int) elips_db()->lastInsertId();
 
     if ($anonymous) {
+        $newUser = elips_user_row($id);
         $_SESSION['user_id'] = $id;
         $_SESSION['logged_in_at'] = gmdate('c');
+        $_SESSION['session_version'] = $newUser ? (int) $newUser['session_version'] : 0;
     }
 
     elips_audit(
@@ -539,13 +665,33 @@ function elips_action_user_update(array $p): array
     if (array_key_exists('phone', $data) && $previous['phone'] !== $nextPhone) $changes[] = 'telepon';
     if ($password !== '') $changes[] = 'password';
 
+    // Ganti password atau menonaktifkan akun membatalkan semua sesi
+    // perangkat yang tersimpan. Perangkat yang sedang dipakai admin
+    // sendiri tetap masuk agar tidak terlempar saat mengubah profilnya.
+    $revokedDevices = 0;
+    if ($password !== '' || ($previous['status'] !== 'nonaktif' && $nextStatus === 'nonaktif')) {
+        $reason = $password !== '' ? 'Password diubah.' : 'Akun dinonaktifkan.';
+        $db = elips_db();
+        $db->prepare('UPDATE users SET session_version = session_version + 1 WHERE id = ?')
+            ->execute([$id]);
+        $revokedDevices = elips_remember_revoke_all($id, $reason, $actor, true, 'security');
+        if ($isSelf) {
+            $freshUser = elips_user_row($id);
+            $_SESSION['session_version'] = $freshUser ? (int) $freshUser['session_version'] : 0;
+        }
+    }
+
     if ($changes) {
+        $detail = 'Memperbarui pengguna "' . $nextName . '" (' . implode(', ', $changes) . ').';
+        if ($revokedDevices > 0) {
+            $detail .= ' Sesi perangkat dicabut (' . $revokedDevices . ' perangkat).';
+        }
         elips_audit(
             'update',
             'user',
             $id,
             $nextName,
-            'Memperbarui pengguna "' . $nextName . '" (' . implode(', ', $changes) . ').',
+            $detail,
             $actor
         );
     }
@@ -583,6 +729,32 @@ function elips_action_user_delete(array $p): array
     );
 
     return elips_ok('Pengguna dihapus.');
+}
+
+function elips_action_user_reset_device(array $p): array
+{
+    $actor = elips_require_admin();
+    $id = (int) ($p['id'] ?? 0);
+    $user = elips_user_row($id);
+    if (!$user) return elips_fail('Pengguna tidak ditemukan.');
+
+    $revoked = elips_remember_revoke_all($id, 'Direset oleh administrator.', $actor, true, 'admin');
+    elips_db()->prepare('UPDATE users SET session_version = session_version + 1 WHERE id = ?')
+        ->execute([$id]);
+
+    elips_audit(
+        'revoke',
+        'user_device',
+        $id,
+        $user['name'],
+        'Meriset perangkat tersimpan untuk "' . $user['name'] . '" (' . $revoked . ' perangkat aktif dicabut).',
+        $actor
+    );
+
+    return elips_ok(
+        'Perangkat berhasil direset. Pengguna perlu masuk kembali.',
+        ['revoked' => $revoked]
+    );
 }
 
 function elips_action_user_assign_courses(array $p): array

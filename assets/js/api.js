@@ -152,6 +152,12 @@
     api.mode = 'server';
     applyCollections(boot.collections || {}, boot.session || null);
 
+    // Sesi PHP bisa habis saat browser ditutup, tetapi cookie "ingat saya"
+    // masih berlaku. Pulihkan sebelum guard halaman di auth.js berjalan.
+    if (!boot.session) {
+        api.call('auth.resume', {});
+    }
+
     // Getter/setter tetap sinkron: pembacaan berasal dari cache snapshot,
     // sedangkan penulisan langsung ditangani aksi API pada modul CRUD.
     ELIPS.read = function (key, fallback) {

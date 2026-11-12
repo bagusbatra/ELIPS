@@ -161,9 +161,11 @@
         return success('Pengguna dihapus.');
     }
 
-    function authenticateUser(email, password) {
+    function authenticateUser(email, password, options) {
         if (ELIPS.api && ELIPS.api.enabled) {
-            return ELIPS.api.call('auth.login', { email: email, password: password });
+            const payload = { email: email, password: password };
+            if (options && options.remember) payload.remember = true;
+            return ELIPS.api.call('auth.login', payload);
         }
         const normalizedEmail = String(email || '').trim().toLowerCase();
         const submittedPassword = String(password || '');
@@ -182,6 +184,21 @@
         if (submittedPassword !== expectedPassword) return failure('Password salah.');
 
         return success('Login berhasil.', user);
+    }
+
+    function resetUserDevice(userId) {
+        if (ELIPS.api && ELIPS.api.enabled) {
+            return ELIPS.api.call('user.resetDevice', { id: userId });
+        }
+        const user = ELIPS.getUserById(userId);
+        if (!user) return failure('Pengguna tidak ditemukan.');
+        recordAudit({
+            action: 'revoke',
+            entity: 'user_device',
+            entityLabel: user.name,
+            detail: 'Meriset perangkat tersimpan untuk "' + user.name + '" (mode demo).'
+        });
+        return success('Perangkat direset (mode demo).', { revoked: 0 });
     }
 
     function assignInstructorToCourses(instructorId, courseIds) {
@@ -232,6 +249,7 @@
         updateUser: updateUser,
         deleteUser: deleteUser,
         authenticateUser: authenticateUser,
+        resetUserDevice: resetUserDevice,
         assignInstructorToCourses: assignInstructorToCourses
     });
 })(window.ELIPS);

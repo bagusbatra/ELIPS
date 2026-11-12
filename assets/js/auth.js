@@ -38,7 +38,8 @@
     }
 
     function requireRole(role) {
-        const user = getSessionUser();
+        let user = getSessionUser();
+        if (!user) user = resumeSession();
         if (!user) {
             window.location.href = basePathPrefix() + 'login.html';
             return null;
@@ -48,6 +49,14 @@
             return null;
         }
         return user;
+    }
+
+    // Cadangan bila api.js dimuat tanpa proses resume otomatis.
+    function resumeSession() {
+        if (!(ELIPS.api && ELIPS.api.enabled)) return null;
+        const result = ELIPS.api.call('auth.resume', {});
+        if (!result || !result.ok) return null;
+        return getSessionUser();
     }
 
     function setCurrentUser(userId) {
@@ -69,6 +78,7 @@
         basePathPrefix: basePathPrefix,
         dashboardPathForRole: dashboardPathForRole,
         requireRole: requireRole,
+        resumeSession: resumeSession,
         setCurrentUser: setCurrentUser,
         logout: logout
     });

@@ -2,7 +2,7 @@
 
 **Versi dokumen:** 4.0  
 **Terakhir diperbarui:** 2026-11-11
-**Status proyek:** Dual-mode - PHP 8/MySQL 8 + fallback `localStorage`; v4.0 Phase 1-6 (kurikulum, kelas/angkatan, enrollment berbasis kelas, jadwal & presensi offline, materi tambahan & mode akses materi, tugas & ujian, skema penilaian/finalisasi/koreksi) plus cabang, kalender jadwal Admin, aksi langsung dan filter jadwal lanjutan, absensi staf berbasis kamera, serta absensi karyawan (role `karyawan`, jam server, GPS wajib, aturan harian, modul bersama, dan halaman `employee/attendance.html`)
+**Status proyek:** Dual-mode - PHP 8/MySQL 8 + fallback `localStorage`; v4.0 Phase 1-6 (kurikulum, kelas/angkatan, enrollment berbasis kelas, jadwal & presensi offline, materi tambahan & mode akses materi, tugas & ujian, skema penilaian/finalisasi/koreksi) plus cabang, kalender jadwal Admin, aksi langsung dan filter jadwal lanjutan, absensi staf berbasis kamera, serta absensi karyawan (role `karyawan`, jam server, GPS wajib, aturan harian, modul bersama, halaman `employee/attendance.html`, dan sesi diingat dengan rotasi token per perangkat)
 **Dokumen terkait:** `prd.md`, `erd.md`, `ELIPS-LMS-PRD-v4.0.md`
 
 ---
@@ -159,6 +159,49 @@ Prinsip yang dipakai:
 ---
 
 ## 3. Riwayat Perubahan
+
+### v4.0 - 2026-11-11 - Fase 4 absensi karyawan: sesi diingat dan satu perangkat aktif
+
+**Tujuan:** menyelesaikan `PRD_karyawan.md` Fase 4 sehingga karyawan cukup login sekali di perangkatnya, sementara administrator tetap dapat mencabut akses perangkat yang hilang atau berganti.
+
+Perubahan skema:
+
+- Tabel baru `user_devices` (tabel ke-38) menyimpan **hash SHA-256** token "ingat saya", label perangkat, user agent, IP, waktu dibuat/dipakai/kedaluwarsa, `revoked_at`, dan `revoked_reason`; `token_hash` unik dan `user_id` CASCADE ke `users`.
+- `users.session_version` ditambahkan (default `0`) untuk membatalkan sesi PHP lama saat login baru, ganti password, akun dinonaktifkan, atau reset perangkat.
+- `api/install.php` menambahkan migrasi additive untuk `session_version` dan `revoked_reason`; pemasangan ulang tetap aman untuk database lama.
+
+Perubahan backend:
+
+- `auth.login` menerima `remember`; token acak 32 byte diterbitkan, hash disimpan, cookie `elips_remember` dikirim `HttpOnly; SameSite=Lax; Secure` saat HTTPS dengan masa sliding 30 hari. Login baru menaikkan `session_version` dan mencabut token perangkat lama (`superseded`).
+- `auth.resume` baru: memvalidasi cookie, membuat sesi PHP, merotasi token (`rotated`), dan memperpanjang masa berlaku. Token hasil rotasi yang dipakai ulang mencabut **semua** perangkat pengguna (`reuse`) + menaikkan `session_version` + audit; token yang dicabut karena logout/reset/kedaluwarsa hanya ditolak.
+- `auth.logout` mencabut token perangkat saat ini (`logout`) dan membersihkan cookie.
+- `user.resetDevice` (alias `users.resetDevice`, admin) mencabut semua token pengguna (`admin`), menaikkan `session_version`, dan mencatat audit.
+- Ganti password dan penonaktifan akun mencabut seluruh token (`security`) dengan detail audit; sesi admin yang mengubah profilnya sendiri tetap dipertahankan.
+- Rate limit 10 percobaan gagal per 60 detik per IP+email (`auth.login`) atau per hash token (`auth.resume`), disimpan di direktori temporer server. Percobaan berhasil membersihkan hitungan.
+- Helper baru di `api/helpers.php`: cookie/token remember, deteksi label perangkat, pencarian/rotasi/pencabutan token, pemangkasan riwayat >30 hari, penegakan `session_version`, dan rate limit.
+
+Perubahan frontend:
+
+- `login.html`: checkbox **"Ingat saya di perangkat ini"** (aktif secara default); `ui.js` meneruskan nilainya.
+- `crud-users.js`: `authenticateUser(email, password, { remember })` dan `resetUserDevice(userId)` (mode lokal mencatat audit demo).
+- `auth.js`: `resumeSession()` dan fallback pada `requireRole`; `api.js` otomatis memanggil `auth.resume` setelah bootstrap tanpa sesi.
+- `admin/users.html`: tombol **Reset Perangkat** per pengguna dengan konfirmasi.
+- `audit.js`: label aksi `revoke` dan entitas `user_device`.
+
+Pengujian:
+
+- `test-remember-login.js` (baru) 37/37: cookie + rotasi, sliding resume, logout, token lama, satu perangkat aktif, reset admin, auto-resume klien tanpa sesi PHP, pencabutan saat ganti password/nonaktif, dan rate limit.
+- Regresi: `api-integration` 55/55, `test-staff-attendance-api` 46/46, `api-employee-fase1` 34/34, `api-v4` 39/39, branches 17/17, materials 42/42, sessions 37/37, phase5 52/52, phase6 44/44; `test-employee-server` 17/17, `test-server-mode` 18/18, `test-sessions-server`, serta seluruh suite lokal (28 halaman, 20 modul JS) lulus.
+- `php api/install.php --fresh` menghasilkan 38 tabel; `user_devices` dan `staff_attendances` kosong pada seed.
+
+Dampak angka: 38 tabel MySQL, 94 aksi API, 38 storage key, 20 modul JS, dan 28 halaman HTML.
+
+Batasan:
+
+- PWA, retensi foto, kapasitas penyimpanan, dan uji perangkat nyata tetap menjadi pekerjaan Fase 5-6.
+- Mode lokal tidak memakai token perangkat; Reset Perangkat hanya mencatat audit demo.
+
+---
 
 ### v4.0 - 2026-11-11 - Fase 2-3 absensi karyawan: modul bersama dan halaman karyawan
 
@@ -1021,7 +1064,7 @@ Perubahan sentralisasi:
 
 ### 5.1 MySQL (mode server)
 
-Tabel: `users`, `categories`, `branches`, `courses`, `curriculum_versions`, `classes`, `class_instructor_histories`, `modules`, `lessons`, `class_material_settings`, `class_materials`, `enrollments`, `class_sessions`, `attendances`, `attendance_corrections`, `class_lesson_progress`, `class_material_progress`, `assignments`, `assignment_files`, `assignment_rubrics`, `submissions`, `submission_files`, `submission_reviews`, `exams`, `exam_participants`, `exam_results`, `predicate_ranges`, `grade_schemes`, `grade_scheme_components`, `grades`, `grade_component_scores`, `grade_corrections`, `certificates`, `completed_lessons`, `audit_logs`, `notifications`, dan `staff_attendances` (37 tabel). Detail kolom, relasi, dan foreign key ada di `erd.md` §16. Sesi login disimpan di sesi PHP native, bukan tabel database.
+Tabel: `users`, `user_devices`, `categories`, `branches`, `courses`, `curriculum_versions`, `classes`, `class_instructor_histories`, `modules`, `lessons`, `class_material_settings`, `class_materials`, `enrollments`, `class_sessions`, `attendances`, `attendance_corrections`, `class_lesson_progress`, `class_material_progress`, `assignments`, `assignment_files`, `assignment_rubrics`, `submissions`, `submission_files`, `submission_reviews`, `exams`, `exam_participants`, `exam_results`, `predicate_ranges`, `grade_schemes`, `grade_scheme_components`, `grades`, `grade_component_scores`, `grade_corrections`, `certificates`, `completed_lessons`, `audit_logs`, `notifications`, dan `staff_attendances` (38 tabel). Detail kolom, relasi, dan foreign key ada di `erd.md` §16. Sesi login disimpan di sesi PHP native; token "ingat saya" disimpan sebagai hash di `user_devices`.
 
 ### 5.2 `localStorage` (mode fallback)
 

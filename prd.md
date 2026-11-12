@@ -2,7 +2,7 @@
 
 **Versi:** 4.0  
 **Tanggal:** 2026-11-11
-**Status:** Implemented Phase 1-6 (Dual-mode - PHP 8/MySQL 8 + fallback `localStorage`). v3.0 tetap menjadi baseline alur kursus; v4.0 menambahkan versi kurikulum, angkatan/kelas, penguncian kurikulum per kelas, histori tentor, enrollment berbasis kelas, jadwal pertemuan dan presensi offline, **cabang** dengan halaman kalender/jadwal admin, **materi tambahan kelas dan mode akses materi**, **tugas & ujian**, **skema penilaian, finalisasi nilai, predikat konfigurabel, dan koreksi beraudit**, serta **absensi karyawan** (role `karyawan`, jam server, GPS wajib, aturan harian di database, modul absensi bersama, dan halaman `employee/attendance.html`).
+**Status:** Implemented Phase 1-6 (Dual-mode - PHP 8/MySQL 8 + fallback `localStorage`). v3.0 tetap menjadi baseline alur kursus; v4.0 menambahkan versi kurikulum, angkatan/kelas, penguncian kurikulum per kelas, histori tentor, enrollment berbasis kelas, jadwal pertemuan dan presensi offline, **cabang** dengan halaman kalender/jadwal admin, **materi tambahan kelas dan mode akses materi**, **tugas & ujian**, **skema penilaian, finalisasi nilai, predikat konfigurabel, dan koreksi beraudit**, serta **absensi karyawan** (role `karyawan`, jam server, GPS wajib, aturan harian di database, modul absensi bersama, halaman `employee/attendance.html`, dan sesi login diingat dengan rotasi token per perangkat).
 **Baseline v4.0 lengkap:** `ELIPS-LMS-PRD-v4.0.md`  
 **Log pengembangan:** `log.md`
 **ERD:** `erd.md`
@@ -318,6 +318,9 @@ Seluruh aturan di atas ditegakkan **di server** (`api/actions.php` + `api/helper
 | Predikat A–E konfigurabel | ✅ Selesai | `predicate_ranges` + `predicate.list/save`; editor di `admin/settings.html`; validasi cakupan 0–100 tanpa celah/tumpang tindih |
 | Koreksi nilai beraudit | ✅ Selesai | `grade.correct` + `grade_corrections`; wajib alasan ≥5 karakter; koreksi komponen atau override nilai akhir |
 | Transkrip nilai peserta | ✅ Selesai | `grade.transcript`; panel transkrip di `learning.html`; peserta hanya melihat miliknya sendiri |
+| Sesi login diingat (remember me) | ✅ Selesai | `auth.login` menerima `remember`; `auth.resume` memulihkan sesi dari cookie `elips_remember`; token dirotasi tiap dipakai dan hanya hash SHA-256 tersimpan di `user_devices` |
+| Satu perangkat aktif & reset perangkat | ✅ Selesai | Login baru mencabut token perangkat lama; `users.resetDevice` + tombol **Reset Perangkat** di `admin/users.html`; ganti password/nonaktif juga mencabut token |
+| Pembatalan sesi lama | ✅ Selesai | `users.session_version` membatalkan sesi PHP lama saat login baru, ganti password, akun nonaktif, atau reset perangkat |
 
 ---
 
@@ -361,7 +364,7 @@ Backend berada di folder `api/` dan terdiri dari front controller, konfigurasi, 
 
 ### 4.3 Penyimpanan Data
 
-- **MySQL (mode server):** tabel `users`, `categories`, `courses`, `curriculum_versions`, `classes`, `class_instructor_histories`, `modules`, `lessons`, `enrollments`, `class_sessions`, `attendances`, `attendance_corrections`, `grades`, `certificates`, `completed_lessons`, `audit_logs`, `notifications` (lihat `erd.md`).
+- **MySQL (mode server):** tabel `users`, `user_devices`, `categories`, `courses`, `curriculum_versions`, `classes`, `class_instructor_histories`, `modules`, `lessons`, `enrollments`, `class_sessions`, `attendances`, `attendance_corrections`, `grades`, `certificates`, `completed_lessons`, `audit_logs`, `notifications` (lihat `erd.md`).
 - **`localStorage` (mode lokal/fallback):** key `elips_users`, `elips_branches`, `elips_categories`, `elips_courses`, `elips_curriculumVersions`, `elips_classes`, `elips_classInstructorHistories`, `elips_enrollments`, `elips_classSessions`, `elips_attendances`, `elips_attendanceCorrections`, `elips_modules`, `elips_lessons`, `elips_grades`, `elips_certificates`, `elips_completedLessons`, `elips_auditLogs`, `elips_notifications`, dan `elips_session`.
 - **Styling:** Custom CSS (`assets/css/style.css`), Bootstrap Icons, Google Fonts (Inter)
 - **Struktur Folder:** Berbasis role (`admin/`, `instructor/`, `student/`)
@@ -445,8 +448,8 @@ Backend berada di folder `api/` dan terdiri dari front controller, konfigurasi, 
 | `api/db.php` | ✅ Selesai | Koneksi PDO MySQL dan timezone UTC |
 | `api/helpers.php` | ✅ Selesai | Sesi, otorisasi, serializer (termasuk cabang, sesi/presensi/koreksi, tugas/ujian, predikat, skema, dan nilai), mesin komputasi nilai, kebijakan kehadiran, rekap, sanitasi HTML, audit, dan notifikasi |
 | `api/snapshot.php` | ✅ Selesai | Snapshot koleksi untuk cache client, termasuk `branches`, `classSessions`, `attendances`, `attendanceCorrections`, tugas/ujian, predikat, skema penilaian, nilai komponen, dan koreksi |
-| `api/actions.php` | ✅ Selesai | 92 aksi bisnis dan validasi role/kepemilikan di server, termasuk `branch.*`, `session.*`, `attendance.*`, `assignment.*`, `submission.*`, `exam.*`, `predicate.*`, `gradeScheme.*`, dan aksi nilai Phase 6 |
-| `api/schema.sql` | ✅ Selesai | Skema MySQL 8 (37 tabel), foreign key, dan index |
+| `api/actions.php` | ✅ Selesai | 94 aksi bisnis dan validasi role/kepemilikan di server, termasuk `auth.*`, `branch.*`, `session.*`, `attendance.*`, `assignment.*`, `submission.*`, `exam.*`, `predicate.*`, `gradeScheme.*`, aksi nilai Phase 6, dan `user.resetDevice` |
+| `api/schema.sql` | ✅ Selesai | Skema MySQL 8 (38 tabel), foreign key, dan index |
 | `api/install.php` | ✅ Selesai | Installer/seeder data demo (`--fresh` untuk reset), termasuk cabang, sesi, presensi, tugas/ujian, predikat, dan skema penilaian; migrasi kolom Phase 4–6 untuk database lama |
 
 ---
@@ -960,6 +963,7 @@ else                            -> student/dashboard.html
 | Absensi staf dari dashboard Admin | Lulus uji | `test-staff-attendance-page` (80/80) memverifikasi tombol masuk/pulang sesuai status harian, modal kamera/fallback yang ringkas, penguncian tanggal, modal sukses dengan satu tombol Selesai, penyimpanan lokal, detail, audit, dan hapus catatan |
 | API absensi staf & privasi | Lulus uji | `test-staff-attendance-api` (46/46) memverifikasi guard role, validasi foto/koordinat/GPS, jam server, duplikat harian, alasan hapus, persistensi metadata, dan snapshot tanpa foto |
 | Role karyawan & absensi server | Lulus uji | `api-employee-fase1` (34/34) memverifikasi role `karyawan` di API, login karyawan, absen masuk/pulang, duplikat, privasi riwayat, akses admin via `userId`, hapus beralasan + audit, dan penolakan instruktur/peserta |
+| Sesi diingat, rotasi token & reset perangkat | Lulus uji | `test-remember-login` (37/37) memverifikasi cookie `elips_remember`, rotasi + sliding 30 hari, deteksi token lama, satu perangkat aktif, reset oleh admin, auto-resume klien, pencabutan saat logout/ganti password/nonaktif, dan rate limit |
 | Degradasi kamera & geolokasi | Lulus uji | Kamera tanpa dukungan/izin/secure context menampilkan fallback unggah; GPS gagal tidak memblokir penyimpanan |
 
 ---
@@ -972,8 +976,8 @@ else                            -> student/dashboard.html
 - **Struktur Rapi:** File terorganisir berdasarkan role untuk kemudahan navigasi, dengan lapisan backend terpisah di `api/`.
 - **Responsive:** Menggunakan CSS custom yang responsif.
 - **UI Konsisten:** Menggunakan komponen seragam (navbar, sidebar, cards, tables, badges).
-- **Keamanan:** Pada mode server password di-hash, sesi memakai cookie `HttpOnly`/`SameSite=Lax`, dan otorisasi role/kepemilikan ditegakkan di server. Mode lokal tetap bersifat demo dan tidak boleh dianggap aman untuk produksi.
-- **Cakupan v4.0:** Increment ini mencakup **Phase 1–6** (versi kurikulum + kelas/angkatan + enrollment berbasis kelas + jadwal sesi/presensi offline + materi tambahan dan mode akses materi + cabang/kalender + absensi staf + tugas/ujian + skema penilaian/finalisasi/koreksi), ditambah **absensi karyawan** (role `karyawan`, validasi aturan harian, jam server, GPS wajib, modul absensi bersama, dan halaman `employee/attendance.html`), dengan 37 tabel MySQL, 92 aksi API, 38 storage key, 20 modul JS, dan 28 halaman HTML. Pembayaran dan sertifikat PDF mengikuti phase berikutnya pada `ELIPS-LMS-PRD-v4.0.md`.
+- **Keamanan:** Pada mode server password di-hash, sesi memakai cookie `HttpOnly`/`SameSite=Lax`, dan otorisasi role/kepemilikan ditegakkan di server. Cookie `elips_remember` juga `HttpOnly` (+ `Secure` saat HTTPS), token disimpan sebagai hash SHA-256, dirotasi setiap dipakai, dan dicabut saat logout/ganti password/akun nonaktif/reset admin. Mode lokal tetap bersifat demo dan tidak boleh dianggap aman untuk produksi.
+- **Cakupan v4.0:** Increment ini mencakup **Phase 1–6** (versi kurikulum + kelas/angkatan + enrollment berbasis kelas + jadwal sesi/presensi offline + materi tambahan dan mode akses materi + cabang/kalender + absensi staf + tugas/ujian + skema penilaian/finalisasi/koreksi), ditambah **absensi karyawan** (role `karyawan`, validasi aturan harian, jam server, GPS wajib, modul absensi bersama, halaman `employee/attendance.html`, serta sesi diingat dengan `user_devices`/`users.session_version`), dengan 38 tabel MySQL, 94 aksi API, 38 storage key, 20 modul JS, dan 28 halaman HTML. Pembayaran dan sertifikat PDF mengikuti phase berikutnya pada `ELIPS-LMS-PRD-v4.0.md`.
 - **Kompatibilitas v3.0:** Struktur v3 tetap dipertahankan. Setiap kursus lama mendapat versi kurikulum `1.0`; enrollment lama dipetakan ke kelas migrasi (`legacy_import`) agar tidak ada data yang hilang. Alur nilai manual klasik tetap tersedia di samping skema penilaian Phase 6.
 
 ---

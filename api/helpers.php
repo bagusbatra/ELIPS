@@ -50,10 +50,29 @@ function elips_session_user(): ?array
     }
     $row = elips_user_row((int) $_SESSION['user_id']);
     if (!$row) {
-        unset($_SESSION['user_id'], $_SESSION['logged_in_at']);
+        elips_session_forget();
+        return null;
+    }
+    // Sesi lama (sebelum Fase 4) dianggap versi 0. Jika pengguna sudah
+    // login ulang/ganti password, versi di database naik dan sesi lama
+    // otomatis tidak berlaku.
+    $sessionVersion = array_key_exists('session_version', $_SESSION)
+        ? (int) $_SESSION['session_version']
+        : 0;
+    if ($sessionVersion !== (int) $row['session_version']) {
+        elips_session_forget();
+        return null;
+    }
+    if ($row['status'] !== 'aktif') {
+        elips_session_forget();
         return null;
     }
     return $row;
+}
+
+function elips_session_forget(): void
+{
+    unset($_SESSION['user_id'], $_SESSION['logged_in_at'], $_SESSION['session_version']);
 }
 
 function elips_session_payload(): ?array
@@ -105,6 +124,340 @@ function elips_require_attendance_access(): array
 function elips_attendance_timezone(): string
 {
     return 'Asia/Jakarta';
+}
+
+// ---------- Sesi diingat (remember token) ----------
+
+function elips_remember_cookie_name(): string
+{
+    return 'elips_remember';
+}
+
+/** Masa berlaku sliding 30 hari. */
+function elips_remember_ttl(): int
+{
+    return 30 * 24 * 60 * 60;
+}
+
+function elips_request_is_https(): bool
+{
+    $https = strtolower((string) ($_SERVER['HTTPS'] ?? ''));
+    if ($https !== '' && $https !== 'off') {
+        return true;
+    }
+    $forwarded = strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? ''));
+    if ($forwarded === 'https') {
+        return true;
+    }
+    return (int) ($_SERVER['SERVER_PORT'] ?? 0) === 443;
+}
+
+function elips_request_ip(): string
+{
+    return substr((string) ($_SERVER['REMOTE_ADDR'] ?? ''), 0, 45);
+}
+
+function elips_request_user_agent(): string
+{
+    return substr((string) ($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 255);
+}
+
+/** Label ringkas perangkat, mis. "Android • Chrome". */
+function elips_device_label(?string $userAgent = null): string
+{
+    $ua = strtolower($userAgent === null ? elips_request_user_agent() : $userAgent);
+
+    $platform = 'Perangkat lain';
+    if (strpos($ua, 'android') !== false) {
+        $platform = 'Android';
+    } elseif (strpos($ua, 'ipad') !== false) {
+        $platform = 'iPad';
+    } elseif (strpos($ua, 'iphone') !== false || strpos($ua, 'ipod') !== false) {
+        $platform = 'iPhone';
+    } elseif (strpos($ua, 'windows') !== false) {
+        $platform = 'Windows';
+    } elseif (strpos($ua, 'mac os x') !== false || strpos($ua, 'macintosh') !== false) {
+        $platform = 'macOS';
+    } elseif (strpos($ua, 'linux') !== false) {
+        $platform = 'Linux';
+    }
+
+    $browser = 'Browser lain';
+    if (strpos($ua, 'edg/') !== false) {
+        $browser = 'Edge';
+    } elseif (strpos($ua, 'chrome/') !== false || strpos($ua, 'crios/') !== false) {
+        $browser = 'Chrome';
+    } elseif (strpos($ua, 'firefox/') !== false || strpos($ua, 'fxios/') !== false) {
+        $browser = 'Firefox';
+    } elseif (strpos($ua, 'safari/') !== false) {
+        $browser = 'Safari';
+    }
+
+    return substr($platform . ' • ' . $browser, 0, 120);
+}
+
+function elips_remember_set_cookie(string $token): void
+{
+    if (headers_sent()) {
+        return;
+    }
+    setcookie(elips_remember_cookie_name(), $token, [
+        'expires' => time() + elips_remember_ttl(),
+        'path' => '/',
+        'secure' => elips_request_is_https(),
+        'httponly' => true,
+        'samesite' => 'Lax',
+    ]);
+}
+
+function elips_remember_clear_cookie(): void
+{
+    if (!headers_sent()) {
+        setcookie(elips_remember_cookie_name(), '', [
+            'expires' => time() - 3600,
+            'path' => '/',
+            'secure' => elips_request_is_https(),
+            'httponly' => true,
+            'samesite' => 'Lax',
+        ]);
+    }
+    unset($_COOKIE[elips_remember_cookie_name()]);
+}
+
+/** Token mentah dari cookie; hanya menerima format 64 karakter hex. */
+function elips_remember_current_token(): string
+{
+    $raw = $_COOKIE[elips_remember_cookie_name()] ?? '';
+    if (!is_string($raw) || !preg_match('/^[a-f0-9]{64}$/', $raw)) {
+        return '';
+    }
+    return $raw;
+}
+
+function elips_user_device_by_token_hash(string $hash): ?array
+{
+    $stmt = elips_db()->prepare('SELECT * FROM user_devices WHERE token_hash = ? LIMIT 1');
+    $stmt->execute([$hash]);
+    $row = $stmt->fetch();
+    return $row ?: null;
+}
+
+function elips_user_device_insert(int $userId, string $label, string $token): int
+{
+    $now = gmdate('Y-m-d H:i:s');
+    $expires = gmdate('Y-m-d H:i:s', time() + elips_remember_ttl());
+    $stmt = elips_db()->prepare(
+        'INSERT INTO user_devices
+            (user_id, token_hash, device_label, user_agent, ip_address, created_at, last_used_at, expires_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+    );
+    $stmt->execute([
+        $userId,
+        hash('sha256', $token),
+        $label,
+        elips_request_user_agent(),
+        elips_request_ip(),
+        $now,
+        $now,
+        $expires,
+    ]);
+    return (int) elips_db()->lastInsertId();
+}
+
+/** Buang riwayat token yang sudah dicabut lebih dari 30 hari. */
+function elips_user_devices_prune(): void
+{
+    elips_db()->exec(
+        'DELETE FROM user_devices
+         WHERE revoked_at IS NOT NULL AND revoked_at < (UTC_TIMESTAMP() - INTERVAL 30 DAY)'
+    );
+}
+
+/**
+ * Terbitkan token baru untuk pengguna. Pemanggil bertanggung jawab mencabut
+ * perangkat lama lebih dulu agar aturan satu perangkat aktif tetap terjaga.
+ */
+function elips_remember_issue(int $userId, ?array $actor = null): string
+{
+    elips_user_devices_prune();
+    $label = elips_device_label();
+    $token = bin2hex(random_bytes(32));
+    $deviceId = elips_user_device_insert($userId, $label, $token);
+    elips_audit(
+        'create',
+        'user_device',
+        $deviceId,
+        $actor ? $actor['name'] : $label,
+        'Mengingat perangkat "' . $label . '" selama 30 hari.',
+        $actor
+    );
+    return $token;
+}
+
+/** Cabut semua token aktif milik pengguna. Mengembalikan jumlah perangkat. */
+function elips_remember_revoke_all(
+    int $userId,
+    string $reason,
+    ?array $actor = null,
+    bool $audit = true,
+    string $code = 'revoked'
+): int {
+    $db = elips_db();
+    $stmt = $db->prepare('SELECT id, device_label FROM user_devices WHERE user_id = ? AND revoked_at IS NULL');
+    $stmt->execute([$userId]);
+    $rows = $stmt->fetchAll();
+    if (!$rows) {
+        return 0;
+    }
+    $update = $db->prepare('UPDATE user_devices SET revoked_at = UTC_TIMESTAMP(), revoked_reason = ? WHERE id = ?');
+    foreach ($rows as $row) {
+        $update->execute([$code, (int) $row['id']]);
+        if ($audit) {
+            elips_audit(
+                'revoke',
+                'user_device',
+                (int) $row['id'],
+                $actor ? $actor['name'] : $row['device_label'],
+                'Mencabut perangkat "' . $row['device_label'] . '". ' . $reason,
+                $actor
+            );
+        }
+    }
+    return count($rows);
+}
+
+/** Cabut token yang sedang dipakai (dipanggil saat logout). */
+function elips_remember_revoke_current(?array $actor = null): int
+{
+    $raw = elips_remember_current_token();
+    if ($raw === '') {
+        return 0;
+    }
+    $device = elips_user_device_by_token_hash(hash('sha256', $raw));
+    if (!$device || $device['revoked_at'] !== null) {
+        return 0;
+    }
+    $stmt = elips_db()->prepare(
+        "UPDATE user_devices SET revoked_at = UTC_TIMESTAMP(), revoked_reason = 'logout' WHERE id = ?"
+    );
+    $stmt->execute([(int) $device['id']]);
+    elips_audit(
+        'revoke',
+        'user_device',
+        (int) $device['id'],
+        $actor ? $actor['name'] : $device['device_label'],
+        'Mencabut perangkat "' . $device['device_label'] . '" saat keluar.',
+        $actor
+    );
+    return 1;
+}
+
+/**
+ * Cari perangkat + pengguna dari token mentah. Hasil juga memuat baris
+ * perangkat yang sudah dicabut agar pemakaian ulang token lama terdeteksi.
+ */
+function elips_remember_find(string $raw): ?array
+{
+    if (!preg_match('/^[a-f0-9]{64}$/', $raw)) {
+        return null;
+    }
+    $device = elips_user_device_by_token_hash(hash('sha256', $raw));
+    if (!$device) {
+        return null;
+    }
+    $user = elips_user_row((int) $device['user_id']);
+    if (!$user) {
+        return null;
+    }
+    return [
+        'device' => $device,
+        'user' => $user,
+        'revoked' => $device['revoked_at'] !== null,
+        'reused' => $device['revoked_at'] !== null
+            && ($device['revoked_reason'] ?? '') === 'rotated',
+    ];
+}
+
+/**
+ * Rotasi token: baris lama dicabut (disimpan sebagai riwayat) lalu baris
+ * baru diterbitkan untuk perangkat yang sama.
+ */
+function elips_remember_rotate(array $device, array $user): string
+{
+    $db = elips_db();
+    $stmt = $db->prepare(
+        "UPDATE user_devices SET revoked_at = UTC_TIMESTAMP(), revoked_reason = 'rotated' WHERE id = ?"
+    );
+    $stmt->execute([(int) $device['id']]);
+
+    elips_user_devices_prune();
+    $label = trim((string) $device['device_label']) !== ''
+        ? (string) $device['device_label']
+        : elips_device_label();
+    $token = bin2hex(random_bytes(32));
+    elips_user_device_insert((int) $user['id'], $label, $token);
+    return $token;
+}
+
+function elips_session_apply(array $user): void
+{
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        session_regenerate_id(true);
+    }
+    $_SESSION['user_id'] = (int) $user['id'];
+    $_SESSION['logged_in_at'] = gmdate('c');
+    $_SESSION['session_version'] = (int) $user['session_version'];
+}
+
+// ---------- Rate limit percobaan gagal ----------
+
+function elips_rate_limit_file(string $scope, string $key): string
+{
+    $dir = rtrim(sys_get_temp_dir(), DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'elips_rate_limit';
+    if (!is_dir($dir)) {
+        @mkdir($dir, 0700, true);
+    }
+    $safeScope = preg_replace('/[^a-z0-9_]+/i', '-', $scope) ?? 'scope';
+    return $dir . DIRECTORY_SEPARATOR . $safeScope . '-' . hash('sha256', $key) . '.json';
+}
+
+/** Sisa detik blokir, atau 0 bila belum melewati batas. */
+function elips_rate_limit_blocked(string $scope, string $key, int $max = 10, int $window = 60): int
+{
+    $file = elips_rate_limit_file($scope, $key);
+    if (!is_file($file)) {
+        return 0;
+    }
+    $decoded = json_decode((string) @file_get_contents($file), true);
+    if (!is_array($decoded)) {
+        return 0;
+    }
+    $now = time();
+    $hits = array_values(array_filter($decoded, static function ($timestamp) use ($now, $window): bool {
+        return is_int($timestamp) && $timestamp > ($now - $window);
+    }));
+    if (count($hits) < $max) {
+        return 0;
+    }
+    return max(1, ((int) $hits[0] + $window) - $now);
+}
+
+function elips_rate_limit_hit(string $scope, string $key, int $window = 60): void
+{
+    $file = elips_rate_limit_file($scope, $key);
+    $now = time();
+    $decoded = is_file($file) ? json_decode((string) @file_get_contents($file), true) : [];
+    $hits = is_array($decoded) ? $decoded : [];
+    $hits = array_values(array_filter($hits, static function ($timestamp) use ($now, $window): bool {
+        return is_int($timestamp) && $timestamp > ($now - $window);
+    }));
+    $hits[] = $now;
+    @file_put_contents($file, json_encode($hits), LOCK_EX);
+}
+
+function elips_rate_limit_clear(string $scope, string $key): void
+{
+    @unlink(elips_rate_limit_file($scope, $key));
 }
 
 // ---------- Query dasar ----------

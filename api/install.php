@@ -113,6 +113,20 @@ try {
         }
     }
 
+    // ---------- Migrasi Fase 4 sesi diingat ----------
+    // Versi sesi dipakai untuk membatalkan sesi PHP lama begitu pengguna
+    // login di perangkat lain, ganti password, atau dinonaktifkan.
+    $hasSessionVersion = (bool) $db->query("SHOW COLUMNS FROM users LIKE 'session_version'")->fetch();
+    if (!$hasSessionVersion) {
+        $db->exec('ALTER TABLE users ADD COLUMN session_version INT UNSIGNED NOT NULL DEFAULT 0 AFTER status');
+        echo "Versi sesi pengguna ditambahkan.\n";
+    }
+    $hasRevokedReason = (bool) $db->query("SHOW COLUMNS FROM user_devices LIKE 'revoked_reason'")->fetch();
+    if (!$hasRevokedReason) {
+        $db->exec("ALTER TABLE user_devices ADD COLUMN revoked_reason VARCHAR(40) NOT NULL DEFAULT '' AFTER revoked_at");
+        echo "Alasan pencabutan perangkat ditambahkan.\n";
+    }
+
     // ---------- Migrasi Fase 1 absensi karyawan ----------
     // Role `karyawan` hanya untuk absensi; klien baru memakainya pada Fase 3.
     $roleColumn = $db->query("SHOW COLUMNS FROM users LIKE 'role'")->fetch();

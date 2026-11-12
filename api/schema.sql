@@ -29,11 +29,34 @@ CREATE TABLE IF NOT EXISTS `users` (
     `password_hash` VARCHAR(255) NOT NULL,
     `role` ENUM('admin', 'instruktur', 'peserta', 'karyawan') NOT NULL DEFAULT 'peserta',
     `status` ENUM('aktif', 'nonaktif') NOT NULL DEFAULT 'aktif',
+    `session_version` INT UNSIGNED NOT NULL DEFAULT 0,
     `created_at` DATE NOT NULL DEFAULT (CURRENT_DATE),
     `updated_at` DATETIME NULL,
     PRIMARY KEY (`id`),
     UNIQUE KEY `uq_users_email` (`email`),
     KEY `idx_users_role` (`role`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Token "ingat saya": hanya hash SHA-256 yang disimpan. Rotasi token
+-- membuat baris baru dan mencabut baris lama agar pemakaian ulang token
+-- lama dapat dideteksi.
+CREATE TABLE IF NOT EXISTS `user_devices` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `user_id` INT UNSIGNED NOT NULL,
+    `token_hash` CHAR(64) NOT NULL,
+    `device_label` VARCHAR(120) NOT NULL DEFAULT '',
+    `user_agent` VARCHAR(255) NOT NULL DEFAULT '',
+    `ip_address` VARCHAR(45) NOT NULL DEFAULT '',
+    `created_at` DATETIME NOT NULL,
+    `last_used_at` DATETIME NOT NULL,
+    `expires_at` DATETIME NOT NULL,
+    `revoked_at` DATETIME NULL,
+    `revoked_reason` VARCHAR(40) NOT NULL DEFAULT '',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uq_user_devices_token` (`token_hash`),
+    KEY `idx_user_devices_user` (`user_id`),
+    KEY `idx_user_devices_expires` (`expires_at`),
+    CONSTRAINT `fk_user_devices_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `branches` (
