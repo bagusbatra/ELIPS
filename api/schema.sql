@@ -832,3 +832,22 @@ CREATE TABLE IF NOT EXISTS `staff_attendances` (
     KEY `idx_staff_attendances_taken` (`taken_at`),
     CONSTRAINT `fk_staff_attendances_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `staff_shifts` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `user_id` INT UNSIGNED NOT NULL,
+    `shift_date` DATE NOT NULL,
+    `shift_type` ENUM('pagi', 'sore', 'custom') NOT NULL DEFAULT 'pagi',
+    `start_time` TIME NOT NULL,
+    `end_time` TIME NOT NULL,
+    `note` VARCHAR(255) NOT NULL DEFAULT '',
+    `created_by` INT UNSIGNED NULL,
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NULL,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uq_staff_shifts_user_date` (`user_id`, `shift_date`),
+    KEY `idx_staff_shifts_date` (`shift_date`),
+    KEY `idx_staff_shifts_type` (`shift_type`),
+    CONSTRAINT `fk_staff_shifts_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_staff_shifts_created_by` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

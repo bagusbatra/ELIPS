@@ -1684,6 +1684,29 @@ function elips_staff_attendance_public(array $row, bool $includePhoto = true): a
 }
 
 /**
+ * Serialisasi jadwal shift karyawan. Jam dikembalikan dalam format HH:MM
+ * agar mudah dipakai langsung oleh input time di klien.
+ */
+function elips_staff_shift_public(array $row): array
+{
+    return [
+        'id' => (int) $row['id'],
+        'userId' => (int) $row['user_id'],
+        'userName' => $row['user_name'] ?? '',
+        'userEmail' => $row['user_email'] ?? '',
+        'userRole' => $row['user_role'] ?? '',
+        'shiftDate' => elips_date_only($row['shift_date']),
+        'shiftType' => $row['shift_type'],
+        'startTime' => substr((string) $row['start_time'], 0, 5),
+        'endTime' => substr((string) $row['end_time'], 0, 5),
+        'note' => $row['note'],
+        'createdBy' => $row['created_by'] === null ? null : (int) $row['created_by'],
+        'createdAt' => elips_iso($row['created_at']),
+        'updatedAt' => elips_iso($row['updated_at']),
+    ];
+}
+
+/**
  * Rekap kehadiran berbasis JP. Hanya sesi yang memenuhi kebijakan
  * yang dihitung sebagai JP wajib; status di luar kebijakan tetap
  * dilaporkan terpisah.

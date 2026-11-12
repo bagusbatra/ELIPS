@@ -2,7 +2,7 @@
 
 **Versi dokumen:** 4.0  
 **Terakhir diperbarui:** 2026-11-12
-**Status proyek:** Dual-mode - PHP 8/MySQL 8 + fallback `localStorage`; v4.0 Phase 1-6 (kurikulum, kelas/angkatan, enrollment berbasis kelas, jadwal & presensi offline, materi tambahan & mode akses materi, tugas & ujian, skema penilaian/finalisasi/koreksi) plus cabang, kalender jadwal Admin, aksi langsung dan filter jadwal lanjutan, absensi staf berbasis kamera, absensi karyawan (role `karyawan`, jam server, GPS wajib, aturan harian, modul bersama, halaman `employee/attendance.html`, dan sesi diingat dengan rotasi token per perangkat), PWA (manifest, service worker network-first, banner pemasangan, dan mode offline), serta rekap absensi karyawan untuk Admin (filter, ringkasan status, dan ekspor CSV)
+**Status proyek:** Dual-mode - PHP 8/MySQL 8 + fallback `localStorage`; v4.0 Phase 1-6 (kurikulum, kelas/angkatan, enrollment berbasis kelas, jadwal & presensi offline, materi tambahan & mode akses materi, tugas & ujian, skema penilaian/finalisasi/koreksi) plus cabang, kalender jadwal Admin, aksi langsung dan filter jadwal lanjutan, absensi staf berbasis kamera, absensi karyawan (role `karyawan`, jam server, GPS wajib, aturan harian, modul bersama, halaman `employee/attendance.html`, dan sesi diingat dengan rotasi token per perangkat), PWA (manifest, service worker network-first, banner pemasangan, dan mode offline), rekap absensi karyawan untuk Admin (filter, ringkasan status, dan ekspor CSV), serta jadwal shift karyawan (Pagi/Sore/custom, satu shift per tanggal, dan audit)
 **Dokumen terkait:** `prd.md`, `erd.md`, `ELIPS-LMS-PRD-v4.0.md`
 
 ---
@@ -11,13 +11,14 @@
 
 ELIPS LMS adalah aplikasi Learning Management System berbasis web untuk mengelola kursus, instruktur, peserta, materi, penilaian, dan e-sertifikat. Aplikasi berjalan dual-mode: mode utama memakai backend PHP 8 + MySQL 8, sedangkan mode fallback memakai `localStorage` saat API tidak tersedia (mis. `file://` atau regression test JSDOM).
 
-Tiga role utama:
+Empat role utama:
 
 | Role | Tanggung jawab |
 |---|---|
-| **Admin** | Membuat kursus Draft, mengelola versi kurikulum, membuat angkatan/kelas, menugaskan 1 tentor per kelas, mengatur mode akses materi dan override dengan alasan, mengelola pengguna, mendaftarkan peserta ke kelas, menyetujui sertifikat Draft → Publish, menelusuri audit trail, dan memantau outbox notifikasi |
+| **Admin** | Membuat kursus Draft, mengelola versi kurikulum, membuat angkatan/kelas, menugaskan 1 tentor per kelas, mengatur mode akses materi dan override dengan alasan, mengelola pengguna, mendaftarkan peserta ke kelas, menyetujui sertifikat Draft → Publish, menelusuri audit trail, memantau outbox notifikasi, mencatat absensi pribadi, serta mengelola jadwal shift karyawan (Pagi/Sore/custom) dan rekap absensi |
 | **Instruktur** | Mengelola modul/materi pada versi kurikulum yang belum terkunci, mengatur akses dan materi tambahan kelas, mengonfirmasi penyelesaian materi, memantau progres peserta, mengelola tugas/ujian, menyusun skema penilaian, memberi nilai komponen, memfinalisasi nilai, dan mengoreksi nilai dengan alasan |
 | **Peserta** | Belajar materi dari kelas yang diikuti sesuai mode akses, menandai pelajaran/materi selesai bila diizinkan, melihat status persetujuan instruktur, mengumpulkan tugas, melihat hasil ujian dan transkrip nilai sendiri, serta melihat sertifikat yang sudah Publish |
+| **Karyawan** | Absen masuk/pulang harian dengan foto dan GPS, melihat riwayat absensi sendiri, serta memasang aplikasi PWA; jadwal shift dikelola Admin |
 
 Alur utama:
 
@@ -67,7 +68,8 @@ ELIPS/
 │   ├── snapshot.php
 │   ├── actions.php
 │   ├── schema.sql
-│   └── install.php
+│   ├── install.php
+│   └── seed-karyawan.php
 ├── admin/
 │   ├── dashboard.html
 │   ├── courses.html
@@ -79,6 +81,8 @@ ELIPS/
 │   ├── notifications.html
 │   ├── reports.html
 │   ├── audit.html
+│   ├── attendance-recap.html
+│   ├── shifts.html
 │   └── settings.html
 ├── instructor/
 │   ├── dashboard.html
@@ -123,6 +127,8 @@ ELIPS/
         ├── crud-grades.js
         ├── ui.js
         ├── attendance.js
+        ├── staff-recap.js
+        ├── shift-schedule.js
         └── pwa.js
 ```
 
@@ -133,7 +139,7 @@ Semua halaman memuat modul dengan urutan berikut:
 ```text
 config → core → api → utils → data → seed → sync → progress → auth → audit → notifications
 → crud-users → crud-courses → crud-enrollments
-→ crud-content → crud-academic → crud-tasks → crud-grades → ui → attendance
+→ crud-content → crud-academic → crud-tasks → crud-grades → ui → attendance → staff-recap → shift-schedule
 ```
 
 `pwa.js` tidak termasuk urutan bundle di atas; modul ini dimuat terpisah dengan `defer` di `<head>` setiap halaman aplikasi (dan sengaja tidak dimasukkan ke bundle uji JSDOM).
@@ -160,6 +166,8 @@ config → core → api → utils → data → seed → sync → progress → au
 | `crud-grades.js` | Skema penilaian, komponen berbobot, roster & nilai komponen, pengecualian, finalisasi, koreksi beraudit, transkrip, serta alur sertifikat Draft → Publish | `saveGrade`, `listPredicates`, `savePredicates`, `listGradeSchemes`, `saveGradeScheme`, `setGradeSchemeStatus`, `deleteGradeScheme`, `getGradeRoster`, `saveManualGrade`, `exemptGradeComponent`, `finalizeGrade`, `correctGrade`, `getGradeTranscript`, `createDraftCertificateForEnrollment`, `approveCertificate` |
 | `ui.js` | Perilaku UI bersama: navigasi mobile, sidebar dashboard, katalog beranda, login (email + password), logout, style toast | dijalankan pada `DOMContentLoaded` |
 | `attendance.js` | Modul absensi harian bersama untuk Admin dan Karyawan: hero status, kamera/unggah foto, GPS wajib, aturan masuk/pulang, riwayat pribadi, detail, modal berhasil, dan hapus oleh Admin dengan alasan | `ELIPS.attendance.init`, `ELIPS.attendance.refresh`, `openAttendanceModal`, `saveStaffAttendance`, `loadAttendanceHistory`, `openAttendanceDetail`, `deleteStaffAttendance` |
+| `staff-recap.js` | Rekap absensi Admin: filter tanggal/karyawan/role, agregasi per karyawan per hari, ringkasan status, dan ekspor CSV | `ELIPS.staffRecap.init`, `ELIPS.staffRecap.refresh`, `ELIPS.staffRecap.exportCsv` |
+| `shift-schedule.js` | Jadwal shift Admin: filter tanggal/karyawan/jenis, preset Pagi/Sore, jam Custom, validasi konflik, CRUD server/lokal, dan audit `staff_shift` | `ELIPS.shiftSchedule.init`, `ELIPS.shiftSchedule.refresh`, `ELIPS.shiftSchedule.presets` |
 | `pwa.js` | Pendaftaran service worker (skip waiting + `clients.claim`, reload sekali saat versi baru), banner pemasangan Android (`beforeinstallprompt`), sheet 3 langkah iOS Safari, penolakan 7 hari, prompt sekali per sesi, dan bilah offline dengan tombol coba lagi | `navigator.serviceWorker.register`, `beforeinstallprompt`, `online`/`offline` |
 
 Prinsip yang dipakai:
@@ -174,6 +182,74 @@ Prinsip yang dipakai:
 
 ## 3. Riwayat Perubahan
 
+### v4.0 - 2026-11-12 - Seed 10 akun karyawan dummy
+
+**Tujuan:** menyediakan data karyawan contoh untuk mencoba absensi, rekap, dan jadwal shift tanpa mengubah seed demo utama (tetap 7 pengguna agar regresi tidak berubah).
+
+Perubahan file:
+
+- `api/seed-karyawan.php` (baru): skrip seed idempoten untuk 10 akun berrole `karyawan`; mencocokkan akun lewat email sehingga aman dijalankan berulang (buat bila belum ada, perbarui nama/telepon/role/status bila sudah ada).
+- `log.md`: struktur proyek dan riwayat perubahan.
+
+Perilaku:
+
+- Akun memakai password demo `elips123` (mengikuti `demo_password` pada `api/config.php`), status `aktif`, dan email berakhiran `@example.com`.
+- Daftar: Dewi Lestari, Agus Prasetyo, Sri Wahyuni, Joko Susilo, Ratna Sari, Hendra Gunawan, Maya Putri, Eko Nugroho, Nur Aisyah, Bayu Pratama.
+- Skrip tidak mengubah `api/install.php` maupun `assets/js/seed.js`, sehingga jumlah pengguna seed tetap 7.
+
+Pengujian:
+
+- `php api/seed-karyawan.php` pertama: 10 akun dibuat; eksekusi kedua: 0 dibuat, 10 diperbarui (tanpa duplikat).
+- Verifikasi database: 17 pengguna total, 10 berrole `karyawan`.
+- Login API `dewi.karyawan@example.com` / `elips123` berhasil (`userId` 10, sesi aktif).
+
+Batasan:
+
+- Akun dummy hanya ada di database server; mode `localStorage` tetap memakai seed 7 pengguna.
+
+---
+
+### v4.0 - 2026-11-12 - Jadwal shift karyawan oleh Admin
+
+**Tujuan:** memberi Admin halaman untuk menjadwalkan shift karyawan per tanggal dengan preset **Pagi**/**Sore** atau jam **Custom**, tanpa mencampurkannya ke snapshot publik.
+
+Perubahan file:
+
+- `admin/shifts.html` (baru, halaman aplikasi ke-30): sidebar **Shift Karyawan** setelah **Rekap Absensi**, filter tanggal/karyawan/jenis, kartu ringkasan total/Pagi/Sore/Custom, tabel shift, serta modal tambah/ubah.
+- `assets/js/shift-schedule.js` (baru, modul JS ke-23): CRUD server/lokal, preset Pagi `08:00–16:00` dan Sore `16:00–00:00`, jam Custom, validasi konflik, penanda `+1 hari`, dan audit `staff_shift`.
+- `api/actions.php`: aksi `staffShift.list`, `staffShift.save`, dan `staffShift.delete` (aksi API ke-96–98) khusus Admin; default rentang bulan berjalan, maksimal 366 hari, filter karyawan/jenis.
+- `api/schema.sql`: tabel `staff_shifts` (tabel ke-38) dengan unique key `(user_id, shift_date)` dan FK `user_id`/`created_by`.
+- `api/helpers.php`: serializer `elips_staff_shift_public()`.
+- `assets/js/core.js`, `assets/js/data.js`: key `elips_staffShifts` + accessor `getStaffShifts`/`getStaffShiftsByUser`.
+- `assets/js/audit.js`: label entitas `staff_shift` → **Shift Karyawan**.
+- 13 halaman admin: menu **Shift Karyawan** ditambahkan setelah **Rekap Absensi**.
+- `assets/css/style.css`: gaya badge/ringkasan/tabel shift.
+- `prd.md`, `erd.md`, `PRD_karyawan.md`, `log.md`: dokumentasi fitur, skema, dan angka cakupan.
+- `report/2026-11-12-kamis.md`: bagian jadwal shift dan hasil pengujiannya.
+
+Perilaku:
+
+- Jadwal shift hanya dapat dibaca/diubah Admin; instruktur, peserta, dan karyawan ditolak.
+- Satu karyawan maksimal satu shift per tanggal; duplikat ditolak validasi API dan unique key database.
+- Preset Pagi/Sore mengabaikan jam dari klien; Custom menormalisasi `HH:MM` dan menolak jam mulai = selesai.
+- Pengguna nonaktif atau berrole selain `admin`/`karyawan` tidak dapat dijadwalkan.
+- Shift tidak dimasukkan ke snapshot bootstrap; mode lokal memakai `elips_staffShifts` dengan aturan validasi dan audit yang sama.
+
+Pengujian:
+
+- `test-admin-shifts` (baru) 89/89: render/filter, preset, Custom, CRUD lokal, konflik, audit, jalur server `staffShift.*`, dan empty state.
+- Uji API manual: list/save/update/delete, filter karyawan/jenis/tanggal, duplikat, role instruktur ditolak, rentang/tipe/jam tidak valid, dan pembersihan data (0 baris tersisa).
+- Regresi: `api-employee-fase1` 34/34, `api-staff-recap` 33/33, `test-server-mode` 18/18, `validate-scripts` 31 HTML/24 JS, `test-all-pages` 28 halaman (termasuk `admin/shifts.html`), `test-pwa` 50/50, `test-pwa-server` 16/16, `test-admin-pages`, `test-staff-attendance-page` 84/84, dan `test-employee-attendance-page` 49/49.
+- `php api/install.php --fresh` menghasilkan **39 tabel** dengan tabel `staff_shifts` kosong.
+
+Dampak angka: 39 tabel MySQL, 98 aksi API, 39 storage key, 23 modul JS di `assets/js/`, 31 halaman HTML, dan 24 file JavaScript (termasuk `sw.js`).
+
+Batasan:
+
+- Shift masih berupa rencana; perhitungan keterlambatan atau rekap berbasis shift belum diimplementasikan.
+
+---
+
 ### v4.0 - 2026-11-12 - Rekap absensi karyawan untuk Admin
 
 **Tujuan:** memberi Admin satu halaman untuk melihat rekapitulasi kehadiran karyawan dan admin per hari, memfilter data, lalu mengekspornya ke CSV.
@@ -186,6 +262,7 @@ Perubahan file:
 - 11 halaman admin lain: menu **Rekap Absensi** ditambahkan setelah **Laporan**.
 - `assets/css/style.css`: gaya filter rekap dan label rentang tanggal.
 - `prd.md`, `log.md`, `PRD_karyawan.md`: dokumentasi fitur dan angka cakupan.
+- `report/2026-11-12-kamis.md` (baru): laporan perkembangan increment absensi karyawan Fase 1-5 dan rekap absensi Admin per 12 November 2026.
 
 Perilaku:
 
@@ -1153,7 +1230,7 @@ Perubahan sentralisasi:
 
 ### 5.1 MySQL (mode server)
 
-Tabel: `users`, `user_devices`, `categories`, `branches`, `courses`, `curriculum_versions`, `classes`, `class_instructor_histories`, `modules`, `lessons`, `class_material_settings`, `class_materials`, `enrollments`, `class_sessions`, `attendances`, `attendance_corrections`, `class_lesson_progress`, `class_material_progress`, `assignments`, `assignment_files`, `assignment_rubrics`, `submissions`, `submission_files`, `submission_reviews`, `exams`, `exam_participants`, `exam_results`, `predicate_ranges`, `grade_schemes`, `grade_scheme_components`, `grades`, `grade_component_scores`, `grade_corrections`, `certificates`, `completed_lessons`, `audit_logs`, `notifications`, dan `staff_attendances` (38 tabel). Detail kolom, relasi, dan foreign key ada di `erd.md` §16. Sesi login disimpan di sesi PHP native; token "ingat saya" disimpan sebagai hash di `user_devices`.
+Tabel: `users`, `user_devices`, `categories`, `branches`, `courses`, `curriculum_versions`, `classes`, `class_instructor_histories`, `modules`, `lessons`, `class_material_settings`, `class_materials`, `enrollments`, `class_sessions`, `attendances`, `attendance_corrections`, `class_lesson_progress`, `class_material_progress`, `assignments`, `assignment_files`, `assignment_rubrics`, `submissions`, `submission_files`, `submission_reviews`, `exams`, `exam_participants`, `exam_results`, `predicate_ranges`, `grade_schemes`, `grade_scheme_components`, `grades`, `grade_component_scores`, `grade_corrections`, `certificates`, `completed_lessons`, `audit_logs`, `notifications`, `staff_attendances`, dan `staff_shifts` (39 tabel). Detail kolom, relasi, dan foreign key ada di `erd.md` §16. Sesi login disimpan di sesi PHP native; token "ingat saya" disimpan sebagai hash di `user_devices`.
 
 ### 5.2 `localStorage` (mode fallback)
 
@@ -1196,6 +1273,7 @@ Tabel: `users`, `user_devices`, `categories`, `branches`, `courses`, `curriculum
 | `elips_auditLogs` | Jejak audit perubahan kursus, nilai, sertifikat, pengguna, penugasan, modul, materi, sesi, presensi, dan materi kelas |
 | `elips_notifications` | Outbox notifikasi email simulasi: penerima, subjek, isi, entitas, dan waktu |
 | `elips_staffAttendances` | Absensi harian pribadi admin/karyawan pada mode lokal: maks. satu masuk + satu pulang per hari, tanggal/waktu terisi otomatis, GPS wajib, foto, dan metadata perangkat |
+| `elips_staffShifts` | Jadwal shift per karyawan per tanggal pada mode lokal: Pagi/Sore/custom, satu shift per tanggal, catatan, dan pembuat |
 | `elips_session` | Sesi pengguna yang sedang login |
 
 Akun demo utama:
@@ -1216,11 +1294,11 @@ Akun lama tanpa password otomatis dimigrasikan ke password demo `elips123` saat 
 
 ## 6. Hasil Pengujian Terakhir
 
-Pengujian dijalankan setelah backend PHP/MySQL, client dual-mode (v3.0), increment v4.0 Phase 1-6, penambahan cabang/kalender jadwal, aksi langsung/filter jadwal lanjutan, absensi staf dan penyempurnaan alur hariannya, Fase 1 absensi karyawan (role, jam server, GPS wajib, aturan harian database), Fase 4-5 (sesi diingat, perangkat aktif, dan PWA), serta rekap absensi karyawan untuk Admin:
+Pengujian dijalankan setelah backend PHP/MySQL, client dual-mode (v3.0), increment v4.0 Phase 1-6, penambahan cabang/kalender jadwal, aksi langsung/filter jadwal lanjutan, absensi staf dan penyempurnaan alur hariannya, Fase 1 absensi karyawan (role, jam server, GPS wajib, aturan harian database), Fase 4-5 (sesi diingat, perangkat aktif, dan PWA), rekap absensi karyawan untuk Admin, serta jadwal shift karyawan:
 
 | Pemeriksaan | Hasil |
 |---|---|
-| Syntax 30 HTML + 23 JS + 7 PHP | ✅ Lulus |
+| Syntax 31 HTML + 24 JS + 7 PHP | ✅ Lulus |
 | Guard sesi, password, sanitasi (`test-p0`) | ✅ Lulus |
 | Notifikasi email (`test-notifications`) | ✅ Lulus |
 | Audit trail (`test-audit`) | ✅ Lulus |
@@ -1258,6 +1336,7 @@ Pengujian dijalankan setelah backend PHP/MySQL, client dual-mode (v3.0), increme
 | API rekap absensi Admin (`api-staff-recap`) | Lulus 33/33 |
 | UI rekap absensi lokal (`test-admin-attendance-recap`) | Lulus 53/53 |
 | Rekap absensi mode server (`test-admin-recap-server`) | Lulus 19/19 |
+| UI jadwal shift Admin (`test-admin-shifts`) | Lulus 89/89 |
 | UI akademik admin (`test-academic-page`) | ✅ Lulus |
 | UI cabang & kalender admin (`test-branch-pages`) | ✅ Lulus |
 | UI jadwal/presensi lokal (`test-sessions-page`) | ✅ 47/47 |
@@ -1332,7 +1411,7 @@ Catatan penting yang diuji:
 - Metadata absensi (zona waktu, lokasi, perangkat, koneksi, catatan, IP server) tersimpan konsisten dan muncul di detail.
 - Snapshot bootstrap tidak memuat koleksi/foto absensi staf; riwayat hanya dimuat lewat aksi khusus.
 - Kamera tanpa dukungan/izin/secure context menampilkan fallback unggah foto; GPS tetap wajib pada mode server.
-- Manifest PWA memakai `start_url` halaman absen, `scope` root, dan `display: standalone`; seluruh 29 halaman aplikasi memuat manifest, ikon, dan `pwa.js`.
+- Manifest PWA memakai `start_url` halaman absen, `scope` root, dan `display: standalone`; seluruh 30 halaman aplikasi memuat manifest, ikon, dan `pwa.js`.
 - Service worker network-first tidak menyimpan halaman HTML aplikasi maupun `/api/`, sehingga perubahan file langsung terlihat; hanya aset statis dan `offline.html` yang menjadi fallback.
 - Banner Android memakai `beforeinstallprompt`; iOS Safari menampilkan sheet 3 langkah; penolakan diingat 7 hari dan prompt dibatasi sekali per sesi.
 - Penyimpanan absensi ditolak saat offline sebelum validasi maupun saat GPS selesai setelah koneksi putus.
@@ -1341,6 +1420,7 @@ Catatan penting yang diuji:
 - Rentang rekap default adalah awal bulan berjalan sampai hari ini; tanggal awal setelah tanggal akhir dan rentang lebih dari 366 hari ditolak.
 - Rekap menggabungkan absen masuk/pulang per karyawan per hari dan menandai `lengkap`, `belum_pulang`, atau `tanpa_masuk`, tanpa mengambil foto.
 - Filter karyawan dan role bekerja di server maupun lokal, dan ekspor CSV memakai BOM UTF-8 dengan seluruh sel dikutip.
+- Jadwal shift hanya dapat dikelola Admin; satu karyawan maksimal satu shift per tanggal, preset Pagi/Sore mengabaikan jam klien, Custom menolak jam mulai = selesai, dan shift tidak dimasukkan ke snapshot bootstrap.
 
 ---
 
@@ -1359,6 +1439,7 @@ Keterbatasan saat ini:
 - Absensi staf satu masuk + satu pulang per hari dijaga unique key database dan validasi server; mode lokal kini memakai aturan yang sama (GPS wajib, tanggal `Asia/Jakarta`, hapus beralasan oleh Admin).
 - Role `karyawan`, halaman `employee/attendance.html`, remember-me (`user_devices`), dan PWA sudah dibuat (Fase 1–5). Retensi foto, kapasitas penyimpanan, uji perangkat Android/iOS nyata, panduan karyawan, dan pilot tersisa untuk Fase 6.
 - Rekap absensi Admin sudah tersedia (filter tanggal/karyawan/role, ringkasan status, dan ekspor CSV); keterlambatan, jam kerja terjadwal, izin/cuti/lembur, alpha otomatis, serta ekspor Excel/PDF belum dibuat.
+- Jadwal shift Admin sudah tersedia (Pagi/Sore/custom dan satu shift per tanggal), tetapi belum diintegrasikan ke perhitungan keterlambatan/rekap berbasis jam kerja.
 - Belum ada migration tool, backup otomatis, atau monitoring produksi.
 
 Rencana lanjutan (opsional, sesuai `prd.md`):

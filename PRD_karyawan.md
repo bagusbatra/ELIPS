@@ -3,9 +3,9 @@
 | | |
 |---|---|
 | **Status** | Draft untuk disetujui |
-| **Tanggal** | 11 November 2026 |
-| **Cakupan** | Fitur 1 (sesi login diingat), 2 (PWA / ikon di layar utama), 3 (role & halaman absen khusus karyawan) |
-| **Di luar cakupan** | QR harian, passkey/biometrik, mode kiosk PIN (lihat bagian 11) |
+| **Tanggal** | 12 November 2026 |
+| **Cakupan** | Fitur 1 (sesi login diingat), 2 (PWA / ikon di layar utama), 3 (role & halaman absen khusus karyawan), 4 (jadwal shift karyawan oleh Admin) |
+| **Di luar cakupan** | QR harian, passkey/biometrik, mode kiosk PIN, integrasi shift ke perhitungan keterlambatan (lihat bagian 11) |
 
 ---
 
@@ -32,7 +32,7 @@ Tujuan PRD ini: membuat absen terasa **satu ketuk dari HP**, tanpa mengorbankan 
 | Role | Peran dalam fitur ini |
 |---|---|
 | **Karyawan** (role baru `karyawan`) | Absen masuk/pulang, lihat riwayat sendiri |
-| **Admin** | Membuat akun karyawan, mereset perangkat karyawan, tetap bisa absen sendiri di dashboard admin |
+| **Admin** | Membuat akun karyawan, mereset perangkat karyawan, mengelola jadwal shift karyawan (Pagi/Sore/custom), tetap bisa absen sendiri di dashboard admin |
 | Instruktur / Peserta | Tidak berubah (lihat pertanyaan terbuka #1) |
 
 ## 4. Kondisi saat ini (hasil pembacaan kode)
@@ -85,6 +85,20 @@ Persyaratan fungsional:
 - **F3.6** Admin dapat membuat akun karyawan di **Kelola Pengguna** (pilihan role "Karyawan" pada modal tambah pengguna).
 - **F3.7** Logika absen **dipindahkan** dari inline `admin/dashboard.html` ke modul bersama `assets/js/attendance.js` sehingga dipakai admin dan karyawan tanpa duplikasi.
 
+### 5.4 Fitur 4 — Jadwal shift karyawan (Admin) *(selesai)*
+
+**Cerita pengguna:** *Sebagai Admin, saya ingin mengatur shift Pagi/Sore atau jam khusus untuk setiap karyawan per tanggal, agar rencana kehadiran jelas sebelum absensi berjalan.*
+
+Persyaratan fungsional:
+- **F4.1** Halaman baru `admin/shifts.html` dengan menu **Shift Karyawan** yang konsisten di seluruh sidebar Admin; hanya role `admin` yang dapat mengakses.
+- **F4.2** Setiap karyawan memiliki paling banyak **satu shift per tanggal**. Duplikat `(karyawan, tanggal)` ditolak dengan pesan yang jelas.
+- **F4.3** Jenis shift: **Pagi** (08:00–16:00), **Sore** (16:00–00:00), dan **Custom**. Untuk preset, jam diisi otomatis dan tidak dapat diubah; untuk Custom, Admin mengisi jam mulai/selesai `HH:MM`.
+- **F4.4** Shift melewati tengah malam (mis. Sore berakhir 00:00) ditandai `+1 hari` pada tabel.
+- **F4.5** Filter rentang tanggal (default seluruh bulan berjalan, maksimal 366 hari), filter karyawan, dan filter jenis shift; tombol **Bulan Ini** mengembalikan rentang awal.
+- **F4.6** Ringkasan kartu menampilkan total shift, Pagi, Sore, dan Custom sesuai hasil filter.
+- **F4.7** Admin dapat menambah, mengubah, dan menghapus shift; karyawan yang dapat dijadwalkan adalah pengguna aktif berrole `admin` atau `karyawan`.
+- **F4.8** Semua perubahan dicatat di Audit Trail dengan entitas `staff_shift`.
+
 ## 6. Aturan bisnis absensi (berlaku di semua role)
 
 1. Per akun per hari: maksimal **1 absen masuk** dan **1 absen pulang**.
@@ -93,6 +107,15 @@ Persyaratan fungsional:
 4. Lokasi diambil otomatis dari GPS; jika GPS ditolak, absen tetap tersimpan dengan lokasi "tidak tersedia" dan ditandai agar admin bisa melihatnya (lihat pertanyaan terbuka #3).
 5. Foto wajib. Catatan opsional.
 6. Catatan absen tidak dapat dihapus oleh karyawan. *(Penghapusan oleh admin: lihat pertanyaan terbuka #4.)*
+
+### 6.1 Aturan jadwal shift
+
+1. Shift bersifat **per karyawan per tanggal**; unique key `(user_id, shift_date)` menjaga satu shift per hari.
+2. Hanya role `admin` dan `karyawan` aktif yang dapat dijadwalkan; instruktur/peserta ditolak.
+3. Preset **Pagi** = 08:00–16:00 dan **Sore** = 16:00–00:00. Untuk preset, jam dari klien diabaikan agar konsisten.
+4. **Custom** menerima jam `HH:MM`; jam mulai = jam selesai ditolak.
+5. Rentang daftar maksimal 366 hari dan tanggal awal tidak boleh melewati tanggal akhir.
+6. Jadwal shift hanya berupa rencana; perhitungan keterlambatan/kehadiran berbasis shift belum termasuk pada versi ini.
 
 ## 7. Perubahan teknis
 
@@ -121,6 +144,25 @@ CREATE TABLE user_devices (
 -- (nama tabel/kolom menyesuaikan tabel absensi yang sudah ada)
 -- ALTER TABLE staff_attendance
 --   ADD UNIQUE KEY uq_user_day_kind (user_id, attendance_date, kind);
+
+-- Jadwal shift per karyawan per tanggal (Fitur 4)
+CREATE TABLE staff_shifts (
+  id          INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  user_id     INT UNSIGNED NOT NULL,
+  shift_date  DATE NOT NULL,
+  shift_type  ENUM('pagi','sore','custom') NOT NULL DEFAULT 'pagi',
+  start_time  TIME NOT NULL,
+  end_time    TIME NOT NULL,
+  note        VARCHAR(255) NOT NULL DEFAULT '',
+  created_by  INT UNSIGNED NULL,
+  created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at  DATETIME NULL,
+  UNIQUE KEY uq_staff_shifts_user_date (user_id, shift_date),
+  KEY idx_staff_shifts_date (shift_date),
+  KEY idx_staff_shifts_type (shift_type),
+  CONSTRAINT fk_staff_shifts_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  CONSTRAINT fk_staff_shifts_created_by FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+);
 ```
 
 ### 7.2 API (`api/index.php`)
@@ -135,6 +177,9 @@ CREATE TABLE user_devices (
 | `staffAttendance.list` | Selalu difilter ke user sesi (kecuali admin dengan parameter eksplisit) |
 | `staffAttendance.delete` | Tolak untuk role `karyawan` |
 | Pengguna (`users.create/update`) | Terima role `karyawan` |
+| `staffShift.list` *(baru, admin)* | Daftar shift per rentang tanggal (default bulan berjalan, maks. 366 hari) dengan filter karyawan dan jenis; khusus Admin |
+| `staffShift.save` *(baru, admin)* | Tambah/ubah shift; normalisasi jam preset Custom, tolak duplikat tanggal, role tidak valid, staf nonaktif, dan jam mulai = selesai |
+| `staffShift.delete` *(baru, admin)* | Hapus shift; khusus Admin dan tercatat di Audit Trail |
 
 ### 7.3 Frontend
 
@@ -149,8 +194,10 @@ CREATE TABLE user_devices (
 | `login.html` | Checkbox "Ingat saya"; redirect sesuai role |
 | `admin/users.html` + `crud-users.js` | Role "Karyawan" di modal tambah/ubah; tombol "Reset Perangkat" |
 | `manifest.webmanifest`, `sw.js`, `offline.html`, `assets/js/pwa.js`, `assets/icons/*` *(baru)* | PWA (F2.1–F2.3): manifest, service worker network-first, halaman offline, banner pemasangan, dan ikon |
-| `assets/css/style.css` | Gaya halaman karyawan, banner pasang aplikasi, sheet iOS, dan bilah offline |
-| 29 halaman aplikasi | Tag manifest, `theme-color`, meta mobile/apple, favicon, apple-touch-icon, dan `pwa.js` (`defer`) |
+| `assets/js/shift-schedule.js` *(baru)* | Modul jadwal shift Admin: filter, preset Pagi/Sore, jam Custom, CRUD server/lokal, validasi konflik, dan audit `staff_shift` |
+| `admin/shifts.html` *(baru)* | Halaman **Shift Karyawan**: filter, ringkasan, tabel shift, dan modal tambah/ubah |
+| `assets/css/style.css` | Gaya halaman karyawan, banner pasang aplikasi, sheet iOS, bilah offline, dan tabel/badge shift |
+| 30 halaman aplikasi | Tag manifest, `theme-color`, meta mobile/apple, favicon, apple-touch-icon, dan `pwa.js` (`defer`) |
 
 ## 8. Keamanan & privasi
 
@@ -215,7 +262,14 @@ Catatan implementasi:
 - `sw.js` memakai strategi **network-first**: halaman HTML aplikasi dan seluruh `/api/` tidak pernah disimpan ke cache, sehingga perubahan file baru langsung terlihat. Hanya `offline.html` + ikon yang di-precache, sedangkan aset statis (CSS/JS/gambar/font/webmanifest/JSON) dipakai sebagai fallback saat offline.
 - `assets/js/pwa.js` mendaftarkan service worker (skip waiting + `clients.claim`, reload sekali saat ada versi baru), menampilkan banner pemasangan Android lewat `beforeinstallprompt`, sheet 3 langkah "Tambahkan ke Layar Utama" untuk iOS Safari, dan bilah offline dengan tombol coba lagi. Penolakan banner diingat 7 hari dan prompt dibatasi sekali per sesi.
 - `attendance.js` menolak penyimpanan saat offline, baik sebelum validasi maupun di dalam `persistAttendance` (menutup celah GPS yang selesai setelah koneksi putus).
-- `offline.html` berdiri sendiri (tanpa bundle aplikasi) dengan tombol muat ulang. Semua 29 halaman aplikasi memuat manifest, meta mobile/apple, favicon, apple-touch-icon, dan `pwa.js` (`defer`); server PHP bawaan menyajikan `.webmanifest` sebagai `application/manifest+json`.
+- `offline.html` berdiri sendiri (tanpa bundle aplikasi) dengan tombol muat ulang. Semua 30 halaman aplikasi memuat manifest, meta mobile/apple, favicon, apple-touch-icon, dan `pwa.js` (`defer`); server PHP bawaan menyajikan `.webmanifest` sebagai `application/manifest+json`.
+
+### Fase 5b — Jadwal shift karyawan *(selesai)*
+- [x] Tabel `staff_shifts` + unique key `(user_id, shift_date)`.
+- [x] Aksi `staffShift.list/save/delete` khusus Admin + audit `staff_shift`.
+- [x] `admin/shifts.html` + `assets/js/shift-schedule.js`: preset Pagi/Sore, jam Custom, filter, ringkasan, dan CRUD.
+- [x] Menu **Shift Karyawan** di seluruh sidebar Admin dan dukungan mode lokal `elips_staffShifts`.
+- **Selesai bila:** Admin dapat menjadwalkan shift Pagi/Sore/custom, duplikat tanggal ditolak, dan karyawan nonaktif/tidak valid tidak dapat dijadwalkan.
 
 ### Fase 6 — Uji menyeluruh & peluncuran *(1 hari)*
 - [ ] Jalankan seluruh skenario uji (bagian 10) di Android, iOS, dan desktop.
@@ -242,6 +296,12 @@ Catatan implementasi:
 | 10 | Karyawan membuka URL halaman admin | Diarahkan ke halaman karyawan |
 | 11 | PWA terpasang lalu file diperbarui | Versi baru terlihat tanpa hapus cache |
 | 12 | Offline | Pesan jelas, tidak ada absen tersimpan setengah jalan |
+| 13 | Admin menambah shift Pagi untuk karyawan | Tersimpan 08:00–16:00, muncul di tabel dan ringkasan Pagi |
+| 14 | Admin menambah shift Sore | Tersimpan 16:00–00:00 dan ditandai `+1 hari` |
+| 15 | Admin memilih Custom dengan jam 07:30–13:15 | Jam custom tersimpan dan tampil apa adanya |
+| 16 | Admin menyimpan shift kedua untuk karyawan dan tanggal yang sama | Ditolak dengan pesan konflik |
+| 17 | Admin memilih jam Custom dengan mulai = selesai | Ditolak dengan pesan validasi |
+| 18 | Instruktur membuka API/aksi shift | Ditolak karena khusus Admin |
 
 ## 11. Di luar cakupan (kandidat tahap berikutnya)
 
@@ -249,6 +309,7 @@ Catatan implementasi:
 - Login biometrik (passkey / sidik jari / Face ID).
 - Mode kiosk: tablet bersama dengan NIK + PIN + selfie.
 - Rekap absensi lanjutan: keterlambatan, jam kerja, izin/cuti/lembur, serta ekspor Excel/PDF. Rekap dasar per karyawan per hari dan ekspor CSV sudah tersedia sebagai perluasan di halaman Admin **Rekap Absensi** (`admin/attendance-recap.html`).
+- Integrasi jadwal shift ke perhitungan keterlambatan/kehadiran (mis. membandingkan `takenAt` dengan `startTime` shift). Increment saat ini hanya menyimpan **rencana** shift di `admin/shifts.html`.
 - Absen offline dengan antrean sinkronisasi.
 - Notifikasi pengingat absen (push).
 

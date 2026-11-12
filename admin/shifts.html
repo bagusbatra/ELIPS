@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jadwal Shift - ELIPS LMS</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../assets/css/style.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+
+    <link rel="manifest" href="../manifest.webmanifest">
+    <meta name="theme-color" content="#e98c1e">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="ELIPS">
+    <link rel="icon" type="image/png" sizes="32x32" href="../assets/icons/favicon-32.png">
+    <link rel="apple-touch-icon" href="../assets/icons/apple-touch-icon.png">
+    <script src="../assets/js/pwa.js" defer></script>
+</head>
+<body>
+    <header class="navbar">
+        <div class="container nav-container">
+            <div class="nav-brand">
+                <i class="bi bi-mortarboard-fill brand-icon"></i>
+                <span class="brand-text">ELIPS LMS</span>
+            </div>
+            <nav class="nav-menu" id="navMenu">
+                <a href="../index.html" class="nav-link">Beranda</a>
+                <a href="../index.html#courses" class="nav-link">Kursus</a>
+                <a href="../verify-certificate.html" class="nav-link">Verifikasi Sertifikat</a>
+            </nav>
+            <div class="nav-actions">
+                <a href="dashboard.html" class="btn btn-ghost">Dashboard</a>
+                <a href="../index.html" class="btn btn-outline" data-logout>Keluar</a>
+            </div>
+            <button class="nav-toggle" id="navToggle">
+                <i class="bi bi-list"></i>
+            </button>
+        </div>
+    </header>
+
+    <div class="dashboard-layout">
+        <aside class="dashboard-sidebar">
+            <div class="dashboard-sidebar-header">
+                <div class="dashboard-user">
+                    <div class="dashboard-avatar">AD</div>
+                    <div class="dashboard-user-info">
+                        <div class="dashboard-user-name">Administrator</div>
+                        <div class="dashboard-user-role">Admin</div>
+                    </div>
+                </div>
+            </div>
+            <nav class="dashboard-nav">
+                <a href="dashboard.html" class="dashboard-nav-link">
+                    <i class="bi bi-speedometer2"></i>
+                    <span>Dashboard</span>
+                </a>
+                <a href="users.html" class="dashboard-nav-link">
+                    <i class="bi bi-people"></i>
+                    <span>Kelola Pengguna</span>
+                </a>
+                <a href="courses.html" class="dashboard-nav-link">
+                    <i class="bi bi-journal-bookmark"></i>
+                    <span>Kelola Kursus</span>
+                </a>
+                <a href="academic.html" class="dashboard-nav-link">
+                    <i class="bi bi-diagram-3"></i>
+                    <span>Kurikulum &amp; Kelas</span>
+                </a>
+                <a href="schedule.html" class="dashboard-nav-link">
+                    <i class="bi bi-calendar-week"></i>
+                    <span>Kalender &amp; Jadwal</span>
+                </a>
+                <a href="enrollment.html" class="dashboard-nav-link">
+                    <i class="bi bi-person-check"></i>
+                    <span>Penugasan Siswa</span>
+                </a>
+                <a href="certificates.html" class="dashboard-nav-link">
+                    <i class="bi bi-award"></i>
+                    <span>Kelola Sertifikat</span>
+                </a>
+                <a href="reports.html" class="dashboard-nav-link">
+                    <i class="bi bi-file-earmark-bar-graph"></i>
+                    <span>Laporan</span>
+                </a>
+                <a href="attendance-recap.html" class="dashboard-nav-link">
+                    <i class="bi bi-calendar2-check"></i>
+                    <span>Rekap Absensi</span>
+                </a>
+                <a href="shifts.html" class="dashboard-nav-link active">
+                    <i class="bi bi-clock-history"></i>
+                    <span>Shift Karyawan</span>
+                </a>
+                <a href="notifications.html" class="dashboard-nav-link">
+                    <i class="bi bi-envelope"></i>
+                    <span>Notifikasi</span>
+                </a>
+                <a href="audit.html" class="dashboard-nav-link">
+                    <i class="bi bi-clock-history"></i>
+                    <span>Audit Trail</span>
+                </a>
+                <a href="settings.html" class="dashboard-nav-link">
+                    <i class="bi bi-gear"></i>
+                    <span>Pengaturan</span>
+                </a>
+            </nav>
+        </aside>
+
+        <main class="dashboard-main">
+            <div class="dashboard-header">
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;">
+                    <div>
+                        <h1 class="dashboard-title">Jadwal Shift Karyawan</h1>
+                        <p class="dashboard-subtitle">Atur shift Pagi, Sore, atau jam custom untuk setiap staf pada tanggal tertentu.</p>
+                    </div>
+                    <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
+                        <button class="btn btn-outline" id="shiftRefreshBtn" type="button">
+                            <i class="bi bi-arrow-clockwise"></i>
+                            Muat Ulang
+                        </button>
+                        <button class="btn btn-primary" id="shiftAddBtn" type="button">
+                            <i class="bi bi-plus-lg"></i>
+                            Tambah Shift
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="dashboard-section">
+                <div class="dashboard-section-header" style="flex-wrap: wrap; gap: 1rem;">
+                    <h2 class="dashboard-section-title">Filter Jadwal</h2>
+                    <span id="shiftRangeLabel" class="recap-range-label">-</span>
+                </div>
+                <div class="dashboard-section-body">
+                    <form class="recap-filter" id="shiftFilterForm">
+                        <div class="form-group">
+                            <label class="form-label" for="shiftFrom">Dari Tanggal</label>
+                            <input class="form-input" type="date" id="shiftFrom" name="from">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="shiftTo">Sampai Tanggal</label>
+                            <input class="form-input" type="date" id="shiftTo" name="to">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="shiftEmployee">Karyawan</label>
+                            <select class="form-input" id="shiftEmployee" name="userId">
+                                <option value="">Semua staf</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="shiftType">Jenis Shift</label>
+                            <select class="form-input" id="shiftType" name="shiftType">
+                                <option value="">Semua shift</option>
+                                <option value="pagi">Pagi</option>
+                                <option value="sore">Sore</option>
+                                <option value="custom">Custom</option>
+                            </select>
+                        </div>
+                        <div class="recap-filter-actions">
+                            <button class="btn btn-outline" type="button" id="shiftThisMonthBtn">
+                                <i class="bi bi-calendar-month"></i>
+                                Bulan Ini
+                            </button>
+                            <button class="btn btn-primary" type="submit">
+                                <i class="bi bi-funnel"></i>
+                                Tampilkan
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <div class="dashboard-stats">
+                <div class="stat-card">
+                    <div class="stat-card-icon blue">
+                        <i class="bi bi-calendar3"></i>
+                    </div>
+                    <div class="stat-card-info">
+                        <div class="stat-card-value" id="shiftStatTotal">0</div>
+                        <div class="stat-card-label">Total Shift</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-card-icon green">
+                        <i class="bi bi-sunrise"></i>
+                    </div>
+                    <div class="stat-card-info">
+                        <div class="stat-card-value" id="shiftStatPagi">0</div>
+                        <div class="stat-card-label">Shift Pagi</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-card-icon orange">
+                        <i class="bi bi-sunset"></i>
+                    </div>
+                    <div class="stat-card-info">
+                        <div class="stat-card-value" id="shiftStatSore">0</div>
+                        <div class="stat-card-label">Shift Sore</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-card-icon purple">
+                        <i class="bi bi-sliders"></i>
+                    </div>
+                    <div class="stat-card-info">
+                        <div class="stat-card-value" id="shiftStatCustom">0</div>
+                        <div class="stat-card-label">Jam Custom</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="dashboard-section">
+                <div class="dashboard-section-header">
+                    <h2 class="dashboard-section-title">Daftar Shift</h2>
+                </div>
+                <div class="dashboard-section-body" style="padding: 0;">
+                    <table class="dashboard-table">
+                        <thead>
+                            <tr>
+                                <th>Tanggal</th>
+                                <th>Karyawan</th>
+                                <th>Shift</th>
+                                <th>Jam</th>
+                                <th>Catatan</th>
+                                <th>Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody id="shiftTableBody">
+                            <tr>
+                                <td colspan="6">
+                                    <div class="attendance-empty">Memuat jadwal shift...</div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div class="attendance-modal" id="shiftModal" style="display: none;">
+        <div class="attendance-modal-card shift-modal-card">
+            <div class="attendance-modal-header">
+                <div>
+                    <div class="attendance-modal-title" id="shiftModalTitle">Tambah Shift</div>
+                    <div class="attendance-modal-subtitle">Pilih preset Pagi/Sore atau atur jam custom.</div>
+                </div>
+                <button class="attendance-modal-close" id="shiftModalClose" type="button" aria-label="Tutup">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+            <form id="shiftForm">
+                <div class="attendance-modal-body shift-modal-body">
+                    <input type="hidden" id="shiftId">
+                    <div class="form-group">
+                        <label class="form-label" for="shiftFormEmployee">Karyawan</label>
+                        <select class="form-input" id="shiftFormEmployee" required>
+                            <option value="">Pilih staf</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="shiftFormDate">Tanggal</label>
+                        <input class="form-input" type="date" id="shiftFormDate" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="shiftFormType">Jenis Shift</label>
+                        <select class="form-input" id="shiftFormType">
+                            <option value="pagi">Pagi (08:00 - 16:00)</option>
+                            <option value="sore">Sore (16:00 - 00:00)</option>
+                            <option value="custom">Custom (atur jam manual)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="shiftFormNote">Catatan</label>
+                        <input class="form-input" type="text" id="shiftFormNote" maxlength="255" placeholder="Opsional, misalnya lokasi atau kebutuhan khusus">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="shiftFormStart">Jam Mulai</label>
+                        <input class="form-input" type="time" id="shiftFormStart" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="shiftFormEnd">Jam Selesai</label>
+                        <input class="form-input" type="time" id="shiftFormEnd" required>
+                    </div>
+                    <div class="shift-form-hint" id="shiftFormHint">
+                        Shift Pagi memakai jam 08:00 - 16:00. Pilih Custom untuk mengubah jam secara manual.
+                    </div>
+                </div>
+                <div class="attendance-modal-actions" style="padding: 0 1.5rem 1.5rem;">
+                    <button class="btn btn-outline" id="shiftModalCancel" type="button">Batal</button>
+                    <button class="btn btn-primary" id="shiftFormSubmit" type="submit">
+                        <i class="bi bi-check2-circle"></i>
+                        Simpan Shift
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="../assets/js/config.js"></script>
+    <script src="../assets/js/core.js"></script>
+    <script src="../assets/js/api.js"></script>
+    <script src="../assets/js/utils.js"></script>
+    <script src="../assets/js/data.js"></script>
+    <script src="../assets/js/seed.js"></script>
+    <script src="../assets/js/sync.js"></script>
+    <script src="../assets/js/progress.js"></script>
+    <script src="../assets/js/auth.js"></script>
+    <script src="../assets/js/audit.js"></script>
+    <script src="../assets/js/notifications.js"></script>
+    <script src="../assets/js/ui.js"></script>
+    <script src="../assets/js/shift-schedule.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            if (!ELIPS.requireRole('admin')) return;
+            ELIPS.shiftSchedule.init();
+        });
+    </script>
+</body>
+</html>

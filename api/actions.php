@@ -106,6 +106,12 @@ function elips_dispatch(string $action, array $payload): array
             return elips_action_staff_attendance_recap($payload);
         case 'staffAttendance.delete':
             return elips_action_staff_attendance_delete($payload);
+        case 'staffShift.list':
+            return elips_action_staff_shift_list($payload);
+        case 'staffShift.save':
+            return elips_action_staff_shift_save($payload);
+        case 'staffShift.delete':
+            return elips_action_staff_shift_delete($payload);
         case 'module.create':
             return elips_action_module_create($payload);
         case 'module.update':
@@ -6495,6 +6501,237 @@ function elips_action_staff_attendance_delete(array $p): array
         . '. Alasan: ' . $reason . '.';
     elips_audit('delete', 'staff_attendance', $id, $label, $detail, $actor);
     return elips_ok('Catatan absensi dihapus.');
+}
+
+// ---------- Jadwal shift karyawan ----------
+
+/** Preset jam shift. Sore melewati tengah malam dan disimpan sebagai 00:00. */
+function elips_staff_shift_presets(): array
+{
+    return [
+        'pagi' => ['start' => '08:00', 'end' => '16:00'],
+        'sore' => ['start' => '16:00', 'end' => '00:00'],
+    ];
+}
+
+function elips_staff_shift_label(string $type): string
+{
+    $labels = ['pagi' => 'Pagi', 'sore' => 'Sore', 'custom' => 'Custom'];
+    return $labels[$type] ?? ucfirst($type);
+}
+
+/** Normalisasi jam klien menjadi HH:MM (detik diabaikan). */
+function elips_staff_shift_time($value): ?string
+{
+    $value = trim((string) ($value ?? ''));
+    if (!preg_match('/^([01]\d|2[0-3]):([0-5]\d)(?::[0-5]\d)?$/', $value, $match)) {
+        return null;
+    }
+    return $match[1] . ':' . $match[2];
+}
+
+function elips_staff_shift_row(int $id): ?array
+{
+    $stmt = elips_db()->prepare(
+        'SELECT ss.*, u.name AS user_name, u.email AS user_email, u.role AS user_role
+         FROM staff_shifts ss
+         LEFT JOIN users u ON u.id = ss.user_id
+         WHERE ss.id = ? LIMIT 1'
+    );
+    $stmt->execute([$id]);
+    $row = $stmt->fetch();
+    return $row ?: null;
+}
+
+function elips_action_staff_shift_list(array $p): array
+{
+    elips_require_admin();
+
+    // Default menampilkan seluruh bulan berjalan agar shift yang sudah
+    // direncanakan untuk tanggal mendatang tetap terlihat.
+    $today = new DateTimeImmutable('now', new DateTimeZone(elips_attendance_timezone()));
+    $defaultFrom = $today->modify('first day of this month')->format('Y-m-d');
+    $defaultTo = $today->modify('last day of this month')->format('Y-m-d');
+
+    $from = elips_normalize_date($p['from'] ?? '') ?: $defaultFrom;
+    $to = elips_normalize_date($p['to'] ?? '') ?: $defaultTo;
+    if ($from > $to) {
+        return elips_fail('Tanggal awal tidak boleh setelah tanggal akhir.');
+    }
+    $span = (new DateTimeImmutable($from, new DateTimeZone('UTC')))
+        ->diff(new DateTimeImmutable($to, new DateTimeZone('UTC')))->days;
+    if ($span > 366) {
+        return elips_fail('Rentang jadwal maksimal 366 hari.');
+    }
+
+    $targetId = (int) ($p['userId'] ?? 0);
+    $type = strtolower(trim((string) ($p['shiftType'] ?? '')));
+    if ($type !== '' && !in_array($type, ['pagi', 'sore', 'custom'], true)) {
+        return elips_fail('Filter jenis shift tidak valid.');
+    }
+
+    $where = ['ss.shift_date BETWEEN ? AND ?'];
+    $args = [$from, $to];
+    if ($targetId > 0) {
+        $where[] = 'ss.user_id = ?';
+        $args[] = $targetId;
+    }
+    if ($type !== '') {
+        $where[] = 'ss.shift_type = ?';
+        $args[] = $type;
+    }
+
+    $stmt = elips_db()->prepare(
+        'SELECT ss.*, u.name AS user_name, u.email AS user_email, u.role AS user_role
+         FROM staff_shifts ss
+         LEFT JOIN users u ON u.id = ss.user_id
+         WHERE ' . implode(' AND ', $where) . '
+         ORDER BY ss.shift_date ASC, u.name ASC, ss.id ASC'
+    );
+    $stmt->execute($args);
+    $rows = [];
+    foreach ($stmt->fetchAll() as $row) {
+        $rows[] = elips_staff_shift_public($row);
+    }
+
+    return elips_ok('Jadwal shift dimuat.', [
+        'from' => $from,
+        'to' => $to,
+        'rows' => $rows,
+    ]);
+}
+
+function elips_action_staff_shift_save(array $p): array
+{
+    $actor = elips_require_admin();
+
+    $id = (int) ($p['id'] ?? 0);
+    $userId = (int) ($p['userId'] ?? 0);
+    $shiftDate = elips_normalize_date($p['shiftDate'] ?? '');
+    $shiftType = strtolower(trim((string) ($p['shiftType'] ?? 'pagi')));
+    $note = trim((string) ($p['note'] ?? ''));
+
+    if ($userId <= 0) {
+        return elips_fail('Karyawan wajib dipilih.');
+    }
+    $owner = elips_user_row($userId);
+    if (!$owner) {
+        return elips_fail('Karyawan tidak ditemukan.');
+    }
+    if ($owner['status'] !== 'aktif') {
+        return elips_fail('Karyawan nonaktif tidak dapat dijadwalkan.');
+    }
+    if (!in_array($owner['role'], ['admin', 'karyawan'], true)) {
+        return elips_fail('Jadwal shift hanya untuk staf admin atau karyawan.');
+    }
+    if ($shiftDate === null) {
+        return elips_fail('Tanggal shift wajib diisi dengan format yang valid.');
+    }
+    if (!in_array($shiftType, ['pagi', 'sore', 'custom'], true)) {
+        return elips_fail('Jenis shift tidak valid.');
+    }
+    if (mb_strlen($note) > 255) {
+        return elips_fail('Catatan shift maksimal 255 karakter.');
+    }
+
+    if ($shiftType === 'custom') {
+        $startTime = elips_staff_shift_time($p['startTime'] ?? '');
+        $endTime = elips_staff_shift_time($p['endTime'] ?? '');
+    } else {
+        $preset = elips_staff_shift_presets()[$shiftType];
+        $startTime = $preset['start'];
+        $endTime = $preset['end'];
+    }
+    if ($startTime === null || $endTime === null) {
+        return elips_fail('Jam shift wajib diisi dengan format HH:MM.');
+    }
+    if ($startTime === $endTime) {
+        return elips_fail('Jam mulai dan jam selesai tidak boleh sama.');
+    }
+
+    $existing = null;
+    if ($id > 0) {
+        $existing = elips_staff_shift_row($id);
+        if (!$existing) {
+            return elips_fail('Jadwal shift tidak ditemukan.');
+        }
+    }
+
+    // Satu karyawan hanya memiliki satu shift per tanggal. Saat mengubah
+    // baris yang sama, id tersebut dikecualikan dari pemeriksaan.
+    $conflictStmt = elips_db()->prepare(
+        'SELECT id FROM staff_shifts WHERE user_id = ? AND shift_date = ? AND id <> ? LIMIT 1'
+    );
+    $conflictStmt->execute([$userId, $shiftDate, $id]);
+    if ($conflictStmt->fetch()) {
+        return elips_fail('Sudah ada shift untuk karyawan ini pada tanggal tersebut.');
+    }
+
+    $db = elips_db();
+    try {
+        if ($id > 0) {
+            $stmt = $db->prepare(
+                'UPDATE staff_shifts
+                 SET user_id = ?, shift_date = ?, shift_type = ?, start_time = ?, end_time = ?,
+                     note = ?, updated_at = UTC_TIMESTAMP()
+                 WHERE id = ?'
+            );
+            $stmt->execute([$userId, $shiftDate, $shiftType, $startTime, $endTime, $note, $id]);
+        } else {
+            $stmt = $db->prepare(
+                'INSERT INTO staff_shifts
+                    (user_id, shift_date, shift_type, start_time, end_time, note, created_by, created_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP())'
+            );
+            $stmt->execute([$userId, $shiftDate, $shiftType, $startTime, $endTime, $note, (int) $actor['id']]);
+            $id = (int) $db->lastInsertId();
+        }
+    } catch (PDOException $e) {
+        if ((string) $e->getCode() === '23000') {
+            return elips_fail('Sudah ada shift untuk karyawan ini pada tanggal tersebut.');
+        }
+        throw $e;
+    }
+
+    $ownerName = $owner['name'] ?? ('Pengguna #' . $userId);
+    $label = 'Shift ' . elips_staff_shift_label($shiftType) . ' — ' . $shiftDate;
+    $detail = ($existing ? 'Mengubah' : 'Menambahkan')
+        . ' shift ' . elips_staff_shift_label($shiftType)
+        . ' untuk ' . $ownerName
+        . ' pada ' . $shiftDate
+        . ' (' . $startTime . '–' . $endTime . ')'
+        . ($note !== '' ? '. Catatan: ' . $note : '.');
+    elips_audit($existing ? 'update' : 'create', 'staff_shift', $id, $label, $detail, $actor);
+
+    $row = elips_staff_shift_row($id);
+    return elips_ok(
+        $existing ? 'Jadwal shift diperbarui.' : 'Jadwal shift ditambahkan.',
+        $row ? elips_staff_shift_public($row) : null
+    );
+}
+
+function elips_action_staff_shift_delete(array $p): array
+{
+    $actor = elips_require_admin();
+    $id = (int) ($p['id'] ?? 0);
+    $row = elips_staff_shift_row($id);
+    if (!$row) {
+        return elips_fail('Jadwal shift tidak ditemukan.');
+    }
+
+    $delete = elips_db()->prepare('DELETE FROM staff_shifts WHERE id = ?');
+    $delete->execute([$id]);
+
+    $ownerName = $row['user_name'] ?? ('Pengguna #' . (int) $row['user_id']);
+    $label = 'Shift ' . elips_staff_shift_label((string) $row['shift_type'])
+        . ' — ' . elips_date_only($row['shift_date']);
+    $detail = 'Menghapus shift ' . elips_staff_shift_label((string) $row['shift_type'])
+        . ' milik ' . $ownerName
+        . ' pada ' . elips_date_only($row['shift_date'])
+        . ' (' . substr((string) $row['start_time'], 0, 5)
+        . '–' . substr((string) $row['end_time'], 0, 5) . ').';
+    elips_audit('delete', 'staff_shift', $id, $label, $detail, $actor);
+    return elips_ok('Jadwal shift dihapus.');
 }
 
 // ---------- Admin housekeeping ----------

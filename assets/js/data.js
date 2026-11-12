@@ -145,6 +145,17 @@
             });
     }
 
+    // ---------- Jadwal shift karyawan ----------
+    function getStaffShifts() { return read(KEYS.staffShifts, []); }
+    function setStaffShifts(list) { return write(KEYS.staffShifts, list); }
+    function getStaffShiftsByUser(userId) {
+        return getStaffShifts()
+            .filter(function (shift) { return Number(shift.userId) === Number(userId); })
+            .sort(function (a, b) {
+                return String(a.shiftDate || '').localeCompare(String(b.shiftDate || ''));
+            });
+    }
+
     // ---------- Modules ----------
     function getModules() { return read(KEYS.modules, []); }
     function setModules(list) { return write(KEYS.modules, list); }
@@ -670,6 +681,9 @@
         getStaffAttendances: getStaffAttendances,
         setStaffAttendances: setStaffAttendances,
         getStaffAttendancesByUser: getStaffAttendancesByUser,
+        getStaffShifts: getStaffShifts,
+        setStaffShifts: setStaffShifts,
+        getStaffShiftsByUser: getStaffShiftsByUser,
         getModules: getModules,
         setModules: setModules,
         getModulesByCourse: getModulesByCourse,

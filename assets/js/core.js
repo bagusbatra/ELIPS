@@ -51,6 +51,7 @@
         auditLogs: 'elips_auditLogs',
         notifications: 'elips_notifications',
         staffAttendances: 'elips_staffAttendances',
+        staffShifts: 'elips_staffShifts',
         session: 'elips_session'
     };
 

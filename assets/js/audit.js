@@ -58,6 +58,7 @@
         exam_participant: 'Peserta Ujian',
         exam_result: 'Hasil Ujian',
         staff_attendance: 'Absensi Staf',
+        staff_shift: 'Shift Karyawan',
         predicate: 'Rentang Predikat',
         grade_scheme: 'Skema Penilaian',
         grade_component: 'Komponen Nilai',
