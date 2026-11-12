@@ -486,6 +486,12 @@
         const payload = buildAttendancePayload(now);
 
         if (ELIPS.api && ELIPS.api.enabled) {
+            // Koneksi bisa terputus selama pengambilan GPS.
+            if (window.navigator && window.navigator.onLine === false) {
+                ELIPS.toast('Anda sedang offline. Sambungkan internet untuk menyimpan absensi.');
+                finishSaving(true);
+                return;
+            }
             const result = ELIPS.api.call('staffAttendance.create', payload);
             if (!result.ok) {
                 ELIPS.toast(result.message || 'Absensi gagal disimpan.');
@@ -549,6 +555,12 @@
     function saveStaffAttendance(event) {
         if (event) event.preventDefault();
         if (state.saving) return false;
+        // Absensi di mode server tidak boleh disimpan setengah jalan saat offline.
+        if (ELIPS.api && ELIPS.api.enabled
+            && window.navigator && window.navigator.onLine === false) {
+            ELIPS.toast('Anda sedang offline. Sambungkan internet untuk menyimpan absensi.');
+            return false;
+        }
         const user = ELIPS.getCurrentUser ? ELIPS.getCurrentUser() : null;
         if (!user) {
             ELIPS.toast('Sesi berakhir. Silakan masuk kembali.');

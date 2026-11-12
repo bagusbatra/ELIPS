@@ -148,8 +148,9 @@ CREATE TABLE user_devices (
 | `employee/attendance.html` *(baru)* | Halaman absen karyawan (F3.2) |
 | `login.html` | Checkbox "Ingat saya"; redirect sesuai role |
 | `admin/users.html` + `crud-users.js` | Role "Karyawan" di modal tambah/ubah; tombol "Reset Perangkat" |
-| `manifest.webmanifest`, `sw.js`, `assets/icons/*` *(baru)* | PWA (F2.1–F2.3) |
-| `assets/css/style.css` | Gaya halaman karyawan dan banner pasang aplikasi |
+| `manifest.webmanifest`, `sw.js`, `offline.html`, `assets/js/pwa.js`, `assets/icons/*` *(baru)* | PWA (F2.1–F2.3): manifest, service worker network-first, halaman offline, banner pemasangan, dan ikon |
+| `assets/css/style.css` | Gaya halaman karyawan, banner pasang aplikasi, sheet iOS, dan bilah offline |
+| 28 halaman aplikasi | Tag manifest, `theme-color`, meta mobile/apple, favicon, apple-touch-icon, dan `pwa.js` (`defer`) |
 
 ## 8. Keamanan & privasi
 
@@ -203,10 +204,18 @@ Catatan implementasi:
 - Mode lokal `localStorage` tetap kompatibel: `auth.resume` diabaikan dan Reset Perangkat hanya mencatat audit demo.
 
 ### Fase 5 — PWA *(0,5–1 hari)*
-- [ ] `manifest.webmanifest`, ikon, `sw.js` (network-first, tanpa cache halaman/API).
-- [ ] Banner "Pasang di layar utama" (Android) dan petunjuk iOS.
-- [ ] Pesan saat offline.
+- [x] `manifest.webmanifest`, ikon, `sw.js` (network-first, tanpa cache halaman/API).
+- [x] Banner "Pasang di layar utama" (Android) dan petunjuk iOS.
+- [x] Pesan saat offline.
 - **Selesai bila:** aplikasi bisa dipasang di Android (Chrome) dan iOS (Safari), terbuka standalone langsung ke halaman absen, dan perubahan file baru langsung terlihat tanpa menghapus cache manual.
+
+Catatan implementasi:
+- `manifest.webmanifest` berada di root dengan `start_url: "./employee/attendance.html"`, `scope: "./"`, `display: "standalone"`, serta ikon 192/512 dan maskable. Pengguna yang belum punya sesi tetap diarahkan ke `login.html` oleh `requireRole`; role selain `karyawan`/admin ditolak.
+- Ikon PNG dibuat tanpa dependensi: `icon-192`, `icon-512`, `icon-maskable-192`, `icon-maskable-512`, `apple-touch-icon` 180, dan `favicon-32` di `assets/icons/`.
+- `sw.js` memakai strategi **network-first**: halaman HTML aplikasi dan seluruh `/api/` tidak pernah disimpan ke cache, sehingga perubahan file baru langsung terlihat. Hanya `offline.html` + ikon yang di-precache, sedangkan aset statis (CSS/JS/gambar/font/webmanifest/JSON) dipakai sebagai fallback saat offline.
+- `assets/js/pwa.js` mendaftarkan service worker (skip waiting + `clients.claim`, reload sekali saat ada versi baru), menampilkan banner pemasangan Android lewat `beforeinstallprompt`, sheet 3 langkah "Tambahkan ke Layar Utama" untuk iOS Safari, dan bilah offline dengan tombol coba lagi. Penolakan banner diingat 7 hari dan prompt dibatasi sekali per sesi.
+- `attendance.js` menolak penyimpanan saat offline, baik sebelum validasi maupun di dalam `persistAttendance` (menutup celah GPS yang selesai setelah koneksi putus).
+- `offline.html` berdiri sendiri (tanpa bundle aplikasi) dengan tombol muat ulang. Semua 28 halaman aplikasi memuat manifest, meta mobile/apple, favicon, apple-touch-icon, dan `pwa.js` (`defer`); server PHP bawaan menyajikan `.webmanifest` sebagai `application/manifest+json`.
 
 ### Fase 6 — Uji menyeluruh & peluncuran *(1 hari)*
 - [ ] Jalankan seluruh skenario uji (bagian 10) di Android, iOS, dan desktop.

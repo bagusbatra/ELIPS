@@ -2,7 +2,7 @@
 
 **Versi:** 4.0  
 **Tanggal:** 2026-11-11
-**Status:** Implemented Phase 1-6 (Dual-mode - PHP 8/MySQL 8 + fallback `localStorage`). v3.0 tetap menjadi baseline alur kursus; v4.0 menambahkan versi kurikulum, angkatan/kelas, penguncian kurikulum per kelas, histori tentor, enrollment berbasis kelas, jadwal pertemuan dan presensi offline, **cabang** dengan halaman kalender/jadwal admin, **materi tambahan kelas dan mode akses materi**, **tugas & ujian**, **skema penilaian, finalisasi nilai, predikat konfigurabel, dan koreksi beraudit**, serta **absensi karyawan** (role `karyawan`, jam server, GPS wajib, aturan harian di database, modul absensi bersama, halaman `employee/attendance.html`, dan sesi login diingat dengan rotasi token per perangkat).
+**Status:** Implemented Phase 1-6 (Dual-mode - PHP 8/MySQL 8 + fallback `localStorage`). v3.0 tetap menjadi baseline alur kursus; v4.0 menambahkan versi kurikulum, angkatan/kelas, penguncian kurikulum per kelas, histori tentor, enrollment berbasis kelas, jadwal pertemuan dan presensi offline, **cabang** dengan halaman kalender/jadwal admin, **materi tambahan kelas dan mode akses materi**, **tugas & ujian**, **skema penilaian, finalisasi nilai, predikat konfigurabel, dan koreksi beraudit**, serta **absensi karyawan** (role `karyawan`, jam server, GPS wajib, aturan harian di database, modul absensi bersama, halaman `employee/attendance.html`, dan sesi login diingat dengan rotasi token per perangkat), dan **PWA** (manifest, service worker network-first, banner pemasangan Android/iOS, serta mode offline).
 **Baseline v4.0 lengkap:** `ELIPS-LMS-PRD-v4.0.md`  
 **Log pengembangan:** `log.md`
 **ERD:** `erd.md`
@@ -321,6 +321,7 @@ Seluruh aturan di atas ditegakkan **di server** (`api/actions.php` + `api/helper
 | Sesi login diingat (remember me) | ✅ Selesai | `auth.login` menerima `remember`; `auth.resume` memulihkan sesi dari cookie `elips_remember`; token dirotasi tiap dipakai dan hanya hash SHA-256 tersimpan di `user_devices` |
 | Satu perangkat aktif & reset perangkat | ✅ Selesai | Login baru mencabut token perangkat lama; `users.resetDevice` + tombol **Reset Perangkat** di `admin/users.html`; ganti password/nonaktif juga mencabut token |
 | Pembatalan sesi lama | ✅ Selesai | `users.session_version` membatalkan sesi PHP lama saat login baru, ganti password, akun nonaktif, atau reset perangkat |
+| PWA & mode offline | ✅ Selesai | `manifest.webmanifest` (`start_url` halaman absen, standalone), `sw.js` network-first tanpa cache halaman/API, banner pemasangan Android + sheet iOS di `assets/js/pwa.js`, `offline.html`, dan penolakan simpan absensi saat offline |
 
 ---
 
@@ -348,9 +349,10 @@ Aplikasi berjalan dalam dua mode yang memakai UI dan aturan bisnis yang sama:
   - `crud-users.js`, `crud-courses.js`, `crud-enrollments.js`, `crud-content.js`, `crud-academic.js`, `crud-grades.js` - CRUD dan aturan bisnis per domain; pada mode server fungsi ini meneruskan aksi ke API. `crud-academic.js` menangani versi kurikulum, kelas/angkatan, histori tentor, roster kelas, validasi kuota, jadwal sesi, presensi, koreksi, dan rekap kehadiran di kedua mode;
   - `utils.js` - helper format, escape HTML, dan toast;
   - `ui.js` - perilaku UI bersama (navigasi, sidebar, katalog, login, logout).
+  - `pwa.js` - pendaftaran service worker, banner pemasangan Android/iOS, deteksi versi baru, dan indikator offline; dimuat terpisah dengan `defer` dan tidak termasuk bundle uji JSDOM.
   - Halaman hanya menangani rendering dan interaksi UI.
   - Setiap fungsi CRUD mengembalikan `{ ok, message, data }` agar pesan sukses/gagal konsisten.
-  - Modul dimuat berurutan: `config → core → api → utils → data → seed → sync → progress → auth → audit → notifications → crud-* → ui`.
+  - Modul dimuat berurutan: `config → core → api → utils → data → seed → sync → progress → auth → audit → notifications → crud-* → ui → attendance`; `pwa.js` dimuat sendiri di `<head>` setiap halaman aplikasi.
 
 ### 4.2 Backend PHP/MySQL
 
@@ -439,6 +441,15 @@ Backend berada di folder `api/` dan terdiri dari front controller, konfigurasi, 
 | `assets/js/crud-tasks.js` | ✅ Selesai | CRUD tugas, lampiran, rubrik, submission, review/revisi, ujian, peserta, dan hasil ujian dengan validasi kepemilikan dan status |
 | `assets/js/crud-grades.js` | ✅ Selesai | Skema penilaian, komponen berbobot, roster & nilai komponen, pengecualian, finalisasi, koreksi beraudit, transkrip, serta alur sertifikat Draft → Publish (paritas server/lokal) |
 | `assets/js/ui.js` | ✅ Selesai | Perilaku UI bersama: navigasi, sidebar, katalog, login, logout |
+| `assets/js/pwa.js` | ✅ Selesai | Pendaftaran service worker, banner pemasangan Android (`beforeinstallprompt`), sheet petunjuk iOS, deteksi versi baru, dan bilah offline |
+| `manifest.webmanifest` | ✅ Selesai | Manifest PWA: `start_url` halaman absen, `scope` root, `display` standalone, ikon 192/512 dan maskable |
+| `sw.js` | ✅ Selesai | Service worker network-first; tidak pernah menyimpan halaman HTML aplikasi atau `/api/`; fallback aset statis dan `offline.html` |
+| `assets/icons/*.png` | ✅ Selesai | Ikon PWA 192/512, maskable 192/512, apple-touch-icon 180, dan favicon 32 |
+
+### PWA (`offline.html`)
+| File | Status | Deskripsi |
+|---|---|---|
+| `offline.html` | ✅ Selesai | Halaman offline mandiri (tanpa bundle aplikasi) dengan tombol muat ulang; tidak termasuk 28 halaman aplikasi yang memuat `pwa.js` |
 
 ### Backend (`api/`)
 | File | Status | Deskripsi |
@@ -919,7 +930,7 @@ else                            -> student/dashboard.html
 | Finalisasi & penguncian nilai | ✅ Lulus uji | `api-phase6`/`local-phase6`: finalisasi menolak `incomplete`, snapshot komponen, dan simpan biasa ditolak setelah finalized |
 | Koreksi nilai beraudit | ✅ Lulus uji | `api-phase6`/`local-phase6`: hanya finalized, alasan ≥5 karakter, override/komponen, dan baris `grade_corrections` |
 | Transkrip peserta & privasi | ✅ Lulus uji | `api-phase6`/`local-phase6`: peserta hanya membaca transkrip sendiri; instruktur/Admin pengampu dapat membaca roster |
-| Regresi halaman & skrip Phase 6 | ✅ Lulus uji | `test-all-pages` 28 halaman, `validate-scripts` 28 HTML/20 JS, `test-employee-attendance-page` 49/49, dan `test-staff-attendance-page` 84/84 |
+| Regresi halaman & skrip Phase 6 | ✅ Lulus uji | `test-all-pages` 28 halaman aplikasi, `validate-scripts` 29 HTML/22 JS, `test-employee-attendance-page` 49/49, dan `test-staff-attendance-page` 84/84 |
 | Nilai & sertifikat per enrollment | ✅ Lulus uji | Unique per `enrollment_id`; angkatan berbeda terpisah |
 | Guard role aksi akademik | ✅ Lulus uji | Instruktur/peserta tidak dapat membuat kurikulum/kelas atau mendaftarkan peserta |
 | Halaman akademik admin | ✅ Lulus uji | `test-academic-page` memverifikasi statistik, tabel versi/kelas, modal, roster, histori tentor, dan detail kurikulum |
@@ -965,6 +976,8 @@ else                            -> student/dashboard.html
 | Role karyawan & absensi server | Lulus uji | `api-employee-fase1` (34/34) memverifikasi role `karyawan` di API, login karyawan, absen masuk/pulang, duplikat, privasi riwayat, akses admin via `userId`, hapus beralasan + audit, dan penolakan instruktur/peserta |
 | Sesi diingat, rotasi token & reset perangkat | Lulus uji | `test-remember-login` (37/37) memverifikasi cookie `elips_remember`, rotasi + sliding 30 hari, deteksi token lama, satu perangkat aktif, reset oleh admin, auto-resume klien, pencabutan saat logout/ganti password/nonaktif, dan rate limit |
 | Degradasi kamera & geolokasi | Lulus uji | Kamera tanpa dukungan/izin/secure context menampilkan fallback unggah; GPS gagal tidak memblokir penyimpanan |
+| PWA: manifest, service worker & banner | Lulus uji | `test-pwa` 50/50: `start_url` halaman absen, scope root, tag PWA di 28 halaman, strategi network-first tanpa cache halaman/API, banner Android/iOS, penolakan 7 hari, dan blokir simpan saat offline |
+| PWA mode server | Lulus uji | `test-pwa-server` 16/16: `manifest.webmanifest` tersaji `application/manifest+json`, `sw.js`, `offline.html`, dan seluruh ikon dapat diunduh |
 
 ---
 
@@ -977,7 +990,7 @@ else                            -> student/dashboard.html
 - **Responsive:** Menggunakan CSS custom yang responsif.
 - **UI Konsisten:** Menggunakan komponen seragam (navbar, sidebar, cards, tables, badges).
 - **Keamanan:** Pada mode server password di-hash, sesi memakai cookie `HttpOnly`/`SameSite=Lax`, dan otorisasi role/kepemilikan ditegakkan di server. Cookie `elips_remember` juga `HttpOnly` (+ `Secure` saat HTTPS), token disimpan sebagai hash SHA-256, dirotasi setiap dipakai, dan dicabut saat logout/ganti password/akun nonaktif/reset admin. Mode lokal tetap bersifat demo dan tidak boleh dianggap aman untuk produksi.
-- **Cakupan v4.0:** Increment ini mencakup **Phase 1–6** (versi kurikulum + kelas/angkatan + enrollment berbasis kelas + jadwal sesi/presensi offline + materi tambahan dan mode akses materi + cabang/kalender + absensi staf + tugas/ujian + skema penilaian/finalisasi/koreksi), ditambah **absensi karyawan** (role `karyawan`, validasi aturan harian, jam server, GPS wajib, modul absensi bersama, halaman `employee/attendance.html`, serta sesi diingat dengan `user_devices`/`users.session_version`), dengan 38 tabel MySQL, 94 aksi API, 38 storage key, 20 modul JS, dan 28 halaman HTML. Pembayaran dan sertifikat PDF mengikuti phase berikutnya pada `ELIPS-LMS-PRD-v4.0.md`.
+- **Cakupan v4.0:** Increment ini mencakup **Phase 1–6** (versi kurikulum + kelas/angkatan + enrollment berbasis kelas + jadwal sesi/presensi offline + materi tambahan dan mode akses materi + cabang/kalender + absensi staf + tugas/ujian + skema penilaian/finalisasi/koreksi), ditambah **absensi karyawan** (role `karyawan`, validasi aturan harian, jam server, GPS wajib, modul absensi bersama, halaman `employee/attendance.html`, serta sesi diingat dengan `user_devices`/`users.session_version`) dan **PWA** (manifest, service worker network-first, banner pemasangan, dan mode offline), dengan 38 tabel MySQL, 94 aksi API, 38 storage key, 21 modul JS, 29 halaman HTML (termasuk `offline.html`), dan 22 file JavaScript (termasuk `sw.js`). Pembayaran dan sertifikat PDF mengikuti phase berikutnya pada `ELIPS-LMS-PRD-v4.0.md`.
 - **Kompatibilitas v3.0:** Struktur v3 tetap dipertahankan. Setiap kursus lama mendapat versi kurikulum `1.0`; enrollment lama dipetakan ke kelas migrasi (`legacy_import`) agar tidak ada data yang hilang. Alur nilai manual klasik tetap tersedia di samping skema penilaian Phase 6.
 
 ---

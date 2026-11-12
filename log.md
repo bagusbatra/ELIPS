@@ -1,8 +1,8 @@
 # Log Pengembangan ELIPS LMS
 
 **Versi dokumen:** 4.0  
-**Terakhir diperbarui:** 2026-11-11
-**Status proyek:** Dual-mode - PHP 8/MySQL 8 + fallback `localStorage`; v4.0 Phase 1-6 (kurikulum, kelas/angkatan, enrollment berbasis kelas, jadwal & presensi offline, materi tambahan & mode akses materi, tugas & ujian, skema penilaian/finalisasi/koreksi) plus cabang, kalender jadwal Admin, aksi langsung dan filter jadwal lanjutan, absensi staf berbasis kamera, serta absensi karyawan (role `karyawan`, jam server, GPS wajib, aturan harian, modul bersama, halaman `employee/attendance.html`, dan sesi diingat dengan rotasi token per perangkat)
+**Terakhir diperbarui:** 2026-11-12
+**Status proyek:** Dual-mode - PHP 8/MySQL 8 + fallback `localStorage`; v4.0 Phase 1-6 (kurikulum, kelas/angkatan, enrollment berbasis kelas, jadwal & presensi offline, materi tambahan & mode akses materi, tugas & ujian, skema penilaian/finalisasi/koreksi) plus cabang, kalender jadwal Admin, aksi langsung dan filter jadwal lanjutan, absensi staf berbasis kamera, absensi karyawan (role `karyawan`, jam server, GPS wajib, aturan harian, modul bersama, halaman `employee/attendance.html`, dan sesi diingat dengan rotasi token per perangkat), serta PWA (manifest, service worker network-first, banner pemasangan, dan mode offline)
 **Dokumen terkait:** `prd.md`, `erd.md`, `ELIPS-LMS-PRD-v4.0.md`
 
 ---
@@ -53,6 +53,9 @@ ELIPS/
 ├── learning.html
 ├── certificate-view.html
 ├── verify-certificate.html
+├── offline.html
+├── manifest.webmanifest
+├── sw.js
 ├── prd.md
 ├── log.md
 ├── erd.md
@@ -92,6 +95,13 @@ ELIPS/
 │   └── attendance.html
 └── assets/
     ├── css/style.css
+    ├── icons/
+    │   ├── icon-192.png
+    │   ├── icon-512.png
+    │   ├── icon-maskable-192.png
+    │   ├── icon-maskable-512.png
+    │   ├── apple-touch-icon.png
+    │   └── favicon-32.png
     └── js/
         ├── config.js
         ├── core.js
@@ -112,7 +122,8 @@ ELIPS/
         ├── crud-tasks.js
         ├── crud-grades.js
         ├── ui.js
-        └── attendance.js
+        ├── attendance.js
+        └── pwa.js
 ```
 
 ### 2.1 Tanggung Jawab Modul JavaScript
@@ -124,6 +135,8 @@ config → core → api → utils → data → seed → sync → progress → au
 → crud-users → crud-courses → crud-enrollments
 → crud-content → crud-academic → crud-tasks → crud-grades → ui → attendance
 ```
+
+`pwa.js` tidak termasuk urutan bundle di atas; modul ini dimuat terpisah dengan `defer` di `<head>` setiap halaman aplikasi (dan sengaja tidak dimasukkan ke bundle uji JSDOM).
 
 | Modul | Tanggung jawab | API utama |
 |---|---|---|
@@ -147,6 +160,7 @@ config → core → api → utils → data → seed → sync → progress → au
 | `crud-grades.js` | Skema penilaian, komponen berbobot, roster & nilai komponen, pengecualian, finalisasi, koreksi beraudit, transkrip, serta alur sertifikat Draft → Publish | `saveGrade`, `listPredicates`, `savePredicates`, `listGradeSchemes`, `saveGradeScheme`, `setGradeSchemeStatus`, `deleteGradeScheme`, `getGradeRoster`, `saveManualGrade`, `exemptGradeComponent`, `finalizeGrade`, `correctGrade`, `getGradeTranscript`, `createDraftCertificateForEnrollment`, `approveCertificate` |
 | `ui.js` | Perilaku UI bersama: navigasi mobile, sidebar dashboard, katalog beranda, login (email + password), logout, style toast | dijalankan pada `DOMContentLoaded` |
 | `attendance.js` | Modul absensi harian bersama untuk Admin dan Karyawan: hero status, kamera/unggah foto, GPS wajib, aturan masuk/pulang, riwayat pribadi, detail, modal berhasil, dan hapus oleh Admin dengan alasan | `ELIPS.attendance.init`, `ELIPS.attendance.refresh`, `openAttendanceModal`, `saveStaffAttendance`, `loadAttendanceHistory`, `openAttendanceDetail`, `deleteStaffAttendance` |
+| `pwa.js` | Pendaftaran service worker (skip waiting + `clients.claim`, reload sekali saat versi baru), banner pemasangan Android (`beforeinstallprompt`), sheet 3 langkah iOS Safari, penolakan 7 hari, prompt sekali per sesi, dan bilah offline dengan tombol coba lagi | `navigator.serviceWorker.register`, `beforeinstallprompt`, `online`/`offline` |
 
 Prinsip yang dipakai:
 
@@ -159,6 +173,43 @@ Prinsip yang dipakai:
 ---
 
 ## 3. Riwayat Perubahan
+
+### v4.0 - 2026-11-12 - Fase 5 absensi karyawan: PWA, pemasangan, dan mode offline
+
+**Tujuan:** menyelesaikan `PRD_karyawan.md` Fase 5 sehingga aplikasi dapat dipasang di layar utama Android/iOS, terbuka standalone langsung ke halaman absen, dan perubahan file baru tetap langsung terlihat.
+
+Perubahan file:
+
+- `manifest.webmanifest` (baru) di root: `start_url: "./employee/attendance.html"`, `scope: "./"`, `display: "standalone"`, `theme_color`/`background_color`, ikon 192/512 dan maskable, serta pintasan ke halaman absen.
+- `assets/icons/` (baru): enam PNG tanpa dependensi — `icon-192`, `icon-512`, `icon-maskable-192`, `icon-maskable-512`, `apple-touch-icon` 180, dan `favicon-32`.
+- `sw.js` (baru): service worker **network-first**. Halaman HTML aplikasi dan seluruh `/api/` tidak pernah masuk cache; hanya `offline.html` + ikon yang di-precache, sedangkan aset statis dipakai sebagai fallback offline.
+- `assets/js/pwa.js` (baru, modul JS ke-21): registrasi service worker, `skipWaiting` + `clients.claim`, reload sekali saat ada versi baru, banner pemasangan Android, sheet 3 langkah iOS Safari, penolakan 7 hari, prompt sekali per sesi, dan bilah offline.
+- `offline.html` (baru, halaman HTML ke-29): halaman offline mandiri tanpa bundle aplikasi dengan tombol muat ulang.
+- `assets/js/attendance.js`: menolak penyimpanan saat offline, baik sebelum validasi maupun di dalam `persistAttendance`.
+- `assets/css/style.css`: gaya banner pemasangan, sheet iOS, dan bilah offline dengan safe-area + aturan cetak.
+- 28 halaman aplikasi: tag manifest, `theme-color`, meta mobile/apple, favicon, apple-touch-icon, dan `pwa.js` (`defer`).
+
+Perilaku:
+
+- Pengguna tanpa sesi tetap diarahkan `requireRole` ke `login.html`; role selain `karyawan`/admin tidak dapat membuka halaman absen. Aplikasi terpasang tetap membuka halaman absen sebagai `start_url`.
+- Rotasi versi memakai strategi network-first sehingga file baru langsung terlihat tanpa menghapus cache manual; service worker hanya menyajikan aset statis lama saat jaringan gagal.
+- Simpan absensi saat offline ditolak dengan pesan `Anda sedang offline. Sambungkan internet untuk menyimpan absensi.`
+
+Pengujian:
+
+- `test-pwa` (baru) 50/50: manifest/`start_url`/`scope`, tag PWA di 28 halaman, network-first tanpa cache halaman/API, banner Android/iOS, penolakan 7 hari, dan guard simpan offline.
+- `test-pwa-server` (baru) 16/16: `manifest.webmanifest` tersaji `application/manifest+json`, `sw.js`, `offline.html`, dan seluruh ikon dapat diunduh.
+- Regresi: `validate-scripts` 29 HTML/22 JS, `test-all-pages` 28 halaman, `test-employee-server`, `test-server-mode` 18/18, `test-remember-login` 37/37, `api-employee-fase1` 34/34, `api-integration` 55/55, `api-v4` 39/39, branches 17/17, materials 42/42, sessions 37/37, phase5 52/52, phase6 44/44.
+- `php api/install.php --fresh` tetap menghasilkan 38 tabel tanpa perubahan skema.
+
+Dampak angka: 38 tabel MySQL, 94 aksi API, 38 storage key, 21 modul JS di `assets/js/`, 29 halaman HTML, dan 22 file JavaScript (termasuk `sw.js`).
+
+Batasan:
+
+- Uji pemasangan pada perangkat Android/iOS nyata, retensi foto, dan kapasitas penyimpanan tetap menjadi pekerjaan Fase 6.
+- `offline.html` sengaja tidak memuat `pwa.js` dan tidak termasuk 28 halaman aplikasi pada `test-all-pages`.
+
+---
 
 ### v4.0 - 2026-11-11 - Fase 4 absensi karyawan: sesi diingat dan satu perangkat aktif
 
@@ -1127,11 +1178,11 @@ Akun lama tanpa password otomatis dimigrasikan ke password demo `elips123` saat 
 
 ## 6. Hasil Pengujian Terakhir
 
-Pengujian dijalankan setelah backend PHP/MySQL, client dual-mode (v3.0), increment v4.0 Phase 1-6, penambahan cabang/kalender jadwal, aksi langsung/filter jadwal lanjutan, absensi staf dan penyempurnaan alur hariannya, serta Fase 1 absensi karyawan (role, jam server, GPS wajib, aturan harian database):
+Pengujian dijalankan setelah backend PHP/MySQL, client dual-mode (v3.0), increment v4.0 Phase 1-6, penambahan cabang/kalender jadwal, aksi langsung/filter jadwal lanjutan, absensi staf dan penyempurnaan alur hariannya, Fase 1 absensi karyawan (role, jam server, GPS wajib, aturan harian database), serta Fase 4-5 (sesi diingat, perangkat aktif, dan PWA):
 
 | Pemeriksaan | Hasil |
 |---|---|
-| Syntax 27 HTML + 19 JS + 7 PHP | ✅ Lulus |
+| Syntax 29 HTML + 22 JS + 7 PHP | ✅ Lulus |
 | Guard sesi, password, sanitasi (`test-p0`) | ✅ Lulus |
 | Notifikasi email (`test-notifications`) | ✅ Lulus |
 | Audit trail (`test-audit`) | ✅ Lulus |
@@ -1163,6 +1214,9 @@ Pengujian dijalankan setelah backend PHP/MySQL, client dual-mode (v3.0), increme
 | Absensi staf halaman lokal (`test-staff-attendance-page`) | Lulus 80/80 |
 | API absensi staf (`test-staff-attendance-api`) | Lulus 46/46 |
 | API absensi karyawan Fase 1 (`api-employee-fase1`) | Lulus 34/34 |
+| Sesi diingat & perangkat aktif (`test-remember-login`) | Lulus 37/37 |
+| PWA manifest & service worker (`test-pwa`) | Lulus 50/50 |
+| PWA mode server (`test-pwa-server`) | Lulus 16/16 |
 | UI akademik admin (`test-academic-page`) | ✅ Lulus |
 | UI cabang & kalender admin (`test-branch-pages`) | ✅ Lulus |
 | UI jadwal/presensi lokal (`test-sessions-page`) | ✅ 47/47 |
@@ -1237,6 +1291,11 @@ Catatan penting yang diuji:
 - Metadata absensi (zona waktu, lokasi, perangkat, koneksi, catatan, IP server) tersimpan konsisten dan muncul di detail.
 - Snapshot bootstrap tidak memuat koleksi/foto absensi staf; riwayat hanya dimuat lewat aksi khusus.
 - Kamera tanpa dukungan/izin/secure context menampilkan fallback unggah foto; GPS tetap wajib pada mode server.
+- Manifest PWA memakai `start_url` halaman absen, `scope` root, dan `display: standalone`; seluruh 28 halaman aplikasi memuat manifest, ikon, dan `pwa.js`.
+- Service worker network-first tidak menyimpan halaman HTML aplikasi maupun `/api/`, sehingga perubahan file langsung terlihat; hanya aset statis dan `offline.html` yang menjadi fallback.
+- Banner Android memakai `beforeinstallprompt`; iOS Safari menampilkan sheet 3 langkah; penolakan diingat 7 hari dan prompt dibatasi sekali per sesi.
+- Penyimpanan absensi ditolak saat offline sebelum validasi maupun saat GPS selesai setelah koneksi putus.
+- Server PHP bawaan menyajikan `.webmanifest` sebagai `application/manifest+json`, dan seluruh ikon dapat diunduh.
 
 ---
 
@@ -1247,13 +1306,13 @@ Keterbatasan saat ini:
 - Mode server membutuhkan PHP 8 + MySQL 8 yang berjalan dan database yang sudah diinstal.
 - Mode fallback `localStorage` tetap tidak aman untuk produksi (password demo diverifikasi di client).
 - Snapshot publik masih memuat seluruh koleksi demo; produksi perlu proyeksi terbatas per role dan endpoint verifikasi sertifikat khusus.
-- Belum ada rate limiting login, CSRF token, atau kewajiban HTTPS.
+- Rate limit baru tersedia untuk `auth.login`/`auth.resume`; belum ada CSRF token atau kewajiban HTTPS.
 - Belum ada upload file materi sungguhan; materi bertipe file baru menyimpan metadata/path dan belum ada endpoint penyajian biner.
 - Notifikasi email masih berupa simulasi/outbox di database; email belum benar-benar dikirim.
 - Finalisasi nilai tidak membuat sertifikat otomatis; sertifikasi/PDF tetap phase berikutnya.
 - Mode lokal tidak memiliki transaksi, sehingga finalisasi/koreksi yang gagal di tengah dapat meninggalkan data parsial.
 - Absensi staf satu masuk + satu pulang per hari dijaga unique key database dan validasi server; mode lokal kini memakai aturan yang sama (GPS wajib, tanggal `Asia/Jakarta`, hapus beralasan oleh Admin).
-- Role `karyawan` tersedia di API/DB dan klien; halaman `employee/attendance.html` sudah ada. Remember-me dan PWA belum dibuat (Fase 4–5).
+- Role `karyawan`, halaman `employee/attendance.html`, remember-me (`user_devices`), dan PWA sudah dibuat (Fase 1–5). Retensi foto, kapasitas penyimpanan, uji perangkat Android/iOS nyata, panduan karyawan, dan pilot tersisa untuk Fase 6.
 - Belum ada migration tool, backup otomatis, atau monitoring produksi.
 
 Rencana lanjutan (opsional, sesuai `prd.md`):
@@ -1264,7 +1323,7 @@ Rencana lanjutan (opsional, sesuai `prd.md`):
 | P0 | Pembatasan snapshot per role dan endpoint verifikasi sertifikat publik yang minim data |
 | P0 | Upload file materi dan generate PDF sertifikat |
 | P1 | Migration tool, backup otomatis, dan audit immutable dengan retensi |
-| P1 | Fase 2–5 absensi karyawan: modul `attendance.js` bersama, halaman `employee/attendance.html`, remember-me (`user_devices`), dan PWA |
+| P1 | Fase 6 absensi karyawan: retensi foto & kapasitas penyimpanan, uji perangkat Android/iOS, panduan karyawan, dan pilot |
 | P2 | Notifikasi email nyata saat kursus dipublikasikan atau sertifikat terbit |
 
 ---

@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tidak Ada Koneksi - ELIPS LMS</title>
+    <meta name="theme-color" content="#e98c1e">
+    <meta name="robots" content="noindex">
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="icon" type="image/png" sizes="32x32" href="assets/icons/favicon-32.png">
+    <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
+    <style>
+        :root {
+            --primary: #e98c1e;
+            --primary-dark: #b2660a;
+            --text-primary: #0f172a;
+            --text-secondary: #475569;
+            --border: #e2e8f0;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1.5rem;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f8fafc;
+            color: var(--text-primary);
+            line-height: 1.6;
+        }
+        .offline-card {
+            width: 100%;
+            max-width: 440px;
+            background: #ffffff;
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 2.5rem 2rem;
+            text-align: center;
+            box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.08);
+        }
+        .offline-icon {
+            width: 96px;
+            height: 96px;
+            border-radius: 24px;
+            margin: 0 auto 1.25rem;
+            display: block;
+        }
+        .offline-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            padding: 0.35rem 0.75rem;
+            margin-bottom: 1rem;
+            border-radius: 999px;
+            background: #fef3c7;
+            color: #92400e;
+            font-size: 0.8125rem;
+            font-weight: 600;
+        }
+        h1 {
+            font-size: 1.375rem;
+            margin-bottom: 0.5rem;
+        }
+        p {
+            color: var(--text-secondary);
+            font-size: 0.9375rem;
+            margin-bottom: 1rem;
+        }
+        .offline-note {
+            background: #f8fafc;
+            border: 1px dashed var(--border);
+            border-radius: 10px;
+            padding: 0.875rem 1rem;
+            font-size: 0.875rem;
+            margin-bottom: 1.5rem;
+        }
+        .offline-note strong { color: var(--text-primary); }
+        .offline-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 0.625rem;
+        }
+        .offline-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            min-height: 46px;
+            padding: 0.75rem 1.25rem;
+            border-radius: 8px;
+            border: 1px solid transparent;
+            font-family: inherit;
+            font-size: 0.9375rem;
+            font-weight: 600;
+            text-decoration: none;
+            cursor: pointer;
+        }
+        .offline-btn-primary {
+            background: var(--primary);
+            color: #ffffff;
+        }
+        .offline-btn-primary:hover { background: var(--primary-dark); }
+        .offline-btn-secondary {
+            background: #ffffff;
+            border-color: var(--border);
+            color: var(--text-secondary);
+        }
+        .offline-status {
+            min-height: 1.25rem;
+            margin-top: 1rem;
+            font-size: 0.8125rem;
+            color: var(--text-secondary);
+        }
+        @media (min-width: 480px) {
+            .offline-actions { flex-direction: row; }
+            .offline-btn { flex: 1; }
+        }
+    </style>
+</head>
+<body>
+    <main class="offline-card" role="main">
+        <img class="offline-icon" src="assets/icons/icon-192.png" alt="Ikon ELIPS LMS" width="96" height="96">
+        <span class="offline-badge">&#9888;&#65039; Mode offline</span>
+        <h1>Tidak Ada Koneksi Internet</h1>
+        <p>Halaman ini tidak dapat dimuat karena perangkat Anda sedang offline.</p>
+        <div class="offline-note">
+            <strong>Absensi belum tersimpan.</strong> Sambungkan internet lalu coba lagi.
+            Absensi hanya tercatat setelah server menerima foto, jam, dan lokasi Anda.
+        </div>
+        <div class="offline-actions">
+            <button type="button" class="offline-btn offline-btn-primary" id="offlineRetry">
+                Coba Lagi
+            </button>
+            <a class="offline-btn offline-btn-secondary" href="login.html">Buka Halaman Masuk</a>
+        </div>
+        <p class="offline-status" id="offlineStatus" role="status" aria-live="polite"></p>
+    </main>
+    <script>
+        (function () {
+            'use strict';
+            const retry = document.getElementById('offlineRetry');
+            const status = document.getElementById('offlineStatus');
+            function updateStatus() {
+                if (!status) return;
+                status.textContent = navigator.onLine
+                    ? 'Koneksi terdeteksi. Silakan coba lagi.'
+                    : 'Masih offline. Periksa Wi-Fi atau data seluler Anda.';
+            }
+            if (retry) {
+                retry.addEventListener('click', function () {
+                    retry.disabled = true;
+                    retry.textContent = 'Memuat ulang\u2026';
+                    window.location.reload();
+                });
+            }
+            window.addEventListener('online', updateStatus);
+            window.addEventListener('offline', updateStatus);
+            updateStatus();
+        })();
+    </script>
+</body>
+</html>
