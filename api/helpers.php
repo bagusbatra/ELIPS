@@ -781,6 +781,17 @@ function elips_sanitize_html(string $html): string
     return trim($result);
 }
 
+function elips_user_divisions(): array
+{
+    return ['marketing', 'operasional', 'keuangan', 'hrd'];
+}
+
+function elips_normalize_division(string $division): string
+{
+    $division = strtolower(trim($division));
+    return in_array($division, elips_user_divisions(), true) ? $division : '';
+}
+
 function elips_serialize_user(array $row): array
 {
     return [
@@ -789,6 +800,7 @@ function elips_serialize_user(array $row): array
         'email' => $row['email'],
         'phone' => $row['phone'],
         'role' => $row['role'],
+        'division' => $row['division'] ?? '',
         'status' => $row['status'],
         'createdAt' => elips_date_only($row['created_at']),
         'updatedAt' => elips_iso($row['updated_at']),

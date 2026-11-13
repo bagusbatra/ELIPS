@@ -166,7 +166,7 @@
                 } else if (user.role === 'instruktur') {
                     window.location.href = 'instructor/dashboard.html';
                 } else if (user.role === 'karyawan') {
-                    window.location.href = 'employee/attendance.html';
+                    window.location.href = 'employee/dashboard.html';
                 } else {
                     window.location.href = 'student/dashboard.html';
                 }

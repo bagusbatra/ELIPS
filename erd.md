@@ -2,7 +2,7 @@
 
 **Versi dokumen:** 4.0  
 **Tanggal:** 2026-11-11  
-**Status:** Dual-mode - skema fisik MySQL 8 v4.0 Phase 1-6 + absensi karyawan (role `karyawan`, unique key harian, modul absensi bersama, halaman `employee/attendance.html`) + fallback koleksi `localStorage`  
+**Status:** Dual-mode - skema fisik MySQL 8 v4.0 Phase 1-6 + absensi karyawan (role `karyawan`, unique key harian, modul absensi bersama, halaman `employee/attendance.html`, dan divisi `users.division`) + fallback koleksi `localStorage`  
 **Dokumen terkait:** `prd.md`, `log.md`, `api/schema.sql`
 
 ---
@@ -92,6 +92,7 @@ erDiagram
         string email UK
         string phone
         enum role
+        string division
         enum status
         number sessionVersion
         string password
@@ -791,7 +792,7 @@ Pada mode server, entitas yang sama disimpan di tabel MySQL bernama snake_case (
 | No | Entitas | Storage Key | Bentuk | Jumlah Relasi Utama |
 |---|---|---|---|---|
 | 1 | `CATEGORIES` | `elips_categories` | Array of object | Klasifikasi kursus |
-| 2 | `USERS` | `elips_users` | Array of object | Pusat referensi role dan aktor |
+| 2 | `USERS` | `elips_users` | Array of object | Pusat referensi role, divisi karyawan, dan aktor |
 | 3 | `BRANCHES` | `elips_branches` | Array of object | Cabang penyelenggara kelas dan konteks jadwal |
 | 4 | `COURSES` | `elips_courses` | Array of object | Kategori, instruktur, versi, kelas, enrollment |
 | 5 | `CURRICULUM_VERSIONS` | `elips_curriculumVersions` | Array of object | Milik kursus, berisi modul/materi, dipakai kelas |
@@ -839,7 +840,7 @@ Key lama yang dimigrasikan: `elips_enrolled` (self-enrollment) dipindahkan ke `e
 
 ### 5.1 USERS — `elips_users`
 
-Menyimpan seluruh akun: Admin, Instruktur, dan Peserta.
+Menyimpan seluruh akun: Admin, Instruktur, Peserta, dan Karyawan.
 
 | Field | Tipe | Key | Wajib | Default | Keterangan |
 |---|---|---|---|---|---|
@@ -847,7 +848,8 @@ Menyimpan seluruh akun: Admin, Instruktur, dan Peserta.
 | `name` | string | — | Ya | — | Nama lengkap |
 | `email` | string | UK | Ya | — | Unik, dibandingkan case-insensitive |
 | `phone` | string | — | Tidak | `''` | Nomor telepon |
-| `role` | enum | — | Ya | `peserta` | `admin`, `instruktur`, `peserta`, `karyawan` (absensi saja) |
+| `role` | enum | — | Ya | `peserta` | `admin`, `instruktur`, `peserta`, `karyawan` |
+| `division` | string | — | Ya | `''` | Divisi karyawan: `marketing`, `operasional`, `keuangan`, atau `hrd`; hanya diisi untuk role `karyawan` dan dikosongkan otomatis bila role berubah |
 | `status` | enum | — | Ya | `aktif` | `aktif`, `nonaktif` |
 | `sessionVersion` | number | — | Ya | `0` di mode server | Dinaikkan saat login baru, ganti password, akun dinonaktifkan, atau reset perangkat; sesi PHP lama dengan versi berbeda otomatis tidak berlaku. Tidak dipakai mode lokal. |
 | `password` | string | — | Ya | `elips123` untuk seed/akun lama | Mode lokal: disimpan apa adanya, minimal 8 karakter saat dibuat/diubah, diverifikasi `authenticateUser()`. Mode server: kolom `password_hash` di MySQL (bcrypt/argon2 via `password_hash()`), diverifikasi `password_verify()` di PHP, dan tidak pernah dikirim ke client |
@@ -857,6 +859,7 @@ Menyimpan seluruh akun: Admin, Instruktur, dan Peserta.
 **Aturan:**
 
 - `email` unik; `createUser` dan `updateUser` menolak duplikat.
+- `division` hanya menerima nilai yang terdaftar; nilai tak dikenal ditolak API/CRUD dan divisi otomatis dikosongkan saat role bukan `karyawan`.
 - `password` wajib diisi saat `createUser` dan minimal 8 karakter; `seed.js` mengisi password demo untuk akun lama yang belum memilikinya.
 - `authenticateUser(email, password)` menolak email tidak terdaftar, password kosong/salah, dan akun `nonaktif`.
 - `id = 1` (Administrator utama) tidak dapat dihapus.
@@ -3779,10 +3782,10 @@ Catatan: `uq_certificates_enrollment (enrollment_id)` memastikan satu sertifikat
 | `handled_date` | `DATE` | ya | `NULL` | Tanggal diterima/dikirim |
 | `category` | `VARCHAR(80)` | tidak | `''` | Kategori surat |
 | `classification` | `ENUM('biasa','penting','segera','rahasia')` | tidak | `'biasa'` | Sifat surat |
-| `status` | `ENUM('baru','diproses','selesai','arsip')` | tidak | `'baru'` | Status tindak lanjut |
-| `summary` | `TEXT` | ya | `NULL` | Ringkasan/isi surat |
-| `attachment_url` | `VARCHAR(500)` | tidak | `''` | Tautan lampiran (`http`/`https`/relatif) |
-| `notes` | `VARCHAR(1000)` | tidak | `''` | Catatan/disposisi |
+| `status` | `ENUM('baru','diproses','selesai','arsip')` | tidak | `'baru'` | Warisan kompatibilitas; tidak diisi/ditampilkan di UI |
+| `summary` | `TEXT` | ya | `NULL` | Warisan kompatibilitas; tidak diisi/ditampilkan di UI |
+| `attachment_url` | `VARCHAR(500)` | tidak | `''` | Warisan kompatibilitas; tidak diisi/ditampilkan di UI |
+| `notes` | `VARCHAR(1000)` | tidak | `''` | Warisan kompatibilitas; tidak diisi/ditampilkan di UI |
 | `created_by` | `INT UNSIGNED` | ya | `NULL` | Admin pembuat (FK `users.id`, SET NULL) |
 | `created_at` | `DATETIME` | tidak | `CURRENT_TIMESTAMP` | Waktu dibuat |
 | `updated_at` | `DATETIME` | ya | `NULL` | Waktu diperbarui |

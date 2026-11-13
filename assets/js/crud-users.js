@@ -6,7 +6,7 @@
 (function (ELIPS) {
     'use strict';
 
-    const { success, failure, todayString, isValidEmail, isValidRole, isValidUserStatus } = ELIPS._;
+    const { success, failure, todayString, isValidEmail, isValidRole, isValidDivision, divisionLabel, isValidUserStatus } = ELIPS._;
 
     function recordAudit(entry) {
         if (typeof ELIPS.logAudit === 'function') ELIPS.logAudit(entry);
@@ -20,6 +20,7 @@
         const phone = String(data.phone || '').trim();
         const password = String(data.password || '');
         const role = data.role || 'peserta';
+        const division = role === 'karyawan' ? String(data.division || '').trim().toLowerCase() : '';
         const status = data.status || 'aktif';
 
         if (!name) return failure('Nama wajib diisi.');
@@ -27,6 +28,7 @@
         if (!password) return failure('Password wajib diisi.');
         if (password.length < 8) return failure('Password minimal 8 karakter.');
         if (!isValidRole(role)) return failure('Role pengguna tidak valid.');
+        if (!isValidDivision(division)) return failure('Divisi pengguna tidak valid.');
         if (!isValidUserStatus(status)) return failure('Status pengguna tidak valid.');
 
         const users = ELIPS.getUsers();
@@ -41,6 +43,7 @@
             phone: phone,
             password: password,
             role: role,
+            division: division,
             status: status,
             createdAt: todayString()
         };
@@ -53,7 +56,8 @@
             entityId: user.id,
             entityLabel: user.name,
             actorId: data.actorId,
-            detail: 'Menambahkan pengguna "' + user.name + '" dengan role ' + user.role + '.'
+            detail: 'Menambahkan pengguna "' + user.name + '" dengan role ' + user.role
+                + (user.division ? ' divisi ' + divisionLabel(user.division) : '') + '.'
         });
         return success('Pengguna berhasil ditambahkan.', user);
     }
@@ -68,11 +72,15 @@
         const nextName = data.name !== undefined ? String(data.name).trim() : user.name;
         const nextEmail = data.email !== undefined ? String(data.email).trim().toLowerCase() : user.email;
         const nextRole = data.role !== undefined ? data.role : user.role;
+        const nextDivision = nextRole === 'karyawan'
+            ? (data.division !== undefined ? String(data.division).trim().toLowerCase() : String(user.division || ''))
+            : '';
         const nextStatus = data.status !== undefined ? data.status : user.status;
 
         if (!nextName) return failure('Nama wajib diisi.');
         if (!isValidEmail(nextEmail)) return failure('Email tidak valid.');
         if (!isValidRole(nextRole)) return failure('Role pengguna tidak valid.');
+        if (!isValidDivision(nextDivision)) return failure('Divisi pengguna tidak valid.');
         if (!isValidUserStatus(nextStatus)) return failure('Status pengguna tidak valid.');
         if (data.password && String(data.password).length < 8) {
             return failure('Password minimal 8 karakter.');
@@ -85,6 +93,7 @@
             name: user.name,
             email: user.email,
             role: user.role,
+            division: user.division || '',
             status: user.status
         };
         const previousRole = previous.role;
@@ -92,6 +101,7 @@
         user.email = nextEmail;
         if (data.phone !== undefined) user.phone = String(data.phone).trim();
         user.role = nextRole;
+        user.division = nextDivision;
         user.status = nextStatus;
         if (data.password) user.password = data.password;
         user.updatedAt = new Date().toISOString();
@@ -110,6 +120,7 @@
         if (previous.name !== user.name) changes.push('nama');
         if (previous.email !== user.email) changes.push('email');
         if (previous.role !== user.role) changes.push('role');
+        if (previous.division !== user.division) changes.push('divisi');
         if (previous.status !== user.status) changes.push('status');
         if (data.phone !== undefined) changes.push('telepon');
         if (data.password) changes.push('password');

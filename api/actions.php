@@ -563,6 +563,7 @@ function elips_action_user_create(array $p): array
     $phone = trim((string) ($p['phone'] ?? ''));
     $password = (string) ($p['password'] ?? '');
     $role = (string) ($p['role'] ?? 'peserta');
+    $division = strtolower(trim((string) ($p['division'] ?? '')));
     $status = (string) ($p['status'] ?? 'aktif');
 
     if ($name === '') return elips_fail('Nama wajib diisi.');
@@ -570,6 +571,7 @@ function elips_action_user_create(array $p): array
     if ($password === '') return elips_fail('Password wajib diisi.');
     if (strlen($password) < 8) return elips_fail('Password minimal 8 karakter.');
     if (!in_array($role, ['admin', 'instruktur', 'peserta', 'karyawan'], true)) return elips_fail('Role pengguna tidak valid.');
+    if ($division !== '' && !in_array($division, elips_user_divisions(), true)) return elips_fail('Divisi pengguna tidak valid.');
     if (!in_array($status, ['aktif', 'nonaktif'], true)) return elips_fail('Status pengguna tidak valid.');
 
     $anonymous = $actor === null;
@@ -578,19 +580,23 @@ function elips_action_user_create(array $p): array
         if ($role !== 'peserta' || $status !== 'aktif') {
             return elips_fail('Anda tidak berhak menambahkan pengguna dengan role ini.');
         }
+        $division = '';
     } elseif ($actor['role'] !== 'admin') {
         return elips_fail('Anda tidak berhak menambahkan pengguna.');
     }
+
+    // Divisi hanya bermakna untuk role karyawan.
+    if ($role !== 'karyawan') $division = '';
 
     if (elips_user_by_email($email)) {
         return elips_fail('Email sudah digunakan oleh pengguna lain.');
     }
 
     $stmt = elips_db()->prepare(
-        'INSERT INTO users (name, email, phone, password_hash, role, status, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, UTC_TIMESTAMP())'
+        'INSERT INTO users (name, email, phone, password_hash, role, division, status, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP())'
     );
-    $stmt->execute([$name, $email, $phone, password_hash($password, PASSWORD_DEFAULT), $role, $status]);
+    $stmt->execute([$name, $email, $phone, password_hash($password, PASSWORD_DEFAULT), $role, $division, $status]);
     $id = (int) elips_db()->lastInsertId();
 
     if ($anonymous) {
@@ -605,7 +611,8 @@ function elips_action_user_create(array $p): array
         'user',
         $id,
         $name,
-        'Menambahkan pengguna "' . $name . '" dengan role ' . $role . '.',
+        'Menambahkan pengguna "' . $name . '" dengan role ' . $role
+            . ($division !== '' ? ' divisi ' . $division : '') . '.',
         $anonymous ? elips_user_row($id) : $actor
     );
 
@@ -630,6 +637,9 @@ function elips_action_user_update(array $p): array
     $nextName = array_key_exists('name', $data) ? trim((string) $data['name']) : $user['name'];
     $nextEmail = array_key_exists('email', $data) ? strtolower(trim((string) $data['email'])) : $user['email'];
     $nextRole = $isAdmin && array_key_exists('role', $data) ? (string) $data['role'] : $user['role'];
+    $nextDivision = $isAdmin && array_key_exists('division', $data)
+        ? strtolower(trim((string) $data['division']))
+        : (string) ($user['division'] ?? '');
     $nextStatus = $isAdmin && array_key_exists('status', $data) ? (string) $data['status'] : $user['status'];
     $nextPhone = array_key_exists('phone', $data) ? trim((string) $data['phone']) : $user['phone'];
     $password = (string) ($data['password'] ?? '');
@@ -637,8 +647,12 @@ function elips_action_user_update(array $p): array
     if ($nextName === '') return elips_fail('Nama wajib diisi.');
     if (!filter_var($nextEmail, FILTER_VALIDATE_EMAIL)) return elips_fail('Email tidak valid.');
     if (!in_array($nextRole, ['admin', 'instruktur', 'peserta', 'karyawan'], true)) return elips_fail('Role pengguna tidak valid.');
+    if ($nextDivision !== '' && !in_array($nextDivision, elips_user_divisions(), true)) return elips_fail('Divisi pengguna tidak valid.');
     if (!in_array($nextStatus, ['aktif', 'nonaktif'], true)) return elips_fail('Status pengguna tidak valid.');
     if ($password !== '' && strlen($password) < 8) return elips_fail('Password minimal 8 karakter.');
+
+    // Divisi hanya bermakna untuk role karyawan.
+    if ($nextRole !== 'karyawan') $nextDivision = '';
 
     $stmt = elips_db()->prepare('SELECT id FROM users WHERE email = ? AND id <> ? LIMIT 1');
     $stmt->execute([$nextEmail, $id]);
@@ -648,20 +662,21 @@ function elips_action_user_update(array $p): array
         'name' => $user['name'],
         'email' => $user['email'],
         'role' => $user['role'],
+        'division' => (string) ($user['division'] ?? ''),
         'status' => $user['status'],
         'phone' => $user['phone'],
     ];
 
     if ($password !== '') {
         $stmt = elips_db()->prepare(
-            'UPDATE users SET name = ?, email = ?, phone = ?, role = ?, status = ?, password_hash = ?, updated_at = UTC_TIMESTAMP() WHERE id = ?'
+            'UPDATE users SET name = ?, email = ?, phone = ?, role = ?, division = ?, status = ?, password_hash = ?, updated_at = UTC_TIMESTAMP() WHERE id = ?'
         );
-        $stmt->execute([$nextName, $nextEmail, $nextPhone, $nextRole, $nextStatus, password_hash($password, PASSWORD_DEFAULT), $id]);
+        $stmt->execute([$nextName, $nextEmail, $nextPhone, $nextRole, $nextDivision, $nextStatus, password_hash($password, PASSWORD_DEFAULT), $id]);
     } else {
         $stmt = elips_db()->prepare(
-            'UPDATE users SET name = ?, email = ?, phone = ?, role = ?, status = ?, updated_at = UTC_TIMESTAMP() WHERE id = ?'
+            'UPDATE users SET name = ?, email = ?, phone = ?, role = ?, division = ?, status = ?, updated_at = UTC_TIMESTAMP() WHERE id = ?'
         );
-        $stmt->execute([$nextName, $nextEmail, $nextPhone, $nextRole, $nextStatus, $id]);
+        $stmt->execute([$nextName, $nextEmail, $nextPhone, $nextRole, $nextDivision, $nextStatus, $id]);
     }
 
     if ($previous['role'] === 'instruktur' && $nextRole !== 'instruktur') {
@@ -675,6 +690,7 @@ function elips_action_user_update(array $p): array
     if ($previous['name'] !== $nextName) $changes[] = 'nama';
     if ($previous['email'] !== $nextEmail) $changes[] = 'email';
     if ($previous['role'] !== $nextRole) $changes[] = 'role';
+    if ($previous['division'] !== $nextDivision) $changes[] = 'divisi';
     if ($previous['status'] !== $nextStatus) $changes[] = 'status';
     if (array_key_exists('phone', $data) && $previous['phone'] !== $nextPhone) $changes[] = 'telepon';
     if ($password !== '') $changes[] = 'password';

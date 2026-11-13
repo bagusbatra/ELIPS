@@ -137,6 +137,20 @@ try {
         );
         echo "Role karyawan ditambahkan.\n";
     }
+
+    // ---------- Migrasi divisi karyawan ----------
+    // Divisi hanya dipakai role karyawan. Kolom teks dipilih agar divisi
+    // baru dapat ditambahkan tanpa mengubah enum database.
+    $hasDivisionColumn = (bool) $db->query("SHOW COLUMNS FROM users LIKE 'division'")->fetch();
+    if (!$hasDivisionColumn) {
+        $db->exec("ALTER TABLE users ADD COLUMN division VARCHAR(40) NOT NULL DEFAULT '' AFTER role");
+        echo "Kolom divisi karyawan ditambahkan.\n";
+    }
+    $hasDivisionIndex = (bool) $db->query("SHOW INDEX FROM users WHERE Key_name = 'idx_users_division'")->fetch();
+    if (!$hasDivisionIndex) {
+        $db->exec('ALTER TABLE users ADD KEY idx_users_division (division)');
+    }
+
     // Aturan 1 masuk + 1 pulang per hari dijaga database. Duplikat lama
     // dirapikan lebih dulu (menyisakan baris dengan id terkecil).
     $hasAttendanceUnique = (bool) $db->query(

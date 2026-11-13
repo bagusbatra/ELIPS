@@ -118,7 +118,7 @@
                 <div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;">
                     <div>
                         <h1 class="dashboard-title">Kelola Pengguna</h1>
-                        <p class="dashboard-subtitle">Tambah Admin, Instruktur, atau Peserta. Instruktur juga bisa langsung ditugaskan ke kursus.</p>
+                        <p class="dashboard-subtitle">Tambah Admin, Instruktur, Peserta, atau Karyawan. Instruktur juga bisa langsung ditugaskan ke kursus.</p>
                     </div>
                     <button class="btn btn-primary" onclick="openUserTypeModal()">
                         <i class="bi bi-person-plus"></i>
@@ -148,6 +148,7 @@
                                 <th>Pengguna</th>
                                 <th>Email</th>
                                 <th>Role</th>
+                                <th>Divisi</th>
                                 <th>Status</th>
                                 <th>Tanggal Daftar</th>
                                 <th>Aksi</th>
@@ -209,7 +210,7 @@
                     </span>
                     <span class="user-role-choice-info">
                         <span class="user-role-choice-title">Karyawan</span>
-                        <span class="user-role-choice-desc">Hanya membuka halaman absensi harian dengan foto dan lokasi GPS.</span>
+                        <span class="user-role-choice-desc">Membuka dashboard karyawan, absensi harian dengan foto dan GPS, serta riwayat absensi.</span>
                     </span>
                     <i class="bi bi-chevron-right" style="color: var(--text-light);"></i>
                 </button>
@@ -241,12 +242,23 @@
                 </div>
                 <div class="form-group">
                     <label class="form-label">Role *</label>
-                    <select id="userRole" class="form-input">
+                    <select id="userRole" class="form-input" onchange="syncDivisionField()">
                         <option value="peserta">Peserta</option>
                         <option value="karyawan">Karyawan</option>
                         <option value="instruktur">Instruktur</option>
                         <option value="admin">Admin</option>
                     </select>
+                </div>
+                <div class="form-group" id="divisionGroup" style="display: none;">
+                    <label class="form-label">Divisi</label>
+                    <select id="userDivision" class="form-input">
+                        <option value="">Tanpa divisi</option>
+                        <option value="marketing">Marketing</option>
+                        <option value="operasional">Operasional</option>
+                        <option value="keuangan">Keuangan</option>
+                        <option value="hrd">HRD</option>
+                    </select>
+                    <small class="form-hint">Divisi hanya dipakai untuk role Karyawan.</small>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Status</label>
@@ -363,6 +375,9 @@
                     '</td>',
                     '<td><span>' + ELIPS.escapeHtml(user.email) + '</span></td>',
                     '<td>' + roleBadge(user.role) + '</td>',
+                    '<td>' + (user.role === 'karyawan' && user.division
+                        ? '<span class="badge" style="background: #ecfccb; color: #3f6212;">' + ELIPS.escapeHtml(ELIPS.divisionLabel(user.division)) + '</span>'
+                        : '<span style="color: var(--text-secondary);">-</span>') + '</td>',
                     '<td>' + (user.status === 'aktif' ? '<span class="badge badge-success">Aktif</span>' : '<span class="badge badge-warning">Nonaktif</span>') + '</td>',
                     '<td><span style="color: var(--text-secondary);">' + ELIPS.escapeHtml(user.createdAt || '-') + '</span></td>',
                     '<td>',
@@ -390,6 +405,7 @@
                 document.getElementById('userEmail').value = user.email || '';
                 document.getElementById('userPhone').value = user.phone || '';
                 document.getElementById('userRole').value = user.role || 'peserta';
+                document.getElementById('userDivision').value = user.division || '';
                 document.getElementById('userStatus').value = user.status || 'aktif';
             } else {
                 const role = presetRole || 'peserta';
@@ -398,9 +414,20 @@
                 document.getElementById('userEmail').value = '';
                 document.getElementById('userPhone').value = '';
                 document.getElementById('userRole').value = role;
+                document.getElementById('userDivision').value = '';
                 document.getElementById('userStatus').value = 'aktif';
             }
+            syncDivisionField();
             document.getElementById('userModal').style.display = 'flex';
+        }
+
+        function syncDivisionField() {
+            const role = document.getElementById('userRole').value;
+            const group = document.getElementById('divisionGroup');
+            if (!group) return;
+            const show = role === 'karyawan';
+            group.style.display = show ? '' : 'none';
+            if (!show) document.getElementById('userDivision').value = '';
         }
 
         function closeUserModal() {
@@ -413,6 +440,7 @@
             const email = document.getElementById('userEmail').value.trim().toLowerCase();
             const phone = document.getElementById('userPhone').value.trim();
             const role = document.getElementById('userRole').value;
+            const division = role === 'karyawan' ? document.getElementById('userDivision').value : '';
             const status = document.getElementById('userStatus').value;
             const password = document.getElementById('userPassword').value;
 
@@ -430,6 +458,7 @@
                 email: email,
                 phone: phone,
                 role: role,
+                division: division,
                 status: status,
                 password: password || undefined
             };

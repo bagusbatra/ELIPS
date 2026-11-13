@@ -103,6 +103,23 @@
             || role === 'karyawan';
     }
 
+    const USER_DIVISIONS = ['marketing', 'operasional', 'keuangan', 'hrd'];
+
+    const DIVISION_LABELS = {
+        marketing: 'Marketing',
+        operasional: 'Operasional',
+        keuangan: 'Keuangan',
+        hrd: 'HRD'
+    };
+
+    function isValidDivision(division) {
+        return division === '' || USER_DIVISIONS.indexOf(division) !== -1;
+    }
+
+    function divisionLabel(division) {
+        return DIVISION_LABELS[division] || '';
+    }
+
     function isValidUserStatus(status) {
         return status === 'aktif' || status === 'nonaktif';
     }
@@ -114,6 +131,8 @@
 
     ELIPS.KEYS = KEYS;
     ELIPS.DEFAULT_PASSWORD = DEFAULT_PASSWORD;
+    ELIPS.USER_DIVISIONS = USER_DIVISIONS;
+    ELIPS.divisionLabel = divisionLabel;
     ELIPS.read = read;
     ELIPS.write = write;
     ELIPS.nextId = nextId;
@@ -125,6 +144,9 @@
         failure: failure,
         isValidEmail: isValidEmail,
         isValidRole: isValidRole,
+        USER_DIVISIONS: USER_DIVISIONS,
+        isValidDivision: isValidDivision,
+        divisionLabel: divisionLabel,
         isValidUserStatus: isValidUserStatus,
         isActiveInstructor: isActiveInstructor
     };

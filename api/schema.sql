@@ -28,13 +28,15 @@ CREATE TABLE IF NOT EXISTS `users` (
     `phone` VARCHAR(40) NOT NULL DEFAULT '',
     `password_hash` VARCHAR(255) NOT NULL,
     `role` ENUM('admin', 'instruktur', 'peserta', 'karyawan') NOT NULL DEFAULT 'peserta',
+    `division` VARCHAR(40) NOT NULL DEFAULT '',
     `status` ENUM('aktif', 'nonaktif') NOT NULL DEFAULT 'aktif',
     `session_version` INT UNSIGNED NOT NULL DEFAULT 0,
     `created_at` DATE NOT NULL DEFAULT (CURRENT_DATE),
     `updated_at` DATETIME NULL,
     PRIMARY KEY (`id`),
     UNIQUE KEY `uq_users_email` (`email`),
-    KEY `idx_users_role` (`role`)
+    KEY `idx_users_role` (`role`),
+    KEY `idx_users_division` (`division`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Token "ingat saya": hanya hash SHA-256 yang disimpan. Rotasi token

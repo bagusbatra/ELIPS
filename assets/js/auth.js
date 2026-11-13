@@ -33,7 +33,7 @@
         const prefix = basePathPrefix();
         if (role === 'admin') return prefix + 'admin/dashboard.html';
         if (role === 'instruktur') return prefix + 'instructor/dashboard.html';
-        if (role === 'karyawan') return prefix + 'employee/attendance.html';
+        if (role === 'karyawan') return prefix + 'employee/dashboard.html';
         return prefix + 'student/dashboard.html';
     }
 

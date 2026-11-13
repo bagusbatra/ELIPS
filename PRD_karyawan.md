@@ -79,11 +79,12 @@ Catatan platform: di iOS, PWA yang dipasang memiliki penyimpanan cookie terpisah
 Persyaratan fungsional:
 - **F3.1** Tambah role `karyawan` (validasi role di `core.js`, backend, dan form pengguna).
 - **F3.2** Halaman baru `employee/attendance.html`: header singkat (nama, jam hari ini), status hari ini, **satu tombol besar** sesuai aturan (Masuk / Pulang / Lengkap), riwayat 30 hari terakhir, tombol Keluar.
-- **F3.3** Setelah login, role `karyawan` langsung diarahkan ke `employee/attendance.html` (`dashboardPathForRole`).
+- **F3.3** Setelah login, role `karyawan` diarahkan ke dashboard `employee/dashboard.html` (`dashboardPathForRole`), yang menautkan ke halaman absensi.
 - **F3.4** Guard halaman: `requireRole('karyawan')`; role lain yang membuka halaman ini diarahkan ke dashboard role-nya, dan sebaliknya.
 - **F3.5** Alur absen identik dengan versi admin: modal kamera (kamera, ambil foto, nyalakan kamera, unggah foto, catatan, batal, simpan) → modal sukses dengan detail lengkap dan satu tombol "Selesai".
-- **F3.6** Admin dapat membuat akun karyawan di **Kelola Pengguna** (pilihan role "Karyawan" pada modal tambah pengguna).
+- **F3.6** Admin dapat membuat akun karyawan di **Kelola Pengguna** (pilihan role "Karyawan" pada modal tambah pengguna), termasuk memilih divisi.
 - **F3.7** Logika absen **dipindahkan** dari inline `admin/dashboard.html` ke modul bersama `assets/js/attendance.js` sehingga dipakai admin dan karyawan tanpa duplikasi.
+- **F3.8** *(Tambahan)* Dashboard karyawan `employee/dashboard.html` menampilkan sapaan, nama/divisi, status absensi hari ini, rekap bulan berjalan, akses cepat, dan riwayat terbaru.
 
 ### 5.4 Fitur 4 — Jadwal shift karyawan (Admin) *(selesai)*
 
@@ -186,11 +187,12 @@ CREATE TABLE staff_shifts (
 | File | Perubahan |
 |---|---|
 | `assets/js/core.js` | `isValidRole` menerima `karyawan` |
-| `assets/js/auth.js` | `dashboardPathForRole('karyawan')` → `employee/attendance.html`; `basePathPrefix` mengenali folder `employee/`; coba `auth.resume` sebelum redirect ke login |
+| `assets/js/auth.js` | `dashboardPathForRole('karyawan')` → `employee/dashboard.html`; `basePathPrefix` mengenali folder `employee/`; coba `auth.resume` sebelum redirect ke login |
 | `assets/js/api.js`, `config.js` | Regex path `(admin\|instructor\|student)` ditambah `employee` |
 | `assets/js/attendance.js` *(baru)* | Logika absen yang dipindah dari `admin/dashboard.html` (modul bersama) |
 | `admin/dashboard.html` | Memakai `attendance.js`; tampilan dan perilaku tidak berubah |
 | `employee/attendance.html` *(baru)* | Halaman absen karyawan (F3.2) |
+| `employee/dashboard.html` + `assets/js/employee-dashboard.js` *(baru)* | Dashboard karyawan (F3.8): sapaan, divisi, status hari ini, rekap bulanan, dan riwayat terbaru |
 | `login.html` | Checkbox "Ingat saya"; redirect sesuai role |
 | `admin/users.html` + `crud-users.js` | Role "Karyawan" di modal tambah/ubah; tombol "Reset Perangkat" |
 | `manifest.webmanifest`, `sw.js`, `offline.html`, `assets/js/pwa.js`, `assets/icons/*` *(baru)* | PWA (F2.1–F2.3): manifest, service worker network-first, halaman offline, banner pemasangan, dan ikon |

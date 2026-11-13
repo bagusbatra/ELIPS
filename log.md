@@ -2,7 +2,7 @@
 
 **Versi dokumen:** 4.0  
 **Terakhir diperbarui:** 2026-11-12
-**Status proyek:** Dual-mode - PHP 8/MySQL 8 + fallback `localStorage`; v4.0 Phase 1-6 (kurikulum, kelas/angkatan, enrollment berbasis kelas, jadwal & presensi offline, materi tambahan & mode akses materi, tugas & ujian, skema penilaian/finalisasi/koreksi) plus cabang, kalender jadwal Admin, aksi langsung dan filter jadwal lanjutan, absensi staf berbasis kamera, absensi karyawan (role `karyawan`, jam server, GPS wajib, aturan harian, modul bersama, halaman `employee/attendance.html`, dan sesi diingat dengan rotasi token per perangkat), PWA (manifest, service worker network-first, banner pemasangan, dan mode offline), rekap absensi karyawan untuk Admin (filter, ringkasan status, dan ekspor CSV), jadwal shift karyawan (Pagi/Sore/custom, satu shift per tanggal, dan audit), serta surat menyurat (surat masuk/keluar beserta detail, filter, dan audit)
+**Status proyek:** Dual-mode - PHP 8/MySQL 8 + fallback `localStorage`; v4.0 Phase 1-6 (kurikulum, kelas/angkatan, enrollment berbasis kelas, jadwal & presensi offline, materi tambahan & mode akses materi, tugas & ujian, skema penilaian/finalisasi/koreksi) plus cabang, kalender jadwal Admin, aksi langsung dan filter jadwal lanjutan, absensi staf berbasis kamera, absensi karyawan (role `karyawan`, jam server, GPS wajib, aturan harian, modul bersama, halaman `employee/attendance.html`, dan sesi diingat dengan rotasi token per perangkat), PWA (manifest, service worker network-first, banner pemasangan, dan mode offline), rekap absensi karyawan untuk Admin (filter, ringkasan status, dan ekspor CSV), jadwal shift karyawan (Pagi/Sore/custom, satu shift per tanggal, dan audit), surat menyurat (surat masuk/keluar beserta detail ringkas, filter, audit, dan 14 surat dummy), serta divisi karyawan (`users.division`, pilihan Marketing/Operasional/Keuangan/HRD, seed akun Marketing, dan dashboard `employee/dashboard.html`)
 **Dokumen terkait:** `prd.md`, `erd.md`, `ELIPS-LMS-PRD-v4.0.md`
 
 ---
@@ -69,7 +69,8 @@ ELIPS/
 │   ├── actions.php
 │   ├── schema.sql
 │   ├── install.php
-│   └── seed-karyawan.php
+│   ├── seed-karyawan.php
+│   └── seed-letters.php
 ├── admin/
 │   ├── dashboard.html
 │   ├── courses.html
@@ -144,12 +145,12 @@ config → core → api → utils → data → seed → sync → progress → au
 → crud-content → crud-academic → crud-tasks → crud-grades → ui → attendance → staff-recap → shift-schedule → letter-archive
 ```
 
-`pwa.js` tidak termasuk urutan bundle di atas; modul ini dimuat terpisah dengan `defer` di `<head>` setiap halaman aplikasi (dan sengaja tidak dimasukkan ke bundle uji JSDOM).
+`pwa.js` tidak termasuk urutan bundle di atas; modul ini dimuat terpisah dengan `defer` di `<head>` setiap halaman aplikasi (dan sengaja tidak dimasukkan ke bundle uji JSDOM). `employee-dashboard.js` juga berada di luar bundle bersama dan hanya dimuat oleh `employee/dashboard.html` setelah `ui.js`.
 
 | Modul | Tanggung jawab | API utama |
 |---|---|---|
 | `config.js` | Menentukan `window.ELIPS_CONFIG.apiBase` relatif terhadap halaman | `ELIPS_CONFIG.apiBase` |
-| `core.js` | Namespace `window.ELIPS`, daftar key storage, helper baca/tulis, `nextId`, objek hasil `{ ok, message, data }`, validasi dasar, password demo | `ELIPS.read`, `ELIPS.write`, `ELIPS.nextId`, `ELIPS.DEFAULT_PASSWORD`, `ELIPS._` |
+| `core.js` | Namespace `window.ELIPS`, daftar key storage, helper baca/tulis, `nextId`, objek hasil `{ ok, message, data }`, validasi dasar termasuk divisi karyawan, password demo | `ELIPS.read`, `ELIPS.write`, `ELIPS.nextId`, `ELIPS.DEFAULT_PASSWORD`, `ELIPS.USER_DIVISIONS`, `ELIPS.divisionLabel`, `ELIPS._` |
 | `api.js` | Jembatan dual-mode: bootstrap snapshot, cache sinkron, panggilan aksi tulis, fallback lokal | `ELIPS.api.enabled`, `ELIPS.api.call`, `ELIPS.api.refresh` |
 | `utils.js` | Konversi nilai ke huruf, nomor sertifikat, escape HTML, sanitasi HTML materi, format tanggal, toast | `gradeLetter`, `generateCertificateNumber`, `escapeHtml`, `sanitizeHtml`, `formatDate`, `toast` |
 | `data.js` | Getter/setter seluruh koleksi data termasuk tugas/ujian, predikat, skema nilai, nilai komponen, dan koreksi; mesin komputasi nilai lokal; tidak berisi aturan bisnis | `getUsers`, `getBranches`, `getCourses`, `getCurriculumVersions`, `getClasses`, `getClassInstructorHistories`, `getEnrollments`, `getClassSessions`, `getSessionsByClass`, `getAttendances`, `getSessionAttendances`, `getAttendanceCorrections`, `getModules`, `getLessons`, `getGrades`, `getPredicateRanges`, `getGradeSchemes`, `getGradeSchemeComponents`, `getGradeComponentScores`, `getGradeCorrections`, `getAssignments`, `getSubmissions`, `getExams`, `getExamResults`, `getCertificates`, `getCompletedLessons`, `getPublishedCertificatesByStudent`, `getStaffAttendances`, `getStaffAttendancesByUser`, `predicateLetter`, `computeEnrollmentGrade` |
@@ -159,7 +160,7 @@ config → core → api → utils → data → seed → sync → progress → au
 | `auth.js` | Session, user aktif (tanpa fallback path), path dashboard per role, guard halaman | `getSessionUser`, `getCurrentUser`, `requireRole`, `setCurrentUser`, `logout` |
 | `audit.js` | Audit trail: pencatatan aktor/aksi/entitas, filter log, daftar aktor, pembersihan log | `logAudit`, `getAuditLogs`, `getAuditActors`, `clearAuditLogs`, `auditActionLabel`, `auditEntityLabel` |
 | `notifications.js` | Outbox notifikasi email simulasi: pembuatan saat kursus Published/sertifikat terbit, filter, penerima, pembersihan | `createNotification`, `notifyCoursePublished`, `notifyCertificatePublished`, `getNotifications`, `getNotificationRecipients`, `clearNotifications`, `notificationTypeLabel` |
-| `crud-users.js` | CRUD pengguna, autentikasi email/password, dan penugasan instruktur ke kursus | `createUser`, `updateUser`, `deleteUser`, `authenticateUser`, `assignInstructorToCourses` |
+| `crud-users.js` | CRUD pengguna, autentikasi email/password, validasi/pengosongan divisi karyawan, dan penugasan instruktur ke kursus | `createUser`, `updateUser`, `deleteUser`, `authenticateUser`, `assignInstructorToCourses` |
 | `crud-courses.js` | CRUD kursus dan aturan Draft/Publish | `createCourse`, `updateCourse`, `deleteCourse`, `setCourseStatus`, `toggleCourseStatus` |
 | `crud-enrollments.js` | CRUD pendaftaran peserta ke kelas | `assignStudentToCourses`, `assignStudentsToClass`, `setEnrollmentClassStatus`, `setEnrollmentStatus`, `deleteEnrollment` |
 | `crud-content.js` | CRUD modul dan materi dengan validasi kepemilikan dan versi kurikulum | `createModule`, `updateModule`, `deleteModule`, `createLesson`, `updateLesson`, `deleteLesson` |
@@ -170,7 +171,8 @@ config → core → api → utils → data → seed → sync → progress → au
 | `attendance.js` | Modul absensi harian bersama untuk Admin dan Karyawan: hero status, kamera/unggah foto, GPS wajib, aturan masuk/pulang, riwayat pribadi, detail, modal berhasil, dan hapus oleh Admin dengan alasan | `ELIPS.attendance.init`, `ELIPS.attendance.refresh`, `openAttendanceModal`, `saveStaffAttendance`, `loadAttendanceHistory`, `openAttendanceDetail`, `deleteStaffAttendance` |
 | `staff-recap.js` | Rekap absensi Admin: filter tanggal/karyawan/role, agregasi per karyawan per hari, ringkasan status, dan ekspor CSV | `ELIPS.staffRecap.init`, `ELIPS.staffRecap.refresh`, `ELIPS.staffRecap.exportCsv` |
 | `shift-schedule.js` | Jadwal shift Admin: filter tanggal/karyawan/jenis, preset Pagi/Sore, jam Custom, validasi konflik, CRUD server/lokal, dan audit `staff_shift` | `ELIPS.shiftSchedule.init`, `ELIPS.shiftSchedule.refresh`, `ELIPS.shiftSchedule.presets` |
-| `letter-archive.js` | Surat menyurat Admin: filter jenis/status/tanggal/pencarian, ringkasan statistik, tabel surat masuk/keluar, detail lengkap, validasi tautan lampiran, CRUD server/lokal, dan audit `letter` | `ELIPS.letterArchive.init`, `ELIPS.letterArchive.refresh`, `ELIPS.letterArchive.directionLabel`, `ELIPS.letterArchive.safeAttachmentUrl` |
+| `letter-archive.js` | Surat menyurat Admin: filter jenis/tanggal/pencarian, ringkasan statistik, tabel surat masuk/keluar, detail ringkas, CRUD server/lokal, dan audit `letter` | `ELIPS.letterArchive.init`, `ELIPS.letterArchive.refresh`, `ELIPS.letterArchive.directionLabel`, `ELIPS.letterArchive.classificationLabel` |
+| `employee-dashboard.js` | Dashboard karyawan: sapaan/nama/divisi, status absensi hari ini, rekap hari/catatan bulan berjalan, riwayat terbaru, serta dukungan mode server dan `localStorage` | dijalankan pada `DOMContentLoaded` halaman `employee/dashboard.html` |
 | `pwa.js` | Pendaftaran service worker (skip waiting + `clients.claim`, reload sekali saat versi baru), banner pemasangan Android (`beforeinstallprompt`), sheet 3 langkah iOS Safari, penolakan 7 hari, prompt sekali per sesi, dan bilah offline dengan tombol coba lagi | `navigator.serviceWorker.register`, `beforeinstallprompt`, `online`/`offline` |
 
 Prinsip yang dipakai:
@@ -184,6 +186,83 @@ Prinsip yang dipakai:
 ---
 
 ## 3. Riwayat Perubahan
+
+### v4.0 - 2026-11-12 - Divisi karyawan + dashboard karyawan
+
+**Tujuan:** menambahkan divisi pada role `karyawan` (dimulai dari Marketing), menyediakan akun dummy divisi Marketing, dan memberi karyawan dashboard sederhana sebelum masuk ke halaman absensi.
+
+Perubahan file:
+
+- `api/schema.sql`, `api/install.php`: kolom `users.division VARCHAR(40) NOT NULL DEFAULT ''` setelah `role` dan index `idx_users_division`; migrasi idempoten untuk database lama.
+- `api/helpers.php`: `elips_serialize_user()` mengekspos `division`; helper `elips_user_divisions()` dan `elips_normalize_division()`.
+- `api/actions.php`: `user.create`/`user.update` menerima dan memvalidasi `division`, menolak divisi tak dikenal, mengosongkan divisi untuk role selain `karyawan`, serta mencatat perubahan divisi di audit.
+- `assets/js/core.js`: daftar `USER_DIVISIONS`, `isValidDivision()`, `divisionLabel()`, dan ekspos `ELIPS.USER_DIVISIONS`/`ELIPS.divisionLabel`.
+- `assets/js/crud-users.js`: validasi, penyimpanan lokal, pengosongan otomatis, dan audit divisi.
+- `admin/users.html`: select divisi hanya tampil untuk role Karyawan, kolom **Divisi** pada tabel, dan sinkronisasi saat role berubah.
+- `api/seed-karyawan.php`: 10 akun dummy lama diberi divisi bervariasi (marketing/operasional/keuangan/hrd).
+- `api/seed-marketing.php` (baru): seed idempoten 6 akun karyawan divisi Marketing (`*.marketing@example.com`, password `elips123`).
+- `employee/dashboard.html` (baru, halaman aplikasi ke-33): sapaan + nama/divisi, status absensi hari ini, jumlah hari/catatan absen bulan berjalan, divisi, akses cepat, dan lima absensi terbaru.
+- `assets/js/employee-dashboard.js` (baru, modul JS ke-25): render dashboard, pemuatan riwayat via `staffAttendance.list` atau `localStorage`, dan label divisi.
+- `assets/js/auth.js`, `assets/js/ui.js`: redirect login karyawan diarahkan ke `employee/dashboard.html`.
+- `employee/attendance.html`: tombol navigasi **Dashboard**.
+- `prd.md`, `erd.md`, `log.md`, `report/2026-11-12-kamis.md`: dokumentasi divisi, dashboard, angka cakupan, dan hasil uji.
+
+Perilaku:
+
+- Divisi hanya bermakna untuk role `karyawan`; role lain selalu menyimpan divisi kosong, termasuk saat role diubah dari Karyawan.
+- Nilai divisi yang sah: `marketing`, `operasional`, `keuangan`, `hrd`. Nilai di luar daftar ditolak API dan CRUD lokal.
+- Karyawan dapat memiliki divisi kosong (ditampilkan sebagai **Tanpa divisi**).
+- Login karyawan diarahkan ke dashboard, lalu dashboard menautkan ke halaman absensi dan riwayat.
+- Dashboard membaca data absensi sendiri; Admin tetap memakai rekap absensi terpisah.
+
+Pengujian:
+
+- `test-division-api` 9/9: login Admin, create/update divisi, penolakan nilai tak dikenal, pengosongan saat role berubah, snapshot memuat divisi, dan pembersihan data uji.
+- `test-employee-dashboard` 19/19: helper divisi, sapaan/nama/divisi, status hari ini, rekap hari/catatan bulanan, riwayat, serta CRUD lokal divisi.
+- `test-employee-attendance-page` dan `test-employee-routing` disesuaikan ke `employee/dashboard.html` dan lulus.
+- `test-all-pages` 30 halaman (termasuk `employee/dashboard.html`) lulus; `validate-scripts` 33 HTML/26 JS lulus.
+- `php -l` untuk `api/install.php`, `api/helpers.php`, `api/actions.php`, `api/seed-karyawan.php`, dan `api/seed-marketing.php` lulus.
+
+Dampak angka: 40 tabel MySQL, 101 aksi API, 40 storage key, 25 modul JS di `assets/js/`, 33 halaman HTML, dan 26 file JavaScript (termasuk `sw.js`). Database demo kini berisi 23 pengguna: 9 Marketing, 3 Operasional, 2 Keuangan, 2 HRD, dan 7 tanpa divisi (non-karyawan).
+
+Batasan:
+
+- Divisi masih berupa teks bebas terbatas (bukan tabel relasi), sehingga penambahan divisi baru memerlukan perubahan daftar di API dan client.
+- Dashboard karyawan masih ringkas: belum ada target/penilaian kinerja, pengajuan izin/cuti, atau integrasi jadwal shift.
+
+---
+
+### v4.0 - 2026-11-12 - Penyederhanaan surat menyurat + 14 surat dummy
+
+**Tujuan:** menyederhanakan popup surat dengan menghapus field yang tidak dipakai (status, ringkasan/isi, tautan, catatan) dan menyediakan 14 surat contoh untuk pengujian/demo.
+
+Perubahan file:
+
+- `admin/letters.html`: menghapus select **Status** pada filter, kartu **Selesai**, kolom **Status** pada tabel (colspan 7 → 6), serta field status, ringkasan/isi, tautan lampiran, dan catatan pada modal tambah/ubah.
+- `assets/js/letter-archive.js`: menghapus filter status, badge/status helper, tautan lampiran aman, validasi ringkasan/catatan/tautan, dan baris detail terkait; detail kini hanya menampilkan jenis, nomor, tanggal, perihal, pengirim, penerima, kategori, sifat, dan pembuat. Saat mengubah surat lama, nilai `status`/`summary`/`attachmentUrl`/`notes` dipertahankan; surat baru memakai `status = 'baru'` dan field lain kosong.
+- `api/seed-letters.php` (baru): seed idempoten 14 surat dummy (7 masuk + 7 keluar) dengan tanggal 2026-10-05 s/d 2026-11-04, kategori dan sifat bervariasi; pencocokan `direction` + `letter_number` + `letter_date`.
+- `test-admin-letters`: disesuaikan menjadi 103/103 (field yang dihapus diuji ketiadaannya).
+- `prd.md`, `erd.md`, `log.md`, `report/2026-11-12-kamis.md`: dokumentasi field, seed, dan hasil uji.
+
+Perilaku:
+
+- Popup surat tidak lagi memuat status, ringkasan/isi, tautan, dan catatan.
+- Tabel, filter, kartu ringkasan, dan detail tidak lagi menampilkan keempat field tersebut.
+- `letters.status`/`summary`/`attachment_url`/`notes` tetap ada di skema dan API untuk kompatibilitas data lama; API `letter.save` mengisi default `status = 'baru'` bila tidak dikirim.
+- Tersedia 14 surat dummy di mode server; menjalankan `php api/seed-letters.php` berulang tidak membuat duplikat (run kedua: 0 dibuat, 14 diperbarui).
+
+Pengujian:
+
+- `test-admin-letters` 103/103.
+- `validate-scripts` 32 HTML/25 JS.
+- Uji API manual: login Admin, `letter.list` 14 baris, `letter.save` tanpa field yang dihapus menghasilkan `status = 'baru'` dengan ringkasan/catatan kosong, `letter.delete` membersihkan data uji, dan jumlah akhir tetap 14.
+- `php -l api/seed-letters.php` dan `node --check assets/js/letter-archive.js` lulus.
+
+Batasan:
+
+- Field lama tidak ditampilkan lagi sehingga data warisan hanya dapat dilihat lewat database/API.
+
+---
 
 ### v4.0 - 2026-11-12 - Surat menyurat (surat masuk & keluar) untuk Admin
 
@@ -207,14 +286,14 @@ Perilaku:
 
 - Surat hanya dapat dibaca/diubah Admin; instruktur, peserta, dan karyawan ditolak.
 - Dua jenis surat: `masuk` dan `keluar`; label tanggal otomatis menjadi **Tanggal Diterima** atau **Tanggal Dikirim**.
-- Detail mencakup nomor, perihal, pengirim, penerima, tanggal surat, tanggal diterima/dikirim, kategori, sifat (Biasa/Penting/Segera/Rahasia), status (Baru/Diproses/Selesai/Arsip), ringkasan, tautan lampiran, dan catatan.
+- Detail mencakup nomor, perihal, pengirim, penerima, tanggal surat, tanggal diterima/dikirim, kategori, sifat (Biasa/Penting/Segera/Rahasia), status (Baru/Diproses/Selesai/Arsip), ringkasan, tautan lampiran, dan catatan. **Sejak penyederhanaan 12 November 2026, status/ringkasan/tautan/catatan dihapus dari UI (lihat entri terbaru di atas).**
 - Nomor surat tidak dibuat unik karena surat nyata dari pengirim berbeda dapat memiliki nomor yang sama.
 - Tautan lampiran hanya menerima `http`/`https` atau tautan relatif; skema berbahaya ditolak.
 - Surat tidak dimasukkan ke snapshot bootstrap; mode lokal memakai `elips_letters` dengan aturan validasi dan audit yang sama.
 
 Pengujian:
 
-- `test-admin-letters` (baru) 106/106: render/filter, ringkasan statistik, detail lengkap, CRUD lokal, validasi field wajib & tautan berbahaya, audit, jalur server `letter.*`, dan empty state.
+- `test-admin-letters` (baru) 106/106 saat itu: render/filter, ringkasan statistik, detail lengkap, CRUD lokal, validasi field wajib & tautan berbahaya, audit, jalur server `letter.*`, dan empty state. Setelah penyederhanaan UI, suite menjadi 103/103.
 - Uji API manual: login Admin, create/list/update/delete, nama pembuat, instruktur ditolak, tanggal tidak valid ditolak, tautan `javascript:` ditolak, dan data uji dibersihkan.
 - Regresi: `test-all-pages` 29 halaman (termasuk `admin/letters.html`), `test-admin-pages`, `test-p0`, `test-admin-shifts` 89/89, dan `validate-scripts` 32 HTML/25 JS.
 - `php api/install.php` menambahkan tabel `letters` ke database lama; verifikasi **40 tabel** dengan tabel `letters` kosong.
@@ -1269,6 +1348,9 @@ Perubahan sentralisasi:
 | Koreksi wajib alasan & tercatat | Alasan ≥5 karakter; baris `grade_corrections` append-only + audit |
 | Finalisasi tidak membuat sertifikat | Sertifikasi lanjutan tetap Phase 7; alur Draft → Publish tidak berubah |
 | Peserta hanya membaca transkrip sendiri | `grade.transcript` memfilter enrollment milik peserta; instruktur/Admin pengampu boleh membaca roster |
+| Divisi hanya untuk karyawan | `user.create`/`user.update` dan CRUD lokal mengosongkan `division` untuk role selain `karyawan` |
+| Nilai divisi dibatasi | Hanya `marketing`, `operasional`, `keuangan`, `hrd`; nilai lain ditolak |
+| Dashboard karyawan hanya milik sendiri | `employee/dashboard.html` memakai `staffAttendance.list` tanpa `userId` atau filter `localStorage` berdasarkan user sesi |
 
 ---
 
@@ -1282,7 +1364,7 @@ Tabel: `users`, `user_devices`, `categories`, `branches`, `courses`, `curriculum
 
 | Key | Isi |
 |---|---|
-| `elips_users` | Pengguna: admin, instruktur, peserta |
+| `elips_users` | Pengguna: admin, instruktur, peserta, karyawan (termasuk `division`) |
 | `elips_categories` | Kategori kursus |
 | `elips_branches` | Cabang/unit penyelenggara (kode, kota, manajer, status) |
 | `elips_courses` | Kursus, instruktur pengampu, status, counter modul/materi |
@@ -1320,7 +1402,7 @@ Tabel: `users`, `user_devices`, `categories`, `branches`, `courses`, `curriculum
 | `elips_notifications` | Outbox notifikasi email simulasi: penerima, subjek, isi, entitas, dan waktu |
 | `elips_staffAttendances` | Absensi harian pribadi admin/karyawan pada mode lokal: maks. satu masuk + satu pulang per hari, tanggal/waktu terisi otomatis, GPS wajib, foto, dan metadata perangkat |
 | `elips_staffShifts` | Jadwal shift per karyawan per tanggal pada mode lokal: Pagi/Sore/custom, satu shift per tanggal, catatan, dan pembuat |
-| `elips_letters` | Surat masuk/keluar pada mode lokal: jenis, nomor, perihal, pengirim, penerima, tanggal, kategori, sifat, status, ringkasan, lampiran, catatan, dan pembuat |
+| `elips_letters` | Surat masuk/keluar pada mode lokal: jenis, nomor, perihal, pengirim, penerima, tanggal, kategori, sifat, dan pembuat; status/ringkasan/lampiran/catatan dipertahankan untuk data lama |
 | `elips_session` | Sesi pengguna yang sedang login |
 
 Akun demo utama:
@@ -1341,11 +1423,11 @@ Akun lama tanpa password otomatis dimigrasikan ke password demo `elips123` saat 
 
 ## 6. Hasil Pengujian Terakhir
 
-Pengujian dijalankan setelah backend PHP/MySQL, client dual-mode (v3.0), increment v4.0 Phase 1-6, penambahan cabang/kalender jadwal, aksi langsung/filter jadwal lanjutan, absensi staf dan penyempurnaan alur hariannya, Fase 1 absensi karyawan (role, jam server, GPS wajib, aturan harian database), Fase 4-5 (sesi diingat, perangkat aktif, dan PWA), rekap absensi karyawan untuk Admin, jadwal shift karyawan, serta surat menyurat:
+Pengujian dijalankan setelah backend PHP/MySQL, client dual-mode (v3.0), increment v4.0 Phase 1-6, penambahan cabang/kalender jadwal, aksi langsung/filter jadwal lanjutan, absensi staf dan penyempurnaan alur hariannya, Fase 1 absensi karyawan (role, jam server, GPS wajib, aturan harian database), Fase 4-5 (sesi diingat, perangkat aktif, dan PWA), rekap absensi karyawan untuk Admin, jadwal shift karyawan, surat menyurat, serta divisi dan dashboard karyawan:
 
 | Pemeriksaan | Hasil |
 |---|---|
-| Syntax 32 HTML + 25 JS + 7 PHP | ✅ Lulus |
+| Syntax 33 HTML + 26 JS + 7 PHP | ✅ Lulus |
 | Guard sesi, password, sanitasi (`test-p0`) | ✅ Lulus |
 | Notifikasi email (`test-notifications`) | ✅ Lulus |
 | Audit trail (`test-audit`) | ✅ Lulus |
@@ -1384,7 +1466,9 @@ Pengujian dijalankan setelah backend PHP/MySQL, client dual-mode (v3.0), increme
 | UI rekap absensi lokal (`test-admin-attendance-recap`) | Lulus 53/53 |
 | Rekap absensi mode server (`test-admin-recap-server`) | Lulus 19/19 |
 | UI jadwal shift Admin (`test-admin-shifts`) | Lulus 89/89 |
-| Surat menyurat Admin (`test-admin-letters`) | Lulus 106/106 |
+| Surat menyurat Admin (`test-admin-letters`) | Lulus 103/103 |
+| Divisi & dashboard karyawan (`test-division-api`, `test-employee-dashboard`) | Lulus 9/9 dan 19/19 |
+| Routing & halaman absensi karyawan (`test-employee-routing`, `test-employee-attendance-page`) | ✅ Lulus |
 | UI akademik admin (`test-academic-page`) | ✅ Lulus |
 | UI cabang & kalender admin (`test-branch-pages`) | ✅ Lulus |
 | UI jadwal/presensi lokal (`test-sessions-page`) | ✅ 47/47 |
@@ -1459,7 +1543,7 @@ Catatan penting yang diuji:
 - Metadata absensi (zona waktu, lokasi, perangkat, koneksi, catatan, IP server) tersimpan konsisten dan muncul di detail.
 - Snapshot bootstrap tidak memuat koleksi/foto absensi staf; riwayat hanya dimuat lewat aksi khusus.
 - Kamera tanpa dukungan/izin/secure context menampilkan fallback unggah foto; GPS tetap wajib pada mode server.
-- Manifest PWA memakai `start_url` halaman absen, `scope` root, dan `display: standalone`; seluruh 31 halaman aplikasi memuat manifest, ikon, dan `pwa.js`.
+- Manifest PWA memakai `start_url` halaman absen, `scope` root, dan `display: standalone`; seluruh 32 halaman aplikasi memuat manifest, ikon, dan `pwa.js`.
 - Service worker network-first tidak menyimpan halaman HTML aplikasi maupun `/api/`, sehingga perubahan file langsung terlihat; hanya aset statis dan `offline.html` yang menjadi fallback.
 - Banner Android memakai `beforeinstallprompt`; iOS Safari menampilkan sheet 3 langkah; penolakan diingat 7 hari dan prompt dibatasi sekali per sesi.
 - Penyimpanan absensi ditolak saat offline sebelum validasi maupun saat GPS selesai setelah koneksi putus.
@@ -1469,8 +1553,15 @@ Catatan penting yang diuji:
 - Rekap menggabungkan absen masuk/pulang per karyawan per hari dan menandai `lengkap`, `belum_pulang`, atau `tanpa_masuk`, tanpa mengambil foto.
 - Filter karyawan dan role bekerja di server maupun lokal, dan ekspor CSV memakai BOM UTF-8 dengan seluruh sel dikutip.
 - Jadwal shift hanya dapat dikelola Admin; satu karyawan maksimal satu shift per tanggal, preset Pagi/Sore mengabaikan jam klien, Custom menolak jam mulai = selesai, dan shift tidak dimasukkan ke snapshot bootstrap.
-- Surat menyurat hanya dapat dikelola Admin; jenis `masuk`/`keluar`, nomor surat tidak unik, field wajib divalidasi server, tanggal kalender tidak valid ditolak, dan tautan lampiran selain `http`/`https`/relatif ditolak.
-- Detail surat menampilkan seluruh field beserta pembuat, dan surat tidak dimasukkan ke snapshot bootstrap (dibaca lewat `letter.list`).
+- Surat menyurat hanya dapat dikelola Admin; jenis `masuk`/`keluar`, nomor surat tidak unik, field wajib divalidasi server, dan tanggal kalender tidak valid ditolak. Status, ringkasan/isi, tautan, dan catatan tidak lagi diisi/ditampilkan di UI, tetapi kolomnya tetap disimpan untuk kompatibilitas data lama.
+- Detail surat menampilkan field yang tersisa beserta pembuat, dan surat tidak dimasukkan ke snapshot bootstrap (dibaca lewat `letter.list`).
+- Mode server saat ini memuat 14 surat dummy (7 masuk + 7 keluar) dari `api/seed-letters.php`; seed idempoten sehingga aman dijalankan berulang.
+- Divisi hanya tersimpan untuk role `karyawan`; role lain selalu kosong dan divisi otomatis dikosongkan saat role berubah.
+- Nilai divisi di luar `marketing`/`operasional`/`keuangan`/`hrd` ditolak API maupun CRUD lokal.
+- Login karyawan diarahkan ke `employee/dashboard.html`, dan dashboard hanya membaca absensi milik karyawan yang sedang login.
+- Dashboard menampilkan status hari ini (belum/sudah masuk/lengkap), jumlah hari unik dan jumlah catatan bulan berjalan, serta lima absensi terbaru.
+- Seed Marketing bersifat idempoten: akun `*.marketing@example.com` yang sudah ada diperbarui, bukan diduplikasi.
+- Database demo berisi 23 pengguna: 9 Marketing, 3 Operasional, 2 Keuangan, 2 HRD, dan 7 tanpa divisi (non-karyawan).
 
 ---
 
@@ -1490,7 +1581,8 @@ Keterbatasan saat ini:
 - Role `karyawan`, halaman `employee/attendance.html`, remember-me (`user_devices`), dan PWA sudah dibuat (Fase 1–5). Retensi foto, kapasitas penyimpanan, uji perangkat Android/iOS nyata, panduan karyawan, dan pilot tersisa untuk Fase 6.
 - Rekap absensi Admin sudah tersedia (filter tanggal/karyawan/role, ringkasan status, dan ekspor CSV); keterlambatan, jam kerja terjadwal, izin/cuti/lembur, alpha otomatis, serta ekspor Excel/PDF belum dibuat.
 - Jadwal shift Admin sudah tersedia (Pagi/Sore/custom dan satu shift per tanggal), tetapi belum diintegrasikan ke perhitungan keterlambatan/rekap berbasis jam kerja.
-- Surat menyurat Admin sudah tersedia (surat masuk/keluar beserta detail, filter, dan audit), tetapi lampiran masih berupa tautan (belum unggah berkas) dan belum ditautkan ke kelas/peserta/kursus.
+- Surat menyurat Admin sudah tersedia (surat masuk/keluar beserta detail, filter, dan audit), tetapi belum ditautkan ke kelas/peserta/kursus. Field status, ringkasan/isi, tautan, dan catatan tidak lagi tersedia di UI; data warisan hanya dapat diakses lewat database/API.
+- Divisi karyawan masih berupa kolom teks terbatas, bukan tabel relasi; divisi baru memerlukan pembaruan daftar di API dan client. Dashboard karyawan belum memuat target kinerja, izin/cuti, atau integrasi shift.
 - Belum ada migration tool, backup otomatis, atau monitoring produksi.
 
 Rencana lanjutan (opsional, sesuai `prd.md`):

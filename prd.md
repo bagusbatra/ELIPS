@@ -2,7 +2,7 @@
 
 **Versi:** 4.0  
 **Tanggal:** 2026-11-11
-**Status:** Implemented Phase 1-6 (Dual-mode - PHP 8/MySQL 8 + fallback `localStorage`). v3.0 tetap menjadi baseline alur kursus; v4.0 menambahkan versi kurikulum, angkatan/kelas, penguncian kurikulum per kelas, histori tentor, enrollment berbasis kelas, jadwal pertemuan dan presensi offline, **cabang** dengan halaman kalender/jadwal admin, **materi tambahan kelas dan mode akses materi**, **tugas & ujian**, **skema penilaian, finalisasi nilai, predikat konfigurabel, dan koreksi beraudit**, serta **absensi karyawan** (role `karyawan`, jam server, GPS wajib, aturan harian di database, modul absensi bersama, halaman `employee/attendance.html`, dan sesi login diingat dengan rotasi token per perangkat), dan **PWA** (manifest, service worker network-first, banner pemasangan Android/iOS, serta mode offline).
+**Status:** Implemented Phase 1-6 (Dual-mode - PHP 8/MySQL 8 + fallback `localStorage`). v3.0 tetap menjadi baseline alur kursus; v4.0 menambahkan versi kurikulum, angkatan/kelas, penguncian kurikulum per kelas, histori tentor, enrollment berbasis kelas, jadwal pertemuan dan presensi offline, **cabang** dengan halaman kalender/jadwal admin, **materi tambahan kelas dan mode akses materi**, **tugas & ujian**, **skema penilaian, finalisasi nilai, predikat konfigurabel, dan koreksi beraudit**, serta **absensi karyawan** (role `karyawan`, jam server, GPS wajib, aturan harian di database, modul absensi bersama, halaman `employee/attendance.html`, dan sesi login diingat dengan rotasi token per perangkat), **divisi karyawan** (`users.division` dengan pilihan Marketing/Operasional/Keuangan/HRD dan dashboard karyawan sederhana), dan **PWA** (manifest, service worker network-first, banner pemasangan Android/iOS, serta mode offline).
 **Baseline v4.0 lengkap:** `ELIPS-LMS-PRD-v4.0.md`  
 **Log pengembangan:** `log.md`
 **ERD:** `erd.md`
@@ -394,7 +394,7 @@ Backend berada di folder `api/` dan terdiri dari front controller, konfigurasi, 
 | File | Status | Deskripsi |
 |---|---|---|
 | `admin/dashboard.html` | ✅ Selesai | Dashboard admin dengan ringkasan statistik |
-| `admin/users.html` | ✅ Selesai | Tambah pengguna diawali modal pilihan role Admin/Instruktur/Peserta, edit/hapus pengguna, filter role & pencarian, serta penugasan instruktur ke kursus |
+| `admin/users.html` | ✅ Selesai | Tambah pengguna diawali modal pilihan role Admin/Instruktur/Peserta/Karyawan, edit/hapus pengguna, filter role & pencarian, divisi karyawan (Marketing/Operasional/Keuangan/HRD), serta penugasan instruktur ke kursus |
 | `admin/courses.html` | ✅ Selesai | Tambah/edit kursus, tugaskan 1 instruktur per kursus, publikasi/Draft, filter status & pencarian |
 | `admin/academic.html` | ✅ Selesai | Kelola versi kurikulum (buat/publish/clone/retire/hapus draft), kelas/angkatan (versi terkunci, cabang, tentor, kuota, periode), histori tentor, roster peserta, detail struktur kurikulum, serta jadwal sesi, presensi, koreksi, dan rekap kehadiran; filter cabang & kursus |
 | `admin/schedule.html` | ✅ Selesai | Kalender & jadwal admin: filter cabang/kelas/instruktur/lokasi dan multi-status dengan sinkronisasi URL, kalender bulanan, agenda harian, ringkasan JP, daftar sesi, modal detail sesi dengan aksi langsung (buat, edit, jadwalkan ulang, batalkan dengan alasan, tandai selesai, hapus), serta tautan ke akademik/pengaturan |
@@ -425,6 +425,12 @@ Backend berada di folder `api/` dan terdiri dari front controller, konfigurasi, 
 | `student/certificates.html` | ✅ Selesai | Daftar sertifikat peserta; hanya sertifikat **Publish** yang ditampilkan, Draft sepenuhnya disembunyikan |
 | `student/profile.html` | ✅ Selesai | Profil peserta dan pembaruan nama/no. telepon |
 
+### Role Karyawan (`employee/`)
+| File | Status | Deskripsi |
+|---|---|---|
+| `employee/dashboard.html` | ✅ Selesai | Dashboard karyawan sederhana: sapaan + nama/divisi, status absensi hari ini, jumlah hari/catatan absen bulan berjalan, akses cepat ke absensi, dan tabel absensi terbaru |
+| `employee/attendance.html` | ✅ Selesai | Absensi harian karyawan dengan kamera/foto, GPS wajib, status masuk/pulang, riwayat pribadi, detail metadata, dan tautan kembali ke dashboard |
+
 ### Assets
 | File | Status | Deskripsi |
 |---|---|---|
@@ -452,6 +458,7 @@ Backend berada di folder `api/` dan terdiri dari front controller, konfigurasi, 
 | `assets/js/staff-recap.js` | ✅ Selesai | Rekap absensi karyawan untuk Admin: filter tanggal/karyawan/role, agregasi harian, ringkasan status, dan ekspor CSV |
 | `assets/js/shift-schedule.js` | ✅ Selesai | Jadwal shift karyawan untuk Admin: filter tanggal/karyawan/jenis, preset Pagi/Sore, jam custom, validasi konflik satu shift per tanggal, CRUD server/lokal, dan audit |
 | `assets/js/letter-archive.js` | ✅ Selesai | Surat menyurat untuk Admin: filter jenis/tanggal/pencarian, ringkasan statistik, tabel surat masuk/keluar, detail ringkas, CRUD server/lokal, dan audit |
+| `assets/js/employee-dashboard.js` | ✅ Selesai | Dashboard karyawan: sapaan/divisi, status absensi hari ini, rekap hari/catatan bulan berjalan, riwayat terbaru, serta dukungan mode server dan `localStorage` |
 | `assets/js/pwa.js` | ✅ Selesai | Pendaftaran service worker, banner pemasangan Android (`beforeinstallprompt`), sheet petunjuk iOS, deteksi versi baru, dan bilah offline |
 | `manifest.webmanifest` | ✅ Selesai | Manifest PWA: `start_url` halaman absen, `scope` root, `display` standalone, ikon 192/512 dan maskable |
 | `sw.js` | ✅ Selesai | Service worker network-first; tidak pernah menyimpan halaman HTML aplikasi atau `/api/`; fallback aset statis dan `offline.html` |
@@ -460,7 +467,7 @@ Backend berada di folder `api/` dan terdiri dari front controller, konfigurasi, 
 ### PWA (`offline.html`)
 | File | Status | Deskripsi |
 |---|---|---|
-| `offline.html` | ✅ Selesai | Halaman offline mandiri (tanpa bundle aplikasi) dengan tombol muat ulang; tidak termasuk 31 halaman aplikasi yang memuat `pwa.js` |
+| `offline.html` | ✅ Selesai | Halaman offline mandiri (tanpa bundle aplikasi) dengan tombol muat ulang; tidak termasuk 32 halaman aplikasi yang memuat `pwa.js` |
 
 ### Backend (`api/`)
 | File | Status | Deskripsi |
@@ -630,7 +637,10 @@ Fitur absensi harian di `admin/dashboard.html` dan `employee/attendance.html`, m
 | Metadata perangkat | Selesai | User agent, platform, bahasa, ukuran layar, memori perangkat, CPU core, tipe koneksi, status online, dan IP (server) |
 | Riwayat absensi pribadi | Selesai | Daftar 30 catatan terbaru dengan foto, jenis masuk/pulang, tanggal, jam, lokasi, dan perangkat |
 | Detail & hapus catatan | Selesai | Modal detail menampilkan seluruh metadata dan foto. Hanya Admin yang dapat menghapus (miliknya atau karyawan) dengan alasan ≥5 karakter; karyawan tidak dapat menghapus |
-| Role `karyawan` | Selesai | `users.role` menerima `karyawan`; API absensi hanya untuk `admin` + `karyawan`; instruktur/peserta ditolak. Login karyawan diarahkan ke `employee/attendance.html` dan tidak dapat membuka halaman admin/instruktur/peserta |
+| Role `karyawan` | Selesai | `users.role` menerima `karyawan`; API absensi hanya untuk `admin` + `karyawan`; instruktur/peserta ditolak. Login karyawan diarahkan ke `employee/dashboard.html` dan tidak dapat membuka halaman admin/instruktur/peserta |
+| Divisi karyawan | Selesai | `users.division` menyimpan `marketing`, `operasional`, `keuangan`, atau `hrd`; hanya berlaku untuk role `karyawan` dan dikosongkan otomatis bila role berubah. Admin dapat memilih divisi dari `admin/users.html`, dan dashboard karyawan menampilkan nama divisi |
+| Dashboard karyawan | Selesai | `employee/dashboard.html` menampilkan sapaan + nama/divisi, status absensi hari ini (belum/sudah masuk/lengkap), jumlah hari dan catatan absen bulan berjalan, akses cepat ke absensi, serta lima catatan absensi terbaru |
+| Akun dummy Marketing | Selesai | `api/seed-marketing.php` membuat enam akun karyawan divisi Marketing (`*.marketing@example.com`, password `elips123`) secara idempoten; `api/seed-karyawan.php` memberi divisi pada 10 akun dummy yang sudah ada |
 | Aturan harian di server | Selesai | Maksimal 1 `in` + 1 `out` per pengguna per hari; absen pulang wajib didahului absen masuk; dijaga validasi API dan unique key `(user_id, attendance_date, kind)` |
 | Mode server | Selesai | Aksi `staffAttendance.create`, `staffAttendance.list`, dan `staffAttendance.delete`; karyawan hanya membaca miliknya, Admin dapat meminta `userId` lain |
 | Mode lokal | Selesai | Koleksi `elips_staffAttendances` memakai aturan yang sama dengan server: GPS wajib, maksimal 1 `in` + 1 `out` per hari, absen pulang setelah masuk, tanggal `Asia/Jakarta`, dan hapus hanya oleh Admin dengan alasan ≥5 karakter |
@@ -1037,9 +1047,10 @@ else                            -> student/dashboard.html
 | Absensi staf dari dashboard Admin | Lulus uji | `test-staff-attendance-page` (80/80) memverifikasi tombol masuk/pulang sesuai status harian, modal kamera/fallback yang ringkas, penguncian tanggal, modal sukses dengan satu tombol Selesai, penyimpanan lokal, detail, audit, dan hapus catatan |
 | API absensi staf & privasi | Lulus uji | `test-staff-attendance-api` (46/46) memverifikasi guard role, validasi foto/koordinat/GPS, jam server, duplikat harian, alasan hapus, persistensi metadata, dan snapshot tanpa foto |
 | Role karyawan & absensi server | Lulus uji | `api-employee-fase1` (34/34) memverifikasi role `karyawan` di API, login karyawan, absen masuk/pulang, duplikat, privasi riwayat, akses admin via `userId`, hapus beralasan + audit, dan penolakan instruktur/peserta |
+| Divisi & dashboard karyawan | Lulus uji | `test-division-api` (9/9) memverifikasi serialisasi `division`, create/update divisi, penolakan divisi tak dikenal, dan pengosongan divisi saat role berubah; `test-employee-dashboard` (19/19) memverifikasi helper divisi, sapaan/divisi, status hari ini, rekap bulanan, riwayat, serta CRUD lokal divisi |
 | Sesi diingat, rotasi token & reset perangkat | Lulus uji | `test-remember-login` (37/37) memverifikasi cookie `elips_remember`, rotasi + sliding 30 hari, deteksi token lama, satu perangkat aktif, reset oleh admin, auto-resume klien, pencabutan saat logout/ganti password/nonaktif, dan rate limit |
 | Degradasi kamera & geolokasi | Lulus uji | Kamera tanpa dukungan/izin/secure context menampilkan fallback unggah; GPS wajib dan kegagalannya menampilkan pesan serta tidak menyimpan absensi |
-| PWA: manifest, service worker & banner | Lulus uji | `test-pwa` 50/50: `start_url` halaman absen, scope root, tag PWA di 31 halaman, strategi network-first tanpa cache halaman/API, banner Android/iOS, penolakan 7 hari, dan blokir simpan saat offline |
+| PWA: manifest, service worker & banner | Lulus uji | `test-pwa` 50/50: `start_url` halaman absen, scope root, tag PWA di 32 halaman, strategi network-first tanpa cache halaman/API, banner Android/iOS, penolakan 7 hari, dan blokir simpan saat offline |
 | PWA mode server | Lulus uji | `test-pwa-server` 16/16: `manifest.webmanifest` tersaji `application/manifest+json`, `sw.js`, `offline.html`, dan seluruh ikon dapat diunduh |
 | Rekap absensi karyawan (Admin) | Lulus uji | `api-staff-recap` 33/33 dan `test-admin-recap-server` 19/19: guard Admin-only, rentang default bulan berjalan, batas 366 hari, filter karyawan/role, agregasi status, ekspor CSV, serta UI lokal `test-admin-attendance-recap` 53/53 |
 | Jadwal shift karyawan (Admin) | Lulus uji | `test-admin-shifts` 89/89: render/filter, preset Pagi/Sore, jam custom, validasi konflik & jam, CRUD lokal, audit, jalur server (payload `staffShift.*`), dan empty state. Uji API manual memverifikasi list/save/update/delete, duplikat, role instruktur ditolak, rentang/tipe tidak valid, dan pembersihan data |
@@ -1056,7 +1067,7 @@ else                            -> student/dashboard.html
 - **Responsive:** Menggunakan CSS custom yang responsif.
 - **UI Konsisten:** Menggunakan komponen seragam (navbar, sidebar, cards, tables, badges).
 - **Keamanan:** Pada mode server password di-hash, sesi memakai cookie `HttpOnly`/`SameSite=Lax`, dan otorisasi role/kepemilikan ditegakkan di server. Cookie `elips_remember` juga `HttpOnly` (+ `Secure` saat HTTPS), token disimpan sebagai hash SHA-256, dirotasi setiap dipakai, dan dicabut saat logout/ganti password/akun nonaktif/reset admin. Mode lokal tetap bersifat demo dan tidak boleh dianggap aman untuk produksi.
-- **Cakupan v4.0:** Increment ini mencakup **Phase 1–6** (versi kurikulum + kelas/angkatan + enrollment berbasis kelas + jadwal sesi/presensi offline + materi tambahan dan mode akses materi + cabang/kalender + absensi staf + tugas/ujian + skema penilaian/finalisasi/koreksi), ditambah **absensi karyawan** (role `karyawan`, validasi aturan harian, jam server, GPS wajib, modul absensi bersama, halaman `employee/attendance.html`, serta sesi diingat dengan `user_devices`/`users.session_version`), **PWA** (manifest, service worker network-first, banner pemasangan, dan mode offline), **rekap absensi karyawan** (halaman `admin/attendance-recap.html`, aksi `staffAttendance.recap`, serta ekspor CSV), **jadwal shift karyawan** (halaman `admin/shifts.html`, preset Pagi/Sore + jam custom, serta aksi `staffShift.*`), dan **surat menyurat** (halaman `admin/letters.html`, pencatatan surat masuk/keluar beserta detail, filter, dan aksi `letter.*`), dengan 40 tabel MySQL, 101 aksi API, 40 storage key, 24 modul JS, 32 halaman HTML (termasuk `offline.html`), dan 25 file JavaScript (termasuk `sw.js`). Pembayaran dan sertifikat PDF mengikuti phase berikutnya pada `ELIPS-LMS-PRD-v4.0.md`.
+- **Cakupan v4.0:** Increment ini mencakup **Phase 1–6** (versi kurikulum + kelas/angkatan + enrollment berbasis kelas + jadwal sesi/presensi offline + materi tambahan dan mode akses materi + cabang/kalender + absensi staf + tugas/ujian + skema penilaian/finalisasi/koreksi), ditambah **absensi karyawan** (role `karyawan`, validasi aturan harian, jam server, GPS wajib, modul absensi bersama, halaman `employee/attendance.html`, serta sesi diingat dengan `user_devices`/`users.session_version`), **PWA** (manifest, service worker network-first, banner pemasangan, dan mode offline), **rekap absensi karyawan** (halaman `admin/attendance-recap.html`, aksi `staffAttendance.recap`, serta ekspor CSV), **jadwal shift karyawan** (halaman `admin/shifts.html`, preset Pagi/Sore + jam custom, serta aksi `staffShift.*`), dan **surat menyurat** (halaman `admin/letters.html`, pencatatan surat masuk/keluar beserta detail, filter, dan aksi `letter.*`), serta **divisi karyawan** (kolom `users.division`, pilihan Marketing/Operasional/Keuangan/HRD, seed akun Marketing, dan halaman `employee/dashboard.html`), dengan 40 tabel MySQL, 101 aksi API, 40 storage key, 25 modul JS, 33 halaman HTML (termasuk `offline.html`), dan 26 file JavaScript (termasuk `sw.js`). Pembayaran dan sertifikat PDF mengikuti phase berikutnya pada `ELIPS-LMS-PRD-v4.0.md`.
 - **Kompatibilitas v3.0:** Struktur v3 tetap dipertahankan. Setiap kursus lama mendapat versi kurikulum `1.0`; enrollment lama dipetakan ke kelas migrasi (`legacy_import`) agar tidak ada data yang hilang. Alur nilai manual klasik tetap tersedia di samping skema penilaian Phase 6.
 
 ---
