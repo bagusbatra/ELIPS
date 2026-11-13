@@ -69,6 +69,10 @@
                     <i class="bi bi-clock-history"></i>
                     <span>Riwayat Absensi</span>
                 </a>
+                <a href="#marketingArea" class="dashboard-nav-link" id="marketingNavLink" style="display: none;">
+                    <i class="bi bi-funnel"></i>
+                    <span>Lead Marketing</span>
+                </a>
             </nav>
         </aside>
 
@@ -113,6 +117,112 @@
                     <div class="stat-card-info">
                         <div class="stat-card-value" id="statDivision">Tanpa divisi</div>
                         <div class="stat-card-label">Divisi Anda</div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="marketingArea" style="display: none;">
+                <div class="dashboard-section marketing-hero">
+                    <div class="dashboard-section-header">
+                        <div>
+                            <h2 class="dashboard-section-title">
+                                <i class="bi bi-funnel"></i> Ringkasan Marketing
+                            </h2>
+                            <p class="form-hint" style="margin: 0.25rem 0 0;">
+                                Pantau lead, follow-up, dan target bulan ini.
+                            </p>
+                        </div>
+                        <div class="modal-actions">
+                            <button class="btn btn-outline" type="button" id="marketingTargetButton">
+                                <i class="bi bi-bullseye"></i> Atur Target
+                            </button>
+                            <button class="btn btn-primary" type="button" id="marketingLeadAddButton">
+                                <i class="bi bi-plus-lg"></i> Tambah Lead
+                            </button>
+                        </div>
+                    </div>
+                    <div class="dashboard-section-body">
+                        <div class="marketing-stats">
+                            <div class="marketing-stat">
+                                <span class="marketing-stat-label">Lead Aktif</span>
+                                <span class="marketing-stat-value" id="marketingStatActive">0</span>
+                                <span class="marketing-stat-hint" id="marketingStatActiveHint">0 lead baru</span>
+                            </div>
+                            <div class="marketing-stat">
+                                <span class="marketing-stat-label">Follow-up Hari Ini</span>
+                                <span class="marketing-stat-value" id="marketingStatFollowups">0</span>
+                                <span class="marketing-stat-hint" id="marketingStatFollowupsHint">Tidak ada jadwal</span>
+                            </div>
+                            <div class="marketing-stat">
+                                <span class="marketing-stat-label">Pendaftaran Bulan Ini</span>
+                                <span class="marketing-stat-value" id="marketingStatEnrollments">0</span>
+                                <span class="marketing-stat-hint" id="marketingStatEnrollmentsHint">Target 0 pendaftaran</span>
+                            </div>
+                        </div>
+                        <div class="marketing-progress-grid">
+                            <div class="marketing-progress-card">
+                                <div class="marketing-progress-head">
+                                    <span>Pendaftaran</span>
+                                    <strong id="marketingProgressEnrollmentLabel">0 / 0</strong>
+                                </div>
+                                <div class="marketing-progress-track">
+                                    <div class="marketing-progress-bar" id="marketingProgressEnrollment"></div>
+                                </div>
+                            </div>
+                            <div class="marketing-progress-card">
+                                <div class="marketing-progress-head">
+                                    <span>Pendapatan</span>
+                                    <strong id="marketingProgressRevenueLabel">Rp0 / Rp0</strong>
+                                </div>
+                                <div class="marketing-progress-track">
+                                    <div class="marketing-progress-bar blue" id="marketingProgressRevenue"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="dashboard-section">
+                    <div class="dashboard-section-header">
+                        <h2 class="dashboard-section-title">Aksi Hari Ini</h2>
+                        <span class="badge badge-warning" id="marketingActionCount">0 follow-up</span>
+                    </div>
+                    <div class="dashboard-section-body" id="marketingActionList">
+                        <div class="attendance-empty">Memuat agenda follow-up&hellip;</div>
+                    </div>
+                </div>
+
+                <div class="dashboard-section">
+                    <div class="dashboard-section-header">
+                        <h2 class="dashboard-section-title">Pipeline Lead</h2>
+                    </div>
+                    <div class="dashboard-section-body">
+                        <div class="marketing-pipeline" id="marketingPipeline"></div>
+                    </div>
+                </div>
+
+                <div class="dashboard-section">
+                    <div class="dashboard-section-header">
+                        <h2 class="dashboard-section-title">Daftar Lead</h2>
+                        <button class="btn btn-ghost" type="button" id="marketingLeadRefresh">
+                            <i class="bi bi-arrow-clockwise"></i> Muat Ulang
+                        </button>
+                    </div>
+                    <div class="dashboard-section-body" style="padding: 0; overflow-x: auto;">
+                        <table class="dashboard-table marketing-lead-table">
+                            <thead>
+                                <tr>
+                                    <th>Nama / Kontak</th>
+                                    <th>Sumber</th>
+                                    <th>Status</th>
+                                    <th>Follow-up</th>
+                                    <th>Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody id="marketingLeadBody">
+                                <tr><td colspan="5" style="text-align: center; color: var(--text-secondary);">Memuat lead&hellip;</td></tr>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </div>
@@ -162,6 +272,192 @@
         </main>
     </div>
 
+    <!-- Modal Lead Marketing -->
+    <div class="attendance-modal" id="marketingLeadModal" style="display: none;">
+        <div class="attendance-modal-card marketing-modal-card">
+            <div class="attendance-modal-header">
+                <div>
+                    <div class="attendance-modal-title" id="marketingLeadModalTitle">Tambah Lead</div>
+                    <div class="attendance-modal-subtitle">Catat calon peserta dan jadwal follow-up.</div>
+                </div>
+                <button class="attendance-modal-close" id="marketingLeadModalClose" type="button" aria-label="Tutup">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+            <form id="marketingLeadForm">
+                <div class="attendance-modal-body marketing-modal-body">
+                    <input type="hidden" id="marketingLeadId">
+                    <div class="form-group marketing-span-2">
+                        <label class="form-label" for="marketingLeadName">Nama Lead *</label>
+                        <input class="form-input" type="text" id="marketingLeadName" maxlength="150"
+                            placeholder="Contoh: Rina Pratama" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="marketingLeadPhone">Telepon</label>
+                        <input class="form-input" type="text" id="marketingLeadPhone" maxlength="30"
+                            placeholder="0812xxxxxxx">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="marketingLeadEmail">Email</label>
+                        <input class="form-input" type="email" id="marketingLeadEmail" maxlength="190"
+                            placeholder="nama@email.com">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="marketingLeadCity">Kota</label>
+                        <input class="form-input" type="text" id="marketingLeadCity" maxlength="100"
+                            placeholder="Contoh: Bandung">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="marketingLeadSource">Sumber Lead</label>
+                        <select class="form-input" id="marketingLeadSource">
+                            <option value="walk_in">Walk-in</option>
+                            <option value="referensi">Referensi</option>
+                            <option value="sekolah">Sekolah</option>
+                            <option value="sosial_media">Sosial Media</option>
+                            <option value="pameran">Pameran</option>
+                            <option value="telemarketing">Telemarketing</option>
+                            <option value="lainnya" selected>Lainnya</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="marketingLeadStatus">Status</label>
+                        <select class="form-input" id="marketingLeadStatus">
+                            <option value="baru" selected>Baru</option>
+                            <option value="dihubungi">Dihubungi</option>
+                            <option value="prospek">Prospek</option>
+                            <option value="terdaftar">Terdaftar</option>
+                            <option value="batal">Batal</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="marketingLeadNext">Follow-up Berikutnya</label>
+                        <input class="form-input" type="date" id="marketingLeadNext">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="marketingLeadInterest">Minat Kursus</label>
+                        <input class="form-input" type="text" id="marketingLeadInterest" maxlength="150"
+                            placeholder="Contoh: Bahasa Inggris Dewasa">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="marketingLeadValue">Nilai Pendaftaran (Rp)</label>
+                        <input class="form-input" type="number" id="marketingLeadValue" min="0" step="0.01" value="0">
+                    </div>
+                    <div class="form-group marketing-span-2">
+                        <label class="form-label" for="marketingLeadNotes">Catatan</label>
+                        <textarea class="form-input marketing-textarea" id="marketingLeadNotes" maxlength="1000"
+                            rows="3" placeholder="Kebutuhan, kendala, atau hasil percakapan terakhir."></textarea>
+                    </div>
+                </div>
+                <div class="attendance-modal-actions" style="padding: 0 1.5rem 1.5rem;">
+                    <button class="btn btn-outline" id="marketingLeadCancel" type="button">Batal</button>
+                    <button class="btn btn-primary" id="marketingLeadSubmit" type="submit">
+                        <i class="bi bi-check2-circle"></i> Simpan Lead
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Follow-up Marketing -->
+    <div class="attendance-modal" id="marketingFollowupModal" style="display: none;">
+        <div class="attendance-modal-card marketing-modal-card">
+            <div class="attendance-modal-header">
+                <div>
+                    <div class="attendance-modal-title">Catat Follow-up</div>
+                    <div class="attendance-modal-subtitle" id="marketingFollowupLeadName">-</div>
+                </div>
+                <button class="attendance-modal-close" id="marketingFollowupModalClose" type="button" aria-label="Tutup">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+            <form id="marketingFollowupForm">
+                <div class="attendance-modal-body marketing-modal-body">
+                    <input type="hidden" id="marketingFollowupId">
+                    <input type="hidden" id="marketingFollowupLeadId">
+                    <div class="form-group">
+                        <label class="form-label" for="marketingFollowupChannel">Kanal</label>
+                        <select class="form-input" id="marketingFollowupChannel">
+                            <option value="telepon">Telepon</option>
+                            <option value="whatsapp">WhatsApp</option>
+                            <option value="email">Email</option>
+                            <option value="kunjungan">Kunjungan</option>
+                            <option value="lainnya">Lainnya</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="marketingFollowupDate">Tanggal Follow-up *</label>
+                        <input class="form-input" type="date" id="marketingFollowupDate" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="marketingFollowupOutcome">Hasil Singkat</label>
+                        <input class="form-input" type="text" id="marketingFollowupOutcome" maxlength="200"
+                            placeholder="Contoh: Tertarik, minta jadwal trial">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="marketingFollowupNext">Follow-up Berikutnya</label>
+                        <input class="form-input" type="date" id="marketingFollowupNext">
+                    </div>
+                    <div class="form-group marketing-span-2">
+                        <label class="form-label" for="marketingFollowupNote">Catatan</label>
+                        <textarea class="form-input marketing-textarea" id="marketingFollowupNote" maxlength="1000"
+                            rows="3" placeholder="Ringkasan percakapan dan langkah berikutnya."></textarea>
+                    </div>
+                </div>
+                <div class="attendance-modal-actions" style="padding: 0 1.5rem 1.5rem;">
+                    <button class="btn btn-outline" id="marketingFollowupCancel" type="button">Batal</button>
+                    <button class="btn btn-primary" id="marketingFollowupSubmit" type="submit">
+                        <i class="bi bi-check2-circle"></i> Simpan Follow-up
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Target Marketing -->
+    <div class="attendance-modal" id="marketingTargetModal" style="display: none;">
+        <div class="attendance-modal-card marketing-modal-card">
+            <div class="attendance-modal-header">
+                <div>
+                    <div class="attendance-modal-title">Target Marketing</div>
+                    <div class="attendance-modal-subtitle">Tetapkan target bulanan untuk memantau capaian.</div>
+                </div>
+                <button class="attendance-modal-close" id="marketingTargetModalClose" type="button" aria-label="Tutup">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+            <form id="marketingTargetForm">
+                <div class="attendance-modal-body marketing-modal-body">
+                    <div class="form-group">
+                        <label class="form-label" for="marketingTargetPeriod">Periode</label>
+                        <input class="form-input" type="month" id="marketingTargetPeriod" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="marketingTargetLeads">Target Lead Baru</label>
+                        <input class="form-input" type="number" id="marketingTargetLeads" min="0" step="1" value="0">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="marketingTargetFollowups">Target Follow-up</label>
+                        <input class="form-input" type="number" id="marketingTargetFollowups" min="0" step="1" value="0">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="marketingTargetEnrollments">Target Pendaftaran</label>
+                        <input class="form-input" type="number" id="marketingTargetEnrollments" min="0" step="1" value="0">
+                    </div>
+                    <div class="form-group marketing-span-2">
+                        <label class="form-label" for="marketingTargetRevenue">Target Pendapatan (Rp)</label>
+                        <input class="form-input" type="number" id="marketingTargetRevenue" min="0" step="0.01" value="0">
+                    </div>
+                </div>
+                <div class="attendance-modal-actions" style="padding: 0 1.5rem 1.5rem;">
+                    <button class="btn btn-outline" id="marketingTargetCancel" type="button">Batal</button>
+                    <button class="btn btn-primary" id="marketingTargetSubmit" type="submit">
+                        <i class="bi bi-check2-circle"></i> Simpan Target
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script src="../assets/js/config.js"></script>
     <script src="../assets/js/core.js"></script>
     <script src="../assets/js/api.js"></script>
@@ -178,6 +474,7 @@
     <script src="../assets/js/crud-enrollments.js"></script>
     <script src="../assets/js/crud-content.js"></script>
     <script src="../assets/js/crud-grades.js"></script>
+    <script src="../assets/js/crud-marketing.js"></script>
     <script src="../assets/js/ui.js"></script>
     <script src="../assets/js/employee-dashboard.js"></script>
     <script>

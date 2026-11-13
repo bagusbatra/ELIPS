@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| **Status** | Draft untuk disetujui |
-| **Tanggal** | 12 November 2026 |
-| **Cakupan** | Fitur 1 (sesi login diingat), 2 (PWA / ikon di layar utama), 3 (role & halaman absen khusus karyawan), 4 (jadwal shift karyawan oleh Admin) |
+| **Status** | Fitur 1–4 selesai; tambahan Fitur 5 (Dashboard Marketing) selesai |
+| **Tanggal** | 12 November 2026 (diperbarui 13 November 2026) |
+| **Cakupan** | Fitur 1 (sesi login diingat), 2 (PWA / ikon di layar utama), 3 (role & halaman absen khusus karyawan), 4 (jadwal shift karyawan oleh Admin), 5 (dashboard Marketing untuk lead, follow-up, dan target bulanan) |
 | **Di luar cakupan** | QR harian, passkey/biometrik, mode kiosk PIN, integrasi shift ke perhitungan keterlambatan (lihat bagian 11) |
 
 ---
@@ -39,7 +39,7 @@ Tujuan PRD ini: membuat absen terasa **satu ketuk dari HP**, tanpa mengorbankan 
 
 - Frontend statis HTML/JS (`admin/`, `instructor/`, `student/`, `assets/js/*`), backend PHP/MySQL lewat `api/index.php`; mode cadangan `localStorage` saat API mati.
 - Sesi: `ELIPS.api.session` / `elips_session`; guard halaman lewat `ELIPS.requireRole(role)` di `auth.js`.
-- Role valid di `core.js`: `admin`, `instruktur`, `peserta`.
+- Role valid di `core.js`: `admin`, `instruktur`, `peserta`, `karyawan` (dengan `users.division` untuk karyawan).
 - Absensi staf: aksi API `staffAttendance.create | list | delete`, koleksi `staffAttendances`. Logika UI masih **inline** di `admin/dashboard.html`.
 - Aturan absen sudah ada di UI: belum absen → hanya "Absen Masuk"; sudah masuk → hanya "Absen Pulang"; tanggal, jam, dan lokasi dikunci saat Simpan; modal sukses dengan satu tombol "Selesai".
 
@@ -99,6 +99,22 @@ Persyaratan fungsional:
 - **F4.6** Ringkasan kartu menampilkan total shift, Pagi, Sore, dan Custom sesuai hasil filter.
 - **F4.7** Admin dapat menambah, mengubah, dan menghapus shift; karyawan yang dapat dijadwalkan adalah pengguna aktif berrole `admin` atau `karyawan`.
 - **F4.8** Semua perubahan dicatat di Audit Trail dengan entitas `staff_shift`.
+
+### 5.5 Fitur 5 — Dashboard Marketing *(selesai)*
+
+**Cerita pengguna:** *Sebagai karyawan divisi Marketing, saya ingin mencatat lead, menjadwalkan follow-up, dan melihat capaian target bulanan dari HP tanpa membuka spreadsheet.*
+
+Persyaratan fungsional:
+- **F5.1** Widget Marketing hanya tampil di `employee/dashboard.html` bila `division = 'marketing'`; divisi lain tetap memakai dashboard absensi.
+- **F5.2** Ringkasan menampilkan lead aktif, follow-up hari ini (termasuk terlambat), pendaftaran bulan berjalan, serta progres target pendaftaran dan pendapatan.
+- **F5.3** Pipeline lima tahap: `baru`, `dihubungi`, `prospek`, `terdaftar`, `batal`; sumber lead `walk_in`, `referensi`, `sekolah`, `sosial_media`, `pameran`, `telemarketing`, `lainnya`.
+- **F5.4** CRUD lead mencakup nama, telepon/email (minimal satu), kota, sumber, status, minat kursus, catatan, jadwal follow-up berikutnya, dan nilai pendaftaran.
+- **F5.5** CRUD follow-up memakai kanal `telepon`, `whatsapp`, `email`, `kunjungan`, `lainnya`; follow-up pertama memindahkan lead `baru` → `dihubungi` dan menyinkronkan jadwal lead.
+- **F5.6** Target bulanan (lead, follow-up, pendaftaran, pendapatan) disimpan sebagai upsert per karyawan + periode `YYYY-MM`.
+- **F5.7** Status `terdaftar` mengisi `convertedAt` sekali dan `enrollmentValue` dihitung ke capaian periode berjalan.
+- **F5.8** Karyawan hanya melihat/mengubah data miliknya; Admin dapat memantau seluruh data atau memilih satu karyawan. Role/divisi lain ditolak.
+- **F5.9** Aksi API `marketing.dashboard`, `marketing.lead.save/delete`, `marketing.followup.save/delete`, dan `marketing.target.save`; data tidak masuk snapshot bootstrap.
+- **F5.10** Mode lokal memakai `elips_marketingLeads`, `elips_marketingFollowups`, dan `elips_marketingTargets` dengan validasi dan audit yang sama.
 
 ## 6. Aturan bisnis absensi (berlaku di semua role)
 

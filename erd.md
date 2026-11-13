@@ -1,15 +1,15 @@
 # ERD — ELIPS LMS
 
 **Versi dokumen:** 4.0  
-**Tanggal:** 2026-11-11  
-**Status:** Dual-mode - skema fisik MySQL 8 v4.0 Phase 1-6 + absensi karyawan (role `karyawan`, unique key harian, modul absensi bersama, halaman `employee/attendance.html`, dan divisi `users.division`) + fallback koleksi `localStorage`  
+**Tanggal:** 2026-11-13  
+**Status:** Dual-mode - skema fisik MySQL 8 v4.0 Phase 1-6 + absensi karyawan (role `karyawan`, unique key harian, modul absensi bersama, halaman `employee/attendance.html`, dan divisi `users.division`) + dashboard Marketing (lead, follow-up, target bulanan) + fallback koleksi `localStorage`  
 **Dokumen terkait:** `prd.md`, `log.md`, `api/schema.sql`
 
 ---
 
 ## 1. Ringkasan
 
-ELIPS LMS adalah aplikasi Learning Management System dengan empat role: **Admin**, **Instruktur**, **Peserta**, dan **Karyawan**. Pada mode server, data disimpan di **MySQL 8** dengan 40 tabel (35 domain inti + 5 operasional/pribadi) dan foreign key fisik (lihat §13 dan §16). Pada mode fallback, data disimpan sebagai koleksi JSON di `localStorage` dengan model logis yang sama. Sesi login pada mode server disimpan di sesi PHP native; token **"ingat saya"** disimpan sebagai hash di tabel `user_devices`, bukan di `localStorage`.
+ELIPS LMS adalah aplikasi Learning Management System dengan empat role: **Admin**, **Instruktur**, **Peserta**, dan **Karyawan**. Pada mode server, data disimpan di **MySQL 8** dengan 43 tabel (38 domain inti + 5 operasional/pribadi) dan foreign key fisik (lihat §13 dan §16). Pada mode fallback, data disimpan sebagai koleksi JSON di `localStorage` dengan model logis yang sama. Sesi login pada mode server disimpan di sesi PHP native; token **"ingat saya"** disimpan sebagai hash di tabel `user_devices`, bukan di `localStorage`.
 
 Sejak v4.0, kursus dipisahkan dari penyelenggaraannya:
 
@@ -42,12 +42,12 @@ Publikasi kursus / penerbitan sertifikat ── menghasilkan ──► Notificat
 
 | Termasuk ERD | Tidak termasuk |
 |---|---|
-| 35 tabel domain MySQL + 5 tabel operasional (audit, notifikasi, absensi staf, jadwal shift, perangkat pengguna) dan koleksi `localStorage` yang setara | Halaman statis dan tampilan UI |
+| 38 tabel domain MySQL + 5 tabel operasional (audit, notifikasi, absensi staf, jadwal shift, perangkat pengguna) dan koleksi `localStorage` yang setara | Halaman statis dan tampilan UI |
 | Relasi, kardinalitas, foreign key, dan aturan hapus | Data pengaturan halaman Admin (belum dipersistensi) |
 | Enum status dan lifecycle (kursus, kurikulum, kelas, sesi, presensi, enrollment, akses materi, tugas, ujian, skema nilai, finalisasi, sertifikat) | Data laporan/statistik turunan (dihitung saat runtime) |
 | Sesi PHP native (bukan tabel) | Integrasi email nyata (masih simulasi/outbox) |
 
-Catatan: 35 tabel domain inti mencakup tabel akademik Phase 1-4, sembilan tabel Phase 5 (`assignments`, `assignment_files`, `assignment_rubrics`, `submissions`, `submission_files`, `submission_reviews`, `exams`, `exam_participants`, `exam_results`), lima tabel Phase 6 (`predicate_ranges`, `grade_schemes`, `grade_scheme_components`, `grade_component_scores`, `grade_corrections`), dan tabel administrasi `letters` (surat masuk/keluar). Lima tabel operasional/pribadi adalah `audit_logs`, `notifications`, `staff_attendances`, `staff_shifts`, dan `user_devices` (token "ingat saya" per perangkat), sehingga total 40 tabel. Phase 5 dan Phase 6 sebelumnya belum tercatat pada dokumen ini; angka 23 tabel adalah dokumentasi lama yang sudah dikoreksi.
+Catatan: 38 tabel domain inti mencakup tabel akademik Phase 1-4, sembilan tabel Phase 5 (`assignments`, `assignment_files`, `assignment_rubrics`, `submissions`, `submission_files`, `submission_reviews`, `exams`, `exam_participants`, `exam_results`), lima tabel Phase 6 (`predicate_ranges`, `grade_schemes`, `grade_scheme_components`, `grade_component_scores`, `grade_corrections`), tabel administrasi `letters` (surat masuk/keluar), dan tiga tabel Marketing (`marketing_leads`, `marketing_followups`, `marketing_targets`). Lima tabel operasional/pribadi adalah `audit_logs`, `notifications`, `staff_attendances`, `staff_shifts`, dan `user_devices` (token "ingat saya" per perangkat), sehingga total 43 tabel. Phase 5 dan Phase 6 sebelumnya belum tercatat pada dokumen ini; angka 23 tabel adalah dokumentasi lama yang sudah dikoreksi.
 
 ---
 
@@ -678,6 +678,49 @@ erDiagram
         datetime updatedAt
     }
 
+    MARKETING_LEADS {
+        number id PK
+        number ownerId FK
+        string name
+        string phone
+        string email
+        string city
+        enum source
+        enum status
+        string interest
+        text notes
+        date nextFollowupDate
+        datetime convertedAt
+        number enrollmentValue
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    MARKETING_FOLLOWUPS {
+        number id PK
+        number leadId FK
+        number ownerId FK
+        enum channel
+        date followupDate
+        text note
+        string outcome
+        date nextDate
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    MARKETING_TARGETS {
+        number id PK
+        number userId FK
+        string period UK
+        number leadsTarget
+        number followupsTarget
+        number enrollmentsTarget
+        number revenueTarget
+        datetime createdAt
+        datetime updatedAt
+    }
+
     CATEGORIES |o--o{ COURSES : "mengklasifikasikan"
     USERS |o--o{ COURSES : "mengampu sebagai instruktur"
     COURSES ||--o{ CURRICULUM_VERSIONS : "memiliki versi"
@@ -754,6 +797,10 @@ erDiagram
     USERS ||--o{ STAFF_SHIFTS : "dijadwalkan shift"
     USERS |o--o{ STAFF_SHIFTS : "membuat jadwal shift"
     USERS |o--o{ LETTERS : "mencatat surat"
+    USERS ||--o{ MARKETING_LEADS : "menangani lead"
+    MARKETING_LEADS ||--o{ MARKETING_FOLLOWUPS : "memiliki follow-up"
+    USERS ||--o{ MARKETING_FOLLOWUPS : "mencatat follow-up"
+    USERS ||--o{ MARKETING_TARGETS : "memiliki target bulanan"
     USERS ||--o{ USER_DEVICES : "mengingat perangkat"
     CLASSES ||--o{ ASSIGNMENTS : "memiliki tugas"
     CURRICULUM_VERSIONS ||--o{ ASSIGNMENTS : "menjadi acuan tugas"
@@ -781,7 +828,7 @@ erDiagram
     USERS |o--o{ EXAM_RESULTS : "menilai hasil ujian"
 ```
 
-> **Cara membaca:** `USERS |o--o{ CLASSES` berarti satu instruktur dapat mengampu nol atau banyak kelas, sedangkan satu kelas memiliki nol atau satu instruktur (boleh `null` saat draft atau setelah dilepas). Relasi peserta ke kelas bersifat **N—N** dan dipecah melalui `ENROLLMENTS`. Setiap kelas menunjuk tepat satu `curriculum_versions`; begitu kelas dibuat, versi tersebut berstatus `locked`. Sejak Phase 4, setiap kelas dapat memiliki satu pengaturan akses materi dan banyak materi tambahan; progres materi disimpan per enrollment agar peserta yang mengikuti beberapa kelas tidak saling menimpa. Sejak Phase 5, tugas (`assignments`) dan ujian (`exams`) terikat ke kelas dan versi kurikulum, dengan submission/review dan peserta/hasil ujian sebagai entitas turunan. Sejak Phase 6, satu kelas memiliki tepat satu skema penilaian (`grade_schemes`), skema berisi komponen berbobot, nilai komponen disimpan per enrollment, dan nilai akhir yang telah difinalisasi dapat dikoreksi melalui `grade_corrections` beralasan. Notasi `|o` di sisi `USERS` menandai FK yang boleh `null`; `||` menandai FK yang wajib terisi.
+> **Cara membaca:** `USERS |o--o{ CLASSES` berarti satu instruktur dapat mengampu nol atau banyak kelas, sedangkan satu kelas memiliki nol atau satu instruktur (boleh `null` saat draft atau setelah dilepas). Relasi peserta ke kelas bersifat **N—N** dan dipecah melalui `ENROLLMENTS`. Setiap kelas menunjuk tepat satu `curriculum_versions`; begitu kelas dibuat, versi tersebut berstatus `locked`. Sejak Phase 4, setiap kelas dapat memiliki satu pengaturan akses materi dan banyak materi tambahan; progres materi disimpan per enrollment agar peserta yang mengikuti beberapa kelas tidak saling menimpa. Sejak Phase 5, tugas (`assignments`) dan ujian (`exams`) terikat ke kelas dan versi kurikulum, dengan submission/review dan peserta/hasil ujian sebagai entitas turunan. Sejak Phase 6, satu kelas memiliki tepat satu skema penilaian (`grade_schemes`), skema berisi komponen berbobot, nilai komponen disimpan per enrollment, dan nilai akhir yang telah difinalisasi dapat dikoreksi melalui `grade_corrections` beralasan. Sejak increment Marketing, satu karyawan Marketing memiliki banyak lead, setiap lead memiliki banyak follow-up, dan setiap karyawan memiliki satu target per periode bulanan (`marketing_targets`). Notasi `|o` di sisi `USERS` menandai FK yang boleh `null`; `||` menandai FK yang wajib terisi.
 
 ---
 
@@ -830,9 +877,12 @@ Pada mode server, entitas yang sama disimpan di tabel MySQL bernama snake_case (
 | 37 | `STAFF_ATTENDANCES` | `elips_staffAttendances` | Array of object | Absensi harian pribadi staf/admin: maks. satu `in` + satu `out` per hari, foto, lokasi, dan metadata perangkat |
 | 38 | `STAFF_SHIFTS` | `elips_staffShifts` | Array of object | Jadwal shift per karyawan per tanggal: preset Pagi/Sore atau jam custom, satu shift per tanggal |
 | 39 | `LETTERS` | `elips_letters` | Array of object | Surat masuk/keluar beserta nomor, perihal, pengirim, penerima, tanggal, sifat, dan pembuat; kolom status/ringkasan/lampiran/catatan dipertahankan untuk kompatibilitas |
-| 40 | `SESSION` | `elips_session` | Object tunggal | Sesi user yang sedang login (mode server: sesi PHP) |
+| 40 | `MARKETING_LEADS` | `elips_marketingLeads` | Array of object | Lead milik karyawan Marketing: kontak, sumber, status, minat, jadwal follow-up, konversi, dan nilai pendaftaran |
+| 41 | `MARKETING_FOLLOWUPS` | `elips_marketingFollowups` | Array of object | Catatan follow-up per lead: kanal, tanggal, hasil, dan jadwal berikutnya |
+| 42 | `MARKETING_TARGETS` | `elips_marketingTargets` | Array of object | Target bulanan per karyawan dan periode: lead, follow-up, pendaftaran, dan pendapatan |
+| 43 | `SESSION` | `elips_session` | Object tunggal | Sesi user yang sedang login (mode server: sesi PHP) |
 
-Key lama yang dimigrasikan: `elips_enrolled` (self-enrollment) dipindahkan ke `elips_enrollments` oleh `seed.js`, lalu dihapus. Pada migrasi v3 → v4, `seed.js` membuat entri `elips_categories`/`elips_curriculumVersions`/`elips_classes`/`elips_branches` bila belum ada, mengisi `curriculumVersionId` pada modul/materi lama, lalu menambahkan sesi dan presensi demo untuk kelas migrasi. Kelas lama tanpa cabang diberi `branchId = null` agar tetap kompatibel. Sejak Phase 4, `seed.js` juga menormalisasi empat koleksi materi/progres; kelas yang belum memiliki pengaturan akses **tidak** dibuatkan baris, sehingga default implisit `open` tetap sama dengan mode server. Sejak Phase 5, `seed.js` menambahkan koleksi tugas/ujian beserta submission, review, peserta, dan hasil ujian demo. Sejak Phase 6, `seed.js` menambahkan sembilan predikat default, satu skema penilaian demo untuk kelas 1, tiga komponen (tugas 30%, ujian 40%, manual 30%), nilai komponen manual, dan koleksi koreksi kosong.
+Key lama yang dimigrasikan: `elips_enrolled` (self-enrollment) dipindahkan ke `elips_enrollments` oleh `seed.js`, lalu dihapus. Pada migrasi v3 → v4, `seed.js` membuat entri `elips_categories`/`elips_curriculumVersions`/`elips_classes`/`elips_branches` bila belum ada, mengisi `curriculumVersionId` pada modul/materi lama, lalu menambahkan sesi dan presensi demo untuk kelas migrasi. Kelas lama tanpa cabang diberi `branchId = null` agar tetap kompatibel. Sejak Phase 4, `seed.js` juga menormalisasi empat koleksi materi/progres; kelas yang belum memiliki pengaturan akses **tidak** dibuatkan baris, sehingga default implisit `open` tetap sama dengan mode server. Sejak Phase 5, `seed.js` menambahkan koleksi tugas/ujian beserta submission, review, peserta, dan hasil ujian demo. Sejak Phase 6, `seed.js` menambahkan sembilan predikat default, satu skema penilaian demo untuk kelas 1, tiga komponen (tugas 30%, ujian 40%, manual 30%), nilai komponen manual, dan koleksi koreksi kosong. Tiga key Marketing bersifat opsional dan hanya diisi lewat dashboard karyawan divisi Marketing atau `api/seed-marketing-leads.php` pada mode server; key tidak dibuat otomatis oleh `seed.js`.
 
 ---
 
@@ -2010,6 +2060,73 @@ Pencatatan surat masuk dan surat keluar yang dikelola Admin melalui halaman `adm
 
 ---
 
+### 5.12c MARKETING_LEADS, MARKETING_FOLLOWUPS, MARKETING_TARGETS
+
+Tiga entitas Marketing dipakai oleh dashboard karyawan divisi Marketing. Data lead dan follow-up bersifat pribadi milik karyawan yang menanganinya; Admin dapat memantau seluruh data. Mode lokal memakai key `elips_marketingLeads`, `elips_marketingFollowups`, dan `elips_marketingTargets`.
+
+**`MARKETING_LEADS` — `elips_marketingLeads`**
+
+| Field | Tipe | Key | Wajib | Keterangan |
+|---|---|---|---|---|
+| `id` | number | PK | Ya | ID lead |
+| `ownerId` | number | FK → `users.id` | Ya | Karyawan Marketing pemilik lead; `ON DELETE CASCADE` |
+| `ownerName` | string | - | Tidak | Nama pemilik (hasil JOIN, bukan input client) |
+| `name` | string | - | Ya | Nama calon peserta (maks. 150 karakter) |
+| `phone` | string | - | Tidak | Telepon (maks. 30 karakter); minimal salah satu kontak wajib |
+| `email` | string | - | Tidak | Email valid (maks. 190 karakter); minimal salah satu kontak wajib |
+| `city` | string | - | Tidak | Kota (maks. 100 karakter) |
+| `source` | enum `walk_in`/`referensi`/`sekolah`/`sosial_media`/`pameran`/`telemarketing`/`lainnya` | - | Ya | Sumber lead; default `lainnya` |
+| `status` | enum `baru`/`dihubungi`/`prospek`/`terdaftar`/`batal` | - | Ya | Tahap pipeline; default `baru` |
+| `interest` | string | - | Tidak | Minat kursus (maks. 150 karakter) |
+| `notes` | text | - | Tidak | Catatan (maks. 1000 karakter) |
+| `nextFollowupDate` | date/null | - | Tidak | Jadwal follow-up berikutnya; dasar widget Aksi Hari Ini |
+| `convertedAt` | datetime/null | - | Tidak | Diisi sekali saat status menjadi `terdaftar` |
+| `enrollmentValue` | number | - | Ya | Nilai pendaftaran; default 0, tidak negatif |
+| `createdAt` | datetime ISO | - | Ya | Waktu dibuat |
+| `updatedAt` | datetime/null | - | Tidak | Waktu diperbarui |
+
+**`MARKETING_FOLLOWUPS` — `elips_marketingFollowups`**
+
+| Field | Tipe | Key | Wajib | Keterangan |
+|---|---|---|---|---|
+| `id` | number | PK | Ya | ID follow-up |
+| `leadId` | number | FK → `marketing_leads.id` | Ya | Lead yang di-follow-up; `ON DELETE CASCADE` |
+| `leadName` | string | - | Tidak | Nama lead (hasil JOIN, bukan input client) |
+| `ownerId` | number | FK → `users.id` | Ya | Karyawan pemilik follow-up; `ON DELETE CASCADE` |
+| `channel` | enum `telepon`/`whatsapp`/`email`/`kunjungan`/`lainnya` | - | Ya | Kanal follow-up; default `telepon` |
+| `followupDate` | date | - | Ya | Tanggal follow-up |
+| `note` | text | - | Tidak | Catatan (maks. 1000 karakter) |
+| `outcome` | string | - | Tidak | Hasil singkat (maks. 200 karakter) |
+| `nextDate` | date/null | - | Tidak | Rencana follow-up berikutnya; disinkronkan ke lead |
+| `createdAt` | datetime ISO | - | Ya | Waktu dibuat |
+| `updatedAt` | datetime/null | - | Tidak | Waktu diperbarui |
+
+**`MARKETING_TARGETS` — `elips_marketingTargets`**
+
+| Field | Tipe | Key | Wajib | Keterangan |
+|---|---|---|---|---|
+| `id` | number | PK | Ya | ID target |
+| `userId` | number | FK → `users.id`, UK bersama `period` | Ya | Karyawan Marketing; `ON DELETE CASCADE` |
+| `period` | string `YYYY-MM` | UK bersama `userId` | Ya | Periode target bulanan |
+| `leadsTarget` | number | - | Ya | Target lead baru; default 0, tidak negatif |
+| `followupsTarget` | number | - | Ya | Target follow-up; default 0, tidak negatif |
+| `enrollmentsTarget` | number | - | Ya | Target pendaftaran; default 0, tidak negatif |
+| `revenueTarget` | number | - | Ya | Target pendapatan; default 0, tidak negatif |
+| `createdAt` | datetime ISO | - | Ya | Waktu dibuat |
+| `updatedAt` | datetime/null | - | Tidak | Waktu diperbarui |
+
+**Aturan:**
+
+- Guard `elips_require_marketing_access()` mengizinkan Admin dan karyawan `role = 'karyawan'` dengan `division = 'marketing'`; role/divisi lain ditolak.
+- Karyawan selalu terkunci ke data miliknya. Admin dapat melihat seluruh data atau satu karyawan lewat `userId`; saat menulis, Admin wajib memilih pemilik valid.
+- Lead wajib memiliki nama dan minimal satu kontak (telepon/email). Email harus valid dan seluruh panjang field dibatasi seperti tabel di atas.
+- Status `terdaftar` mengisi `convertedAt` sekali; nilai `enrollmentValue` dihitung ke capaian bulanan hanya bila `convertedAt` berada pada periode aktif.
+- Mencatat follow-up menyinkronkan `nextFollowupDate` lead dan mengubah status `baru` → `dihubungi`. Menghapus follow-up menghitung ulang jadwal dari follow-up tersisa.
+- Target di-upsert per `(userId, period)`; unique key `uq_marketing_targets_user_period` mencegah duplikat.
+- Ketiga tabel tidak dimasukkan ke snapshot bootstrap; data dibaca lewat `marketing.dashboard` dan ditulis lewat `marketing.*`. Setiap create/update/delete dicatat sebagai audit `marketing_lead`, `marketing_followup`, atau `marketing_target`.
+
+---
+
 ### 5.13 USER_DEVICES — tabel server `user_devices` (tanpa key `localStorage`)
 
 Menyimpan token **"ingat saya"** per perangkat. Hanya tersedia di mode server; mode lokal mengabaikan token dan tidak memiliki koleksi `localStorage` yang setara. Token mentah tidak pernah disimpan—yang disimpan adalah hash SHA-256.
@@ -2085,7 +2202,11 @@ Menyimpan token **"ingat saya"** per perangkat. Hanya tersedia di mode server; m
 | R40 | `USERS` (admin/karyawan) -> `STAFF_ATTENDANCES` | 1 -> N | `staff_attendances.userId` | User dihapus: catatan absensi dihapus (`ON DELETE CASCADE`) | Absensi harian pribadi (maks. 1 `in` + 1 `out` per hari, dijaga unique key); pemilik membaca sendiri, admin dapat membaca/menghapus dengan alasan |
 | R40a | `USERS` → `USER_DEVICES` | 1 — N | `user_devices.userId` | User dihapus: seluruh token perangkat dihapus (`ON DELETE CASCADE`) | Token "ingat saya" dirotasi dan dicabut; hash token unik |
 | R40b | `USERS` (admin/karyawan) → `STAFF_SHIFTS` | 1 — N | `staff_shifts.userId` | User dihapus: seluruh jadwal shift dihapus (`ON DELETE CASCADE`) | Satu shift per karyawan per tanggal, dijaga unique key (`user_id`, `shift_date`); pembuat jadwal (`createdBy`) menjadi `NULL` bila admin dihapus |
-| R40c | `USERS` (admin) → `LETTERS` | 1 — N | `letters.createdBy` | User dihapus: `createdBy` menjadi `NULL`, catatan surat tetap tersimpan | Nomor surat tidak unik; pembuat dicatat untuk audit, bukan pemilik dokumen |
+| R40c | `USERS` (admin) → `LETTERS` | 1 - N | `letters.createdBy` | User dihapus: `createdBy` menjadi `NULL`, catatan surat tetap tersimpan | Nomor surat tidak unik; pembuat dicatat untuk audit, bukan pemilik dokumen |
+| R40d | `USERS` (karyawan Marketing) → `MARKETING_LEADS` | 1 - N | `marketing_leads.owner_id` | User dihapus: seluruh lead miliknya dihapus (`ON DELETE CASCADE`) | Lead pribadi milik karyawan; Admin dapat memantau semua |
+| R40e | `MARKETING_LEADS` → `MARKETING_FOLLOWUPS` | 1 - N | `marketing_followups.lead_id` | Lead dihapus: seluruh follow-up dihapus (`ON DELETE CASCADE`) | Riwayat follow-up tidak berdiri sendiri |
+| R40f | `USERS` (karyawan Marketing) → `MARKETING_FOLLOWUPS` | 1 - N | `marketing_followups.owner_id` | User dihapus: seluruh follow-up miliknya dihapus (`ON DELETE CASCADE`) | Denormalisasi pemilik dari lead |
+| R40g | `USERS` (karyawan Marketing) → `MARKETING_TARGETS` | 1 - N | `marketing_targets.user_id` | User dihapus: seluruh target miliknya dihapus (`ON DELETE CASCADE`) | Satu target per karyawan per periode (`user_id`, `period` unik) |
 | R41 | `CLASSES` → `ASSIGNMENTS` | 1 — N | `assignments.classId` | Kelas dihapus: tugas dihapus | Tugas milik satu kelas |
 | R42 | `CURRICULUM_VERSIONS` → `ASSIGNMENTS` | 1 — N | `assignments.curriculumVersionId` | Versi dihapus: tugas dihapus | Acuan versi kelas |
 | R43 | `MODULES`/`LESSONS` → `ASSIGNMENTS` | 1 — N | `assignments.moduleId`, `assignments.lessonId` | Modul/materi dihapus: FK `SET NULL` | Opsional |
@@ -2904,6 +3025,9 @@ Nilai hasil finalisasi skema (enrollment 1 setelah komponen Tugas dikecualikan):
 | Audit | `AUDIT_LOGS` | Urut `createdAt` desc, filter aksi/entitas/aktor/tanggal |
 | Notifikasi | `NOTIFICATIONS` | Urut `createdAt` desc, filter tipe/penerima/tanggal |
 | Surat menyurat | `LETTERS` | Urut `letterDate` desc lalu `id` desc; filter `direction`, rentang `letterDate`, pencarian nomor/perihal/pengirim/penerima/kategori |
+| Lead Marketing | `MARKETING_LEADS` | Filter `ownerId` (Admin: opsional), urut `updatedAt`/`createdAt` desc; cari status, sumber, kota, dan jadwal follow-up |
+| Follow-up Marketing | `MARKETING_FOLLOWUPS` | Filter `ownerId`/`leadId`, urut `followupDate` desc lalu `id` desc, batas 500 baris pada dashboard |
+| Target Marketing | `MARKETING_TARGETS` | Cari `(userId, period)` unik; daftar per periode |
 
 ### 12.1 Index yang Dipakai di MySQL
 
@@ -2941,6 +3065,9 @@ Nilai hasil finalisasi skema (enrollment 1 setelah komponen Tugas dikecualikan):
 - `audit_logs(created_at)`, `audit_logs(actor_id)`, `audit_logs(entity)`
 - `notifications(created_at)`, `notifications(type)`, `notifications(recipient_id)`
 - `letters(direction)`, `letters(letter_date)`, `letters(status)`, `letters(letter_number)`
+- `marketing_leads(owner_id)`, `marketing_leads(status)`, `marketing_leads(next_followup_date)`, `marketing_leads(converted_at)`
+- `marketing_followups(lead_id)`, `marketing_followups(owner_id, followup_date)`, `marketing_followups(followup_date)`
+- `marketing_targets(user_id, period)` unik, `marketing_targets(period)`
 
 ---
 
@@ -2989,6 +3116,9 @@ Skema fisik ada di `api/schema.sql` dan dibuat oleh `api/install.php`. Pemetaan 
 | `STAFF_ATTENDANCES` | `staff_attendances` | `id` | `user_id` → `users.id` CASCADE; unique (`user_id`, `attendance_date`, `kind`); index (`user_id`, `attendance_date`) |
 | `STAFF_SHIFTS` | `staff_shifts` | `id` | `user_id` → `users.id` CASCADE; `created_by` → `users.id` SET NULL; unique (`user_id`, `shift_date`); index (`shift_date`), (`shift_type`) |
 | `LETTERS` | `letters` | `id` | `created_by` → `users.id` SET NULL; index (`direction`), (`letter_date`), (`status`), (`letter_number`) |
+| `MARKETING_LEADS` | `marketing_leads` | `id` | `owner_id` → `users.id` CASCADE; index (`owner_id`), (`status`), (`next_followup_date`), (`converted_at`) |
+| `MARKETING_FOLLOWUPS` | `marketing_followups` | `id` | `lead_id` → `marketing_leads.id` CASCADE; `owner_id` → `users.id` CASCADE; index (`lead_id`), (`owner_id`, `followup_date`), (`followup_date`) |
+| `MARKETING_TARGETS` | `marketing_targets` | `id` | `user_id` → `users.id` CASCADE; UNIQUE(`user_id`, `period`); index (`period`) |
 | `USER_DEVICES` | `user_devices` | `id` | `user_id` → `users.id` CASCADE; `token_hash` UNIQUE; index (`user_id`), (`expires_at`) |
 | `SESSION` | Sesi PHP native | — | Tidak ada tabel `sessions`; cookie sesi hanya menyimpan ID sesi |
 
@@ -3058,6 +3188,8 @@ USERS              1 ─── N AUDIT_LOGS / NOTIFICATIONS
 USERS (admin)      1 ─── N STAFF_ATTENDANCES
 USERS (admin)      1 ─── N STAFF_SHIFTS
 USERS (admin)      1 ─── N LETTERS
+USERS (Marketing)  1 ─── N MARKETING_LEADS / MARKETING_FOLLOWUPS / MARKETING_TARGETS
+MARKETING_LEADS    1 ─── N MARKETING_FOLLOWUPS
 USERS              1 ─── N USER_DEVICES
 USERS              1 ─── 0..1 SESSION
 ```
@@ -3131,7 +3263,10 @@ Bagian ini mendokumentasikan skema yang benar-benar dieksekusi oleh `api/schema.
 | 37 | `staff_attendances` | Absensi harian pribadi staf/admin (kamera + metadata) | `id`, `user_id`, `kind`, `attendance_date`, `taken_at`, `photo`, `latitude`, `longitude` | `user_id` → `users.id` (`ON DELETE CASCADE`) |
 | 38 | `staff_shifts` | Jadwal shift per karyawan per tanggal (Pagi/Sore/custom) | `id`, `user_id`, `shift_date`, `shift_type`, `start_time`, `end_time`, `note` | `user_id` → `users.id` (`ON DELETE CASCADE`); `created_by` → `users.id` (`SET NULL`); unik(`user_id`, `shift_date`) |
 | 39 | `letters` | Arsip surat masuk/keluar beserta detail dan sifat; kolom status/ringkasan/lampiran/catatan dipertahankan untuk kompatibilitas | `id`, `direction`, `letter_number`, `subject`, `sender`, `recipient`, `letter_date`, `classification` | `created_by` → `users.id` (`SET NULL`); index(`direction`), (`letter_date`), (`status`), (`letter_number`) |
-| 40 | `user_devices` | Token "ingat saya" per perangkat (hash SHA-256) | `id`, `user_id`, `token_hash`, `device_label`, `expires_at`, `revoked_at`, `revoked_reason` | `user_id` → `users.id` (`ON DELETE CASCADE`); `token_hash` UNIQUE |
+| 40 | `marketing_leads` | Lead calon peserta milik karyawan Marketing | `id`, `owner_id`, `name`, `phone`, `email`, `source`, `status`, `next_followup_date`, `converted_at`, `enrollment_value` | `owner_id` → `users.id` (`ON DELETE CASCADE`); index(`owner_id`), (`status`), (`next_followup_date`), (`converted_at`) |
+| 41 | `marketing_followups` | Catatan follow-up per lead | `id`, `lead_id`, `owner_id`, `channel`, `followup_date`, `outcome`, `next_date` | `lead_id` → `marketing_leads.id` (`CASCADE`); `owner_id` → `users.id` (`CASCADE`); index(`lead_id`), (`owner_id`, `followup_date`), (`followup_date`) |
+| 42 | `marketing_targets` | Target bulanan per karyawan Marketing | `id`, `user_id`, `period`, `leads_target`, `followups_target`, `enrollments_target`, `revenue_target` | `user_id` → `users.id` (`CASCADE`); unik(`user_id`, `period`); index(`period`) |
+| 43 | `user_devices` | Token "ingat saya" per perangkat (hash SHA-256) | `id`, `user_id`, `token_hash`, `device_label`, `expires_at`, `revoked_at`, `revoked_reason` | `user_id` → `users.id` (`ON DELETE CASCADE`); `token_hash` UNIQUE |
 
 Sesi login **tidak** memakai tabel: autentikasi memakai sesi PHP native (`$_SESSION`) dengan cookie `HttpOnly` dan `SameSite=Lax`. Token "ingat saya" disimpan di `user_devices` (hanya hash) dan dikirim sebagai cookie `elips_remember` yang juga `HttpOnly` (+ `Secure` saat HTTPS).
 
@@ -3790,6 +3925,55 @@ Catatan: `uq_certificates_enrollment (enrollment_id)` memastikan satu sertifikat
 | `created_at` | `DATETIME` | tidak | `CURRENT_TIMESTAMP` | Waktu dibuat |
 | `updated_at` | `DATETIME` | ya | `NULL` | Waktu diperbarui |
 
+**`marketing_leads`**
+
+| Kolom | Tipe | Null | Default | Keterangan |
+|---|---|---|---|---|
+| `id` | `INT UNSIGNED` | tidak | AUTO_INCREMENT | Primary key |
+| `owner_id` | `INT UNSIGNED` | tidak | - | Karyawan Marketing pemilik lead (FK `users.id`, CASCADE) |
+| `name` | `VARCHAR(150)` | tidak | - | Nama calon peserta |
+| `phone` | `VARCHAR(30)` | tidak | `''` | Telepon; minimal satu kontak wajib |
+| `email` | `VARCHAR(190)` | tidak | `''` | Email; minimal satu kontak wajib |
+| `city` | `VARCHAR(100)` | tidak | `''` | Kota |
+| `source` | `ENUM('walk_in','referensi','sekolah','sosial_media','pameran','telemarketing','lainnya')` | tidak | `'lainnya'` | Sumber lead |
+| `status` | `ENUM('baru','dihubungi','prospek','terdaftar','batal')` | tidak | `'baru'` | Tahap pipeline |
+| `interest` | `VARCHAR(150)` | tidak | `''` | Minat kursus |
+| `notes` | `VARCHAR(1000)` | tidak | `''` | Catatan |
+| `next_followup_date` | `DATE` | ya | `NULL` | Jadwal follow-up berikutnya |
+| `converted_at` | `DATETIME` | ya | `NULL` | Diisi sekali saat status menjadi `terdaftar` |
+| `enrollment_value` | `DECIMAL(14,2)` | tidak | `0` | Nilai pendaftaran; tidak negatif |
+| `created_at` | `DATETIME` | tidak | `CURRENT_TIMESTAMP` | Waktu dibuat |
+| `updated_at` | `DATETIME` | ya | `NULL` | Waktu diperbarui |
+
+**`marketing_followups`**
+
+| Kolom | Tipe | Null | Default | Keterangan |
+|---|---|---|---|---|
+| `id` | `INT UNSIGNED` | tidak | AUTO_INCREMENT | Primary key |
+| `lead_id` | `INT UNSIGNED` | tidak | - | Lead yang di-follow-up (FK `marketing_leads.id`, CASCADE) |
+| `owner_id` | `INT UNSIGNED` | tidak | - | Karyawan pemilik follow-up (FK `users.id`, CASCADE) |
+| `channel` | `ENUM('telepon','whatsapp','email','kunjungan','lainnya')` | tidak | `'telepon'` | Kanal follow-up |
+| `followup_date` | `DATE` | tidak | - | Tanggal follow-up |
+| `note` | `VARCHAR(1000)` | tidak | `''` | Catatan |
+| `outcome` | `VARCHAR(200)` | tidak | `''` | Hasil singkat |
+| `next_date` | `DATE` | ya | `NULL` | Rencana follow-up berikutnya; disinkronkan ke lead |
+| `created_at` | `DATETIME` | tidak | `CURRENT_TIMESTAMP` | Waktu dibuat |
+| `updated_at` | `DATETIME` | ya | `NULL` | Waktu diperbarui |
+
+**`marketing_targets`**
+
+| Kolom | Tipe | Null | Default | Keterangan |
+|---|---|---|---|---|
+| `id` | `INT UNSIGNED` | tidak | AUTO_INCREMENT | Primary key |
+| `user_id` | `INT UNSIGNED` | tidak | - | Karyawan Marketing (FK `users.id`, CASCADE); unik bersama `period` |
+| `period` | `CHAR(7)` | tidak | - | Periode `YYYY-MM`; unik bersama `user_id` |
+| `leads_target` | `INT UNSIGNED` | tidak | `0` | Target lead baru |
+| `followups_target` | `INT UNSIGNED` | tidak | `0` | Target follow-up |
+| `enrollments_target` | `INT UNSIGNED` | tidak | `0` | Target pendaftaran |
+| `revenue_target` | `DECIMAL(14,2)` | tidak | `0` | Target pendapatan |
+| `created_at` | `DATETIME` | tidak | `CURRENT_TIMESTAMP` | Waktu dibuat |
+| `updated_at` | `DATETIME` | ya | `NULL` | Waktu diperbarui |
+
 **`user_devices`**
 
 | Kolom | Tipe | Null | Default | Keterangan |
@@ -3869,6 +4053,10 @@ Catatan: `uq_certificates_enrollment (enrollment_id)` memastikan satu sertifikat
 | `staff_shifts` | `uq_staff_shifts_user_date (user_id, shift_date)` | UNIQUE |
 | `staff_shifts` | `idx_staff_shifts_date (shift_date)`, `idx_staff_shifts_type (shift_type)` | INDEX |
 | `letters` | `idx_letters_direction (direction)`, `idx_letters_date (letter_date)`, `idx_letters_status (status)`, `idx_letters_number (letter_number)` | INDEX |
+| `marketing_leads` | `idx_marketing_leads_owner (owner_id)`, `idx_marketing_leads_status (status)`, `idx_marketing_leads_next_followup (next_followup_date)`, `idx_marketing_leads_converted (converted_at)` | INDEX |
+| `marketing_followups` | `idx_marketing_followups_lead (lead_id)`, `idx_marketing_followups_owner_date (owner_id, followup_date)`, `idx_marketing_followups_date (followup_date)` | INDEX |
+| `marketing_targets` | `uq_marketing_targets_user_period (user_id, period)` | UNIQUE |
+| `marketing_targets` | `idx_marketing_targets_period (period)` | INDEX |
 | `user_devices` | `uq_user_devices_token (token_hash)` | UNIQUE |
 | `user_devices` | `idx_user_devices_user (user_id)`, `idx_user_devices_expires (expires_at)` | INDEX |
 
@@ -3988,6 +4176,10 @@ Catatan: `staff_attendances` memiliki unique key pada (`user_id`, `attendance_da
 | `fk_staff_shifts_user` | `staff_shifts.user_id` | `users.id` | `CASCADE` |
 | `fk_staff_shifts_created_by` | `staff_shifts.created_by` | `users.id` | `SET NULL` |
 | `fk_letters_created_by` | `letters.created_by` | `users.id` | `SET NULL` |
+| `fk_marketing_leads_owner` | `marketing_leads.owner_id` | `users.id` | `CASCADE` |
+| `fk_marketing_followups_lead` | `marketing_followups.lead_id` | `marketing_leads.id` | `CASCADE` |
+| `fk_marketing_followups_owner` | `marketing_followups.owner_id` | `users.id` | `CASCADE` |
+| `fk_marketing_targets_user` | `marketing_targets.user_id` | `users.id` | `CASCADE` |
 | `fk_user_devices_user` | `user_devices.user_id` | `users.id` | `CASCADE` |
 
 Catatan: `audit_logs` dan `notifications` sengaja tidak memiliki foreign key fisik ke `users`. Keduanya menyimpan snapshot nama/role/email agar riwayat tetap terbaca meski akun asal dihapus, dan penghapusan pengguna tidak terblokir oleh riwayat. `classes.course_id` dan `classes.curriculum_version_id` memakai `RESTRICT` agar penghapusan kursus/versi yang sudah dipakai kelas ditolak di level database, bukan hanya di level aplikasi.
@@ -4036,15 +4228,18 @@ Snapshot API memakai nama koleksi yang sama dengan model `localStorage`, sehingg
 | `staff_attendances` | `staffAttendances` (tidak di snapshot) | Dibaca lewat `staffAttendance.list`; `user_id`/`attendance_date`/`taken_at`/`photo_mime`/`accuracy_m`/`location_label`/`location_source`/`ip_address`/`user_agent`/`device_memory`/`hardware_concurrency`/`connection_type`/`created_at` → camelCase; `photo` base64 tetap data URL. Karyawan hanya menerima baris miliknya; admin dapat meminta `userId` lain |
 | `staff_shifts` | `staffShifts` (tidak di snapshot) | Dibaca lewat `staffShift.list`; `user_id`/`shift_date`/`shift_type`/`start_time`/`end_time`/`created_by`/`created_at`/`updated_at` → camelCase/ISO; `userName`/`userEmail`/`userRole` dari JOIN. Khusus Admin |
 | `letters` | `letters` (tidak di snapshot) | Dibaca lewat `letter.list`; `letter_number`/`letter_date`/`handled_date`/`attachment_url`/`created_by`/`created_at`/`updated_at` → camelCase/ISO; `createdByName` dari JOIN. Khusus Admin |
+| `marketing_leads` | `marketingLeads` (tidak di snapshot) | Dibaca lewat `marketing.dashboard`; `owner_id`/`next_followup_date`/`converted_at`/`enrollment_value`/`created_at`/`updated_at` → camelCase/ISO; `ownerName` dari JOIN |
+| `marketing_followups` | `marketingFollowups` (tidak di snapshot) | Dibaca lewat `marketing.dashboard`; `lead_id`/`owner_id`/`followup_date`/`next_date`/`created_at`/`updated_at` → camelCase/ISO; `leadName` dari JOIN |
+| `marketing_targets` | `marketingTargets` (tidak di snapshot) | Dibaca lewat `marketing.dashboard`; `user_id`/`leads_target`/`followups_target`/`enrollments_target`/`revenue_target` → camelCase; tanggal → ISO |
 | `user_devices` | — (tidak ada koleksi client) | Server-only; token/hash tidak pernah masuk snapshot, cookie, atau `localStorage` |
 | `notifications` | `notifications` | `recipient_id`/`recipient_email` → camelCase; `created_at` → ISO |
 | Sesi PHP | `session` (cache di `api.js`) | `{ userId }` dari `$_SESSION`, bukan tabel |
 
-Snapshot hanya memuat modul/materi dari versi kurikulum aktif (non-`retired`) tiap kursus. Struktur versi lain diambil lewat aksi `curriculum.detail`. Sejak Phase 4, snapshot juga memuat `classMaterialSettings`, `classMaterials`, `classLessonProgress`, dan `classMaterialProgress`; `classMaterials` sengaja hanya berisi metadata tanpa `content`/`file_path`. Koleksi `staffAttendances` sengaja tidak dimasukkan ke snapshot bootstrap karena memuat foto pribadi dan metadata perangkat; data hanya dikembalikan oleh aksi `staffAttendance.list` milik pengguna yang login. Koleksi `staffShifts` juga tidak masuk snapshot; jadwal dibaca khusus Admin lewat aksi `staffShift.list` agar data shift tidak terekspos ke role lain. Koleksi `letters` juga tidak masuk snapshot; surat dibaca khusus Admin lewat aksi `letter.list`. Pada UI, `attendance_date`, `taken_at`, dan koordinat diisi otomatis saat simpan (tanggal/jam `Asia/Jakarta` dan GPS perangkat), sehingga pengguna tidak dapat mengubahnya; dashboard Admin dan halaman karyawan memakai modul bersama `attendance.js`, dan satu pengguna hanya dapat mencatat satu `in` dan satu `out` per hari. Tabel `user_devices` tidak pernah masuk snapshot: token mentah hanya ada di cookie `elips_remember`, sedangkan server menyimpan hash-nya dan mengelola rotasi/pencabutan sepenuhnya di backend.
+Snapshot hanya memuat modul/materi dari versi kurikulum aktif (non-`retired`) tiap kursus. Struktur versi lain diambil lewat aksi `curriculum.detail`. Sejak Phase 4, snapshot juga memuat `classMaterialSettings`, `classMaterials`, `classLessonProgress`, dan `classMaterialProgress`; `classMaterials` sengaja hanya berisi metadata tanpa `content`/`file_path`. Koleksi `staffAttendances` sengaja tidak dimasukkan ke snapshot bootstrap karena memuat foto pribadi dan metadata perangkat; data hanya dikembalikan oleh aksi `staffAttendance.list` milik pengguna yang login. Koleksi `staffShifts` juga tidak masuk snapshot; jadwal dibaca khusus Admin lewat aksi `staffShift.list` agar data shift tidak terekspos ke role lain. Koleksi `letters` juga tidak masuk snapshot; surat dibaca khusus Admin lewat aksi `letter.list`. Koleksi `marketingLeads`, `marketingFollowups`, dan `marketingTargets` juga tidak masuk snapshot karena memuat kontak pribadi lead; hanya karyawan pemilik (atau Admin) yang menerimanya lewat aksi `marketing.dashboard` dengan cakupan kepemilikan yang ditegakkan server. Pada UI, `attendance_date`, `taken_at`, dan koordinat diisi otomatis saat simpan (tanggal/jam `Asia/Jakarta` dan GPS perangkat), sehingga pengguna tidak dapat mengubahnya; dashboard Admin dan halaman karyawan memakai modul bersama `attendance.js`, dan satu pengguna hanya dapat mencatat satu `in` dan satu `out` per hari. Tabel `user_devices` tidak pernah masuk snapshot: token mentah hanya ada di cookie `elips_remember`, sedangkan server menyimpan hash-nya dan mengelola rotasi/pencabutan sepenuhnya di backend.
 
 ### 16.6 Catatan Operasional
 
-- **Instalasi:** `php api/install.php --fresh` menghapus database lama, membuat ulang seluruh 40 tabel, dan mengisi data demo: 9 predikat, 7 pengguna, 4 kategori, 3 cabang, 4 kursus, 4 versi kurikulum, 25 modul, 75 materi, 1 kelas migrasi, 1 histori tentor, 3 enrollment, 4 sesi pertemuan, 9 baris presensi, 2 tugas, 3 rubrik, 1 submission, 2 riwayat review, 2 ujian, 6 peserta ujian, 6 hasil ujian, 1 skema penilaian, 3 komponen, dan 2 nilai komponen manual. Koleksi `grade_corrections` sengaja kosong pada seed. Tabel `staff_attendances` dibuat (tabel ke-37) tetapi tidak diisi data demo karena absensi bersifat pribadi dan dibuat dari dashboard Admin atau halaman karyawan. Tabel `staff_shifts` dibuat (tabel ke-38) dan sengaja kosong karena jadwal shift diisi Admin melalui halaman jadwal shift. Tabel `letters` dibuat (tabel ke-39) dan tetap kosong setelah `install.php`; 14 surat dummy (7 masuk + 7 keluar) diisi terpisah secara idempoten lewat `php api/seed-letters.php`, yang mencocokkan `direction` + `letter_number` + `letter_date`. Tabel `user_devices` dibuat (tabel ke-40) dan sengaja kosong sampai ada login dengan "Ingat saya". Password demo `elips123` di-hash saat seeding.
+- **Instalasi:** `php api/install.php --fresh` menghapus database lama, membuat ulang seluruh 43 tabel, dan mengisi data demo: 9 predikat, 7 pengguna, 4 kategori, 3 cabang, 4 kursus, 4 versi kurikulum, 25 modul, 75 materi, 1 kelas migrasi, 1 histori tentor, 3 enrollment, 4 sesi pertemuan, 9 baris presensi, 2 tugas, 3 rubrik, 1 submission, 2 riwayat review, 2 ujian, 6 peserta ujian, 6 hasil ujian, 1 skema penilaian, 3 komponen, dan 2 nilai komponen manual. Koleksi `grade_corrections` sengaja kosong pada seed. Tabel `staff_attendances` dibuat (tabel ke-37) tetapi tidak diisi data demo karena absensi bersifat pribadi dan dibuat dari dashboard Admin atau halaman karyawan. Tabel `staff_shifts` dibuat (tabel ke-38) dan sengaja kosong karena jadwal shift diisi Admin melalui halaman jadwal shift. Tabel `letters` dibuat (tabel ke-39) dan tetap kosong setelah `install.php`; 14 surat dummy (7 masuk + 7 keluar) diisi terpisah secara idempoten lewat `php api/seed-letters.php`, yang mencocokkan `direction` + `letter_number` + `letter_date`. Tiga tabel Marketing dibuat (tabel ke-40–42) dan tetap kosong setelah `install.php`; data dummy diisi terpisah secara idempoten lewat `php api/seed-marketing-leads.php` setelah `api/seed-marketing.php`, yang membuat 12 lead, 12 follow-up, dan 6 target periode berjalan dengan mencocokkan `owner_id` + email lead serta meng-upsert target per `(user_id, period)`. Tabel `user_devices` dibuat (tabel ke-43) dan sengaja kosong sampai ada login dengan "Ingat saya". Password demo `elips123` di-hash saat seeding.
 - **Timezone:** koneksi PDO disetel UTC; kolom `DATE` untuk tanggal kalender dan `DATETIME` untuk timestamp.
 - **Transaksi:** operasi multi-tabel dijalankan dalam transaksi eksplisit:
   - pembuatan kelas + penguncian versi kurikulum (`curriculum_versions.status = 'locked'`) + histori tentor awal;

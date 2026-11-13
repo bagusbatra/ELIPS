@@ -120,6 +120,43 @@ function elips_require_attendance_access(): array
     return $user;
 }
 
+/**
+ * Guard data Marketing: admin boleh memantau semua data, karyawan hanya
+ * boleh mengakses data miliknya sendiri dan wajib berasal dari divisi
+ * Marketing.
+ */
+function elips_require_marketing_access(): array
+{
+    $user = elips_require_login();
+    if ($user['role'] === 'admin') {
+        return $user;
+    }
+    if ($user['role'] !== 'karyawan' || ($user['division'] ?? '') !== 'marketing') {
+        throw new ElipsError('Anda tidak berhak mengakses data Marketing.');
+    }
+    return $user;
+}
+
+function elips_marketing_valid_lead_status(string $status): bool
+{
+    return in_array($status, ['baru', 'dihubungi', 'prospek', 'terdaftar', 'batal'], true);
+}
+
+function elips_marketing_valid_lead_source(string $source): bool
+{
+    return in_array($source, ['walk_in', 'referensi', 'sekolah', 'sosial_media', 'pameran', 'telemarketing', 'lainnya'], true);
+}
+
+function elips_marketing_valid_followup_channel(string $channel): bool
+{
+    return in_array($channel, ['telepon', 'whatsapp', 'email', 'kunjungan', 'lainnya'], true);
+}
+
+function elips_marketing_valid_period(string $period): bool
+{
+    return (bool) preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', $period);
+}
+
 /** Zona waktu acuan absensi. Ubah di satu tempat bila kebijakan berubah. */
 function elips_attendance_timezone(): string
 {
@@ -1745,6 +1782,90 @@ function elips_letter_public(array $row): array
         'createdAt' => elips_iso($row['created_at']),
         'updatedAt' => elips_iso($row['updated_at']),
     ];
+}
+
+// ---------- Marketing ----------
+
+function elips_marketing_lead_public(array $row): array
+{
+    return [
+        'id' => (int) $row['id'],
+        'ownerId' => (int) $row['owner_id'],
+        'ownerName' => $row['owner_name'] ?? '',
+        'name' => $row['name'],
+        'phone' => $row['phone'],
+        'email' => $row['email'],
+        'city' => $row['city'],
+        'source' => $row['source'],
+        'status' => $row['status'],
+        'interest' => $row['interest'],
+        'notes' => $row['notes'],
+        'nextFollowupDate' => $row['next_followup_date'] === null
+            ? null
+            : elips_date_only($row['next_followup_date']),
+        'convertedAt' => elips_iso($row['converted_at']),
+        'enrollmentValue' => (float) $row['enrollment_value'],
+        'createdAt' => elips_iso($row['created_at']),
+        'updatedAt' => elips_iso($row['updated_at']),
+    ];
+}
+
+function elips_marketing_followup_public(array $row): array
+{
+    return [
+        'id' => (int) $row['id'],
+        'leadId' => (int) $row['lead_id'],
+        'leadName' => $row['lead_name'] ?? '',
+        'ownerId' => (int) $row['owner_id'],
+        'channel' => $row['channel'],
+        'followupDate' => elips_date_only($row['followup_date']),
+        'note' => $row['note'],
+        'outcome' => $row['outcome'],
+        'nextDate' => $row['next_date'] === null ? null : elips_date_only($row['next_date']),
+        'createdAt' => elips_iso($row['created_at']),
+        'updatedAt' => elips_iso($row['updated_at']),
+    ];
+}
+
+function elips_marketing_target_public(array $row): array
+{
+    return [
+        'id' => (int) $row['id'],
+        'userId' => (int) $row['user_id'],
+        'period' => $row['period'],
+        'leadsTarget' => (int) $row['leads_target'],
+        'followupsTarget' => (int) $row['followups_target'],
+        'enrollmentsTarget' => (int) $row['enrollments_target'],
+        'revenueTarget' => (float) $row['revenue_target'],
+        'createdAt' => elips_iso($row['created_at']),
+        'updatedAt' => elips_iso($row['updated_at']),
+    ];
+}
+
+function elips_marketing_lead_row(int $id): ?array
+{
+    $stmt = elips_db()->prepare(
+        'SELECT ml.*, u.name AS owner_name
+         FROM marketing_leads ml
+         LEFT JOIN users u ON u.id = ml.owner_id
+         WHERE ml.id = ? LIMIT 1'
+    );
+    $stmt->execute([$id]);
+    $row = $stmt->fetch();
+    return $row ?: null;
+}
+
+function elips_marketing_followup_row(int $id): ?array
+{
+    $stmt = elips_db()->prepare(
+        'SELECT mf.*, ml.name AS lead_name
+         FROM marketing_followups mf
+         LEFT JOIN marketing_leads ml ON ml.id = mf.lead_id
+         WHERE mf.id = ? LIMIT 1'
+    );
+    $stmt->execute([$id]);
+    $row = $stmt->fetch();
+    return $row ?: null;
 }
 
 /**

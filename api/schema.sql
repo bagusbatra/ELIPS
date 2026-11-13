@@ -879,3 +879,67 @@ CREATE TABLE IF NOT EXISTS `letters` (
     KEY `idx_letters_number` (`letter_number`),
     CONSTRAINT `fk_letters_created_by` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------- Marketing: lead, follow-up, dan target ----------
+-- Data lead bersifat pribadi milik karyawan Marketing yang menanganinya.
+-- Admin dapat melihat seluruh data untuk keperluan pemantauan.
+
+CREATE TABLE IF NOT EXISTS `marketing_leads` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `owner_id` INT UNSIGNED NOT NULL,
+    `name` VARCHAR(150) NOT NULL,
+    `phone` VARCHAR(30) NOT NULL DEFAULT '',
+    `email` VARCHAR(190) NOT NULL DEFAULT '',
+    `city` VARCHAR(100) NOT NULL DEFAULT '',
+    `source` ENUM('walk_in', 'referensi', 'sekolah', 'sosial_media', 'pameran', 'telemarketing', 'lainnya')
+        NOT NULL DEFAULT 'lainnya',
+    `status` ENUM('baru', 'dihubungi', 'prospek', 'terdaftar', 'batal') NOT NULL DEFAULT 'baru',
+    `interest` VARCHAR(150) NOT NULL DEFAULT '',
+    `notes` VARCHAR(1000) NOT NULL DEFAULT '',
+    `next_followup_date` DATE NULL,
+    `converted_at` DATETIME NULL,
+    `enrollment_value` DECIMAL(14,2) NOT NULL DEFAULT 0,
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NULL,
+    PRIMARY KEY (`id`),
+    KEY `idx_marketing_leads_owner` (`owner_id`),
+    KEY `idx_marketing_leads_status` (`status`),
+    KEY `idx_marketing_leads_next_followup` (`next_followup_date`),
+    KEY `idx_marketing_leads_converted` (`converted_at`),
+    CONSTRAINT `fk_marketing_leads_owner` FOREIGN KEY (`owner_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `marketing_followups` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `lead_id` INT UNSIGNED NOT NULL,
+    `owner_id` INT UNSIGNED NOT NULL,
+    `channel` ENUM('telepon', 'whatsapp', 'email', 'kunjungan', 'lainnya') NOT NULL DEFAULT 'telepon',
+    `followup_date` DATE NOT NULL,
+    `note` VARCHAR(1000) NOT NULL DEFAULT '',
+    `outcome` VARCHAR(200) NOT NULL DEFAULT '',
+    `next_date` DATE NULL,
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NULL,
+    PRIMARY KEY (`id`),
+    KEY `idx_marketing_followups_lead` (`lead_id`),
+    KEY `idx_marketing_followups_owner_date` (`owner_id`, `followup_date`),
+    KEY `idx_marketing_followups_date` (`followup_date`),
+    CONSTRAINT `fk_marketing_followups_lead` FOREIGN KEY (`lead_id`) REFERENCES `marketing_leads` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_marketing_followups_owner` FOREIGN KEY (`owner_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `marketing_targets` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `user_id` INT UNSIGNED NOT NULL,
+    `period` CHAR(7) NOT NULL,
+    `leads_target` INT UNSIGNED NOT NULL DEFAULT 0,
+    `followups_target` INT UNSIGNED NOT NULL DEFAULT 0,
+    `enrollments_target` INT UNSIGNED NOT NULL DEFAULT 0,
+    `revenue_target` DECIMAL(14,2) NOT NULL DEFAULT 0,
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NULL,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uq_marketing_targets_user_period` (`user_id`, `period`),
+    KEY `idx_marketing_targets_period` (`period`),
+    CONSTRAINT `fk_marketing_targets_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

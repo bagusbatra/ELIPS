@@ -167,6 +167,40 @@
             });
     }
 
+    // ---------- Marketing: lead, follow-up, target ----------
+    function getMarketingLeads() { return read(KEYS.marketingLeads, []); }
+    function setMarketingLeads(list) { return write(KEYS.marketingLeads, list); }
+    function getMarketingLeadsByOwner(ownerId) {
+        return getMarketingLeads()
+            .filter(function (lead) { return Number(lead.ownerId) === Number(ownerId); })
+            .sort(function (a, b) {
+                return String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || ''));
+            });
+    }
+    function getMarketingFollowups() { return read(KEYS.marketingFollowups, []); }
+    function setMarketingFollowups(list) { return write(KEYS.marketingFollowups, list); }
+    function getMarketingFollowupsByLead(leadId) {
+        return getMarketingFollowups()
+            .filter(function (followup) { return Number(followup.leadId) === Number(leadId); })
+            .sort(function (a, b) {
+                return String(b.followupDate || '').localeCompare(String(a.followupDate || ''));
+            });
+    }
+    function getMarketingFollowupsByOwner(ownerId) {
+        return getMarketingFollowups()
+            .filter(function (followup) { return Number(followup.ownerId) === Number(ownerId); })
+            .sort(function (a, b) {
+                return String(b.followupDate || '').localeCompare(String(a.followupDate || ''));
+            });
+    }
+    function getMarketingTargets() { return read(KEYS.marketingTargets, []); }
+    function setMarketingTargets(list) { return write(KEYS.marketingTargets, list); }
+    function getMarketingTarget(userId, period) {
+        return getMarketingTargets().find(function (target) {
+            return Number(target.userId) === Number(userId) && String(target.period) === String(period);
+        }) || null;
+    }
+
     // ---------- Modules ----------
     function getModules() { return read(KEYS.modules, []); }
     function setModules(list) { return write(KEYS.modules, list); }
@@ -698,6 +732,16 @@
         getLetters: getLetters,
         setLetters: setLetters,
         getLettersByDirection: getLettersByDirection,
+        getMarketingLeads: getMarketingLeads,
+        setMarketingLeads: setMarketingLeads,
+        getMarketingLeadsByOwner: getMarketingLeadsByOwner,
+        getMarketingFollowups: getMarketingFollowups,
+        setMarketingFollowups: setMarketingFollowups,
+        getMarketingFollowupsByLead: getMarketingFollowupsByLead,
+        getMarketingFollowupsByOwner: getMarketingFollowupsByOwner,
+        getMarketingTargets: getMarketingTargets,
+        setMarketingTargets: setMarketingTargets,
+        getMarketingTarget: getMarketingTarget,
         getModules: getModules,
         setModules: setModules,
         getModulesByCourse: getModulesByCourse,

@@ -118,6 +118,18 @@ function elips_dispatch(string $action, array $payload): array
             return elips_action_letter_save($payload);
         case 'letter.delete':
             return elips_action_letter_delete($payload);
+        case 'marketing.dashboard':
+            return elips_action_marketing_dashboard($payload);
+        case 'marketing.lead.save':
+            return elips_action_marketing_lead_save($payload);
+        case 'marketing.lead.delete':
+            return elips_action_marketing_lead_delete($payload);
+        case 'marketing.followup.save':
+            return elips_action_marketing_followup_save($payload);
+        case 'marketing.followup.delete':
+            return elips_action_marketing_followup_delete($payload);
+        case 'marketing.target.save':
+            return elips_action_marketing_target_save($payload);
         case 'module.create':
             return elips_action_module_create($payload);
         case 'module.update':
@@ -7014,6 +7026,510 @@ function elips_action_letter_delete(array $p): array
         . ' tanggal ' . elips_date_only($row['letter_date']) . '.';
     elips_audit('delete', 'letter', $id, $label, $detail, $actor);
     return elips_ok('Surat dihapus.');
+}
+
+// ---------- Marketing: lead, follow-up, target ----------
+
+/**
+ * Menentukan cakupan data Marketing. Admin dapat memilih satu karyawan
+ * lewat userId, atau 0 untuk seluruh data. Karyawan selalu terkunci ke
+ * data miliknya sendiri.
+ */
+function elips_marketing_scope_owner(array $actor, array $p): int
+{
+    if ($actor['role'] !== 'admin') {
+        return (int) $actor['id'];
+    }
+    return max(0, (int) ($p['userId'] ?? 0));
+}
+
+/**
+ * Pemilik data saat menyimpan. Admin wajib memilih karyawan Marketing
+ * yang valid; karyawan selalu menyimpan atas namanya sendiri.
+ */
+function elips_marketing_write_owner(array $actor, array $p): int
+{
+    if ($actor['role'] !== 'admin') {
+        return (int) $actor['id'];
+    }
+
+    $targetId = (int) ($p['ownerId'] ?? 0);
+    if ($targetId <= 0) {
+        throw new ElipsError('Pilih karyawan Marketing sebagai pemilik data.');
+    }
+    $target = elips_user_row($targetId);
+    if (!$target || $target['role'] !== 'karyawan' || ($target['division'] ?? '') !== 'marketing') {
+        throw new ElipsError('Pemilik data harus karyawan divisi Marketing.');
+    }
+    return $targetId;
+}
+
+function elips_marketing_current_period(): string
+{
+    return (new DateTimeImmutable('now', new DateTimeZone(elips_attendance_timezone())))->format('Y-m');
+}
+
+function elips_marketing_dashboard(array $p): array
+{
+    $actor = elips_require_marketing_access();
+    $ownerId = elips_marketing_scope_owner($actor, $p);
+
+    $period = trim((string) ($p['period'] ?? ''));
+    if ($period === '') {
+        $period = elips_marketing_current_period();
+    }
+    if (!elips_marketing_valid_period($period)) {
+        return elips_fail('Periode target tidak valid (format YYYY-MM).');
+    }
+
+    $today = (new DateTimeImmutable('now', new DateTimeZone(elips_attendance_timezone())))->format('Y-m-d');
+    $db = elips_db();
+
+    $leadWhere = '';
+    $leadArgs = [];
+    if ($ownerId > 0) {
+        $leadWhere = ' WHERE ml.owner_id = ?';
+        $leadArgs[] = $ownerId;
+    }
+    $stmt = $db->prepare(
+        'SELECT ml.*, u.name AS owner_name
+         FROM marketing_leads ml
+         LEFT JOIN users u ON u.id = ml.owner_id'
+        . $leadWhere
+        . ' ORDER BY ml.updated_at DESC, ml.created_at DESC, ml.id DESC'
+    );
+    $stmt->execute($leadArgs);
+    $leads = [];
+    $statusCounts = [
+        'baru' => 0,
+        'dihubungi' => 0,
+        'prospek' => 0,
+        'terdaftar' => 0,
+        'batal' => 0,
+    ];
+    $monthEnrollments = 0;
+    $monthRevenue = 0.0;
+    $todayFollowups = [];
+    $overdueFollowups = [];
+
+    foreach ($stmt->fetchAll() as $row) {
+        $lead = elips_marketing_lead_public($row);
+        $leads[] = $lead;
+        $status = (string) $lead['status'];
+        if (array_key_exists($status, $statusCounts)) {
+            $statusCounts[$status]++;
+        }
+        $convertedAt = $lead['convertedAt'];
+        if ($lead['status'] === 'terdaftar' && $convertedAt && substr($convertedAt, 0, 7) === $period) {
+            $monthEnrollments++;
+            $monthRevenue += (float) $lead['enrollmentValue'];
+        }
+        $nextDate = $lead['nextFollowupDate'];
+        if ($nextDate && !in_array($lead['status'], ['terdaftar', 'batal'], true)) {
+            if ($nextDate === $today) {
+                $todayFollowups[] = $lead;
+            } elseif ($nextDate < $today) {
+                $overdueFollowups[] = $lead;
+            }
+        }
+    }
+
+    $followWhere = '';
+    $followArgs = [];
+    if ($ownerId > 0) {
+        $followWhere = ' WHERE mf.owner_id = ?';
+        $followArgs[] = $ownerId;
+    }
+    $stmt = $db->prepare(
+        'SELECT mf.*, ml.name AS lead_name
+         FROM marketing_followups mf
+         LEFT JOIN marketing_leads ml ON ml.id = mf.lead_id'
+        . $followWhere
+        . ' ORDER BY mf.followup_date DESC, mf.id DESC LIMIT 500'
+    );
+    $stmt->execute($followArgs);
+    $followups = [];
+    $monthFollowups = 0;
+    foreach ($stmt->fetchAll() as $row) {
+        $followup = elips_marketing_followup_public($row);
+        $followups[] = $followup;
+        if (substr((string) $followup['followupDate'], 0, 7) === $period) {
+            $monthFollowups++;
+        }
+    }
+
+    $target = null;
+    if ($ownerId > 0) {
+        $stmt = $db->prepare('SELECT * FROM marketing_targets WHERE user_id = ? AND period = ? LIMIT 1');
+        $stmt->execute([$ownerId, $period]);
+        $targetRow = $stmt->fetch();
+        if ($targetRow) {
+            $target = elips_marketing_target_public($targetRow);
+        }
+    }
+
+    $owner = $ownerId > 0 ? elips_user_row($ownerId) : null;
+    $activeLeads = $statusCounts['baru'] + $statusCounts['dihubungi'] + $statusCounts['prospek'];
+
+    return elips_ok('Dashboard Marketing dimuat.', [
+        'period' => $period,
+        'today' => $today,
+        'ownerId' => $ownerId > 0 ? $ownerId : null,
+        'ownerName' => $owner ? $owner['name'] : 'Semua Karyawan Marketing',
+        'leads' => $leads,
+        'followups' => $followups,
+        'target' => $target,
+        'todayFollowups' => $todayFollowups,
+        'overdueFollowups' => $overdueFollowups,
+        'stats' => [
+            'totalLeads' => count($leads),
+            'activeLeads' => $activeLeads,
+            'newLeads' => $statusCounts['baru'],
+            'contactedLeads' => $statusCounts['dihubungi'],
+            'prospectLeads' => $statusCounts['prospek'],
+            'registeredLeads' => $statusCounts['terdaftar'],
+            'canceledLeads' => $statusCounts['batal'],
+            'todayFollowups' => count($todayFollowups),
+            'overdueFollowups' => count($overdueFollowups),
+            'monthFollowups' => $monthFollowups,
+            'monthEnrollments' => $monthEnrollments,
+            'monthRevenue' => $monthRevenue,
+            'leadsTarget' => $target ? $target['leadsTarget'] : 0,
+            'followupsTarget' => $target ? $target['followupsTarget'] : 0,
+            'enrollmentsTarget' => $target ? $target['enrollmentsTarget'] : 0,
+            'revenueTarget' => $target ? $target['revenueTarget'] : 0,
+        ],
+    ]);
+}
+
+function elips_action_marketing_dashboard(array $p): array
+{
+    return elips_marketing_dashboard($p);
+}
+
+function elips_action_marketing_lead_save(array $p): array
+{
+    $actor = elips_require_marketing_access();
+    $id = (int) ($p['id'] ?? 0);
+    $existing = $id > 0 ? elips_marketing_lead_row($id) : null;
+    if ($id > 0 && !$existing) {
+        return elips_fail('Lead tidak ditemukan.');
+    }
+    if ($existing && $actor['role'] !== 'admin' && (int) $existing['owner_id'] !== (int) $actor['id']) {
+        return elips_fail('Anda hanya dapat mengubah lead milik Anda.');
+    }
+
+    try {
+        $ownerId = $existing ? (int) $existing['owner_id'] : elips_marketing_write_owner($actor, $p);
+    } catch (ElipsError $e) {
+        return elips_fail($e->getMessage());
+    }
+
+    $name = trim((string) ($p['name'] ?? ''));
+    $phone = trim((string) ($p['phone'] ?? ''));
+    $email = trim((string) ($p['email'] ?? ''));
+    $city = trim((string) ($p['city'] ?? ''));
+    $source = strtolower(trim((string) ($p['source'] ?? 'lainnya')));
+    $status = strtolower(trim((string) ($p['status'] ?? 'baru')));
+    $interest = trim((string) ($p['interest'] ?? ''));
+    $notes = trim((string) ($p['notes'] ?? ''));
+    $nextRaw = trim((string) ($p['nextFollowupDate'] ?? ''));
+    $nextFollowupDate = $nextRaw === '' ? null : elips_normalize_date($nextRaw);
+    $enrollmentValue = trim((string) ($p['enrollmentValue'] ?? '0'));
+
+    if ($name === '') {
+        return elips_fail('Nama lead wajib diisi.');
+    }
+    if (mb_strlen($name) > 150) {
+        return elips_fail('Nama lead maksimal 150 karakter.');
+    }
+    if ($phone === '' && $email === '') {
+        return elips_fail('Isi minimal salah satu kontak: telepon atau email.');
+    }
+    if (mb_strlen($phone) > 30) {
+        return elips_fail('Nomor telepon maksimal 30 karakter.');
+    }
+    if ($email !== '' && (!filter_var($email, FILTER_VALIDATE_EMAIL) || mb_strlen($email) > 190)) {
+        return elips_fail('Alamat email lead tidak valid.');
+    }
+    if (mb_strlen($city) > 100) {
+        return elips_fail('Kota maksimal 100 karakter.');
+    }
+    if (!elips_marketing_valid_lead_source($source)) {
+        return elips_fail('Sumber lead tidak valid.');
+    }
+    if (!elips_marketing_valid_lead_status($status)) {
+        return elips_fail('Status lead tidak valid.');
+    }
+    if (mb_strlen($interest) > 150) {
+        return elips_fail('Minat kursus maksimal 150 karakter.');
+    }
+    if (mb_strlen($notes) > 1000) {
+        return elips_fail('Catatan lead maksimal 1000 karakter.');
+    }
+    if ($nextRaw !== '' && $nextFollowupDate === null) {
+        return elips_fail('Tanggal follow-up berikutnya tidak valid.');
+    }
+    if (!is_numeric($enrollmentValue) || (float) $enrollmentValue < 0) {
+        return elips_fail('Nilai pendaftaran harus berupa angka tidak negatif.');
+    }
+    $enrollmentValue = round((float) $enrollmentValue, 2);
+
+    $convertedAt = null;
+    if ($status === 'terdaftar') {
+        $convertedAt = $existing && !empty($existing['converted_at'])
+            ? $existing['converted_at']
+            : gmdate('Y-m-d H:i:s');
+    }
+
+    $db = elips_db();
+    if ($existing) {
+        $stmt = $db->prepare(
+            'UPDATE marketing_leads
+             SET name = ?, phone = ?, email = ?, city = ?, source = ?, status = ?, interest = ?,
+                 notes = ?, next_followup_date = ?, converted_at = ?, enrollment_value = ?,
+                 updated_at = UTC_TIMESTAMP()
+             WHERE id = ?'
+        );
+        $stmt->execute([
+            $name, $phone, $email, $city, $source, $status, $interest,
+            $notes, $nextFollowupDate, $convertedAt, $enrollmentValue, $id,
+        ]);
+    } else {
+        $stmt = $db->prepare(
+            'INSERT INTO marketing_leads
+                (owner_id, name, phone, email, city, source, status, interest, notes,
+                 next_followup_date, converted_at, enrollment_value, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP())'
+        );
+        $stmt->execute([
+            $ownerId, $name, $phone, $email, $city, $source, $status, $interest,
+            $notes, $nextFollowupDate, $convertedAt, $enrollmentValue,
+        ]);
+        $id = (int) $db->lastInsertId();
+    }
+
+    $label = $name . ($phone !== '' ? ' — ' . $phone : '');
+    $detail = ($existing ? 'Mengubah' : 'Menambahkan')
+        . ' lead "' . $name . '"'
+        . ' sumber ' . $source
+        . ' status ' . $status
+        . ($nextFollowupDate ? ' follow-up ' . $nextFollowupDate : '')
+        . '.';
+    elips_audit($existing ? 'update' : 'create', 'marketing_lead', $id, $label, $detail, $actor);
+
+    $row = elips_marketing_lead_row($id);
+    return elips_ok(
+        $existing ? 'Lead diperbarui.' : 'Lead ditambahkan.',
+        $row ? elips_marketing_lead_public($row) : null
+    );
+}
+
+function elips_action_marketing_lead_delete(array $p): array
+{
+    $actor = elips_require_marketing_access();
+    $id = (int) ($p['id'] ?? 0);
+    $row = elips_marketing_lead_row($id);
+    if (!$row) {
+        return elips_fail('Lead tidak ditemukan.');
+    }
+    if ($actor['role'] !== 'admin' && (int) $row['owner_id'] !== (int) $actor['id']) {
+        return elips_fail('Anda hanya dapat menghapus lead milik Anda.');
+    }
+
+    $stmt = elips_db()->prepare('DELETE FROM marketing_leads WHERE id = ?');
+    $stmt->execute([$id]);
+
+    $label = $row['name'] . (!empty($row['phone']) ? ' — ' . $row['phone'] : '');
+    $detail = 'Menghapus lead "' . $row['name'] . '" sumber ' . $row['source']
+        . ' status ' . $row['status'] . '.';
+    elips_audit('delete', 'marketing_lead', $id, $label, $detail, $actor);
+    return elips_ok('Lead dihapus.');
+}
+
+function elips_action_marketing_followup_save(array $p): array
+{
+    $actor = elips_require_marketing_access();
+    $id = (int) ($p['id'] ?? 0);
+    $existing = $id > 0 ? elips_marketing_followup_row($id) : null;
+    if ($id > 0 && !$existing) {
+        return elips_fail('Follow-up tidak ditemukan.');
+    }
+    if ($existing && $actor['role'] !== 'admin' && (int) $existing['owner_id'] !== (int) $actor['id']) {
+        return elips_fail('Anda hanya dapat mengubah follow-up milik Anda.');
+    }
+
+    $leadId = (int) ($p['leadId'] ?? ($existing['lead_id'] ?? 0));
+    $lead = elips_marketing_lead_row($leadId);
+    if (!$lead) {
+        return elips_fail('Lead tidak ditemukan.');
+    }
+    if ($actor['role'] !== 'admin' && (int) $lead['owner_id'] !== (int) $actor['id']) {
+        return elips_fail('Anda hanya dapat mencatat follow-up untuk lead milik Anda.');
+    }
+
+    $channel = strtolower(trim((string) ($p['channel'] ?? 'telepon')));
+    $followupDate = elips_normalize_date($p['followupDate'] ?? '');
+    $note = trim((string) ($p['note'] ?? ''));
+    $outcome = trim((string) ($p['outcome'] ?? ''));
+    $nextRaw = trim((string) ($p['nextDate'] ?? ''));
+    $nextDate = $nextRaw === '' ? null : elips_normalize_date($nextRaw);
+
+    if (!elips_marketing_valid_followup_channel($channel)) {
+        return elips_fail('Kanal follow-up tidak valid.');
+    }
+    if ($followupDate === null) {
+        return elips_fail('Tanggal follow-up wajib diisi dengan format yang valid.');
+    }
+    if (mb_strlen($note) > 1000) {
+        return elips_fail('Catatan follow-up maksimal 1000 karakter.');
+    }
+    if (mb_strlen($outcome) > 200) {
+        return elips_fail('Hasil follow-up maksimal 200 karakter.');
+    }
+    if ($nextRaw !== '' && $nextDate === null) {
+        return elips_fail('Tanggal follow-up berikutnya tidak valid.');
+    }
+
+    $ownerId = (int) $lead['owner_id'];
+    $db = elips_db();
+    if ($existing) {
+        $stmt = $db->prepare(
+            'UPDATE marketing_followups
+             SET lead_id = ?, owner_id = ?, channel = ?, followup_date = ?, note = ?, outcome = ?,
+                 next_date = ?, updated_at = UTC_TIMESTAMP()
+             WHERE id = ?'
+        );
+        $stmt->execute([$leadId, $ownerId, $channel, $followupDate, $note, $outcome, $nextDate, $id]);
+    } else {
+        $stmt = $db->prepare(
+            'INSERT INTO marketing_followups
+                (lead_id, owner_id, channel, followup_date, note, outcome, next_date, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP())'
+        );
+        $stmt->execute([$leadId, $ownerId, $channel, $followupDate, $note, $outcome, $nextDate]);
+        $id = (int) $db->lastInsertId();
+    }
+
+    // Follow-up pertama otomatis memindahkan lead dari "baru" ke "dihubungi".
+    // Tanggal rencana berikutnya disinkronkan agar muncul di Aksi Hari Ini.
+    $sync = $db->prepare(
+        "UPDATE marketing_leads
+         SET next_followup_date = ?,
+             status = CASE WHEN status = 'baru' THEN 'dihubungi' ELSE status END,
+             updated_at = UTC_TIMESTAMP()
+         WHERE id = ?"
+    );
+    $sync->execute([$nextDate, $leadId]);
+
+    $label = $lead['name'] . ' — ' . $channel;
+    $detail = ($existing ? 'Mengubah' : 'Mencatat') . ' follow-up ' . $channel
+        . ' untuk lead "' . $lead['name'] . '" tanggal ' . $followupDate
+        . ($outcome !== '' ? ' hasil: ' . $outcome : '')
+        . ($nextDate ? ' berikutnya ' . $nextDate : '') . '.';
+    elips_audit($existing ? 'update' : 'create', 'marketing_followup', $id, $label, $detail, $actor);
+
+    $row = elips_marketing_followup_row($id);
+    return elips_ok(
+        $existing ? 'Follow-up diperbarui.' : 'Follow-up dicatat.',
+        $row ? elips_marketing_followup_public($row) : null
+    );
+}
+
+function elips_action_marketing_followup_delete(array $p): array
+{
+    $actor = elips_require_marketing_access();
+    $id = (int) ($p['id'] ?? 0);
+    $row = elips_marketing_followup_row($id);
+    if (!$row) {
+        return elips_fail('Follow-up tidak ditemukan.');
+    }
+    if ($actor['role'] !== 'admin' && (int) $row['owner_id'] !== (int) $actor['id']) {
+        return elips_fail('Anda hanya dapat menghapus follow-up milik Anda.');
+    }
+
+    $db = elips_db();
+    $stmt = $db->prepare('DELETE FROM marketing_followups WHERE id = ?');
+    $stmt->execute([$id]);
+
+    $stmt = $db->prepare('SELECT MAX(next_date) FROM marketing_followups WHERE lead_id = ?');
+    $stmt->execute([(int) $row['lead_id']]);
+    $nextDate = $stmt->fetchColumn();
+    $stmt = $db->prepare('UPDATE marketing_leads SET next_followup_date = ?, updated_at = UTC_TIMESTAMP() WHERE id = ?');
+    $stmt->execute([$nextDate ?: null, (int) $row['lead_id']]);
+
+    $label = ($row['lead_name'] ?? 'Lead') . ' — ' . $row['channel'];
+    $detail = 'Menghapus follow-up ' . $row['channel']
+        . ' untuk lead "' . ($row['lead_name'] ?? '') . '"'
+        . ' tanggal ' . elips_date_only($row['followup_date']) . '.';
+    elips_audit('delete', 'marketing_followup', $id, $label, $detail, $actor);
+    return elips_ok('Follow-up dihapus.');
+}
+
+function elips_action_marketing_target_save(array $p): array
+{
+    $actor = elips_require_marketing_access();
+    try {
+        $ownerId = elips_marketing_write_owner($actor, $p);
+    } catch (ElipsError $e) {
+        return elips_fail($e->getMessage());
+    }
+
+    $period = trim((string) ($p['period'] ?? ''));
+    if ($period === '') {
+        $period = elips_marketing_current_period();
+    }
+    if (!elips_marketing_valid_period($period)) {
+        return elips_fail('Periode target tidak valid (format YYYY-MM).');
+    }
+
+    $leadsTarget = (int) ($p['leadsTarget'] ?? 0);
+    $followupsTarget = (int) ($p['followupsTarget'] ?? 0);
+    $enrollmentsTarget = (int) ($p['enrollmentsTarget'] ?? 0);
+    $revenueRaw = trim((string) ($p['revenueTarget'] ?? '0'));
+    if ($leadsTarget < 0 || $followupsTarget < 0 || $enrollmentsTarget < 0) {
+        return elips_fail('Target jumlah tidak boleh negatif.');
+    }
+    if (!is_numeric($revenueRaw) || (float) $revenueRaw < 0) {
+        return elips_fail('Target pendapatan harus berupa angka tidak negatif.');
+    }
+    $revenueTarget = round((float) $revenueRaw, 2);
+
+    $db = elips_db();
+    $stmt = $db->prepare('SELECT * FROM marketing_targets WHERE user_id = ? AND period = ? LIMIT 1');
+    $stmt->execute([$ownerId, $period]);
+    $existing = $stmt->fetch();
+    if ($existing) {
+        $stmt = $db->prepare(
+            'UPDATE marketing_targets
+             SET leads_target = ?, followups_target = ?, enrollments_target = ?, revenue_target = ?,
+                 updated_at = UTC_TIMESTAMP()
+             WHERE id = ?'
+        );
+        $stmt->execute([$leadsTarget, $followupsTarget, $enrollmentsTarget, $revenueTarget, (int) $existing['id']]);
+        $id = (int) $existing['id'];
+    } else {
+        $stmt = $db->prepare(
+            'INSERT INTO marketing_targets
+                (user_id, period, leads_target, followups_target, enrollments_target, revenue_target, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, UTC_TIMESTAMP())'
+        );
+        $stmt->execute([$ownerId, $period, $leadsTarget, $followupsTarget, $enrollmentsTarget, $revenueTarget]);
+        $id = (int) $db->lastInsertId();
+    }
+
+    $label = 'Target ' . $period . ' — ' . ($ownerId > 0 ? ($actor['role'] === 'admin' ? 'Karyawan #' . $ownerId : $actor['name']) : '');
+    $detail = 'Menyimpan target Marketing periode ' . $period
+        . ': lead ' . $leadsTarget
+        . ', follow-up ' . $followupsTarget
+        . ', pendaftaran ' . $enrollmentsTarget
+        . ', pendapatan ' . $revenueTarget . '.';
+    elips_audit($existing ? 'update' : 'create', 'marketing_target', $id, $label, $detail, $actor);
+
+    $stmt = $db->prepare('SELECT * FROM marketing_targets WHERE id = ? LIMIT 1');
+    $stmt->execute([$id]);
+    $row = $stmt->fetch();
+    return elips_ok('Target Marketing disimpan.', $row ? elips_marketing_target_public($row) : null);
 }
 
 // ---------- Admin housekeeping ----------

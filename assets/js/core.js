@@ -53,6 +53,9 @@
         staffAttendances: 'elips_staffAttendances',
         staffShifts: 'elips_staffShifts',
         letters: 'elips_letters',
+        marketingLeads: 'elips_marketingLeads',
+        marketingFollowups: 'elips_marketingFollowups',
+        marketingTargets: 'elips_marketingTargets',
         session: 'elips_session'
     };
 
