@@ -4042,3 +4042,192 @@ body.pwa-sheet-open {
     background: #fee2e2;
     color: #b91c1c;
 }
+
+/* ---------- Campaigns Marketing ---------- */
+.campaign-toolbar {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.campaign-search {
+    position: relative;
+    flex: 1 1 260px;
+}
+
+.campaign-search i {
+    position: absolute;
+    top: 50%;
+    left: 0.85rem;
+    transform: translateY(-50%);
+    color: var(--text-secondary);
+    pointer-events: none;
+}
+
+.campaign-search .form-input {
+    padding-left: 2.4rem;
+}
+
+.campaign-filter {
+    flex: 0 1 180px;
+}
+
+.campaign-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 1rem;
+}
+
+.campaign-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.875rem;
+    padding: 1rem;
+    background: var(--bg-white);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.campaign-card-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 0.75rem;
+}
+
+.campaign-card-title {
+    margin: 0 0 0.375rem;
+    font-size: 1rem;
+    font-weight: 600;
+    line-height: 1.35;
+    color: var(--text-primary);
+}
+
+.campaign-card-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+}
+
+.campaign-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.2rem 0.5rem;
+    border-radius: 6px;
+    background: var(--bg);
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+}
+
+.campaign-card-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.campaign-progress-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-bottom: 0.3rem;
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+}
+
+.campaign-progress-head strong {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.campaign-progress-track {
+    height: 7px;
+    border-radius: 4px;
+    background: var(--border);
+    overflow: hidden;
+}
+
+.campaign-progress-bar {
+    height: 100%;
+    width: 0;
+    border-radius: 4px;
+    background: var(--success);
+    transition: width 0.3s ease;
+}
+
+.campaign-progress-bar.blue {
+    background: #3b82f6;
+}
+
+.campaign-card-facts {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+    padding-top: 0.75rem;
+    border-top: 1px dashed var(--border);
+}
+
+.campaign-card-facts div {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+
+.campaign-card-facts strong {
+    font-size: 0.875rem;
+    color: var(--text-primary);
+}
+
+.campaign-card-notes {
+    margin: 0;
+    font-size: 0.8125rem;
+    line-height: 1.5;
+    color: var(--text-secondary);
+}
+
+.campaign-card-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.25rem;
+    margin-top: auto;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--border);
+}
+
+.campaign-card-actions .btn {
+    padding: 0.375rem 0.5rem;
+    font-size: 0.75rem;
+}
+
+.campaign-delete {
+    color: #b91c1c;
+}
+
+.campaign-empty {
+    grid-column: 1 / -1;
+    text-align: center;
+    color: var(--text-secondary);
+    padding: 2rem 1rem;
+    border: 1px dashed var(--border);
+    border-radius: 12px;
+}
+
+@media (max-width: 640px) {
+    .campaign-toolbar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .campaign-filter {
+        flex-basis: auto;
+    }
+
+    .campaign-grid {
+        grid-template-columns: 1fr;
+    }
+}

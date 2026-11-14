@@ -69,6 +69,10 @@
                     <i class="bi bi-clock-history"></i>
                     <span>Riwayat Absensi</span>
                 </a>
+                <a href="campaigns.html" class="dashboard-nav-link" id="marketingCampaignNavLink" style="display: none;">
+                    <i class="bi bi-megaphone"></i>
+                    <span>Campaigns</span>
+                </a>
                 <a href="#marketingArea" class="dashboard-nav-link" id="marketingNavLink" style="display: none;">
                     <i class="bi bi-funnel"></i>
                     <span>Lead Marketing</span>
@@ -133,6 +137,9 @@
                             </p>
                         </div>
                         <div class="modal-actions">
+                            <a href="campaigns.html" class="btn btn-outline">
+                                <i class="bi bi-megaphone"></i> Kelola Campaign
+                            </a>
                             <button class="btn btn-outline" type="button" id="marketingTargetButton">
                                 <i class="bi bi-bullseye"></i> Atur Target
                             </button>
@@ -337,6 +344,12 @@
                         <label class="form-label" for="marketingLeadInterest">Minat Kursus</label>
                         <input class="form-input" type="text" id="marketingLeadInterest" maxlength="150"
                             placeholder="Contoh: Bahasa Inggris Dewasa">
+                    </div>
+                    <div class="form-group marketing-span-2">
+                        <label class="form-label" for="marketingLeadCampaign">Campaign</label>
+                        <select class="form-input" id="marketingLeadCampaign">
+                            <option value="">Tanpa campaign</option>
+                        </select>
                     </div>
                     <div class="form-group">
                         <label class="form-label" for="marketingLeadValue">Nilai Pendaftaran (Rp)</label>

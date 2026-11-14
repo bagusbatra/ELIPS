@@ -328,6 +328,7 @@
             const contacts = [];
             if (lead.phone) contacts.push('<i class="bi bi-telephone"></i> ' + escapeHtml(lead.phone));
             if (lead.email) contacts.push('<i class="bi bi-envelope"></i> ' + escapeHtml(lead.email));
+            if (lead.campaignName) contacts.push('<i class="bi bi-megaphone"></i> ' + escapeHtml(lead.campaignName));
             return '<tr>'
                 + '<td><div class="marketing-lead-name">' + escapeHtml(lead.name) + '</div>'
                 + '<span class="marketing-lead-contact">' + (contacts.length ? contacts.join('<br>') : '-') + '</span></td>'
@@ -353,6 +354,21 @@
         renderMarketingActions(marketingState.data);
         renderMarketingPipeline(marketingState.data);
         renderMarketingLeads(marketingState.data);
+    }
+
+    function loadCampaignOptions(user) {
+        const select = el('marketingLeadCampaign');
+        if (!select || !user) return;
+        const current = select.value;
+        const result = ELIPS.marketingCampaigns(user.id);
+        const campaigns = result && result.ok && result.data && Array.isArray(result.data.campaigns)
+            ? result.data.campaigns
+            : [];
+        select.innerHTML = '<option value="">Tanpa campaign</option>' + campaigns.map(function (campaign) {
+            return '<option value="' + campaign.id + '">' + escapeHtml(campaign.name)
+                + ' (' + escapeHtml(ELIPS.marketingCampaignStatusLabel(campaign.status)) + ')</option>';
+        }).join('');
+        if (current) select.value = current;
     }
 
     function renderMarketingError(message) {
@@ -417,6 +433,7 @@
     }
 
     function openLeadModal(lead) {
+        loadCampaignOptions(ELIPS.getSessionUser());
         resetLeadForm();
         if (lead) {
             setText('marketingLeadModalTitle', 'Ubah Lead');
@@ -429,6 +446,7 @@
                 marketingLeadSource: lead.source,
                 marketingLeadStatus: lead.status,
                 marketingLeadNext: lead.nextFollowupDate || '',
+                marketingLeadCampaign: lead.campaignId || '',
                 marketingLeadInterest: lead.interest,
                 marketingLeadValue: lead.enrollmentValue || 0,
                 marketingLeadNotes: lead.notes
@@ -549,6 +567,7 @@
                 city: (el('marketingLeadCity') || {}).value || '',
                 source: (el('marketingLeadSource') || {}).value || 'lainnya',
                 status: (el('marketingLeadStatus') || {}).value || 'baru',
+                campaignId: Number((el('marketingLeadCampaign') || {}).value || 0) || undefined,
                 interest: (el('marketingLeadInterest') || {}).value || '',
                 nextFollowupDate: (el('marketingLeadNext') || {}).value || '',
                 enrollmentValue: (el('marketingLeadValue') || {}).value || 0,
@@ -641,12 +660,16 @@
             if (area) area.style.display = 'block';
             const navLink = el('marketingNavLink');
             if (navLink) navLink.style.display = '';
+            const campaignNavLink = el('marketingCampaignNavLink');
+            if (campaignNavLink) campaignNavLink.style.display = '';
+            loadCampaignOptions(user);
             bindMarketing(user);
             loadMarketing(user, false);
         }
 
         window.addEventListener('storage', function (event) {
             if (!event.key || event.key === ELIPS.KEYS.session || event.key === ELIPS.KEYS.staffAttendances
+                || event.key === ELIPS.KEYS.marketingCampaigns
                 || event.key === ELIPS.KEYS.marketingLeads || event.key === ELIPS.KEYS.marketingFollowups
                 || event.key === ELIPS.KEYS.marketingTargets) {
                 window.location.reload();

@@ -120,6 +120,12 @@ function elips_dispatch(string $action, array $payload): array
             return elips_action_letter_delete($payload);
         case 'marketing.dashboard':
             return elips_action_marketing_dashboard($payload);
+        case 'marketing.campaign.list':
+            return elips_action_marketing_campaign_list($payload);
+        case 'marketing.campaign.save':
+            return elips_action_marketing_campaign_save($payload);
+        case 'marketing.campaign.delete':
+            return elips_action_marketing_campaign_delete($payload);
         case 'marketing.lead.save':
             return elips_action_marketing_lead_save($payload);
         case 'marketing.lead.delete':
@@ -7069,6 +7075,168 @@ function elips_marketing_current_period(): string
     return (new DateTimeImmutable('now', new DateTimeZone(elips_attendance_timezone())))->format('Y-m');
 }
 
+function elips_action_marketing_campaign_list(array $p): array
+{
+    $actor = elips_require_marketing_access();
+    $ownerId = elips_marketing_scope_owner($actor, $p);
+
+    $where = '';
+    $args = [];
+    if ($ownerId > 0) {
+        $where = ' WHERE mc.owner_id = ?';
+        $args[] = $ownerId;
+    }
+
+    $stmt = elips_db()->prepare(
+        'SELECT mc.*, u.name AS owner_name,
+                COALESCE(l.lead_count, 0) AS lead_count,
+                COALESCE(l.enrolled_count, 0) AS enrolled_count,
+                COALESCE(l.revenue, 0) AS revenue
+         FROM marketing_campaigns mc
+         LEFT JOIN users u ON u.id = mc.owner_id
+         LEFT JOIN (
+             SELECT campaign_id,
+                    COUNT(*) AS lead_count,
+                    SUM(CASE WHEN status = \'terdaftar\' THEN 1 ELSE 0 END) AS enrolled_count,
+                    SUM(CASE WHEN status = \'terdaftar\' THEN enrollment_value ELSE 0 END) AS revenue
+             FROM marketing_leads
+             WHERE campaign_id IS NOT NULL
+             GROUP BY campaign_id
+         ) l ON l.campaign_id = mc.id'
+        . $where
+        . ' ORDER BY mc.start_date DESC, mc.updated_at DESC, mc.created_at DESC, mc.id DESC'
+    );
+    $stmt->execute($args);
+
+    $campaigns = array_map('elips_marketing_campaign_public', $stmt->fetchAll());
+    return elips_ok('Campaign Marketing dimuat.', ['campaigns' => $campaigns]);
+}
+
+function elips_action_marketing_campaign_save(array $p): array
+{
+    $actor = elips_require_marketing_access();
+    $id = (int) ($p['id'] ?? 0);
+    $existing = $id > 0 ? elips_marketing_campaign_row($id) : null;
+    if ($id > 0 && !$existing) {
+        return elips_fail('Campaign tidak ditemukan.');
+    }
+    if ($existing && $actor['role'] !== 'admin' && (int) $existing['owner_id'] !== (int) $actor['id']) {
+        return elips_fail('Anda hanya dapat mengubah campaign milik Anda.');
+    }
+
+    try {
+        $ownerId = $existing ? (int) $existing['owner_id'] : elips_marketing_write_owner($actor, $p);
+    } catch (ElipsError $e) {
+        return elips_fail($e->getMessage());
+    }
+
+    $name = trim((string) ($p['name'] ?? ''));
+    $channel = strtolower(trim((string) ($p['channel'] ?? 'lainnya')));
+    $status = strtolower(trim((string) ($p['status'] ?? 'draft')));
+    $startRaw = trim((string) ($p['startDate'] ?? ''));
+    $endRaw = trim((string) ($p['endDate'] ?? ''));
+    $startDate = $startRaw === '' ? null : elips_normalize_date($startRaw);
+    $endDate = $endRaw === '' ? null : elips_normalize_date($endRaw);
+    $budgetRaw = trim((string) ($p['budget'] ?? '0'));
+    $targetLeads = (int) ($p['targetLeads'] ?? 0);
+    $targetEnrollments = (int) ($p['targetEnrollments'] ?? 0);
+    $notes = trim((string) ($p['notes'] ?? ''));
+
+    if ($name === '') {
+        return elips_fail('Nama campaign wajib diisi.');
+    }
+    if (mb_strlen($name) > 150) {
+        return elips_fail('Nama campaign maksimal 150 karakter.');
+    }
+    if (!elips_marketing_valid_campaign_channel($channel)) {
+        return elips_fail('Kanal campaign tidak valid.');
+    }
+    if (!elips_marketing_valid_campaign_status($status)) {
+        return elips_fail('Status campaign tidak valid.');
+    }
+    if ($startRaw !== '' && $startDate === null) {
+        return elips_fail('Tanggal mulai campaign tidak valid.');
+    }
+    if ($endRaw !== '' && $endDate === null) {
+        return elips_fail('Tanggal selesai campaign tidak valid.');
+    }
+    if ($startDate !== null && $endDate !== null && $endDate < $startDate) {
+        return elips_fail('Tanggal selesai tidak boleh sebelum tanggal mulai.');
+    }
+    if (!is_numeric($budgetRaw) || (float) $budgetRaw < 0) {
+        return elips_fail('Budget campaign harus berupa angka tidak negatif.');
+    }
+    if ($targetLeads < 0 || $targetEnrollments < 0) {
+        return elips_fail('Target campaign tidak boleh negatif.');
+    }
+    if (mb_strlen($notes) > 1000) {
+        return elips_fail('Catatan campaign maksimal 1000 karakter.');
+    }
+
+    $budget = round((float) $budgetRaw, 2);
+    $db = elips_db();
+    if ($existing) {
+        $stmt = $db->prepare(
+            'UPDATE marketing_campaigns
+             SET name = ?, channel = ?, status = ?, start_date = ?, end_date = ?, budget = ?,
+                 target_leads = ?, target_enrollments = ?, notes = ?, updated_at = UTC_TIMESTAMP()
+             WHERE id = ?'
+        );
+        $stmt->execute([
+            $name, $channel, $status, $startDate, $endDate, $budget,
+            $targetLeads, $targetEnrollments, $notes, $id,
+        ]);
+    } else {
+        $stmt = $db->prepare(
+            'INSERT INTO marketing_campaigns
+                (owner_id, name, channel, status, start_date, end_date, budget,
+                 target_leads, target_enrollments, notes, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP())'
+        );
+        $stmt->execute([
+            $ownerId, $name, $channel, $status, $startDate, $endDate, $budget,
+            $targetLeads, $targetEnrollments, $notes,
+        ]);
+        $id = (int) $db->lastInsertId();
+    }
+
+    $detail = ($existing ? 'Mengubah' : 'Menambahkan')
+        . ' campaign "' . $name . '"'
+        . ' kanal ' . $channel
+        . ' status ' . $status
+        . ($startDate ? ' mulai ' . $startDate : '')
+        . ($endDate ? ' selesai ' . $endDate : '')
+        . '.';
+    elips_audit($existing ? 'update' : 'create', 'marketing_campaign', $id, $name, $detail, $actor);
+
+    $row = elips_marketing_campaign_row($id);
+    return elips_ok(
+        $existing ? 'Campaign diperbarui.' : 'Campaign ditambahkan.',
+        $row ? elips_marketing_campaign_public($row) : null
+    );
+}
+
+function elips_action_marketing_campaign_delete(array $p): array
+{
+    $actor = elips_require_marketing_access();
+    $id = (int) ($p['id'] ?? 0);
+    $row = elips_marketing_campaign_row($id);
+    if (!$row) {
+        return elips_fail('Campaign tidak ditemukan.');
+    }
+    if ($actor['role'] !== 'admin' && (int) $row['owner_id'] !== (int) $actor['id']) {
+        return elips_fail('Anda hanya dapat menghapus campaign milik Anda.');
+    }
+
+    $stmt = elips_db()->prepare('DELETE FROM marketing_campaigns WHERE id = ?');
+    $stmt->execute([$id]);
+
+    $detail = 'Menghapus campaign "' . $row['name'] . '" kanal ' . $row['channel']
+        . ' status ' . $row['status'] . '.';
+    elips_audit('delete', 'marketing_campaign', $id, $row['name'], $detail, $actor);
+    return elips_ok('Campaign dihapus.');
+}
+
 function elips_marketing_dashboard(array $p): array
 {
     $actor = elips_require_marketing_access();
@@ -7092,9 +7260,10 @@ function elips_marketing_dashboard(array $p): array
         $leadArgs[] = $ownerId;
     }
     $stmt = $db->prepare(
-        'SELECT ml.*, u.name AS owner_name
+        'SELECT ml.*, u.name AS owner_name, mc.name AS campaign_name
          FROM marketing_leads ml
-         LEFT JOIN users u ON u.id = ml.owner_id'
+         LEFT JOIN users u ON u.id = ml.owner_id
+         LEFT JOIN marketing_campaigns mc ON mc.id = ml.campaign_id'
         . $leadWhere
         . ' ORDER BY ml.updated_at DESC, ml.created_at DESC, ml.id DESC'
     );
@@ -7225,6 +7394,19 @@ function elips_action_marketing_lead_save(array $p): array
         return elips_fail($e->getMessage());
     }
 
+    $campaignId = max(0, (int) ($p['campaignId'] ?? 0));
+    $campaignIdValue = null;
+    if ($campaignId > 0) {
+        $campaign = elips_marketing_campaign_row($campaignId);
+        if (!$campaign) {
+            return elips_fail('Campaign tidak ditemukan.');
+        }
+        if ((int) $campaign['owner_id'] !== $ownerId) {
+            return elips_fail('Campaign harus milik pemilik lead yang sama.');
+        }
+        $campaignIdValue = $campaignId;
+    }
+
     $name = trim((string) ($p['name'] ?? ''));
     $phone = trim((string) ($p['phone'] ?? ''));
     $email = trim((string) ($p['email'] ?? ''));
@@ -7286,24 +7468,24 @@ function elips_action_marketing_lead_save(array $p): array
     if ($existing) {
         $stmt = $db->prepare(
             'UPDATE marketing_leads
-             SET name = ?, phone = ?, email = ?, city = ?, source = ?, status = ?, interest = ?,
+             SET campaign_id = ?, name = ?, phone = ?, email = ?, city = ?, source = ?, status = ?, interest = ?,
                  notes = ?, next_followup_date = ?, converted_at = ?, enrollment_value = ?,
                  updated_at = UTC_TIMESTAMP()
              WHERE id = ?'
         );
         $stmt->execute([
-            $name, $phone, $email, $city, $source, $status, $interest,
+            $campaignIdValue, $name, $phone, $email, $city, $source, $status, $interest,
             $notes, $nextFollowupDate, $convertedAt, $enrollmentValue, $id,
         ]);
     } else {
         $stmt = $db->prepare(
             'INSERT INTO marketing_leads
-                (owner_id, name, phone, email, city, source, status, interest, notes,
+                (owner_id, campaign_id, name, phone, email, city, source, status, interest, notes,
                  next_followup_date, converted_at, enrollment_value, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP())'
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP())'
         );
         $stmt->execute([
-            $ownerId, $name, $phone, $email, $city, $source, $status, $interest,
+            $ownerId, $campaignIdValue, $name, $phone, $email, $city, $source, $status, $interest,
             $notes, $nextFollowupDate, $convertedAt, $enrollmentValue,
         ]);
         $id = (int) $db->lastInsertId();

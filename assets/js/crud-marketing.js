@@ -13,6 +13,8 @@
     const LEAD_STATUSES = ['baru', 'dihubungi', 'prospek', 'terdaftar', 'batal'];
     const LEAD_SOURCES = ['walk_in', 'referensi', 'sekolah', 'sosial_media', 'pameran', 'telemarketing', 'lainnya'];
     const FOLLOWUP_CHANNELS = ['telepon', 'whatsapp', 'email', 'kunjungan', 'lainnya'];
+    const CAMPAIGN_STATUSES = ['draft', 'aktif', 'selesai', 'batal'];
+    const CAMPAIGN_CHANNELS = ['sosial_media', 'email', 'pameran', 'sekolah', 'komunitas', 'telemarketing', 'lainnya'];
 
     const STATUS_LABELS = {
         baru: 'Baru',
@@ -37,6 +39,23 @@
         whatsapp: 'WhatsApp',
         email: 'Email',
         kunjungan: 'Kunjungan',
+        lainnya: 'Lainnya'
+    };
+
+    const CAMPAIGN_STATUS_LABELS = {
+        draft: 'Draft',
+        aktif: 'Aktif',
+        selesai: 'Selesai',
+        batal: 'Batal'
+    };
+
+    const CAMPAIGN_CHANNEL_LABELS = {
+        sosial_media: 'Sosial Media',
+        email: 'Email',
+        pameran: 'Pameran',
+        sekolah: 'Sekolah',
+        komunitas: 'Komunitas',
+        telemarketing: 'Telemarketing',
         lainnya: 'Lainnya'
     };
 
@@ -87,6 +106,14 @@
         return CHANNEL_LABELS[channel] || channel || '-';
     }
 
+    function campaignStatusLabel(status) {
+        return CAMPAIGN_STATUS_LABELS[status] || status || '-';
+    }
+
+    function campaignChannelLabel(channel) {
+        return CAMPAIGN_CHANNEL_LABELS[channel] || channel || '-';
+    }
+
     function resolveOwnerId(data, existing) {
         const user = sessionUser();
         if (existing) return Number(existing.ownerId);
@@ -117,6 +144,20 @@
             ? data.enrollmentValue
             : (existing ? existing.enrollmentValue : 0);
         const enrollmentValue = Number(enrollmentRaw || 0);
+        const campaignRaw = data.campaignId !== undefined
+            ? data.campaignId
+            : (existing ? existing.campaignId : '');
+        const campaignId = Number(campaignRaw || 0);
+        let campaign = null;
+        if (campaignId > 0) {
+            campaign = typeof ELIPS.getMarketingCampaign === 'function'
+                ? ELIPS.getMarketingCampaign(campaignId)
+                : null;
+            if (!campaign) return { error: 'Campaign tidak ditemukan.' };
+            if (Number(campaign.ownerId) !== Number(ownerId)) {
+                return { error: 'Campaign harus milik pemilik lead yang sama.' };
+            }
+        }
 
         if (!ownerId) return { error: 'Pemilik lead tidak valid.' };
         if (!name) return { error: 'Nama lead wajib diisi.' };
@@ -138,6 +179,7 @@
 
         return {
             ownerId: ownerId,
+            campaignId: campaignId > 0 ? campaignId : null,
             name: name,
             phone: phone,
             email: email,
@@ -433,6 +475,201 @@
         return success('Target Marketing disimpan.', target);
     }
 
+    function normalizeCampaignPayload(data, existing) {
+        data = data || {};
+        const ownerId = resolveOwnerId(data, existing);
+        const name = String(data.name !== undefined ? data.name : (existing ? existing.name : '')).trim();
+        const channel = String(data.channel !== undefined ? data.channel : (existing ? existing.channel : 'lainnya')).trim();
+        const status = String(data.status !== undefined ? data.status : (existing ? existing.status : 'draft')).trim();
+        const startRaw = data.startDate !== undefined
+            ? data.startDate
+            : (existing ? existing.startDate : '');
+        const endRaw = data.endDate !== undefined
+            ? data.endDate
+            : (existing ? existing.endDate : '');
+        const startDate = startRaw ? normalizeDate(startRaw) : null;
+        const endDate = endRaw ? normalizeDate(endRaw) : null;
+        const budget = Number(data.budget !== undefined ? data.budget : (existing ? existing.budget : 0));
+        const targetLeads = Number(data.targetLeads !== undefined
+            ? data.targetLeads
+            : (existing ? existing.targetLeads : 0));
+        const targetEnrollments = Number(data.targetEnrollments !== undefined
+            ? data.targetEnrollments
+            : (existing ? existing.targetEnrollments : 0));
+        const notes = String(data.notes !== undefined ? data.notes : (existing ? existing.notes : '')).trim();
+
+        if (!ownerId) return { error: 'Pemilik campaign tidak valid.' };
+        if (!name) return { error: 'Nama campaign wajib diisi.' };
+        if (name.length > 150) return { error: 'Nama campaign maksimal 150 karakter.' };
+        if (CAMPAIGN_CHANNELS.indexOf(channel) === -1) return { error: 'Kanal campaign tidak valid.' };
+        if (CAMPAIGN_STATUSES.indexOf(status) === -1) return { error: 'Status campaign tidak valid.' };
+        if (startRaw && !startDate) return { error: 'Tanggal mulai campaign tidak valid.' };
+        if (endRaw && !endDate) return { error: 'Tanggal selesai campaign tidak valid.' };
+        if (startDate && endDate && endDate < startDate) {
+            return { error: 'Tanggal selesai tidak boleh sebelum tanggal mulai.' };
+        }
+        if (!isFinite(budget) || budget < 0) {
+            return { error: 'Budget campaign harus berupa angka tidak negatif.' };
+        }
+        if (!isFinite(targetLeads) || targetLeads < 0
+            || !isFinite(targetEnrollments) || targetEnrollments < 0) {
+            return { error: 'Target campaign tidak boleh negatif.' };
+        }
+        if (notes.length > 1000) return { error: 'Catatan campaign maksimal 1000 karakter.' };
+
+        return {
+            ownerId: ownerId,
+            name: name,
+            channel: channel,
+            status: status,
+            startDate: startDate,
+            endDate: endDate,
+            budget: Math.round(budget * 100) / 100,
+            targetLeads: Math.round(targetLeads),
+            targetEnrollments: Math.round(targetEnrollments),
+            notes: notes
+        };
+    }
+
+    function saveMarketingCampaign(data) {
+        if (ELIPS.api && ELIPS.api.enabled) {
+            return ELIPS.api.call('marketing.campaign.save', data || {});
+        }
+
+        data = data || {};
+        const id = Number(data.id || 0);
+        const campaigns = ELIPS.getMarketingCampaigns();
+        const existing = id > 0
+            ? campaigns.find(function (campaign) { return Number(campaign.id) === id; })
+            : null;
+        if (id > 0 && !existing) return failure('Campaign tidak ditemukan.');
+
+        const user = sessionUser();
+        if (existing && user && user.role !== 'admin' && Number(existing.ownerId) !== Number(user.id)) {
+            return failure('Anda hanya dapat mengubah campaign milik Anda.');
+        }
+
+        const normalized = normalizeCampaignPayload(data, existing);
+        if (normalized.error) return failure(normalized.error);
+
+        const now = new Date().toISOString();
+        let campaign;
+        if (existing) {
+            campaign = Object.assign(existing, normalized, { updatedAt: now });
+            ELIPS.setMarketingCampaigns(campaigns);
+        } else {
+            campaign = Object.assign({}, normalized, {
+                id: ELIPS.nextId(campaigns),
+                ownerName: ownerName(normalized.ownerId),
+                leadCount: 0,
+                enrolledCount: 0,
+                revenue: 0,
+                createdAt: now,
+                updatedAt: now
+            });
+            campaigns.push(campaign);
+            ELIPS.setMarketingCampaigns(campaigns);
+        }
+
+        recordAudit({
+            action: existing ? 'update' : 'create',
+            entity: 'marketing_campaign',
+            entityId: campaign.id,
+            entityLabel: campaign.name,
+            actorId: user ? user.id : undefined,
+            detail: (existing ? 'Mengubah' : 'Menambahkan') + ' campaign "' + campaign.name + '"'
+                + ' kanal ' + campaignChannelLabel(campaign.channel)
+                + ' status ' + campaignStatusLabel(campaign.status)
+                + (campaign.startDate ? ' mulai ' + campaign.startDate : '')
+                + (campaign.endDate ? ' selesai ' + campaign.endDate : '') + '.'
+        });
+        return success(existing ? 'Campaign diperbarui.' : 'Campaign ditambahkan.', campaign);
+    }
+
+    function deleteMarketingCampaign(id) {
+        if (ELIPS.api && ELIPS.api.enabled) {
+            return ELIPS.api.call('marketing.campaign.delete', { id: id });
+        }
+
+        const campaigns = ELIPS.getMarketingCampaigns();
+        const campaign = campaigns.find(function (row) { return Number(row.id) === Number(id); });
+        if (!campaign) return failure('Campaign tidak ditemukan.');
+
+        const user = sessionUser();
+        if (user && user.role !== 'admin' && Number(campaign.ownerId) !== Number(user.id)) {
+            return failure('Anda hanya dapat menghapus campaign milik Anda.');
+        }
+
+        ELIPS.setMarketingCampaigns(campaigns.filter(function (row) {
+            return Number(row.id) !== Number(id);
+        }));
+
+        const leads = ELIPS.getMarketingLeads();
+        let linked = 0;
+        leads.forEach(function (lead) {
+            if (Number(lead.campaignId) === Number(id)) {
+                lead.campaignId = null;
+                linked++;
+            }
+        });
+        if (linked > 0) ELIPS.setMarketingLeads(leads);
+
+        recordAudit({
+            action: 'delete',
+            entity: 'marketing_campaign',
+            entityId: campaign.id,
+            entityLabel: campaign.name,
+            actorId: user ? user.id : undefined,
+            detail: 'Menghapus campaign "' + campaign.name + '" kanal '
+                + campaignChannelLabel(campaign.channel)
+                + ' status ' + campaignStatusLabel(campaign.status)
+                + (linked > 0 ? '. ' + linked + ' lead dilepas dari campaign.' : '.')
+        });
+        return success('Campaign dihapus.');
+    }
+
+    function localCampaignList(userId) {
+        const user = sessionUser();
+        const scope = (userId === undefined || userId === null || userId === '')
+            ? (user && user.role !== 'admin' ? Number(user.id) : 0)
+            : Number(userId);
+        const leads = ELIPS.getMarketingLeads();
+
+        const campaigns = ELIPS.getMarketingCampaigns()
+            .filter(function (campaign) { return scope === 0 || Number(campaign.ownerId) === scope; })
+            .map(function (campaign) {
+                const linked = leads.filter(function (lead) {
+                    return Number(lead.campaignId) === Number(campaign.id);
+                });
+                const enrolled = linked.filter(function (lead) { return lead.status === 'terdaftar'; });
+                return Object.assign({}, campaign, {
+                    ownerName: campaign.ownerName || ownerName(campaign.ownerId),
+                    leadCount: linked.length,
+                    enrolledCount: enrolled.length,
+                    revenue: enrolled.reduce(function (total, lead) {
+                        return total + Number(lead.enrollmentValue || 0);
+                    }, 0)
+                });
+            })
+            .sort(function (a, b) {
+                return String(b.startDate || b.updatedAt || b.createdAt || '')
+                    .localeCompare(String(a.startDate || a.updatedAt || a.createdAt || ''));
+            });
+
+        return success('Campaign Marketing dimuat.', { campaigns: campaigns });
+    }
+
+    function marketingCampaigns(userId) {
+        if (ELIPS.api && ELIPS.api.enabled) {
+            const payload = {};
+            if (userId !== undefined && userId !== null && userId !== '') {
+                payload.userId = Number(userId);
+            }
+            return ELIPS.api.call('marketing.campaign.list', payload);
+        }
+        return localCampaignList(userId);
+    }
+
     function localDashboard(userId, period) {
         const today = todayString();
         const activePeriod = validPeriod(period) ? String(period) : currentPeriod();
@@ -526,9 +763,16 @@
     ELIPS.LEAD_STATUSES = LEAD_STATUSES;
     ELIPS.LEAD_SOURCES = LEAD_SOURCES;
     ELIPS.FOLLOWUP_CHANNELS = FOLLOWUP_CHANNELS;
+    ELIPS.CAMPAIGN_STATUSES = CAMPAIGN_STATUSES;
+    ELIPS.CAMPAIGN_CHANNELS = CAMPAIGN_CHANNELS;
     ELIPS.marketingStatusLabel = statusLabel;
     ELIPS.marketingSourceLabel = sourceLabel;
     ELIPS.marketingChannelLabel = channelLabel;
+    ELIPS.marketingCampaignStatusLabel = campaignStatusLabel;
+    ELIPS.marketingCampaignChannelLabel = campaignChannelLabel;
+    ELIPS.marketingCampaigns = marketingCampaigns;
+    ELIPS.saveMarketingCampaign = saveMarketingCampaign;
+    ELIPS.deleteMarketingCampaign = deleteMarketingCampaign;
     ELIPS.marketingDashboard = marketingDashboard;
     ELIPS.saveMarketingLead = saveMarketingLead;
     ELIPS.deleteMarketingLead = deleteMarketingLead;

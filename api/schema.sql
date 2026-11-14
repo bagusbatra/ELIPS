@@ -880,13 +880,36 @@ CREATE TABLE IF NOT EXISTS `letters` (
     CONSTRAINT `fk_letters_created_by` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- ---------- Marketing: lead, follow-up, dan target ----------
--- Data lead bersifat pribadi milik karyawan Marketing yang menanganinya.
--- Admin dapat melihat seluruh data untuk keperluan pemantauan.
+-- ---------- Marketing: campaign, lead, follow-up, dan target ----------
+-- Data campaign dan lead bersifat pribadi milik karyawan Marketing yang
+-- menanganinya. Admin dapat melihat seluruh data untuk keperluan pemantauan.
+
+CREATE TABLE IF NOT EXISTS `marketing_campaigns` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `owner_id` INT UNSIGNED NOT NULL,
+    `name` VARCHAR(150) NOT NULL,
+    `channel` ENUM('sosial_media', 'email', 'pameran', 'sekolah', 'komunitas', 'telemarketing', 'lainnya')
+        NOT NULL DEFAULT 'lainnya',
+    `status` ENUM('draft', 'aktif', 'selesai', 'batal') NOT NULL DEFAULT 'draft',
+    `start_date` DATE NULL,
+    `end_date` DATE NULL,
+    `budget` DECIMAL(14,2) NOT NULL DEFAULT 0,
+    `target_leads` INT UNSIGNED NOT NULL DEFAULT 0,
+    `target_enrollments` INT UNSIGNED NOT NULL DEFAULT 0,
+    `notes` VARCHAR(1000) NOT NULL DEFAULT '',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NULL,
+    PRIMARY KEY (`id`),
+    KEY `idx_marketing_campaigns_owner` (`owner_id`),
+    KEY `idx_marketing_campaigns_status` (`status`),
+    KEY `idx_marketing_campaigns_period` (`start_date`, `end_date`),
+    CONSTRAINT `fk_marketing_campaigns_owner` FOREIGN KEY (`owner_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `marketing_leads` (
     `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
     `owner_id` INT UNSIGNED NOT NULL,
+    `campaign_id` INT UNSIGNED NULL,
     `name` VARCHAR(150) NOT NULL,
     `phone` VARCHAR(30) NOT NULL DEFAULT '',
     `email` VARCHAR(190) NOT NULL DEFAULT '',
@@ -903,10 +926,13 @@ CREATE TABLE IF NOT EXISTS `marketing_leads` (
     `updated_at` DATETIME NULL,
     PRIMARY KEY (`id`),
     KEY `idx_marketing_leads_owner` (`owner_id`),
+    KEY `idx_marketing_leads_campaign` (`campaign_id`),
     KEY `idx_marketing_leads_status` (`status`),
     KEY `idx_marketing_leads_next_followup` (`next_followup_date`),
     KEY `idx_marketing_leads_converted` (`converted_at`),
-    CONSTRAINT `fk_marketing_leads_owner` FOREIGN KEY (`owner_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+    CONSTRAINT `fk_marketing_leads_owner` FOREIGN KEY (`owner_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_marketing_leads_campaign` FOREIGN KEY (`campaign_id`) REFERENCES `marketing_campaigns` (`id`)
+        ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `marketing_followups` (

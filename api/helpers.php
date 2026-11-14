@@ -152,6 +152,16 @@ function elips_marketing_valid_followup_channel(string $channel): bool
     return in_array($channel, ['telepon', 'whatsapp', 'email', 'kunjungan', 'lainnya'], true);
 }
 
+function elips_marketing_valid_campaign_status(string $status): bool
+{
+    return in_array($status, ['draft', 'aktif', 'selesai', 'batal'], true);
+}
+
+function elips_marketing_valid_campaign_channel(string $channel): bool
+{
+    return in_array($channel, ['sosial_media', 'email', 'pameran', 'sekolah', 'komunitas', 'telemarketing', 'lainnya'], true);
+}
+
 function elips_marketing_valid_period(string $period): bool
 {
     return (bool) preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', $period);
@@ -1786,12 +1796,37 @@ function elips_letter_public(array $row): array
 
 // ---------- Marketing ----------
 
+function elips_marketing_campaign_public(array $row): array
+{
+    return [
+        'id' => (int) $row['id'],
+        'ownerId' => (int) $row['owner_id'],
+        'ownerName' => $row['owner_name'] ?? '',
+        'name' => $row['name'],
+        'channel' => $row['channel'],
+        'status' => $row['status'],
+        'startDate' => $row['start_date'] === null ? null : elips_date_only($row['start_date']),
+        'endDate' => $row['end_date'] === null ? null : elips_date_only($row['end_date']),
+        'budget' => (float) $row['budget'],
+        'targetLeads' => (int) $row['target_leads'],
+        'targetEnrollments' => (int) $row['target_enrollments'],
+        'notes' => $row['notes'],
+        'leadCount' => (int) ($row['lead_count'] ?? 0),
+        'enrolledCount' => (int) ($row['enrolled_count'] ?? 0),
+        'revenue' => (float) ($row['revenue'] ?? 0),
+        'createdAt' => elips_iso($row['created_at']),
+        'updatedAt' => elips_iso($row['updated_at']),
+    ];
+}
+
 function elips_marketing_lead_public(array $row): array
 {
     return [
         'id' => (int) $row['id'],
         'ownerId' => (int) $row['owner_id'],
         'ownerName' => $row['owner_name'] ?? '',
+        'campaignId' => $row['campaign_id'] === null ? null : (int) $row['campaign_id'],
+        'campaignName' => $row['campaign_name'] ?? '',
         'name' => $row['name'],
         'phone' => $row['phone'],
         'email' => $row['email'],
@@ -1842,12 +1877,26 @@ function elips_marketing_target_public(array $row): array
     ];
 }
 
+function elips_marketing_campaign_row(int $id): ?array
+{
+    $stmt = elips_db()->prepare(
+        'SELECT mc.*, u.name AS owner_name
+         FROM marketing_campaigns mc
+         LEFT JOIN users u ON u.id = mc.owner_id
+         WHERE mc.id = ? LIMIT 1'
+    );
+    $stmt->execute([$id]);
+    $row = $stmt->fetch();
+    return $row ?: null;
+}
+
 function elips_marketing_lead_row(int $id): ?array
 {
     $stmt = elips_db()->prepare(
-        'SELECT ml.*, u.name AS owner_name
+        'SELECT ml.*, u.name AS owner_name, mc.name AS campaign_name
          FROM marketing_leads ml
          LEFT JOIN users u ON u.id = ml.owner_id
+         LEFT JOIN marketing_campaigns mc ON mc.id = ml.campaign_id
          WHERE ml.id = ? LIMIT 1'
     );
     $stmt->execute([$id]);

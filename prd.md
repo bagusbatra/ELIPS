@@ -1,8 +1,8 @@
 # PRD: Learning Management System (LMS) ELIPS
 
 **Versi:** 4.0  
-**Tanggal:** 2026-11-13
-**Status:** Implemented Phase 1-6 (Dual-mode - PHP 8/MySQL 8 + fallback `localStorage`). v3.0 tetap menjadi baseline alur kursus; v4.0 menambahkan versi kurikulum, angkatan/kelas, penguncian kurikulum per kelas, histori tentor, enrollment berbasis kelas, jadwal pertemuan dan presensi offline, **cabang** dengan halaman kalender/jadwal admin, **materi tambahan kelas dan mode akses materi**, **tugas & ujian**, **skema penilaian, finalisasi nilai, predikat konfigurabel, dan koreksi beraudit**, serta **absensi karyawan** (role `karyawan`, jam server, GPS wajib, aturan harian di database, modul absensi bersama, halaman `employee/attendance.html`, dan sesi login diingat dengan rotasi token per perangkat), **divisi karyawan** (`users.division` dengan pilihan Marketing/Operasional/Keuangan/HRD), **dashboard Marketing** (lead, follow-up, target bulanan, pipeline, dan aksi hari ini untuk karyawan divisi Marketing), dan **PWA** (manifest, service worker network-first, banner pemasangan Android/iOS, serta mode offline).
+**Tanggal:** 2026-11-14
+**Status:** Implemented Phase 1-6 (Dual-mode - PHP 8/MySQL 8 + fallback `localStorage`). v3.0 tetap menjadi baseline alur kursus; v4.0 menambahkan versi kurikulum, angkatan/kelas, penguncian kurikulum per kelas, histori tentor, enrollment berbasis kelas, jadwal pertemuan dan presensi offline, **cabang** dengan halaman kalender/jadwal admin, **materi tambahan kelas dan mode akses materi**, **tugas & ujian**, **skema penilaian, finalisasi nilai, predikat konfigurabel, dan koreksi beraudit**, serta **absensi karyawan** (role `karyawan`, jam server, GPS wajib, aturan harian di database, modul absensi bersama, halaman `employee/attendance.html`, dan sesi login diingat dengan rotasi token per perangkat), **divisi karyawan** (`users.division` dengan pilihan Marketing/Operasional/Keuangan/HRD), **dashboard Marketing** (lead, follow-up, target bulanan, pipeline, dan aksi hari ini untuk karyawan divisi Marketing), **campaign Marketing** (halaman `employee/campaigns.html` untuk CRUD campaign, tautan lead, dan capaian otomatis), dan **PWA** (manifest, service worker network-first, banner pemasangan Android/iOS, serta mode offline).
 **Baseline v4.0 lengkap:** `ELIPS-LMS-PRD-v4.0.md`  
 **Log pengembangan:** `log.md`
 **ERD:** `erd.md`
@@ -66,7 +66,7 @@ Aturan inti yang sudah diterapkan:
 | **Admin** | Pengelola sistem | Menambah kursus (Draft), mengelola versi kurikulum, mengelola cabang, membuat angkatan/kelas, menugaskan 1 tentor per kelas, menyusun jadwal sesi, memantau kalender/presensi/rekap, mengatur mode akses materi dan override dengan alasan, menambah pengguna, mendaftarkan siswa ke kelas, menyetujui sertifikat Draft → Publish |
 | **Instruktur/Trainer** | Pengajar kursus/kelas | Login, melihat kelas yang diampu, mengelola modul/materi pada versi kurikulum yang masih dapat diubah, mengatur akses dan materi tambahan kelas, mengonfirmasi penyelesaian materi, menyusun jadwal, mencatat presensi dan koreksi, memantau progres, mengelola tugas/ujian, menyusun skema penilaian, memberi nilai komponen, memfinalisasi nilai, dan mengoreksi nilai dengan alasan |
 | **Peserta/Student** | Peserta pelatihan | Mengakses materi dari kelas yang diikuti sesuai mode akses, menandai pelajaran/materi selesai bila diizinkan, melihat status persetujuan instruktur, melihat rekap kehadiran sendiri, mengumpulkan tugas, melihat hasil ujian, melihat transkrip nilai sendiri, dan melihat sertifikat yang sudah Publish |
-| **Karyawan** | Staf operasional (dengan divisi) | Absen masuk/pulang dengan foto dan GPS, melihat riwayat absensi sendiri, memasang PWA, serta—khusus divisi Marketing—mengelola lead, follow-up, dan target pendaftaran/pendapatan bulanan |
+| **Karyawan** | Staf operasional (dengan divisi) | Absen masuk/pulang dengan foto dan GPS, melihat riwayat absensi sendiri, memasang PWA, serta-khusus divisi Marketing-mengelola campaign, lead, follow-up, dan target pendaftaran/pendapatan bulanan |
 
 ---
 
@@ -431,6 +431,7 @@ Backend berada di folder `api/` dan terdiri dari front controller, konfigurasi, 
 |---|---|---|
 | `employee/dashboard.html` | ✅ Selesai | Dashboard karyawan: sapaan + nama/divisi, status absensi hari ini, jumlah hari/catatan absen bulan berjalan, akses cepat ke absensi, dan tabel absensi terbaru. Khusus divisi Marketing menampilkan ringkasan lead, follow-up hari ini, capaian target pendaftaran/pendapatan, pipeline, aksi hari ini, tabel lead, serta modal lead/follow-up/target |
 | `employee/attendance.html` | ✅ Selesai | Absensi harian karyawan dengan kamera/foto, GPS wajib, status masuk/pulang, riwayat pribadi, detail metadata, dan tautan kembali ke dashboard |
+| `employee/campaigns.html` | ✅ Selesai | Campaigns Marketing: statistik total/aktif/lead/pendaftaran, pencarian + filter status, kartu campaign dengan progres capaian dari lead tertaut, serta modal CRUD campaign (nama, kanal, status, periode, budget, target lead/pendaftaran, catatan) |
 
 ### Assets
 | File | Status | Deskripsi |
@@ -459,8 +460,9 @@ Backend berada di folder `api/` dan terdiri dari front controller, konfigurasi, 
 | `assets/js/staff-recap.js` | ✅ Selesai | Rekap absensi karyawan untuk Admin: filter tanggal/karyawan/role, agregasi harian, ringkasan status, dan ekspor CSV |
 | `assets/js/shift-schedule.js` | ✅ Selesai | Jadwal shift karyawan untuk Admin: filter tanggal/karyawan/jenis, preset Pagi/Sore, jam custom, validasi konflik satu shift per tanggal, CRUD server/lokal, dan audit |
 | `assets/js/letter-archive.js` | ✅ Selesai | Surat menyurat untuk Admin: filter jenis/tanggal/pencarian, ringkasan statistik, tabel surat masuk/keluar, detail ringkas, CRUD server/lokal, dan audit |
-| `assets/js/crud-marketing.js` | ✅ Selesai | Logika Marketing: CRUD lead/follow-up/target, validasi status/sumber/kanal/periode, sinkronisasi jadwal follow-up, agregasi dashboard (pipeline, aksi hari ini, capaian target), audit, dan jalur server/lokal |
-| `assets/js/employee-dashboard.js` | ✅ Selesai | Dashboard karyawan: sapaan/divisi, status absensi hari ini, rekap hari/catatan bulan berjalan, riwayat terbaru, serta widget Marketing (statistik, target, pipeline, aksi hari ini, tabel lead, dan modal) untuk divisi Marketing |
+| `assets/js/crud-marketing.js` | ✅ Selesai | Logika Marketing: CRUD campaign/lead/follow-up/target, tautan lead ke campaign, validasi status/sumber/kanal/periode, sinkronisasi jadwal follow-up, agregasi dashboard dan capaian campaign, audit, dan jalur server/lokal |
+| `assets/js/employee-dashboard.js` | ✅ Selesai | Dashboard karyawan: sapaan/divisi, status absensi hari ini, rekap hari/catatan bulan berjalan, riwayat terbaru, serta widget Marketing (statistik, target, pipeline, aksi hari ini, tabel lead, kampanye pada lead, dan modal) untuk divisi Marketing |
+| `assets/js/employee-campaigns.js` | ✅ Selesai | Halaman Campaigns Marketing: guard divisi, statistik campaign, pencarian/filter status, kartu progres capaian, modal tambah/ubah/hapus, dan sinkronisasi mode server/lokal |
 | `assets/js/pwa.js` | ✅ Selesai | Pendaftaran service worker, banner pemasangan Android (`beforeinstallprompt`), sheet petunjuk iOS, deteksi versi baru, dan bilah offline |
 | `manifest.webmanifest` | ✅ Selesai | Manifest PWA: `start_url` halaman absen, `scope` root, `display` standalone, ikon 192/512 dan maskable |
 | `sw.js` | ✅ Selesai | Service worker network-first; tidak pernah menyimpan halaman HTML aplikasi atau `/api/`; fallback aset statis dan `offline.html` |
@@ -469,7 +471,7 @@ Backend berada di folder `api/` dan terdiri dari front controller, konfigurasi, 
 ### PWA (`offline.html`)
 | File | Status | Deskripsi |
 |---|---|---|
-| `offline.html` | ✅ Selesai | Halaman offline mandiri (tanpa bundle aplikasi) dengan tombol muat ulang; tidak termasuk 32 halaman aplikasi yang memuat `pwa.js` |
+| `offline.html` | ✅ Selesai | Halaman offline mandiri (tanpa bundle aplikasi) dengan tombol muat ulang; tidak termasuk 33 halaman aplikasi yang memuat `pwa.js` |
 
 ### Backend (`api/`)
 | File | Status | Deskripsi |
@@ -477,12 +479,12 @@ Backend berada di folder `api/` dan terdiri dari front controller, konfigurasi, 
 | `api/index.php` | ✅ Selesai | Front controller API dan pengaturan sesi PHP |
 | `api/config.php` | ✅ Selesai | Konfigurasi database (override via environment variable) |
 | `api/db.php` | ✅ Selesai | Koneksi PDO MySQL dan timezone UTC |
-| `api/helpers.php` | ✅ Selesai | Sesi, otorisasi (termasuk guard Marketing), serializer (termasuk cabang, sesi/presensi/koreksi, tugas/ujian, predikat, skema, nilai, lead/follow-up/target Marketing), mesin komputasi nilai, kebijakan kehadiran, rekap, sanitasi HTML, audit, dan notifikasi |
+| `api/helpers.php` | ✅ Selesai | Sesi, otorisasi (termasuk guard Marketing), serializer (termasuk cabang, sesi/presensi/koreksi, tugas/ujian, predikat, skema, nilai, campaign/lead/follow-up/target Marketing), mesin komputasi nilai, kebijakan kehadiran, rekap, sanitasi HTML, audit, dan notifikasi |
 | `api/snapshot.php` | ✅ Selesai | Snapshot koleksi untuk cache client, termasuk `branches`, `classSessions`, `attendances`, `attendanceCorrections`, tugas/ujian, predikat, skema penilaian, nilai komponen, dan koreksi |
-| `api/actions.php` | ✅ Selesai | 108 aksi bisnis dan validasi role/kepemilikan di server, termasuk `auth.*`, `branch.*`, `session.*`, `attendance.*`, `staffAttendance.recap`, `staffShift.*`, `letter.*`, `marketing.*`, `assignment.*`, `submission.*`, `exam.*`, `predicate.*`, `gradeScheme.*`, aksi nilai Phase 6, dan `user.resetDevice` |
-| `api/schema.sql` | ✅ Selesai | Skema MySQL 8 (43 tabel), foreign key, dan index |
-| `api/install.php` | ✅ Selesai | Installer/seeder data demo (`--fresh` untuk reset), termasuk cabang, sesi, presensi, tugas/ujian, predikat, skema penilaian, dan migrasi tabel surat menyurat serta Marketing; migrasi kolom Phase 4–6 untuk database lama |
-| `api/seed-marketing-leads.php` | ✅ Selesai | Seed idempoten 12 lead, 12 follow-up, dan 6 target periode berjalan untuk enam akun karyawan Marketing; aman dijalankan berulang |
+| `api/actions.php` | ✅ Selesai | 111 aksi bisnis dan validasi role/kepemilikan di server, termasuk `auth.*`, `branch.*`, `session.*`, `attendance.*`, `staffAttendance.recap`, `staffShift.*`, `letter.*`, `marketing.*` (termasuk `marketing.campaign.*`), `assignment.*`, `submission.*`, `exam.*`, `predicate.*`, `gradeScheme.*`, aksi nilai Phase 6, dan `user.resetDevice` |
+| `api/schema.sql` | ✅ Selesai | Skema MySQL 8 (44 tabel), foreign key, dan index |
+| `api/install.php` | ✅ Selesai | Installer/seeder data demo (`--fresh` untuk reset), termasuk cabang, sesi, presensi, tugas/ujian, predikat, skema penilaian, dan migrasi tabel surat menyurat serta Marketing (termasuk `campaign_id` pada lead); migrasi kolom Phase 4–6 untuk database lama |
+| `api/seed-marketing-leads.php` | ✅ Selesai | Seed idempoten 10 campaign, 12 lead (semua tertaut campaign), 12 follow-up, dan 6 target periode berjalan untuk enam akun karyawan Marketing; aman dijalankan berulang |
 
 ---
 
@@ -700,6 +702,25 @@ Karyawan dengan `division = 'marketing'` memperoleh area tambahan di `employee/d
 | Mode lokal | Selesai | Key `elips_marketingLeads`, `elips_marketingFollowups`, dan `elips_marketingTargets` dengan validasi dan audit yang sama |
 | Audit | Selesai | Create/update/delete mencatat entitas `marketing_lead`, `marketing_followup`, dan `marketing_target` |
 | Data dummy | Selesai | `api/seed-marketing-leads.php` membuat 12 lead, 12 follow-up, dan 6 target periode berjalan secara idempoten untuk enam akun Marketing |
+
+### 6.5e Campaigns Marketing (Karyawan Divisi Marketing)
+
+Halaman terpisah `employee/campaigns.html` memberi karyawan Marketing tempat mengelola campaign, lalu menghubungkan lead ke campaign tersebut. Data campaign mengikuti kepemilikan lead: karyawan hanya melihat campaign miliknya, sedangkan Admin dapat memantau seluruh campaign atau memfilter satu karyawan. Modul `assets/js/crud-marketing.js` menangani validasi dan agregasi; `assets/js/employee-campaigns.js` merender halaman.
+
+| Fitur | Status | Keterangan |
+|---|---|---|
+| Daftar campaign | Selesai | Kartu responsif berisi nama, kanal, status, periode, budget, target, catatan, serta capaian lead/pendaftaran/pendapatan |
+| Ringkasan campaign | Selesai | Statistik total campaign, campaign aktif, lead terkumpul, dan pendaftaran dari seluruh campaign milik pengguna |
+| CRUD campaign | Selesai | Nama (wajib, maks. 150 karakter), kanal, status, tanggal mulai/selesai, budget, target lead, target pendaftaran, dan catatan (maks. 1000 karakter) |
+| Status & kanal | Selesai | Status `draft`, `aktif`, `selesai`, `batal`; kanal `sosial_media`, `email`, `pameran`, `sekolah`, `komunitas`, `telemarketing`, `lainnya` |
+| Validasi | Selesai | Tanggal selesai tidak boleh sebelum tanggal mulai, budget/target tidak negatif, status/kanal wajib valid, dan campaign harus milik pemilik lead yang sama |
+| Tautan lead | Selesai | Lead dapat ditautkan ke satu campaign lewat modal lead di dashboard; nama campaign tampil pada tabel lead. Menghapus campaign melepas tautan lead (`campaign_id` menjadi `NULL`) tanpa menghapus lead |
+| Capaian otomatis | Selesai | `leadCount` dihitung dari seluruh lead tertaut, `enrolledCount` dari status `terdaftar`, dan `revenue` dari `enrollmentValue` lead yang terdaftar |
+| Privasi & akses | Selesai | Karyawan Marketing hanya melihat/mengubah campaign miliknya; Admin dapat memilih seluruh data atau satu karyawan; role/divisi lain ditolak dan halaman mengalihkan ke dashboard |
+| Mode server | Selesai | Aksi `marketing.campaign.list/save/delete`; data campaign tidak masuk snapshot bootstrap |
+| Mode lokal | Selesai | Key `elips_marketingCampaigns` dengan validasi, agregasi, tautan lead, dan audit yang sama |
+| Audit | Selesai | Create/update/delete mencatat entitas `marketing_campaign` |
+| Data dummy | Selesai | `api/seed-marketing-leads.php` membuat 10 campaign idempoten dan menautkan seluruh 12 lead yang di-seed |
 
 ### 6.6 Manajemen Pengguna
 | Fitur | Status | Keterangan |
@@ -974,11 +995,19 @@ else                            -> student/dashboard.html
 - Guard server `elips_require_marketing_access()` mengizinkan Admin dan karyawan `role = 'karyawan'` dengan `division = 'marketing'`; role/divisi lain ditolak.
 - Karyawan selalu terkunci ke data miliknya sendiri. Admin dapat melihat seluruh data (`userId` kosong) atau satu karyawan melalui parameter `userId`; saat menulis, Admin wajib memilih pemilik yang valid.
 - Lead wajib memiliki nama serta minimal satu kontak (telepon atau email). Status dibatasi `baru`, `dihubungi`, `prospek`, `terdaftar`, `batal`; sumber dibatasi `walk_in`, `referensi`, `sekolah`, `sosial_media`, `pameran`, `telemarketing`, `lainnya`.
+- Lead dapat menyertakan `campaignId` opsional. Campaign harus ada dan dimiliki pemilik lead yang sama; nilai `0`/kosong berarti tanpa campaign.
 - Follow-up memakai kanal `telepon`, `whatsapp`, `email`, `kunjungan`, `lainnya` dan tanggal valid. Mencatat follow-up menyinkronkan `nextFollowupDate` lead dan menaikkan status `baru` menjadi `dihubungi`. Menghapus follow-up menghitung ulang jadwal berikutnya dari follow-up yang tersisa.
 - Menghapus lead ikut menghapus seluruh follow-up terkait melalui foreign key `ON DELETE CASCADE` (server) atau pembersihan eksplisit (mode lokal).
 - Status `terdaftar` mengisi `convertedAt` sekali dan tidak menimpanya saat diubah lagi; nilai `enrollmentValue` dihitung ke target pendaftaran/pendapatan hanya bila `convertedAt` berada pada periode aktif.
 - Target disimpan sebagai satu baris per karyawan + periode (`YYYY-MM`) dan di-upsert; seluruh angka target tidak boleh negatif.
 - Endpoint `marketing.*` tidak dimasukkan ke snapshot bootstrap karena memuat kontak pribadi lead. Mode lokal memakai tiga key terpisah dengan aturan validasi dan audit yang sama.
+
+### Campaigns Marketing
+- Campaign dimiliki `owner_id` karyawan Marketing dan mengikuti cakupan yang sama dengan lead: karyawan hanya melihat miliknya, Admin dapat memfilter lewat `userId`.
+- Validasi server dan lokal: nama wajib (maks. 150 karakter), kanal/status dari daftar tetap, tanggal valid dengan `endDate >= startDate`, budget/target tidak negatif, dan catatan maks. 1000 karakter.
+- Daftar campaign mengembalikan agregat `leadCount`, `enrolledCount`, dan `revenue` dari subquery lead tertaut; capaian tidak disimpan sebagai kolom agar selalu konsisten dengan data lead.
+- Menghapus campaign memakai foreign key `campaign_id ... ON DELETE SET NULL`, sehingga lead tetap ada dan hanya kehilangan tautan; mode lokal melakukan pembersihan yang sama secara eksplisit.
+- Aksi `marketing.campaign.list/save/delete` khusus Admin dan karyawan Marketing. Mode lokal memakai key `elips_marketingCampaigns` dengan validasi, agregasi, dan audit `marketing_campaign` yang sama.
 
 ---
 
@@ -1082,13 +1111,15 @@ else                            -> student/dashboard.html
 | Divisi & dashboard karyawan | Lulus uji | `test-division-api` (9/9) memverifikasi serialisasi `division`, create/update divisi, penolakan divisi tak dikenal, dan pengosongan divisi saat role berubah; `test-employee-dashboard` (19/19) memverifikasi helper divisi, sapaan/divisi, status hari ini, rekap bulanan, riwayat, serta CRUD lokal divisi |
 | Sesi diingat, rotasi token & reset perangkat | Lulus uji | `test-remember-login` (37/37) memverifikasi cookie `elips_remember`, rotasi + sliding 30 hari, deteksi token lama, satu perangkat aktif, reset oleh admin, auto-resume klien, pencabutan saat logout/ganti password/nonaktif, dan rate limit |
 | Degradasi kamera & geolokasi | Lulus uji | Kamera tanpa dukungan/izin/secure context menampilkan fallback unggah; GPS wajib dan kegagalannya menampilkan pesan serta tidak menyimpan absensi |
-| PWA: manifest, service worker & banner | Lulus uji | `test-pwa` 50/50: `start_url` halaman absen, scope root, tag PWA di 32 halaman, strategi network-first tanpa cache halaman/API, banner Android/iOS, penolakan 7 hari, dan blokir simpan saat offline |
+| PWA: manifest, service worker & banner | Lulus uji | `test-pwa` 50/50: `start_url` halaman absen, scope root, tag PWA di 33 halaman, strategi network-first tanpa cache halaman/API, banner Android/iOS, penolakan 7 hari, dan blokir simpan saat offline |
 | PWA mode server | Lulus uji | `test-pwa-server` 16/16: `manifest.webmanifest` tersaji `application/manifest+json`, `sw.js`, `offline.html`, dan seluruh ikon dapat diunduh |
 | Rekap absensi karyawan (Admin) | Lulus uji | `api-staff-recap` 33/33 dan `test-admin-recap-server` 19/19: guard Admin-only, rentang default bulan berjalan, batas 366 hari, filter karyawan/role, agregasi status, ekspor CSV, serta UI lokal `test-admin-attendance-recap` 53/53 |
 | Jadwal shift karyawan (Admin) | Lulus uji | `test-admin-shifts` 89/89: render/filter, preset Pagi/Sore, jam custom, validasi konflik & jam, CRUD lokal, audit, jalur server (payload `staffShift.*`), dan empty state. Uji API manual memverifikasi list/save/update/delete, duplikat, role instruktur ditolak, rentang/tipe tidak valid, dan pembersihan data |
 | Surat menyurat (Admin) | Lulus uji | `test-admin-letters` 103/103: render/filter jenis/tanggal/pencarian, ringkasan statistik, detail ringkas tanpa status/ringkasan/tautan/catatan, CRUD lokal, validasi field wajib, audit, jalur server (payload `letter.*`), serta empty state. Uji API manual memverifikasi list/save/update/delete pada 14 surat dummy, nama pembuat, role instruktur ditolak, dan tanggal tidak valid |
 | API Marketing | Lulus uji | `test-marketing-api` 24/24: login Marketing, dashboard milik sendiri, lead/follow-up/target, konversi `terdaftar`, sinkronisasi jadwal, penolakan lintas pemilik, cakupan Admin, dan penolakan karyawan divisi lain |
 | Dashboard Marketing (lokal) | Lulus uji | `test-marketing-dashboard` 27/27: area hanya tampil untuk divisi Marketing, statistik/pipeline/aksi hari ini, CRUD lead/follow-up/target, sinkronisasi status & jadwal, hapus berantai, serta divisi lain tetap tanpa widget Marketing |
+| API Campaigns Marketing | Lulus uji | `test-marketing-campaign-api` 24/24: tautan lead ke campaign, daftar & capaian agregat, create/update/hapus, penolakan kanal/tanggal tidak valid, cakupan pemilik, filter Admin, dan pelepasan tautan lead saat campaign dihapus |
+| Campaigns Marketing (lokal) | Lulus uji | `test-marketing-campaign-local` 21/21: guard divisi, statistik dan kartu progres, CRUD lokal, tautan lead + agregasi, penolakan lintas pemilik, validasi, dan pelepasan tautan saat hapus campaign |
 
 ---
 
@@ -1101,7 +1132,7 @@ else                            -> student/dashboard.html
 - **Responsive:** Menggunakan CSS custom yang responsif.
 - **UI Konsisten:** Menggunakan komponen seragam (navbar, sidebar, cards, tables, badges).
 - **Keamanan:** Pada mode server password di-hash, sesi memakai cookie `HttpOnly`/`SameSite=Lax`, dan otorisasi role/kepemilikan ditegakkan di server. Cookie `elips_remember` juga `HttpOnly` (+ `Secure` saat HTTPS), token disimpan sebagai hash SHA-256, dirotasi setiap dipakai, dan dicabut saat logout/ganti password/akun nonaktif/reset admin. Mode lokal tetap bersifat demo dan tidak boleh dianggap aman untuk produksi.
-- **Cakupan v4.0:** Increment ini mencakup **Phase 1–6** (versi kurikulum + kelas/angkatan + enrollment berbasis kelas + jadwal sesi/presensi offline + materi tambahan dan mode akses materi + cabang/kalender + absensi staf + tugas/ujian + skema penilaian/finalisasi/koreksi), ditambah **absensi karyawan** (role `karyawan`, validasi aturan harian, jam server, GPS wajib, modul absensi bersama, halaman `employee/attendance.html`, serta sesi diingat dengan `user_devices`/`users.session_version`), **PWA** (manifest, service worker network-first, banner pemasangan, dan mode offline), **rekap absensi karyawan** (halaman `admin/attendance-recap.html`, aksi `staffAttendance.recap`, serta ekspor CSV), **jadwal shift karyawan** (halaman `admin/shifts.html`, preset Pagi/Sore + jam custom, serta aksi `staffShift.*`), **surat menyurat** (halaman `admin/letters.html`, pencatatan surat masuk/keluar beserta detail, filter, dan aksi `letter.*`), **divisi karyawan** (kolom `users.division`, pilihan Marketing/Operasional/Keuangan/HRD), dan **dashboard Marketing** (lead, follow-up, target bulanan, pipeline, aksi hari ini, serta aksi `marketing.*`), dengan 43 tabel MySQL, 108 aksi API, 43 storage key, 26 modul JS, 33 halaman HTML (termasuk `offline.html`), dan 27 file JavaScript (termasuk `sw.js`). Pembayaran dan sertifikat PDF mengikuti phase berikutnya pada `ELIPS-LMS-PRD-v4.0.md`.
+- **Cakupan v4.0:** Increment ini mencakup **Phase 1–6** (versi kurikulum + kelas/angkatan + enrollment berbasis kelas + jadwal sesi/presensi offline + materi tambahan dan mode akses materi + cabang/kalender + absensi staf + tugas/ujian + skema penilaian/finalisasi/koreksi), ditambah **absensi karyawan** (role `karyawan`, validasi aturan harian, jam server, GPS wajib, modul absensi bersama, halaman `employee/attendance.html`, serta sesi diingat dengan `user_devices`/`users.session_version`), **PWA** (manifest, service worker network-first, banner pemasangan, dan mode offline), **rekap absensi karyawan** (halaman `admin/attendance-recap.html`, aksi `staffAttendance.recap`, serta ekspor CSV), **jadwal shift karyawan** (halaman `admin/shifts.html`, preset Pagi/Sore + jam custom, serta aksi `staffShift.*`), **surat menyurat** (halaman `admin/letters.html`, pencatatan surat masuk/keluar beserta detail, filter, dan aksi `letter.*`), **divisi karyawan** (kolom `users.division`, pilihan Marketing/Operasional/Keuangan/HRD), **dashboard Marketing** (lead, follow-up, target bulanan, pipeline, aksi hari ini, serta aksi `marketing.*`), dan **campaign Marketing** (halaman `employee/campaigns.html`, tautan lead ke campaign, capaian otomatis, serta aksi `marketing.campaign.*`), dengan 44 tabel MySQL, 111 aksi API, 44 storage key, 27 modul JS, 34 halaman HTML (termasuk `offline.html`), dan 28 file JavaScript (termasuk `sw.js`). Pembayaran dan sertifikat PDF mengikuti phase berikutnya pada `ELIPS-LMS-PRD-v4.0.md`.
 - **Kompatibilitas v3.0:** Struktur v3 tetap dipertahankan. Setiap kursus lama mendapat versi kurikulum `1.0`; enrollment lama dipetakan ke kelas migrasi (`legacy_import`) agar tidak ada data yang hilang. Alur nilai manual klasik tetap tersedia di samping skema penilaian Phase 6.
 
 ---

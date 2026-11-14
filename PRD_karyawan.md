@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| **Status** | Fitur 1–4 selesai; tambahan Fitur 5 (Dashboard Marketing) selesai |
-| **Tanggal** | 12 November 2026 (diperbarui 13 November 2026) |
-| **Cakupan** | Fitur 1 (sesi login diingat), 2 (PWA / ikon di layar utama), 3 (role & halaman absen khusus karyawan), 4 (jadwal shift karyawan oleh Admin), 5 (dashboard Marketing untuk lead, follow-up, dan target bulanan) |
+| **Status** | Fitur 1–4 selesai; tambahan Fitur 5 (Dashboard Marketing) dan Fitur 6 (Campaigns Marketing) selesai |
+| **Tanggal** | 12 November 2026 (diperbarui 14 November 2026) |
+| **Cakupan** | Fitur 1 (sesi login diingat), 2 (PWA / ikon di layar utama), 3 (role & halaman absen khusus karyawan), 4 (jadwal shift karyawan oleh Admin), 5 (dashboard Marketing untuk lead, follow-up, dan target bulanan), 6 (Campaigns Marketing untuk CRUD campaign, tautan lead, dan capaian otomatis) |
 | **Di luar cakupan** | QR harian, passkey/biometrik, mode kiosk PIN, integrasi shift ke perhitungan keterlambatan (lihat bagian 11) |
 
 ---
@@ -115,6 +115,23 @@ Persyaratan fungsional:
 - **F5.8** Karyawan hanya melihat/mengubah data miliknya; Admin dapat memantau seluruh data atau memilih satu karyawan. Role/divisi lain ditolak.
 - **F5.9** Aksi API `marketing.dashboard`, `marketing.lead.save/delete`, `marketing.followup.save/delete`, dan `marketing.target.save`; data tidak masuk snapshot bootstrap.
 - **F5.10** Mode lokal memakai `elips_marketingLeads`, `elips_marketingFollowups`, dan `elips_marketingTargets` dengan validasi dan audit yang sama.
+
+### 5.6 Fitur 6 - Campaigns Marketing *(selesai)*
+
+**Cerita pengguna:** *Sebagai karyawan divisi Marketing, saya ingin mencatat campaign (kanal, periode, budget, target), menautkan lead ke campaign, dan melihat capaian lead/pendaftaran/pendapatan secara otomatis dari HP.*
+
+Persyaratan fungsional:
+- **F6.1** Halaman baru `employee/campaigns.html` dengan menu **Campaigns** khusus divisi Marketing; role/divisi lain diarahkan ke dashboard.
+- **F6.2** Kartu campaign menampilkan nama, kanal, status, periode, budget, target, catatan, serta progres capaian lead/pendaftaran/pendapatan; halaman menyediakan statistik total/aktif/lead/pendaftaran, pencarian, dan filter status.
+- **F6.3** CRUD campaign mencakup nama (wajib, maks. 150 karakter), kanal, status, tanggal mulai/selesai, budget, target lead, target pendaftaran, dan catatan (maks. 1000 karakter).
+- **F6.4** Status campaign `draft`, `aktif`, `selesai`, `batal`; kanal `sosial_media`, `email`, `pameran`, `sekolah`, `komunitas`, `telemarketing`, `lainnya`.
+- **F6.5** Validasi: `endDate` tidak boleh sebelum `startDate`, budget/target tidak negatif, dan status/kanal harus dari daftar tetap.
+- **F6.6** Lead dapat ditautkan ke satu campaign lewat modal lead di dashboard; campaign harus dimiliki pemilik lead yang sama, dan nama campaign tampil pada tabel lead.
+- **F6.7** Capaian dihitung otomatis dari lead tertaut: `leadCount` (semua lead), `enrolledCount` (status `terdaftar`), dan `revenue` (nilai pendaftaran lead terdaftar).
+- **F6.8** Menghapus campaign hanya melepas tautan lead (`campaignId` menjadi kosong/`NULL`) tanpa menghapus lead.
+- **F6.9** Karyawan hanya melihat/mengubah campaign miliknya; Admin dapat memantau seluruh campaign atau memfilter satu karyawan.
+- **F6.10** Aksi API `marketing.campaign.list/save/delete`; data campaign tidak masuk snapshot bootstrap. Mode lokal memakai `elips_marketingCampaigns` dengan validasi dan audit `marketing_campaign` yang sama.
+- **F6.11** Seed `api/seed-marketing-leads.php` membuat 10 campaign idempoten dan menautkan seluruh 12 lead yang di-seed.
 
 ## 6. Aturan bisnis absensi (berlaku di semua role)
 
@@ -280,7 +297,7 @@ Catatan implementasi:
 - `sw.js` memakai strategi **network-first**: halaman HTML aplikasi dan seluruh `/api/` tidak pernah disimpan ke cache, sehingga perubahan file baru langsung terlihat. Hanya `offline.html` + ikon yang di-precache, sedangkan aset statis (CSS/JS/gambar/font/webmanifest/JSON) dipakai sebagai fallback saat offline.
 - `assets/js/pwa.js` mendaftarkan service worker (skip waiting + `clients.claim`, reload sekali saat ada versi baru), menampilkan banner pemasangan Android lewat `beforeinstallprompt`, sheet 3 langkah "Tambahkan ke Layar Utama" untuk iOS Safari, dan bilah offline dengan tombol coba lagi. Penolakan banner diingat 7 hari dan prompt dibatasi sekali per sesi.
 - `attendance.js` menolak penyimpanan saat offline, baik sebelum validasi maupun di dalam `persistAttendance` (menutup celah GPS yang selesai setelah koneksi putus).
-- `offline.html` berdiri sendiri (tanpa bundle aplikasi) dengan tombol muat ulang. Semua 31 halaman aplikasi memuat manifest, meta mobile/apple, favicon, apple-touch-icon, dan `pwa.js` (`defer`); server PHP bawaan menyajikan `.webmanifest` sebagai `application/manifest+json`.
+- `offline.html` berdiri sendiri (tanpa bundle aplikasi) dengan tombol muat ulang. Seluruh 33 halaman aplikasi saat ini memuat manifest, meta mobile/apple, favicon, apple-touch-icon, dan `pwa.js` (`defer`); server PHP bawaan menyajikan `.webmanifest` sebagai `application/manifest+json`.
 
 ### Fase 5b — Jadwal shift karyawan *(selesai)*
 - [x] Tabel `staff_shifts` + unique key `(user_id, shift_date)`.
@@ -288,6 +305,13 @@ Catatan implementasi:
 - [x] `admin/shifts.html` + `assets/js/shift-schedule.js`: preset Pagi/Sore, jam Custom, filter, ringkasan, dan CRUD.
 - [x] Menu **Shift Karyawan** di seluruh sidebar Admin dan dukungan mode lokal `elips_staffShifts`.
 - **Selesai bila:** Admin dapat menjadwalkan shift Pagi/Sore/custom, duplikat tanggal ditolak, dan karyawan nonaktif/tidak valid tidak dapat dijadwalkan.
+
+### Fase 5c — Campaigns Marketing *(selesai)*
+- [x] Tabel `marketing_campaigns` + kolom nullable `marketing_leads.campaign_id` dengan index dan FK `ON DELETE SET NULL`.
+- [x] Aksi `marketing.campaign.list/save/delete`, validasi pemilik/periode/kanal/status, dan agregasi capaian dari lead tertaut.
+- [x] `employee/campaigns.html` + `assets/js/employee-campaigns.js`: statistik, filter, kartu progres, modal CRUD, dan guard divisi Marketing.
+- [x] Tautan campaign pada modal lead dashboard, nama campaign pada tabel lead, key lokal `elips_marketingCampaigns`, audit `marketing_campaign`, dan seed 10 campaign.
+- **Selesai bila:** karyawan Marketing dapat membuat/mengubah/menghapus campaign, menautkan lead, dan capaian lead/pendaftaran/pendapatan terbarui otomatis tanpa mengubah data lead saat campaign dihapus.
 
 ### Fase 6 — Uji menyeluruh & peluncuran *(1 hari)*
 - [ ] Jalankan seluruh skenario uji (bagian 10) di Android, iOS, dan desktop.
@@ -320,6 +344,9 @@ Catatan implementasi:
 | 16 | Admin menyimpan shift kedua untuk karyawan dan tanggal yang sama | Ditolak dengan pesan konflik |
 | 17 | Admin memilih jam Custom dengan mulai = selesai | Ditolak dengan pesan validasi |
 | 18 | Instruktur membuka API/aksi shift | Ditolak karena khusus Admin |
+| 19 | Karyawan Marketing membuat campaign lalu menautkan lead | Campaign tersimpan, lead menampilkan nama campaign, capaian lead bertambah |
+| 20 | Lead berstatus `terdaftar` ditautkan ke campaign | `enrolledCount` dan `revenue` campaign bertambah otomatis |
+| 21 | Campaign dihapus | Lead tetap ada, tautan campaign menjadi kosong, audit `marketing_campaign` tercatat |
 
 ## 11. Di luar cakupan (kandidat tahap berikutnya)
 
@@ -330,6 +357,7 @@ Catatan implementasi:
 - Integrasi jadwal shift ke perhitungan keterlambatan/kehadiran (mis. membandingkan `takenAt` dengan `startTime` shift). Increment saat ini hanya menyimpan **rencana** shift di `admin/shifts.html`.
 - Absen offline dengan antrean sinkronisasi.
 - Notifikasi pengingat absen (push).
+- Menu Marketing lanjutan: **Task**, **Clients**, **Report**, dan **Settings**; laporan/ekspor campaign lintas periode dan biaya aktual vs budget.
 
 ## 12. Pertanyaan terbuka (perlu keputusan sebelum Fase 1)
 

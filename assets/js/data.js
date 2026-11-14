@@ -167,7 +167,22 @@
             });
     }
 
-    // ---------- Marketing: lead, follow-up, target ----------
+    // ---------- Marketing: campaign, lead, follow-up, target ----------
+    function getMarketingCampaigns() { return read(KEYS.marketingCampaigns, []); }
+    function setMarketingCampaigns(list) { return write(KEYS.marketingCampaigns, list); }
+    function getMarketingCampaignsByOwner(ownerId) {
+        return getMarketingCampaigns()
+            .filter(function (campaign) { return Number(campaign.ownerId) === Number(ownerId); })
+            .sort(function (a, b) {
+                return String(b.startDate || b.updatedAt || b.createdAt || '')
+                    .localeCompare(String(a.startDate || a.updatedAt || a.createdAt || ''));
+            });
+    }
+    function getMarketingCampaign(id) {
+        return getMarketingCampaigns().find(function (campaign) {
+            return Number(campaign.id) === Number(id);
+        }) || null;
+    }
     function getMarketingLeads() { return read(KEYS.marketingLeads, []); }
     function setMarketingLeads(list) { return write(KEYS.marketingLeads, list); }
     function getMarketingLeadsByOwner(ownerId) {
@@ -732,6 +747,10 @@
         getLetters: getLetters,
         setLetters: setLetters,
         getLettersByDirection: getLettersByDirection,
+        getMarketingCampaigns: getMarketingCampaigns,
+        setMarketingCampaigns: setMarketingCampaigns,
+        getMarketingCampaignsByOwner: getMarketingCampaignsByOwner,
+        getMarketingCampaign: getMarketingCampaign,
         getMarketingLeads: getMarketingLeads,
         setMarketingLeads: setMarketingLeads,
         getMarketingLeadsByOwner: getMarketingLeadsByOwner,

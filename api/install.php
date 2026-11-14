@@ -43,6 +43,33 @@ try {
 
     $db = elips_db();
 
+    // ---------- Migrasi Campaigns Marketing ----------
+    // Skema baru langsung memuat kolom campaign_id; database lama perlu
+    // ditambahkan agar relasi lead ke campaign tetap kompatibel.
+    $hasLeadCampaign = (bool) $db->query("SHOW COLUMNS FROM marketing_leads LIKE 'campaign_id'")->fetch();
+    if (!$hasLeadCampaign) {
+        $db->exec('ALTER TABLE marketing_leads ADD COLUMN campaign_id INT UNSIGNED NULL AFTER owner_id');
+        echo "Kolom campaign lead ditambahkan.\n";
+    }
+    $hasLeadCampaignIndex = (bool) $db->query(
+        "SHOW INDEX FROM marketing_leads WHERE Key_name = 'idx_marketing_leads_campaign'"
+    )->fetch();
+    if (!$hasLeadCampaignIndex) {
+        $db->exec('ALTER TABLE marketing_leads ADD KEY idx_marketing_leads_campaign (campaign_id)');
+    }
+    $leadCampaignFk = $db->prepare(
+        "SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS
+         WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'marketing_leads'
+           AND CONSTRAINT_NAME = 'fk_marketing_leads_campaign'"
+    );
+    $leadCampaignFk->execute();
+    if ((int) $leadCampaignFk->fetchColumn() === 0) {
+        $db->exec(
+            'ALTER TABLE marketing_leads ADD CONSTRAINT fk_marketing_leads_campaign
+             FOREIGN KEY (campaign_id) REFERENCES marketing_campaigns (id) ON DELETE SET NULL'
+        );
+    }
+
     // ---------- Migrasi v4.0: cabang ----------
     // Skema baru membuat kolom branch_id langsung; database lama perlu
     // ditambahkan agar tetap kompatibel tanpa menghapus data.
