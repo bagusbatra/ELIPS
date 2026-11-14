@@ -4,11 +4,11 @@ declare(strict_types=1);
 // ============================================================
 // ELIPS LMS - seed data Marketing
 // Jalankan: php api/seed-marketing-leads.php
-// Membuat lead, follow-up, dan target bulan berjalan untuk enam
-// akun karyawan Marketing dari api/seed-marketing.php.
-// Skrip idempoten: lead dicocokkan lewat owner + email, follow-up
-// hanya dibuat bila lead belum memiliki catatan, target di-upsert
-// berdasarkan user + periode.
+// Membuat campaign, lead, follow-up, target bulan berjalan, dan task
+// untuk enam akun karyawan Marketing dari api/seed-marketing.php.
+// Skrip idempoten: campaign/lead/task dicocokkan lewat owner + nama
+// atau email, follow-up hanya dibuat bila lead belum memiliki catatan,
+// target di-upsert berdasarkan user + periode.
 // ============================================================
 
 require __DIR__ . '/db.php';
@@ -68,6 +68,23 @@ $targetSeeds = [
     ['dinda.marketing@example.com', 20, 60, 5, 12500000],
     ['fajar.marketing@example.com', 18, 55, 4, 10000000],
     ['gita.marketing@example.com', 16, 50, 4, 10000000],
+];
+
+// owner email, judul, deskripsi, jenis, prioritas, status, tenggat (hari),
+// campaign, email lead
+$taskSeeds = [
+    ['andi.marketing@example.com', 'Follow-up lead Budi Santoso', 'Konfirmasi jadwal trial kelas malam dan kebutuhan jadwal peserta.', 'follow_up', 'tinggi', 'proses', 0, 'Promo Kelas Malam November', 'budi.lead@example.com'],
+    ['andi.marketing@example.com', 'Rekap laporan campaign mingguan', 'Rangkum capaian lead dan pendaftaran untuk evaluasi mingguan.', 'administrasi', 'sedang', 'belum', 2, 'Promo Kelas Malam November', ''],
+    ['bella.marketing@example.com', 'Kirim materi promosi ke Rina Pratama', 'Kirim brosur dan skema cicilan kelas bahasa Jepang.', 'follow_up', 'tinggi', 'belum', -1, 'Campaign Sosial Media Bella', 'rina.lead@example.com'],
+    ['bella.marketing@example.com', 'Evaluasi konten sosial media', 'Tinjau performa konten dan iklan campaign yang sedang berjalan.', 'campaign', 'sedang', 'selesai', -3, 'Campaign Sosial Media Bella', ''],
+    ['candra.marketing@example.com', 'Konfirmasi kunjungan sekolah', 'Pastikan jadwal presentasi program dengan pihak sekolah mitra.', 'follow_up', 'tinggi', 'proses', 1, 'Kerja Sama Sekolah Candra', 'dewi.lead@example.com'],
+    ['candra.marketing@example.com', 'Susun ringkasan hasil telemarketing', 'Dokumentasikan alasan rendahnya respons untuk evaluasi kanal.', 'administrasi', 'rendah', 'batal', -4, 'Telemarketing Candra', 'hendra.lead@example.com'],
+    ['dinda.marketing@example.com', 'Konfirmasi trial Maya Sari', 'Tanyakan kesiapan jadwal trial dan opsi kelas bahasa Korea.', 'follow_up', 'tinggi', 'belum', 0, 'Open House Bandung', 'maya.lead@example.com'],
+    ['dinda.marketing@example.com', 'Siapkan booth open house', 'Finalisasi materi, banner, dan perlengkapan trial class.', 'campaign', 'tinggi', 'selesai', -2, 'Open House Bandung', ''],
+    ['fajar.marketing@example.com', 'Aktifkan email nurturing', 'Susun rangkaian email untuk prospek baru campaign digital.', 'campaign', 'sedang', 'proses', 3, 'Campaign Digital Fajar', ''],
+    ['fajar.marketing@example.com', 'Follow-up brosur Yudi Hartono', 'Kirim brosur digital dan tawarkan jadwal konsultasi.', 'follow_up', 'sedang', 'belum', 2, 'Kerja Sama Sekolah Fajar', 'yudi.lead@example.com'],
+    ['gita.marketing@example.com', 'Rekap lead pameran pendidikan', 'Kelompokkan lead berdasarkan minat dan prioritas follow-up.', 'administrasi', 'sedang', 'selesai', -5, 'Pameran Pendidikan Gita', 'lestari.lead@example.com'],
+    ['gita.marketing@example.com', 'Hubungi Fahmi Idris untuk paket korporat', 'Konfirmasi kebutuhan pelatihan tim dan jadwal presentasi.', 'follow_up', 'tinggi', 'proses', 1, 'Telemarketing Korporat Gita', 'fahmi.lead@example.com'],
 ];
 
 try {
@@ -166,6 +183,7 @@ try {
     $createdLeads = 0;
     $updatedLeads = 0;
     $createdFollowups = 0;
+    $leadIds = [];
 
     $db->beginTransaction();
     foreach ($leadSeeds as $seed) {
@@ -195,6 +213,7 @@ try {
             $updatedLeads++;
             echo "Lead diperbarui: {$name} ({$owner['name']})\n";
         }
+        $leadIds[$ownerEmail][$leadEmail] = $leadId;
 
         $countFollowups->execute([$leadId]);
         if ((int) $countFollowups->fetchColumn() === 0) {
@@ -252,11 +271,54 @@ try {
         $targetCount++;
     }
 
+    $findTask = $db->prepare('SELECT id FROM marketing_tasks WHERE owner_id = ? AND title = ? LIMIT 1');
+    $insertTask = $db->prepare(
+        'INSERT INTO marketing_tasks
+            (owner_id, campaign_id, lead_id, title, description, type, priority, status,
+             due_date, completed_at, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP())'
+    );
+    $updateTask = $db->prepare(
+        'UPDATE marketing_tasks
+         SET campaign_id = ?, lead_id = ?, description = ?, type = ?, priority = ?, status = ?,
+             due_date = ?, completed_at = ?, updated_at = UTC_TIMESTAMP()
+         WHERE id = ?'
+    );
+
+    $taskCount = 0;
+    foreach ($taskSeeds as $seed) {
+        [$ownerEmail, $title, $description, $type, $priority, $status, $dueOffset, $campaignName, $leadEmail] = $seed;
+        $owner = $users[$ownerEmail];
+        $campaignId = $campaignName !== '' ? ($campaignIds[$ownerEmail][$campaignName] ?? null) : null;
+        $leadId = $leadEmail !== '' ? ($leadIds[$ownerEmail][$leadEmail] ?? null) : null;
+        $dueDate = $baseDate->modify(($dueOffset >= 0 ? '+' : '') . $dueOffset . ' days')->format('Y-m-d');
+        $completedAt = $status === 'selesai'
+            ? $now->modify('-1 day')->format('Y-m-d H:i:s')
+            : null;
+
+        $findTask->execute([(int) $owner['id'], $title]);
+        $taskId = $findTask->fetchColumn();
+        if ($taskId === false || $taskId === null) {
+            $insertTask->execute([
+                (int) $owner['id'], $campaignId, $leadId, $title, $description, $type, $priority,
+                $status, $dueDate, $completedAt,
+            ]);
+            echo "Task dibuat: {$title} ({$owner['name']})\n";
+        } else {
+            $updateTask->execute([
+                $campaignId, $leadId, $description, $type, $priority, $status,
+                $dueDate, $completedAt, (int) $taskId,
+            ]);
+            echo "Task diperbarui: {$title} ({$owner['name']})\n";
+        }
+        $taskCount++;
+    }
+
     $db->commit();
 
     echo "\nSelesai: {$campaignCount} campaign disimpan, {$createdLeads} lead dibuat, "
         . "{$updatedLeads} lead diperbarui, {$createdFollowups} follow-up dibuat, "
-        . "{$targetCount} target disimpan untuk periode {$period}.\n";
+        . "{$targetCount} target disimpan, {$taskCount} task disimpan untuk periode {$period}.\n";
     echo "Tanggal acuan follow-up: {$today} (Asia/Jakarta).\n";
 } catch (Throwable $e) {
     if (isset($db) && $db->inTransaction()) {

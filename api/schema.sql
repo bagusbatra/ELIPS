@@ -969,3 +969,31 @@ CREATE TABLE IF NOT EXISTS `marketing_targets` (
     KEY `idx_marketing_targets_period` (`period`),
     CONSTRAINT `fk_marketing_targets_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `marketing_tasks` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `owner_id` INT UNSIGNED NOT NULL,
+    `campaign_id` INT UNSIGNED NULL,
+    `lead_id` INT UNSIGNED NULL,
+    `title` VARCHAR(150) NOT NULL,
+    `description` VARCHAR(1000) NOT NULL DEFAULT '',
+    `type` ENUM('follow_up', 'campaign', 'administrasi', 'lainnya') NOT NULL DEFAULT 'lainnya',
+    `priority` ENUM('rendah', 'sedang', 'tinggi') NOT NULL DEFAULT 'sedang',
+    `status` ENUM('belum', 'proses', 'selesai', 'batal') NOT NULL DEFAULT 'belum',
+    `due_date` DATE NULL,
+    `completed_at` DATETIME NULL,
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NULL,
+    PRIMARY KEY (`id`),
+    KEY `idx_marketing_tasks_owner` (`owner_id`),
+    KEY `idx_marketing_tasks_status` (`status`),
+    KEY `idx_marketing_tasks_priority` (`priority`),
+    KEY `idx_marketing_tasks_due` (`due_date`),
+    KEY `idx_marketing_tasks_campaign` (`campaign_id`),
+    KEY `idx_marketing_tasks_lead` (`lead_id`),
+    CONSTRAINT `fk_marketing_tasks_owner` FOREIGN KEY (`owner_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_marketing_tasks_campaign` FOREIGN KEY (`campaign_id`) REFERENCES `marketing_campaigns` (`id`)
+        ON DELETE SET NULL,
+    CONSTRAINT `fk_marketing_tasks_lead` FOREIGN KEY (`lead_id`) REFERENCES `marketing_leads` (`id`)
+        ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

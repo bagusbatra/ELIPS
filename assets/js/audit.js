@@ -61,6 +61,7 @@
         staff_shift: 'Shift Karyawan',
         letter: 'Surat Menyurat',
         marketing_campaign: 'Campaign Marketing',
+        marketing_task: 'Task Marketing',
         marketing_lead: 'Lead Marketing',
         marketing_followup: 'Follow-up Marketing',
         marketing_target: 'Target Marketing',

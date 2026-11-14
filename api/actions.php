@@ -126,6 +126,12 @@ function elips_dispatch(string $action, array $payload): array
             return elips_action_marketing_campaign_save($payload);
         case 'marketing.campaign.delete':
             return elips_action_marketing_campaign_delete($payload);
+        case 'marketing.task.list':
+            return elips_action_marketing_task_list($payload);
+        case 'marketing.task.save':
+            return elips_action_marketing_task_save($payload);
+        case 'marketing.task.delete':
+            return elips_action_marketing_task_delete($payload);
         case 'marketing.lead.save':
             return elips_action_marketing_lead_save($payload);
         case 'marketing.lead.delete':
@@ -7235,6 +7241,188 @@ function elips_action_marketing_campaign_delete(array $p): array
         . ' status ' . $row['status'] . '.';
     elips_audit('delete', 'marketing_campaign', $id, $row['name'], $detail, $actor);
     return elips_ok('Campaign dihapus.');
+}
+
+function elips_action_marketing_task_list(array $p): array
+{
+    $actor = elips_require_marketing_access();
+    $ownerId = elips_marketing_scope_owner($actor, $p);
+
+    $where = '';
+    $args = [];
+    if ($ownerId > 0) {
+        $where = ' WHERE mt.owner_id = ?';
+        $args[] = $ownerId;
+    }
+
+    $stmt = elips_db()->prepare(
+        'SELECT mt.*, u.name AS owner_name, mc.name AS campaign_name, ml.name AS lead_name
+         FROM marketing_tasks mt
+         LEFT JOIN users u ON u.id = mt.owner_id
+         LEFT JOIN marketing_campaigns mc ON mc.id = mt.campaign_id
+         LEFT JOIN marketing_leads ml ON ml.id = mt.lead_id'
+        . $where
+        . ' ORDER BY CASE mt.status
+                WHEN \'belum\' THEN 0
+                WHEN \'proses\' THEN 1
+                WHEN \'selesai\' THEN 2
+                ELSE 3
+              END,
+              CASE mt.priority
+                WHEN \'tinggi\' THEN 0
+                WHEN \'sedang\' THEN 1
+                ELSE 2
+              END,
+              (mt.due_date IS NULL), mt.due_date ASC, mt.created_at DESC, mt.id DESC'
+    );
+    $stmt->execute($args);
+
+    $tasks = array_map('elips_marketing_task_public', $stmt->fetchAll());
+    return elips_ok('Task Marketing dimuat.', ['tasks' => $tasks]);
+}
+
+function elips_action_marketing_task_save(array $p): array
+{
+    $actor = elips_require_marketing_access();
+    $id = (int) ($p['id'] ?? 0);
+    $existing = $id > 0 ? elips_marketing_task_row($id) : null;
+    if ($id > 0 && !$existing) {
+        return elips_fail('Task tidak ditemukan.');
+    }
+    if ($existing && $actor['role'] !== 'admin' && (int) $existing['owner_id'] !== (int) $actor['id']) {
+        return elips_fail('Anda hanya dapat mengubah task milik Anda.');
+    }
+
+    try {
+        $ownerId = $existing ? (int) $existing['owner_id'] : elips_marketing_write_owner($actor, $p);
+    } catch (ElipsError $e) {
+        return elips_fail($e->getMessage());
+    }
+
+    $campaignId = max(0, (int) ($p['campaignId'] ?? 0));
+    $campaignIdValue = null;
+    if ($campaignId > 0) {
+        $campaign = elips_marketing_campaign_row($campaignId);
+        if (!$campaign) {
+            return elips_fail('Campaign tidak ditemukan.');
+        }
+        if ((int) $campaign['owner_id'] !== $ownerId) {
+            return elips_fail('Campaign harus milik pemilik task yang sama.');
+        }
+        $campaignIdValue = $campaignId;
+    }
+
+    $leadId = max(0, (int) ($p['leadId'] ?? 0));
+    $leadIdValue = null;
+    if ($leadId > 0) {
+        $lead = elips_marketing_lead_row($leadId);
+        if (!$lead) {
+            return elips_fail('Lead tidak ditemukan.');
+        }
+        if ((int) $lead['owner_id'] !== $ownerId) {
+            return elips_fail('Lead harus milik pemilik task yang sama.');
+        }
+        $leadIdValue = $leadId;
+    }
+
+    $title = trim((string) ($p['title'] ?? ''));
+    $description = trim((string) ($p['description'] ?? ''));
+    $type = strtolower(trim((string) ($p['type'] ?? 'lainnya')));
+    $priority = strtolower(trim((string) ($p['priority'] ?? 'sedang')));
+    $status = strtolower(trim((string) ($p['status'] ?? 'belum')));
+    $dueRaw = trim((string) ($p['dueDate'] ?? ''));
+    $dueDate = $dueRaw === '' ? null : elips_normalize_date($dueRaw);
+
+    if ($title === '') {
+        return elips_fail('Judul task wajib diisi.');
+    }
+    if (mb_strlen($title) > 150) {
+        return elips_fail('Judul task maksimal 150 karakter.');
+    }
+    if (mb_strlen($description) > 1000) {
+        return elips_fail('Deskripsi task maksimal 1000 karakter.');
+    }
+    if (!elips_marketing_valid_task_type($type)) {
+        return elips_fail('Jenis task tidak valid.');
+    }
+    if (!elips_marketing_valid_task_priority($priority)) {
+        return elips_fail('Prioritas task tidak valid.');
+    }
+    if (!elips_marketing_valid_task_status($status)) {
+        return elips_fail('Status task tidak valid.');
+    }
+    if ($dueRaw !== '' && $dueDate === null) {
+        return elips_fail('Tenggat task tidak valid.');
+    }
+
+    $completedAt = null;
+    if ($status === 'selesai') {
+        $completedAt = $existing && !empty($existing['completed_at'])
+            ? $existing['completed_at']
+            : gmdate('Y-m-d H:i:s');
+    }
+
+    $db = elips_db();
+    if ($existing) {
+        $stmt = $db->prepare(
+            'UPDATE marketing_tasks
+             SET campaign_id = ?, lead_id = ?, title = ?, description = ?, type = ?, priority = ?,
+                 status = ?, due_date = ?, completed_at = ?, updated_at = UTC_TIMESTAMP()
+             WHERE id = ?'
+        );
+        $stmt->execute([
+            $campaignIdValue, $leadIdValue, $title, $description, $type, $priority,
+            $status, $dueDate, $completedAt, $id,
+        ]);
+    } else {
+        $stmt = $db->prepare(
+            'INSERT INTO marketing_tasks
+                (owner_id, campaign_id, lead_id, title, description, type, priority, status,
+                 due_date, completed_at, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP())'
+        );
+        $stmt->execute([
+            $ownerId, $campaignIdValue, $leadIdValue, $title, $description, $type, $priority,
+            $status, $dueDate, $completedAt,
+        ]);
+        $id = (int) $db->lastInsertId();
+    }
+
+    $detail = ($existing ? 'Mengubah' : 'Menambahkan')
+        . ' task "' . $title . '"'
+        . ' jenis ' . $type
+        . ' prioritas ' . $priority
+        . ' status ' . $status
+        . ($dueDate ? ' tenggat ' . $dueDate : '')
+        . '.';
+    elips_audit($existing ? 'update' : 'create', 'marketing_task', $id, $title, $detail, $actor);
+
+    $row = elips_marketing_task_row($id);
+    return elips_ok(
+        $existing ? 'Task diperbarui.' : 'Task ditambahkan.',
+        $row ? elips_marketing_task_public($row) : null
+    );
+}
+
+function elips_action_marketing_task_delete(array $p): array
+{
+    $actor = elips_require_marketing_access();
+    $id = (int) ($p['id'] ?? 0);
+    $row = elips_marketing_task_row($id);
+    if (!$row) {
+        return elips_fail('Task tidak ditemukan.');
+    }
+    if ($actor['role'] !== 'admin' && (int) $row['owner_id'] !== (int) $actor['id']) {
+        return elips_fail('Anda hanya dapat menghapus task milik Anda.');
+    }
+
+    $stmt = elips_db()->prepare('DELETE FROM marketing_tasks WHERE id = ?');
+    $stmt->execute([$id]);
+
+    $detail = 'Menghapus task "' . $row['title'] . '" jenis ' . $row['type']
+        . ' prioritas ' . $row['priority'] . ' status ' . $row['status'] . '.';
+    elips_audit('delete', 'marketing_task', $id, $row['title'], $detail, $actor);
+    return elips_ok('Task dihapus.');
 }
 
 function elips_marketing_dashboard(array $p): array

@@ -162,6 +162,21 @@ function elips_marketing_valid_campaign_channel(string $channel): bool
     return in_array($channel, ['sosial_media', 'email', 'pameran', 'sekolah', 'komunitas', 'telemarketing', 'lainnya'], true);
 }
 
+function elips_marketing_valid_task_status(string $status): bool
+{
+    return in_array($status, ['belum', 'proses', 'selesai', 'batal'], true);
+}
+
+function elips_marketing_valid_task_priority(string $priority): bool
+{
+    return in_array($priority, ['rendah', 'sedang', 'tinggi'], true);
+}
+
+function elips_marketing_valid_task_type(string $type): bool
+{
+    return in_array($type, ['follow_up', 'campaign', 'administrasi', 'lainnya'], true);
+}
+
 function elips_marketing_valid_period(string $period): bool
 {
     return (bool) preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', $period);
@@ -1877,6 +1892,28 @@ function elips_marketing_target_public(array $row): array
     ];
 }
 
+function elips_marketing_task_public(array $row): array
+{
+    return [
+        'id' => (int) $row['id'],
+        'ownerId' => (int) $row['owner_id'],
+        'ownerName' => $row['owner_name'] ?? '',
+        'campaignId' => $row['campaign_id'] === null ? null : (int) $row['campaign_id'],
+        'campaignName' => $row['campaign_name'] ?? '',
+        'leadId' => $row['lead_id'] === null ? null : (int) $row['lead_id'],
+        'leadName' => $row['lead_name'] ?? '',
+        'title' => $row['title'],
+        'description' => $row['description'],
+        'type' => $row['type'],
+        'priority' => $row['priority'],
+        'status' => $row['status'],
+        'dueDate' => $row['due_date'] === null ? null : elips_date_only($row['due_date']),
+        'completedAt' => elips_iso($row['completed_at']),
+        'createdAt' => elips_iso($row['created_at']),
+        'updatedAt' => elips_iso($row['updated_at']),
+    ];
+}
+
 function elips_marketing_campaign_row(int $id): ?array
 {
     $stmt = elips_db()->prepare(
@@ -1911,6 +1948,21 @@ function elips_marketing_followup_row(int $id): ?array
          FROM marketing_followups mf
          LEFT JOIN marketing_leads ml ON ml.id = mf.lead_id
          WHERE mf.id = ? LIMIT 1'
+    );
+    $stmt->execute([$id]);
+    $row = $stmt->fetch();
+    return $row ?: null;
+}
+
+function elips_marketing_task_row(int $id): ?array
+{
+    $stmt = elips_db()->prepare(
+        'SELECT mt.*, u.name AS owner_name, mc.name AS campaign_name, ml.name AS lead_name
+         FROM marketing_tasks mt
+         LEFT JOIN users u ON u.id = mt.owner_id
+         LEFT JOIN marketing_campaigns mc ON mc.id = mt.campaign_id
+         LEFT JOIN marketing_leads ml ON ml.id = mt.lead_id
+         WHERE mt.id = ? LIMIT 1'
     );
     $stmt->execute([$id]);
     $row = $stmt->fetch();

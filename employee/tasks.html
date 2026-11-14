@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Task Marketing - ELIPS LMS</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../assets/css/style.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+
+    <link rel="manifest" href="../manifest.webmanifest">
+    <meta name="theme-color" content="#e98c1e">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="ELIPS">
+    <link rel="icon" type="image/png" sizes="32x32" href="../assets/icons/favicon-32.png">
+    <link rel="apple-touch-icon" href="../assets/icons/apple-touch-icon.png">
+    <script src="../assets/js/pwa.js" defer></script>
+</head>
+<body>
+    <header class="navbar">
+        <div class="container nav-container">
+            <div class="nav-brand">
+                <i class="bi bi-mortarboard-fill brand-icon"></i>
+                <span class="brand-text">ELIPS LMS</span>
+            </div>
+            <nav class="nav-menu" id="navMenu">
+                <a href="../index.html" class="nav-link">Beranda</a>
+                <a href="dashboard.html" class="nav-link">Dashboard</a>
+                <a href="campaigns.html" class="nav-link">Campaigns</a>
+                <a href="tasks.html" class="nav-link active">Task</a>
+            </nav>
+            <div class="nav-actions">
+                <span class="nav-link" style="display: inline-flex; align-items: center; gap: 0.5rem;">
+                    <i class="bi bi-person-badge"></i>
+                    <span class="dashboard-user-name" id="employeeName">Karyawan</span>
+                </span>
+                <a href="../index.html" class="btn btn-outline" data-logout>Keluar</a>
+            </div>
+            <button class="nav-toggle" id="navToggle" aria-label="Buka menu">
+                <i class="bi bi-list"></i>
+            </button>
+        </div>
+    </header>
+
+    <div class="dashboard-layout">
+        <aside class="dashboard-sidebar">
+            <div class="dashboard-sidebar-header">
+                <div class="dashboard-user">
+                    <div class="dashboard-avatar" id="employeeAvatar">K</div>
+                    <div class="dashboard-user-info">
+                        <div class="dashboard-user-name" id="employeeSidebarName">Karyawan</div>
+                        <div class="dashboard-user-role" id="employeeDivision">Karyawan</div>
+                    </div>
+                </div>
+            </div>
+            <nav class="dashboard-nav">
+                <a href="dashboard.html" class="dashboard-nav-link">
+                    <i class="bi bi-speedometer2"></i>
+                    <span>Dashboard</span>
+                </a>
+                <a href="attendance.html" class="dashboard-nav-link">
+                    <i class="bi bi-camera"></i>
+                    <span>Absensi Hari Ini</span>
+                </a>
+                <a href="attendance.html#attendanceHistorySection" class="dashboard-nav-link">
+                    <i class="bi bi-clock-history"></i>
+                    <span>Riwayat Absensi</span>
+                </a>
+                <a href="campaigns.html" class="dashboard-nav-link">
+                    <i class="bi bi-megaphone"></i>
+                    <span>Campaigns</span>
+                </a>
+                <a href="tasks.html" class="dashboard-nav-link active">
+                    <i class="bi bi-check2-square"></i>
+                    <span>Task</span>
+                </a>
+                <a href="dashboard.html#marketingArea" class="dashboard-nav-link">
+                    <i class="bi bi-funnel"></i>
+                    <span>Lead Marketing</span>
+                </a>
+            </nav>
+        </aside>
+
+        <main class="dashboard-main">
+            <div class="dashboard-header">
+                <h1 class="dashboard-title">Task Marketing</h1>
+                <p class="dashboard-subtitle" id="taskGreeting">
+                    Kelola pekerjaan harian Marketing dan pantau tenggatnya.
+                </p>
+            </div>
+
+            <div class="dashboard-stats">
+                <div class="stat-card">
+                    <div class="stat-card-icon orange">
+                        <i class="bi bi-check2-square"></i>
+                    </div>
+                    <div class="stat-card-info">
+                        <div class="stat-card-value" id="taskStatTotal">0</div>
+                        <div class="stat-card-label">Total Task</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-card-icon blue">
+                        <i class="bi bi-hourglass-split"></i>
+                    </div>
+                    <div class="stat-card-info">
+                        <div class="stat-card-value" id="taskStatOpen">0</div>
+                        <div class="stat-card-label">Belum Selesai</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-card-icon green">
+                        <i class="bi bi-check2-circle"></i>
+                    </div>
+                    <div class="stat-card-info">
+                        <div class="stat-card-value" id="taskStatDone">0</div>
+                        <div class="stat-card-label">Selesai</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-card-icon purple">
+                        <i class="bi bi-exclamation-triangle"></i>
+                    </div>
+                    <div class="stat-card-info">
+                        <div class="stat-card-value" id="taskStatOverdue">0</div>
+                        <div class="stat-card-label">Terlambat</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="dashboard-section">
+                <div class="dashboard-section-header">
+                    <div>
+                        <h2 class="dashboard-section-title">Daftar Task</h2>
+                        <p class="form-hint" style="margin: 0.25rem 0 0;">
+                            Task dapat ditautkan ke campaign dan lead agar pekerjaan lebih terarah.
+                        </p>
+                    </div>
+                    <div class="modal-actions">
+                        <button class="btn btn-ghost" type="button" id="taskRefresh">
+                            <i class="bi bi-arrow-clockwise"></i> Muat Ulang
+                        </button>
+                        <button class="btn btn-primary" type="button" id="taskAddButton">
+                            <i class="bi bi-plus-lg"></i> Tambah Task
+                        </button>
+                    </div>
+                </div>
+                <div class="dashboard-section-body">
+                    <div class="task-toolbar">
+                        <div class="task-search">
+                            <i class="bi bi-search"></i>
+                            <input class="form-input" type="search" id="taskSearch" maxlength="100"
+                                placeholder="Cari judul, deskripsi, campaign, atau lead">
+                        </div>
+                        <select class="form-input task-filter" id="taskStatusFilter">
+                            <option value="">Semua status</option>
+                            <option value="belum">Belum</option>
+                            <option value="proses">Proses</option>
+                            <option value="selesai">Selesai</option>
+                            <option value="batal">Batal</option>
+                        </select>
+                        <select class="form-input task-filter" id="taskPriorityFilter">
+                            <option value="">Semua prioritas</option>
+                            <option value="tinggi">Tinggi</option>
+                            <option value="sedang">Sedang</option>
+                            <option value="rendah">Rendah</option>
+                        </select>
+                    </div>
+                    <div class="task-grid" id="taskList">
+                        <div class="task-empty">Memuat task&hellip;</div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <button class="dashboard-sidebar-toggle" id="taskSidebarToggle" type="button" aria-label="Buka menu">
+        <i class="bi bi-list"></i>
+    </button>
+    <div class="dashboard-sidebar-backdrop" id="taskSidebarBackdrop"></div>
+
+    <!-- Modal Task -->
+    <div class="attendance-modal" id="taskModal" style="display: none;">
+        <div class="attendance-modal-card marketing-modal-card">
+            <div class="attendance-modal-header">
+                <div>
+                    <div class="attendance-modal-title" id="taskModalTitle">Tambah Task</div>
+                    <div class="attendance-modal-subtitle">Tentukan jenis, prioritas, dan tenggat pekerjaan.</div>
+                </div>
+                <button class="attendance-modal-close" id="taskModalClose" type="button" aria-label="Tutup">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+            <form id="taskForm">
+                <div class="attendance-modal-body marketing-modal-body">
+                    <input type="hidden" id="taskId">
+                    <div class="form-group marketing-span-2">
+                        <label class="form-label" for="taskTitle">Judul Task *</label>
+                        <input class="form-input" type="text" id="taskTitle" maxlength="150"
+                            placeholder="Contoh: Follow-up lead hasil pameran" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="taskType">Jenis</label>
+                        <select class="form-input" id="taskType">
+                            <option value="follow_up">Follow-up</option>
+                            <option value="campaign">Campaign</option>
+                            <option value="administrasi">Administrasi</option>
+                            <option value="lainnya">Lainnya</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="taskPriority">Prioritas</label>
+                        <select class="form-input" id="taskPriority">
+                            <option value="rendah">Rendah</option>
+                            <option value="sedang">Sedang</option>
+                            <option value="tinggi">Tinggi</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="taskStatus">Status</label>
+                        <select class="form-input" id="taskStatus">
+                            <option value="belum">Belum</option>
+                            <option value="proses">Proses</option>
+                            <option value="selesai">Selesai</option>
+                            <option value="batal">Batal</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="taskDueDate">Tenggat</label>
+                        <input class="form-input" type="date" id="taskDueDate">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="taskCampaign">Campaign</label>
+                        <select class="form-input" id="taskCampaign">
+                            <option value="">Tanpa campaign</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="taskLead">Lead</label>
+                        <select class="form-input" id="taskLead">
+                            <option value="">Tanpa lead</option>
+                        </select>
+                    </div>
+                    <div class="form-group marketing-span-2">
+                        <label class="form-label" for="taskDescription">Deskripsi</label>
+                        <textarea class="form-input marketing-textarea" id="taskDescription" maxlength="1000"
+                            rows="3" placeholder="Langkah pekerjaan, hasil yang diharapkan, atau catatan."></textarea>
+                    </div>
+                </div>
+                <div class="attendance-modal-actions" style="padding: 0 1.5rem 1.5rem;">
+                    <button class="btn btn-outline" id="taskCancel" type="button">Batal</button>
+                    <button class="btn btn-primary" type="submit">
+                        <i class="bi bi-check2-circle"></i> Simpan Task
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="../assets/js/config.js"></script>
+    <script src="../assets/js/core.js"></script>
+    <script src="../assets/js/api.js"></script>
+    <script src="../assets/js/utils.js"></script>
+    <script src="../assets/js/data.js"></script>
+    <script src="../assets/js/seed.js"></script>
+    <script src="../assets/js/sync.js"></script>
+    <script src="../assets/js/progress.js"></script>
+    <script src="../assets/js/auth.js"></script>
+    <script src="../assets/js/audit.js"></script>
+    <script src="../assets/js/notifications.js"></script>
+    <script src="../assets/js/crud-users.js"></script>
+    <script src="../assets/js/crud-courses.js"></script>
+    <script src="../assets/js/crud-enrollments.js"></script>
+    <script src="../assets/js/crud-content.js"></script>
+    <script src="../assets/js/crud-grades.js"></script>
+    <script src="../assets/js/crud-marketing.js"></script>
+    <script src="../assets/js/ui.js"></script>
+    <script src="../assets/js/employee-tasks.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const user = ELIPS.getSessionUser();
+            if (user) {
+                const sidebarName = document.getElementById('employeeSidebarName');
+                if (sidebarName) sidebarName.textContent = user.name;
+            }
+
+            const sidebar = document.querySelector('.dashboard-sidebar');
+            const toggle = document.getElementById('taskSidebarToggle');
+            const backdrop = document.getElementById('taskSidebarBackdrop');
+            function closeSidebar() {
+                if (sidebar) sidebar.classList.remove('active');
+                if (backdrop) backdrop.classList.remove('active');
+            }
+            if (toggle && sidebar) {
+                toggle.addEventListener('click', function () {
+                    sidebar.classList.toggle('active');
+                    if (backdrop) backdrop.classList.toggle('active');
+                });
+            }
+            if (backdrop) backdrop.addEventListener('click', closeSidebar);
+            if (sidebar) {
+                sidebar.addEventListener('click', function (event) {
+                    if (event.target.closest('a')) closeSidebar();
+                });
+            }
+        });
+    </script>
+</body>
+</html>

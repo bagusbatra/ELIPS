@@ -54,6 +54,7 @@
         staffShifts: 'elips_staffShifts',
         letters: 'elips_letters',
         marketingCampaigns: 'elips_marketingCampaigns',
+        marketingTasks: 'elips_marketingTasks',
         marketingLeads: 'elips_marketingLeads',
         marketingFollowups: 'elips_marketingFollowups',
         marketingTargets: 'elips_marketingTargets',

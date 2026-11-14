@@ -662,6 +662,8 @@
             if (navLink) navLink.style.display = '';
             const campaignNavLink = el('marketingCampaignNavLink');
             if (campaignNavLink) campaignNavLink.style.display = '';
+            const taskNavLink = el('marketingTaskNavLink');
+            if (taskNavLink) taskNavLink.style.display = '';
             loadCampaignOptions(user);
             bindMarketing(user);
             loadMarketing(user, false);

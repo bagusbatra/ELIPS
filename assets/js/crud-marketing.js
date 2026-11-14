@@ -15,6 +15,9 @@
     const FOLLOWUP_CHANNELS = ['telepon', 'whatsapp', 'email', 'kunjungan', 'lainnya'];
     const CAMPAIGN_STATUSES = ['draft', 'aktif', 'selesai', 'batal'];
     const CAMPAIGN_CHANNELS = ['sosial_media', 'email', 'pameran', 'sekolah', 'komunitas', 'telemarketing', 'lainnya'];
+    const TASK_STATUSES = ['belum', 'proses', 'selesai', 'batal'];
+    const TASK_PRIORITIES = ['rendah', 'sedang', 'tinggi'];
+    const TASK_TYPES = ['follow_up', 'campaign', 'administrasi', 'lainnya'];
 
     const STATUS_LABELS = {
         baru: 'Baru',
@@ -56,6 +59,26 @@
         sekolah: 'Sekolah',
         komunitas: 'Komunitas',
         telemarketing: 'Telemarketing',
+        lainnya: 'Lainnya'
+    };
+
+    const TASK_STATUS_LABELS = {
+        belum: 'Belum',
+        proses: 'Proses',
+        selesai: 'Selesai',
+        batal: 'Batal'
+    };
+
+    const TASK_PRIORITY_LABELS = {
+        rendah: 'Rendah',
+        sedang: 'Sedang',
+        tinggi: 'Tinggi'
+    };
+
+    const TASK_TYPE_LABELS = {
+        follow_up: 'Follow-up',
+        campaign: 'Campaign',
+        administrasi: 'Administrasi',
         lainnya: 'Lainnya'
     };
 
@@ -112,6 +135,18 @@
 
     function campaignChannelLabel(channel) {
         return CAMPAIGN_CHANNEL_LABELS[channel] || channel || '-';
+    }
+
+    function taskStatusLabel(status) {
+        return TASK_STATUS_LABELS[status] || status || '-';
+    }
+
+    function taskPriorityLabel(priority) {
+        return TASK_PRIORITY_LABELS[priority] || priority || '-';
+    }
+
+    function taskTypeLabel(type) {
+        return TASK_TYPE_LABELS[type] || type || '-';
     }
 
     function resolveOwnerId(data, existing) {
@@ -265,6 +300,16 @@
         ELIPS.setMarketingFollowups(ELIPS.getMarketingFollowups().filter(function (row) {
             return Number(row.leadId) !== Number(id);
         }));
+        const tasks = ELIPS.getMarketingTasks();
+        let unlinked = 0;
+        tasks.forEach(function (task) {
+            if (Number(task.leadId) === Number(id)) {
+                task.leadId = null;
+                task.leadName = '';
+                unlinked++;
+            }
+        });
+        if (unlinked > 0) ELIPS.setMarketingTasks(tasks);
 
         recordAudit({
             action: 'delete',
@@ -614,6 +659,17 @@
         });
         if (linked > 0) ELIPS.setMarketingLeads(leads);
 
+        const tasks = ELIPS.getMarketingTasks();
+        let unlinkedTasks = 0;
+        tasks.forEach(function (task) {
+            if (Number(task.campaignId) === Number(id)) {
+                task.campaignId = null;
+                task.campaignName = '';
+                unlinkedTasks++;
+            }
+        });
+        if (unlinkedTasks > 0) ELIPS.setMarketingTasks(tasks);
+
         recordAudit({
             action: 'delete',
             entity: 'marketing_campaign',
@@ -624,8 +680,214 @@
                 + campaignChannelLabel(campaign.channel)
                 + ' status ' + campaignStatusLabel(campaign.status)
                 + (linked > 0 ? '. ' + linked + ' lead dilepas dari campaign.' : '.')
+                + (unlinkedTasks > 0 ? ' ' + unlinkedTasks + ' task dilepas dari campaign.' : '')
         });
         return success('Campaign dihapus.');
+    }
+
+    function normalizeTaskPayload(data, existing) {
+        data = data || {};
+        const ownerId = resolveOwnerId(data, existing);
+        const title = String(data.title !== undefined ? data.title : (existing ? existing.title : '')).trim();
+        const description = String(data.description !== undefined
+            ? data.description
+            : (existing ? existing.description : '')).trim();
+        const type = String(data.type !== undefined ? data.type : (existing ? existing.type : 'lainnya')).trim();
+        const priority = String(data.priority !== undefined
+            ? data.priority
+            : (existing ? existing.priority : 'sedang')).trim();
+        const status = String(data.status !== undefined ? data.status : (existing ? existing.status : 'belum')).trim();
+        const dueRaw = data.dueDate !== undefined ? data.dueDate : (existing ? existing.dueDate : '');
+        const dueDate = dueRaw ? normalizeDate(dueRaw) : null;
+
+        const campaignRaw = data.campaignId !== undefined
+            ? data.campaignId
+            : (existing ? existing.campaignId : '');
+        const campaignId = Number(campaignRaw || 0);
+        let campaign = null;
+        if (campaignId > 0) {
+            campaign = typeof ELIPS.getMarketingCampaign === 'function'
+                ? ELIPS.getMarketingCampaign(campaignId)
+                : null;
+            if (!campaign) return { error: 'Campaign tidak ditemukan.' };
+            if (Number(campaign.ownerId) !== Number(ownerId)) {
+                return { error: 'Campaign harus milik pemilik task yang sama.' };
+            }
+        }
+
+        const leadRaw = data.leadId !== undefined ? data.leadId : (existing ? existing.leadId : '');
+        const leadId = Number(leadRaw || 0);
+        let lead = null;
+        if (leadId > 0) {
+            lead = ELIPS.getMarketingLeads().find(function (row) {
+                return Number(row.id) === leadId;
+            }) || null;
+            if (!lead) return { error: 'Lead tidak ditemukan.' };
+            if (Number(lead.ownerId) !== Number(ownerId)) {
+                return { error: 'Lead harus milik pemilik task yang sama.' };
+            }
+        }
+
+        if (!ownerId) return { error: 'Pemilik task tidak valid.' };
+        if (!title) return { error: 'Judul task wajib diisi.' };
+        if (title.length > 150) return { error: 'Judul task maksimal 150 karakter.' };
+        if (description.length > 1000) return { error: 'Deskripsi task maksimal 1000 karakter.' };
+        if (TASK_TYPES.indexOf(type) === -1) return { error: 'Jenis task tidak valid.' };
+        if (TASK_PRIORITIES.indexOf(priority) === -1) return { error: 'Prioritas task tidak valid.' };
+        if (TASK_STATUSES.indexOf(status) === -1) return { error: 'Status task tidak valid.' };
+        if (dueRaw && !dueDate) return { error: 'Tenggat task tidak valid.' };
+
+        return {
+            ownerId: ownerId,
+            campaignId: campaignId > 0 ? campaignId : null,
+            campaignName: campaign ? campaign.name : '',
+            leadId: leadId > 0 ? leadId : null,
+            leadName: lead ? lead.name : '',
+            title: title,
+            description: description,
+            type: type,
+            priority: priority,
+            status: status,
+            dueDate: dueDate
+        };
+    }
+
+    function saveMarketingTask(data) {
+        if (ELIPS.api && ELIPS.api.enabled) {
+            return ELIPS.api.call('marketing.task.save', data || {});
+        }
+
+        data = data || {};
+        const id = Number(data.id || 0);
+        const tasks = ELIPS.getMarketingTasks();
+        const existing = id > 0
+            ? tasks.find(function (task) { return Number(task.id) === id; })
+            : null;
+        if (id > 0 && !existing) return failure('Task tidak ditemukan.');
+
+        const user = sessionUser();
+        if (existing && user && user.role !== 'admin' && Number(existing.ownerId) !== Number(user.id)) {
+            return failure('Anda hanya dapat mengubah task milik Anda.');
+        }
+
+        const normalized = normalizeTaskPayload(data, existing);
+        if (normalized.error) return failure(normalized.error);
+
+        const now = new Date().toISOString();
+        let task;
+        if (existing) {
+            task = Object.assign(existing, normalized, {
+                completedAt: normalized.status === 'selesai'
+                    ? (existing.completedAt || now)
+                    : null,
+                updatedAt: now
+            });
+            ELIPS.setMarketingTasks(tasks);
+        } else {
+            task = Object.assign({}, normalized, {
+                id: ELIPS.nextId(tasks),
+                ownerName: ownerName(normalized.ownerId),
+                completedAt: normalized.status === 'selesai' ? now : null,
+                createdAt: now,
+                updatedAt: now
+            });
+            tasks.push(task);
+            ELIPS.setMarketingTasks(tasks);
+        }
+
+        recordAudit({
+            action: existing ? 'update' : 'create',
+            entity: 'marketing_task',
+            entityId: task.id,
+            entityLabel: task.title,
+            actorId: user ? user.id : undefined,
+            detail: (existing ? 'Mengubah' : 'Menambahkan') + ' task "' + task.title + '"'
+                + ' jenis ' + taskTypeLabel(task.type)
+                + ' prioritas ' + taskPriorityLabel(task.priority)
+                + ' status ' + taskStatusLabel(task.status)
+                + (task.dueDate ? ' tenggat ' + task.dueDate : '') + '.'
+        });
+        return success(existing ? 'Task diperbarui.' : 'Task ditambahkan.', task);
+    }
+
+    function deleteMarketingTask(id) {
+        if (ELIPS.api && ELIPS.api.enabled) {
+            return ELIPS.api.call('marketing.task.delete', { id: id });
+        }
+
+        const tasks = ELIPS.getMarketingTasks();
+        const task = tasks.find(function (row) { return Number(row.id) === Number(id); });
+        if (!task) return failure('Task tidak ditemukan.');
+
+        const user = sessionUser();
+        if (user && user.role !== 'admin' && Number(task.ownerId) !== Number(user.id)) {
+            return failure('Anda hanya dapat menghapus task milik Anda.');
+        }
+
+        ELIPS.setMarketingTasks(tasks.filter(function (row) {
+            return Number(row.id) !== Number(id);
+        }));
+
+        recordAudit({
+            action: 'delete',
+            entity: 'marketing_task',
+            entityId: task.id,
+            entityLabel: task.title,
+            actorId: user ? user.id : undefined,
+            detail: 'Menghapus task "' + task.title + '" jenis ' + taskTypeLabel(task.type)
+                + ' prioritas ' + taskPriorityLabel(task.priority)
+                + ' status ' + taskStatusLabel(task.status) + '.'
+        });
+        return success('Task dihapus.');
+    }
+
+    function localTaskList(userId) {
+        const user = sessionUser();
+        const scope = (userId === undefined || userId === null || userId === '')
+            ? (user && user.role !== 'admin' ? Number(user.id) : 0)
+            : Number(userId);
+        const statusOrder = { belum: 0, proses: 1, selesai: 2, batal: 3 };
+        const priorityOrder = { tinggi: 0, sedang: 1, rendah: 2 };
+        const leads = ELIPS.getMarketingLeads();
+
+        const tasks = ELIPS.getMarketingTasks()
+            .filter(function (task) { return scope === 0 || Number(task.ownerId) === scope; })
+            .map(function (task) {
+                const campaign = Number(task.campaignId) > 0 && typeof ELIPS.getMarketingCampaign === 'function'
+                    ? ELIPS.getMarketingCampaign(task.campaignId)
+                    : null;
+                const lead = Number(task.leadId) > 0
+                    ? leads.find(function (row) { return Number(row.id) === Number(task.leadId); })
+                    : null;
+                return Object.assign({}, task, {
+                    ownerName: task.ownerName || ownerName(task.ownerId),
+                    campaignName: campaign ? campaign.name : (task.campaignName || ''),
+                    leadName: lead ? lead.name : (task.leadName || '')
+                });
+            })
+            .sort(function (a, b) {
+                const statusDiff = (statusOrder[a.status] ?? 3) - (statusOrder[b.status] ?? 3);
+                if (statusDiff !== 0) return statusDiff;
+                const priorityDiff = (priorityOrder[a.priority] ?? 3) - (priorityOrder[b.priority] ?? 3);
+                if (priorityDiff !== 0) return priorityDiff;
+                const dueA = a.dueDate || '9999-12-31';
+                const dueB = b.dueDate || '9999-12-31';
+                if (dueA !== dueB) return String(dueA).localeCompare(String(dueB));
+                return String(b.createdAt || '').localeCompare(String(a.createdAt || ''));
+            });
+
+        return success('Task Marketing dimuat.', { tasks: tasks });
+    }
+
+    function marketingTasks(userId) {
+        if (ELIPS.api && ELIPS.api.enabled) {
+            const payload = {};
+            if (userId !== undefined && userId !== null && userId !== '') {
+                payload.userId = Number(userId);
+            }
+            return ELIPS.api.call('marketing.task.list', payload);
+        }
+        return localTaskList(userId);
     }
 
     function localCampaignList(userId) {
@@ -765,14 +1027,23 @@
     ELIPS.FOLLOWUP_CHANNELS = FOLLOWUP_CHANNELS;
     ELIPS.CAMPAIGN_STATUSES = CAMPAIGN_STATUSES;
     ELIPS.CAMPAIGN_CHANNELS = CAMPAIGN_CHANNELS;
+    ELIPS.TASK_STATUSES = TASK_STATUSES;
+    ELIPS.TASK_PRIORITIES = TASK_PRIORITIES;
+    ELIPS.TASK_TYPES = TASK_TYPES;
     ELIPS.marketingStatusLabel = statusLabel;
     ELIPS.marketingSourceLabel = sourceLabel;
     ELIPS.marketingChannelLabel = channelLabel;
     ELIPS.marketingCampaignStatusLabel = campaignStatusLabel;
     ELIPS.marketingCampaignChannelLabel = campaignChannelLabel;
+    ELIPS.marketingTaskStatusLabel = taskStatusLabel;
+    ELIPS.marketingTaskPriorityLabel = taskPriorityLabel;
+    ELIPS.marketingTaskTypeLabel = taskTypeLabel;
     ELIPS.marketingCampaigns = marketingCampaigns;
     ELIPS.saveMarketingCampaign = saveMarketingCampaign;
     ELIPS.deleteMarketingCampaign = deleteMarketingCampaign;
+    ELIPS.marketingTasks = marketingTasks;
+    ELIPS.saveMarketingTask = saveMarketingTask;
+    ELIPS.deleteMarketingTask = deleteMarketingTask;
     ELIPS.marketingDashboard = marketingDashboard;
     ELIPS.saveMarketingLead = saveMarketingLead;
     ELIPS.deleteMarketingLead = deleteMarketingLead;
