@@ -997,3 +997,27 @@ CREATE TABLE IF NOT EXISTS `marketing_tasks` (
     CONSTRAINT `fk_marketing_tasks_lead` FOREIGN KEY (`lead_id`) REFERENCES `marketing_leads` (`id`)
         ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `marketing_clients` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `owner_id` INT UNSIGNED NOT NULL,
+    `campaign_id` INT UNSIGNED NULL,
+    `name` VARCHAR(150) NOT NULL,
+    `company` VARCHAR(150) NOT NULL DEFAULT '',
+    `pic` VARCHAR(150) NOT NULL DEFAULT '',
+    `phone` VARCHAR(30) NOT NULL DEFAULT '',
+    `email` VARCHAR(190) NOT NULL DEFAULT '',
+    `city` VARCHAR(100) NOT NULL DEFAULT '',
+    `address` VARCHAR(255) NOT NULL DEFAULT '',
+    `status` ENUM('prospek', 'aktif', 'nonaktif') NOT NULL DEFAULT 'prospek',
+    `notes` VARCHAR(1000) NOT NULL DEFAULT '',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NULL,
+    PRIMARY KEY (`id`),
+    KEY `idx_marketing_clients_owner` (`owner_id`),
+    KEY `idx_marketing_clients_campaign` (`campaign_id`),
+    KEY `idx_marketing_clients_status` (`status`),
+    CONSTRAINT `fk_marketing_clients_owner` FOREIGN KEY (`owner_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_marketing_clients_campaign` FOREIGN KEY (`campaign_id`) REFERENCES `marketing_campaigns` (`id`)
+        ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

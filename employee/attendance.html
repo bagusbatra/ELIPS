@@ -35,6 +35,12 @@
                 <a href="dashboard.html" class="btn btn-ghost">
                     <i class="bi bi-speedometer2"></i> Dashboard
                 </a>
+                <a href="clients.html" class="btn btn-ghost" id="attendanceClientsLink" style="display: none;">
+                    <i class="bi bi-people"></i> Clients
+                </a>
+                <a href="reports.html" class="btn btn-ghost" id="attendanceReportsLink" style="display: none;">
+                    <i class="bi bi-file-earmark-bar-graph"></i> Report
+                </a>
                 <span class="nav-link" style="display: inline-flex; align-items: center; gap: 0.5rem;">
                     <i class="bi bi-person-badge"></i>
                     <span class="dashboard-user-name" id="employeeName">Karyawan</span>
@@ -241,6 +247,12 @@
             const greeting = document.getElementById('employeeGreeting');
             if (greeting) greeting.textContent = 'Selamat datang, ' + user.name
                 + '. Catat kehadiran harian Anda langsung dari perangkat ini.';
+            if (user.division === 'marketing') {
+                const clientsLink = document.getElementById('attendanceClientsLink');
+                if (clientsLink) clientsLink.style.display = '';
+                const reportsLink = document.getElementById('attendanceReportsLink');
+                if (reportsLink) reportsLink.style.display = '';
+            }
         });
     </script>
 </body>

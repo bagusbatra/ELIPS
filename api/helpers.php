@@ -177,6 +177,11 @@ function elips_marketing_valid_task_type(string $type): bool
     return in_array($type, ['follow_up', 'campaign', 'administrasi', 'lainnya'], true);
 }
 
+function elips_marketing_valid_client_status(string $status): bool
+{
+    return in_array($status, ['prospek', 'aktif', 'nonaktif'], true);
+}
+
 function elips_marketing_valid_period(string $period): bool
 {
     return (bool) preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', $period);
@@ -1963,6 +1968,42 @@ function elips_marketing_task_row(int $id): ?array
          LEFT JOIN marketing_campaigns mc ON mc.id = mt.campaign_id
          LEFT JOIN marketing_leads ml ON ml.id = mt.lead_id
          WHERE mt.id = ? LIMIT 1'
+    );
+    $stmt->execute([$id]);
+    $row = $stmt->fetch();
+    return $row ?: null;
+}
+
+function elips_marketing_client_public(array $row): array
+{
+    return [
+        'id' => (int) $row['id'],
+        'ownerId' => (int) $row['owner_id'],
+        'ownerName' => $row['owner_name'] ?? '',
+        'campaignId' => $row['campaign_id'] === null ? null : (int) $row['campaign_id'],
+        'campaignName' => $row['campaign_name'] ?? '',
+        'name' => $row['name'],
+        'company' => $row['company'],
+        'pic' => $row['pic'],
+        'phone' => $row['phone'],
+        'email' => $row['email'],
+        'city' => $row['city'],
+        'address' => $row['address'],
+        'status' => $row['status'],
+        'notes' => $row['notes'],
+        'createdAt' => elips_iso($row['created_at']),
+        'updatedAt' => elips_iso($row['updated_at']),
+    ];
+}
+
+function elips_marketing_client_row(int $id): ?array
+{
+    $stmt = elips_db()->prepare(
+        'SELECT mc.*, u.name AS owner_name, camp.name AS campaign_name
+         FROM marketing_clients mc
+         LEFT JOIN users u ON u.id = mc.owner_id
+         LEFT JOIN marketing_campaigns camp ON camp.id = mc.campaign_id
+         WHERE mc.id = ? LIMIT 1'
     );
     $stmt->execute([$id]);
     $row = $stmt->fetch();

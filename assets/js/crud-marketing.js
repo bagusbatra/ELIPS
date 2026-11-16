@@ -18,6 +18,7 @@
     const TASK_STATUSES = ['belum', 'proses', 'selesai', 'batal'];
     const TASK_PRIORITIES = ['rendah', 'sedang', 'tinggi'];
     const TASK_TYPES = ['follow_up', 'campaign', 'administrasi', 'lainnya'];
+    const CLIENT_STATUSES = ['prospek', 'aktif', 'nonaktif'];
 
     const STATUS_LABELS = {
         baru: 'Baru',
@@ -80,6 +81,12 @@
         campaign: 'Campaign',
         administrasi: 'Administrasi',
         lainnya: 'Lainnya'
+    };
+
+    const CLIENT_STATUS_LABELS = {
+        prospek: 'Prospek',
+        aktif: 'Aktif',
+        nonaktif: 'Nonaktif'
     };
 
     function recordAudit(entry) {
@@ -147,6 +154,10 @@
 
     function taskTypeLabel(type) {
         return TASK_TYPE_LABELS[type] || type || '-';
+    }
+
+    function clientStatusLabel(status) {
+        return CLIENT_STATUS_LABELS[status] || status || '-';
     }
 
     function resolveOwnerId(data, existing) {
@@ -1022,6 +1033,177 @@
         return localDashboard(userId, period);
     }
 
+    function normalizeClientPayload(data, existing) {
+        data = data || {};
+        const ownerId = resolveOwnerId(data, existing);
+        const name = String(data.name !== undefined ? data.name : (existing ? existing.name : '')).trim();
+        const company = String(data.company !== undefined ? data.company : (existing ? existing.company : '')).trim();
+        const pic = String(data.pic !== undefined ? data.pic : (existing ? existing.pic : '')).trim();
+        const phone = String(data.phone !== undefined ? data.phone : (existing ? existing.phone : '')).trim();
+        const email = String(data.email !== undefined ? data.email : (existing ? existing.email : '')).trim().toLowerCase();
+        const city = String(data.city !== undefined ? data.city : (existing ? existing.city : '')).trim();
+        const address = String(data.address !== undefined ? data.address : (existing ? existing.address : '')).trim();
+        const status = String(data.status !== undefined ? data.status : (existing ? existing.status : 'prospek')).trim();
+        const notes = String(data.notes !== undefined ? data.notes : (existing ? existing.notes : '')).trim();
+        let campaignId = Number(data.campaignId !== undefined ? data.campaignId : (existing ? existing.campaignId : 0));
+        let campaign = null;
+
+        if (campaignId > 0) {
+            campaign = typeof ELIPS.getMarketingCampaign === 'function'
+                ? ELIPS.getMarketingCampaign(campaignId)
+                : null;
+            if (!campaign) return { error: 'Campaign tidak ditemukan.' };
+            if (Number(campaign.ownerId) !== Number(ownerId)) {
+                return { error: 'Campaign harus milik pemilik client yang sama.' };
+            }
+        } else {
+            campaignId = 0;
+        }
+
+        if (!ownerId) return { error: 'Pemilik client tidak valid.' };
+        if (!name) return { error: 'Nama client wajib diisi.' };
+        if (name.length > 150) return { error: 'Nama client maksimal 150 karakter.' };
+        if (company.length > 150) return { error: 'Nama perusahaan maksimal 150 karakter.' };
+        if (pic.length > 150) return { error: 'Nama PIC maksimal 150 karakter.' };
+        if (!phone && !email) return { error: 'Isi minimal salah satu kontak: telepon atau email.' };
+        if (phone.length > 30) return { error: 'Nomor telepon maksimal 30 karakter.' };
+        if (email && (!isValidEmail(email) || email.length > 190)) {
+            return { error: 'Alamat email client tidak valid.' };
+        }
+        if (city.length > 100) return { error: 'Kota maksimal 100 karakter.' };
+        if (address.length > 255) return { error: 'Alamat maksimal 255 karakter.' };
+        if (CLIENT_STATUSES.indexOf(status) === -1) return { error: 'Status client tidak valid.' };
+        if (notes.length > 1000) return { error: 'Catatan client maksimal 1000 karakter.' };
+
+        return {
+            ownerId: ownerId,
+            campaignId: campaignId > 0 ? campaignId : null,
+            campaignName: campaign ? campaign.name : '',
+            name: name,
+            company: company,
+            pic: pic,
+            phone: phone,
+            email: email,
+            city: city,
+            address: address,
+            status: status,
+            notes: notes
+        };
+    }
+
+    function saveMarketingClient(data) {
+        if (ELIPS.api && ELIPS.api.enabled) {
+            return ELIPS.api.call('marketing.client.save', data || {});
+        }
+
+        data = data || {};
+        const id = Number(data.id || 0);
+        const clients = ELIPS.getMarketingClients();
+        const existing = id > 0
+            ? clients.find(function (client) { return Number(client.id) === id; })
+            : null;
+        if (id > 0 && !existing) return failure('Client tidak ditemukan.');
+
+        const user = sessionUser();
+        if (existing && user && user.role !== 'admin' && Number(existing.ownerId) !== Number(user.id)) {
+            return failure('Anda hanya dapat mengubah client milik Anda.');
+        }
+
+        const normalized = normalizeClientPayload(data, existing);
+        if (normalized.error) return failure(normalized.error);
+
+        const now = new Date().toISOString();
+        let client;
+        if (existing) {
+            client = Object.assign(existing, normalized, { updatedAt: now });
+            ELIPS.setMarketingClients(clients);
+        } else {
+            client = Object.assign({}, normalized, {
+                id: ELIPS.nextId(clients),
+                ownerName: ownerName(normalized.ownerId),
+                createdAt: now,
+                updatedAt: now
+            });
+            clients.push(client);
+            ELIPS.setMarketingClients(clients);
+        }
+
+        recordAudit({
+            action: existing ? 'update' : 'create',
+            entity: 'marketing_client',
+            entityId: client.id,
+            entityLabel: client.name,
+            actorId: user ? user.id : undefined,
+            detail: (existing ? 'Mengubah' : 'Menambahkan') + ' client "' + client.name + '"'
+                + (client.company ? ' perusahaan ' + client.company : '')
+                + ' status ' + clientStatusLabel(client.status) + '.'
+        });
+        return success(existing ? 'Client diperbarui.' : 'Client ditambahkan.', client);
+    }
+
+    function deleteMarketingClient(id) {
+        if (ELIPS.api && ELIPS.api.enabled) {
+            return ELIPS.api.call('marketing.client.delete', { id: id });
+        }
+
+        const clients = ELIPS.getMarketingClients();
+        const client = clients.find(function (row) { return Number(row.id) === Number(id); });
+        if (!client) return failure('Client tidak ditemukan.');
+
+        const user = sessionUser();
+        if (user && user.role !== 'admin' && Number(client.ownerId) !== Number(user.id)) {
+            return failure('Anda hanya dapat menghapus client milik Anda.');
+        }
+
+        ELIPS.setMarketingClients(clients.filter(function (row) {
+            return Number(row.id) !== Number(id);
+        }));
+        recordAudit({
+            action: 'delete',
+            entity: 'marketing_client',
+            entityId: client.id,
+            entityLabel: client.name,
+            actorId: user ? user.id : undefined,
+            detail: 'Menghapus client "' + client.name + '" status ' + clientStatusLabel(client.status) + '.'
+        });
+        return success('Client dihapus.');
+    }
+
+    function localClientList(userId) {
+        const user = sessionUser();
+        const scope = (userId === undefined || userId === null || userId === '')
+            ? (user && user.role !== 'admin' ? Number(user.id) : 0)
+            : Number(userId);
+
+        const clients = ELIPS.getMarketingClients()
+            .filter(function (client) { return scope === 0 || Number(client.ownerId) === scope; })
+            .map(function (client) {
+                const campaign = Number(client.campaignId) > 0 && typeof ELIPS.getMarketingCampaign === 'function'
+                    ? ELIPS.getMarketingCampaign(client.campaignId)
+                    : null;
+                return Object.assign({}, client, {
+                    ownerName: client.ownerName || ownerName(client.ownerId),
+                    campaignName: client.campaignName || (campaign ? campaign.name : '')
+                });
+            })
+            .sort(function (a, b) {
+                return String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || ''));
+            });
+
+        return success('Client Marketing dimuat.', { clients: clients });
+    }
+
+    function marketingClients(userId) {
+        if (ELIPS.api && ELIPS.api.enabled) {
+            const payload = {};
+            if (userId !== undefined && userId !== null && userId !== '') {
+                payload.userId = Number(userId);
+            }
+            return ELIPS.api.call('marketing.client.list', payload);
+        }
+        return localClientList(userId);
+    }
+
     ELIPS.LEAD_STATUSES = LEAD_STATUSES;
     ELIPS.LEAD_SOURCES = LEAD_SOURCES;
     ELIPS.FOLLOWUP_CHANNELS = FOLLOWUP_CHANNELS;
@@ -1030,6 +1212,7 @@
     ELIPS.TASK_STATUSES = TASK_STATUSES;
     ELIPS.TASK_PRIORITIES = TASK_PRIORITIES;
     ELIPS.TASK_TYPES = TASK_TYPES;
+    ELIPS.CLIENT_STATUSES = CLIENT_STATUSES;
     ELIPS.marketingStatusLabel = statusLabel;
     ELIPS.marketingSourceLabel = sourceLabel;
     ELIPS.marketingChannelLabel = channelLabel;
@@ -1038,12 +1221,16 @@
     ELIPS.marketingTaskStatusLabel = taskStatusLabel;
     ELIPS.marketingTaskPriorityLabel = taskPriorityLabel;
     ELIPS.marketingTaskTypeLabel = taskTypeLabel;
+    ELIPS.marketingClientStatusLabel = clientStatusLabel;
     ELIPS.marketingCampaigns = marketingCampaigns;
     ELIPS.saveMarketingCampaign = saveMarketingCampaign;
     ELIPS.deleteMarketingCampaign = deleteMarketingCampaign;
     ELIPS.marketingTasks = marketingTasks;
     ELIPS.saveMarketingTask = saveMarketingTask;
     ELIPS.deleteMarketingTask = deleteMarketingTask;
+    ELIPS.marketingClients = marketingClients;
+    ELIPS.saveMarketingClient = saveMarketingClient;
+    ELIPS.deleteMarketingClient = deleteMarketingClient;
     ELIPS.marketingDashboard = marketingDashboard;
     ELIPS.saveMarketingLead = saveMarketingLead;
     ELIPS.deleteMarketingLead = deleteMarketingLead;

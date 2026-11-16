@@ -55,6 +55,7 @@
         letters: 'elips_letters',
         marketingCampaigns: 'elips_marketingCampaigns',
         marketingTasks: 'elips_marketingTasks',
+        marketingClients: 'elips_marketingClients',
         marketingLeads: 'elips_marketingLeads',
         marketingFollowups: 'elips_marketingFollowups',
         marketingTargets: 'elips_marketingTargets',

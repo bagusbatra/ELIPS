@@ -664,6 +664,10 @@
             if (campaignNavLink) campaignNavLink.style.display = '';
             const taskNavLink = el('marketingTaskNavLink');
             if (taskNavLink) taskNavLink.style.display = '';
+            const clientNavLink = el('marketingClientNavLink');
+            if (clientNavLink) clientNavLink.style.display = '';
+            const reportNavLink = el('marketingReportNavLink');
+            if (reportNavLink) reportNavLink.style.display = '';
             loadCampaignOptions(user);
             bindMarketing(user);
             loadMarketing(user, false);
@@ -673,7 +677,8 @@
             if (!event.key || event.key === ELIPS.KEYS.session || event.key === ELIPS.KEYS.staffAttendances
                 || event.key === ELIPS.KEYS.marketingCampaigns
                 || event.key === ELIPS.KEYS.marketingLeads || event.key === ELIPS.KEYS.marketingFollowups
-                || event.key === ELIPS.KEYS.marketingTargets) {
+                || event.key === ELIPS.KEYS.marketingTargets
+                || event.key === ELIPS.KEYS.marketingClients) {
                 window.location.reload();
             }
         });

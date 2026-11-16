@@ -198,6 +198,22 @@
             return Number(task.id) === Number(id);
         }) || null;
     }
+
+    function getMarketingClients() { return read(KEYS.marketingClients, []); }
+    function setMarketingClients(list) { return write(KEYS.marketingClients, list); }
+    function getMarketingClientsByOwner(ownerId) {
+        return getMarketingClients()
+            .filter(function (client) { return Number(client.ownerId) === Number(ownerId); })
+            .sort(function (a, b) {
+                return String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || ''));
+            });
+    }
+    function getMarketingClient(id) {
+        return getMarketingClients().find(function (client) {
+            return Number(client.id) === Number(id);
+        }) || null;
+    }
+
     function getMarketingLeads() { return read(KEYS.marketingLeads, []); }
     function setMarketingLeads(list) { return write(KEYS.marketingLeads, list); }
     function getMarketingLeadsByOwner(ownerId) {
@@ -770,6 +786,10 @@
         setMarketingTasks: setMarketingTasks,
         getMarketingTasksByOwner: getMarketingTasksByOwner,
         getMarketingTask: getMarketingTask,
+        getMarketingClients: getMarketingClients,
+        setMarketingClients: setMarketingClients,
+        getMarketingClientsByOwner: getMarketingClientsByOwner,
+        getMarketingClient: getMarketingClient,
         getMarketingLeads: getMarketingLeads,
         setMarketingLeads: setMarketingLeads,
         getMarketingLeadsByOwner: getMarketingLeadsByOwner,

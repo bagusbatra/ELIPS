@@ -132,6 +132,12 @@ function elips_dispatch(string $action, array $payload): array
             return elips_action_marketing_task_save($payload);
         case 'marketing.task.delete':
             return elips_action_marketing_task_delete($payload);
+        case 'marketing.client.list':
+            return elips_action_marketing_client_list($payload);
+        case 'marketing.client.save':
+            return elips_action_marketing_client_save($payload);
+        case 'marketing.client.delete':
+            return elips_action_marketing_client_delete($payload);
         case 'marketing.lead.save':
             return elips_action_marketing_lead_save($payload);
         case 'marketing.lead.delete':
@@ -1072,7 +1078,7 @@ function elips_action_curriculum_create(array $p): array
     $code = trim((string) ($p['code'] ?? ''));
     if ($code === '') $code = elips_next_curriculum_code($courseId);
     $name = trim((string) ($p['name'] ?? ''));
-    if ($name === '') $name = 'Kurikulum ' . $code . ' — ' . $course['title'];
+    if ($name === '') $name = 'Kurikulum ' . $code . ' â€” ' . $course['title'];
 
     $db = elips_db();
     $stmt = $db->prepare('SELECT id FROM curriculum_versions WHERE course_id = ? AND code = ? LIMIT 1');
@@ -1207,7 +1213,7 @@ function elips_action_curriculum_clone(array $p): array
     $code = trim((string) ($p['code'] ?? ''));
     if ($code === '') $code = elips_next_curriculum_code($courseId);
     $name = trim((string) ($p['name'] ?? ''));
-    if ($name === '') $name = 'Kurikulum ' . $code . ' — revisi dari ' . $source['code'];
+    if ($name === '') $name = 'Kurikulum ' . $code . ' â€” revisi dari ' . $source['code'];
 
     $db = elips_db();
     $stmt = $db->prepare('SELECT id FROM curriculum_versions WHERE course_id = ? AND code = ? LIMIT 1');
@@ -1807,7 +1813,7 @@ function elips_action_enrollment_assign(array $p): array
             'create',
             'enrollment',
             $enrollmentId,
-            $student['name'] . ' — ' . ($course ? $course['title'] : 'Kursus #' . $courseId),
+            $student['name'] . ' â€” ' . ($course ? $course['title'] : 'Kursus #' . $courseId),
             'Menugaskan "' . $student['name'] . '" ke kursus "' . ($course ? $course['title'] : 'Kursus #' . $courseId) . '".',
             $actor
         );
@@ -1881,7 +1887,7 @@ function elips_action_enrollment_assign_class(array $p): array
             'create',
             'enrollment',
             $enrollmentId,
-            $student['name'] . ' — ' . $class['name'],
+            $student['name'] . ' â€” ' . $class['name'],
             'Mendaftarkan "' . $student['name'] . '" ke kelas "' . $class['name'] . '" (' . $class['code'] . ').',
             $actor
         );
@@ -1916,7 +1922,7 @@ function elips_action_enrollment_class_status(array $p): array
     $student = elips_user_row((int) $enrollment['student_id']);
     $class = elips_class_row((int) $enrollment['class_id']);
     $label = ($student ? $student['name'] : 'Peserta #' . $enrollment['student_id'])
-        . ' — ' . ($class ? $class['name'] : 'Kelas #' . $enrollment['class_id']);
+        . ' â€” ' . ($class ? $class['name'] : 'Kelas #' . $enrollment['class_id']);
 
     elips_audit(
         'status',
@@ -1947,7 +1953,7 @@ function elips_action_enrollment_status(array $p): array
 
     $student = elips_user_row((int) $enrollment['student_id']);
     $course = elips_course_row((int) $enrollment['course_id']);
-    $label = ($student ? $student['name'] : 'Peserta #' . $enrollment['student_id']) . ' — ' .
+    $label = ($student ? $student['name'] : 'Peserta #' . $enrollment['student_id']) . ' â€” ' .
         ($course ? $course['title'] : 'Kursus #' . $enrollment['course_id']);
 
     elips_audit(
@@ -1976,7 +1982,7 @@ function elips_action_enrollment_delete(array $p): array
     $courseId = (int) $enrollment['course_id'];
     $student = elips_user_row($studentId);
     $course = elips_course_row($courseId);
-    $label = ($student ? $student['name'] : 'Peserta #' . $studentId) . ' — ' .
+    $label = ($student ? $student['name'] : 'Peserta #' . $studentId) . ' â€” ' .
         ($course ? $course['title'] : 'Kursus #' . $courseId);
 
     $db = elips_db();
@@ -2168,7 +2174,7 @@ function elips_session_store(array $class, array $p, array $actor, int $sessionN
         'create',
         'session',
         $id,
-        $class['name'] . ' — Pertemuan ' . $sessionNumber,
+        $class['name'] . ' â€” Pertemuan ' . $sessionNumber,
         'Menambahkan sesi pertemuan ' . $sessionNumber . ' untuk kelas "' . $class['name'] . '" pada '
             . $values['sessionDate'] . ' pukul ' . substr($values['startTime'], 0, 5)
             . '-' . substr($values['endTime'], 0, 5) . ' (' . $values['plannedJp'] . ' JP).',
@@ -2415,7 +2421,7 @@ function elips_action_session_status(array $p): array
     $stmt->execute([$status, round($actualJp, 2), $notes, (int) $actor['id'], $id]);
 
     $class = elips_class_row((int) $session['class_id']);
-    $label = ($class ? $class['name'] : 'Kelas #' . $session['class_id']) . ' — Pertemuan ' . $session['session_number'];
+    $label = ($class ? $class['name'] : 'Kelas #' . $session['class_id']) . ' â€” Pertemuan ' . $session['session_number'];
     elips_audit(
         'status',
         'session',
@@ -2449,7 +2455,7 @@ function elips_action_session_delete(array $p): array
     }
 
     $class = elips_class_row((int) $session['class_id']);
-    $label = ($class ? $class['name'] : 'Kelas #' . $session['class_id']) . ' — Pertemuan ' . $session['session_number'];
+    $label = ($class ? $class['name'] : 'Kelas #' . $session['class_id']) . ' â€” Pertemuan ' . $session['session_number'];
 
     $stmt = elips_db()->prepare('DELETE FROM class_sessions WHERE id = ?');
     $stmt->execute([$id]);
@@ -2620,7 +2626,7 @@ function elips_action_attendance_save_bulk(array $p): array
         'attendance',
         'session',
         $sessionId,
-        ($class ? $class['name'] : 'Kelas #' . $session['class_id']) . ' — Pertemuan ' . $session['session_number'],
+        ($class ? $class['name'] : 'Kelas #' . $session['class_id']) . ' â€” Pertemuan ' . $session['session_number'],
         'Menyimpan presensi sesi pertemuan ' . $session['session_number'] . ': '
             . $saved . ' baru, ' . $updated . ' diperbarui, ' . $corrected . ' dikoreksi.',
         $actor
@@ -2693,7 +2699,7 @@ function elips_action_attendance_correct(array $p): array
     $student = elips_user_row((int) $attendance['student_id']);
     $class = elips_class_row((int) $session['class_id']);
     $label = ($student ? $student['name'] : 'Peserta #' . $attendance['student_id'])
-        . ' — ' . ($class ? $class['name'] : 'Kelas #' . $session['class_id'])
+        . ' â€” ' . ($class ? $class['name'] : 'Kelas #' . $session['class_id'])
         . ' / Pertemuan ' . $session['session_number'];
 
     elips_audit(
@@ -5110,9 +5116,9 @@ function elips_action_grade_save(array $p): array
         'grade',
         'grade',
         $gradeId,
-        $studentName . ' — ' . $course['title'],
+        $studentName . ' â€” ' . $course['title'],
         ($isNewGrade ? 'Memberi' : 'Memperbarui') . ' nilai ' . $score . ' (' . $letter . ')'
-            . ($note ? ' — catatan: ' . $note : '') . ' untuk ' . $studentName
+            . ($note ? ' â€” catatan: ' . $note : '') . ' untuk ' . $studentName
             . ' pada kursus "' . $course['title'] . '".',
         $actor
     );
@@ -5678,7 +5684,7 @@ function elips_action_grade_manual_save(array $p): array
         'grade',
         'grade_component',
         $componentId,
-        $component['name'] . ' — ' . $studentName,
+        $component['name'] . ' â€” ' . $studentName,
         'Menyimpan nilai komponen "' . $component['name'] . '" untuk ' . $studentName
             . ($score !== null ? ' sebesar ' . $score : ' dengan status ' . $status) . '.',
         $actor
@@ -5742,8 +5748,8 @@ function elips_action_grade_exempt(array $p): array
         'exempt',
         'grade_component',
         $componentId,
-        $component['name'] . ' — ' . $studentName,
-        'Memberi pengecualian komponen "' . $component['name'] . '" untuk ' . $studentName . ' — alasan: ' . $reason . '.',
+        $component['name'] . ' â€” ' . $studentName,
+        'Memberi pengecualian komponen "' . $component['name'] . '" untuk ' . $studentName . ' â€” alasan: ' . $reason . '.',
         $actor
     );
 
@@ -5843,7 +5849,7 @@ function elips_action_grade_finalize(array $p): array
             'finalize',
             'grade',
             $gradeId,
-            $studentName . ' — ' . $class['code'],
+            $studentName . ' â€” ' . $class['code'],
             'Memfinalisasi nilai akhir ' . $computed['finalScore'] . ' (' . $computed['letter'] . ') untuk ' . $studentName . '.',
             $actor
         );
@@ -5999,8 +6005,8 @@ function elips_action_grade_correct(array $p): array
         'correct',
         'grade',
         (int) $grade['id'],
-        $studentName . ' — ' . $course['title'],
-        'Mengoreksi nilai dari ' . $previousScore . ' (' . $previousLetter . ') menjadi ' . $newScore . ' (' . $newLetter . ') — alasan: ' . $reason . '.',
+        $studentName . ' â€” ' . $course['title'],
+        'Mengoreksi nilai dari ' . $previousScore . ' (' . $previousLetter . ') menjadi ' . $newScore . ' (' . $newLetter . ') â€” alasan: ' . $reason . '.',
         $actor
     );
 
@@ -6394,7 +6400,7 @@ function elips_action_staff_attendance_create(array $p): array
     }
     $id = (int) $db->lastInsertId();
 
-    $label = ($kind === 'in' ? 'Absensi Masuk' : 'Absensi Pulang') . ' — ' . $attendanceDate;
+    $label = ($kind === 'in' ? 'Absensi Masuk' : 'Absensi Pulang') . ' â€” ' . $attendanceDate;
     $detail = 'Mencatat ' . ($kind === 'in' ? 'absensi masuk' : 'absensi pulang')
         . ' pada ' . $taken->format('Y-m-d H:i')
         . ($locationLabel !== '' ? ' di ' . $locationLabel : '')
@@ -6539,7 +6545,7 @@ function elips_action_staff_attendance_delete(array $p): array
     $delete->execute([$id]);
 
     $label = ($row['kind'] === 'in' ? 'Absensi Masuk' : 'Absensi Pulang')
-        . ' — ' . elips_date_only($row['attendance_date']);
+        . ' â€” ' . elips_date_only($row['attendance_date']);
     $detail = 'Menghapus catatan absensi '
         . ($row['kind'] === 'in' ? 'masuk' : 'pulang')
         . ' milik ' . $ownerName
@@ -6740,12 +6746,12 @@ function elips_action_staff_shift_save(array $p): array
     }
 
     $ownerName = $owner['name'] ?? ('Pengguna #' . $userId);
-    $label = 'Shift ' . elips_staff_shift_label($shiftType) . ' — ' . $shiftDate;
+    $label = 'Shift ' . elips_staff_shift_label($shiftType) . ' â€” ' . $shiftDate;
     $detail = ($existing ? 'Mengubah' : 'Menambahkan')
         . ' shift ' . elips_staff_shift_label($shiftType)
         . ' untuk ' . $ownerName
         . ' pada ' . $shiftDate
-        . ' (' . $startTime . '–' . $endTime . ')'
+        . ' (' . $startTime . 'â€“' . $endTime . ')'
         . ($note !== '' ? '. Catatan: ' . $note : '.');
     elips_audit($existing ? 'update' : 'create', 'staff_shift', $id, $label, $detail, $actor);
 
@@ -6770,12 +6776,12 @@ function elips_action_staff_shift_delete(array $p): array
 
     $ownerName = $row['user_name'] ?? ('Pengguna #' . (int) $row['user_id']);
     $label = 'Shift ' . elips_staff_shift_label((string) $row['shift_type'])
-        . ' — ' . elips_date_only($row['shift_date']);
+        . ' â€” ' . elips_date_only($row['shift_date']);
     $detail = 'Menghapus shift ' . elips_staff_shift_label((string) $row['shift_type'])
         . ' milik ' . $ownerName
         . ' pada ' . elips_date_only($row['shift_date'])
         . ' (' . substr((string) $row['start_time'], 0, 5)
-        . '–' . substr((string) $row['end_time'], 0, 5) . ').';
+        . 'â€“' . substr((string) $row['end_time'], 0, 5) . ').';
     elips_audit('delete', 'staff_shift', $id, $label, $detail, $actor);
     return elips_ok('Jadwal shift dihapus.');
 }
@@ -6998,7 +7004,7 @@ function elips_action_letter_save(array $p): array
         $id = (int) $db->lastInsertId();
     }
 
-    $label = elips_letter_direction_label($direction) . ' — ' . $letterNumber;
+    $label = elips_letter_direction_label($direction) . ' â€” ' . $letterNumber;
     $detail = ($existing ? 'Mengubah' : 'Menambahkan')
         . ' ' . strtolower(elips_letter_direction_label($direction))
         . ' nomor ' . $letterNumber
@@ -7029,7 +7035,7 @@ function elips_action_letter_delete(array $p): array
     $delete->execute([$id]);
 
     $label = elips_letter_direction_label((string) $row['direction'])
-        . ' — ' . $row['letter_number'];
+        . ' â€” ' . $row['letter_number'];
     $detail = 'Menghapus ' . strtolower(elips_letter_direction_label((string) $row['direction']))
         . ' nomor ' . $row['letter_number']
         . ' perihal ' . $row['subject']
@@ -7564,6 +7570,166 @@ function elips_action_marketing_dashboard(array $p): array
     return elips_marketing_dashboard($p);
 }
 
+
+function elips_action_marketing_client_list(array $p): array
+{
+    $actor = elips_require_marketing_access();
+    $ownerId = elips_marketing_scope_owner($actor, $p);
+
+    $where = '';
+    $args = [];
+    if ($ownerId > 0) {
+        $where = ' WHERE mc.owner_id = ?';
+        $args[] = $ownerId;
+    }
+
+    $stmt = elips_db()->prepare(
+        'SELECT mc.*, u.name AS owner_name, camp.name AS campaign_name
+         FROM marketing_clients mc
+         LEFT JOIN users u ON u.id = mc.owner_id
+         LEFT JOIN marketing_campaigns camp ON camp.id = mc.campaign_id'
+        . $where
+        . ' ORDER BY mc.updated_at DESC, mc.created_at DESC, mc.id DESC'
+    );
+    $stmt->execute($args);
+
+    $clients = array_map('elips_marketing_client_public', $stmt->fetchAll());
+    return elips_ok('Client Marketing dimuat.', ['clients' => $clients]);
+}
+
+function elips_action_marketing_client_save(array $p): array
+{
+    $actor = elips_require_marketing_access();
+    $id = (int) ($p['id'] ?? 0);
+    $existing = $id > 0 ? elips_marketing_client_row($id) : null;
+    if ($id > 0 && !$existing) {
+        return elips_fail('Client tidak ditemukan.');
+    }
+    if ($existing && $actor['role'] !== 'admin' && (int) $existing['owner_id'] !== (int) $actor['id']) {
+        return elips_fail('Anda hanya dapat mengubah client milik Anda.');
+    }
+
+    try {
+        $ownerId = $existing ? (int) $existing['owner_id'] : elips_marketing_write_owner($actor, $p);
+    } catch (ElipsError $e) {
+        return elips_fail($e->getMessage());
+    }
+
+    $name = trim((string) ($p['name'] ?? ''));
+    $company = trim((string) ($p['company'] ?? ''));
+    $pic = trim((string) ($p['pic'] ?? ''));
+    $phone = trim((string) ($p['phone'] ?? ''));
+    $email = trim((string) ($p['email'] ?? ''));
+    $city = trim((string) ($p['city'] ?? ''));
+    $address = trim((string) ($p['address'] ?? ''));
+    $status = strtolower(trim((string) ($p['status'] ?? 'prospek')));
+    $notes = trim((string) ($p['notes'] ?? ''));
+    $campaignRaw = $p['campaignId'] ?? null;
+
+    $campaignId = null;
+    if ($campaignRaw !== null && $campaignRaw !== '' && (int) $campaignRaw > 0) {
+        $campaign = elips_marketing_campaign_row((int) $campaignRaw);
+        if (!$campaign) {
+            return elips_fail('Campaign tidak ditemukan.');
+        }
+        if ((int) $campaign['owner_id'] !== $ownerId) {
+            return elips_fail('Campaign harus milik pemilik client yang sama.');
+        }
+        $campaignId = (int) $campaignRaw;
+    }
+
+    if ($name === '') {
+        return elips_fail('Nama client wajib diisi.');
+    }
+    if (mb_strlen($name) > 150) {
+        return elips_fail('Nama client maksimal 150 karakter.');
+    }
+    if (mb_strlen($company) > 150) {
+        return elips_fail('Nama perusahaan maksimal 150 karakter.');
+    }
+    if (mb_strlen($pic) > 150) {
+        return elips_fail('Nama PIC maksimal 150 karakter.');
+    }
+    if (!$phone && !$email) {
+        return elips_fail('Isi minimal salah satu kontak: telepon atau email.');
+    }
+    if (mb_strlen($phone) > 30) {
+        return elips_fail('Nomor telepon maksimal 30 karakter.');
+    }
+    if ($email !== '' && (mb_strlen($email) > 190 || !filter_var($email, FILTER_VALIDATE_EMAIL))) {
+        return elips_fail('Alamat email client tidak valid.');
+    }
+    if (mb_strlen($city) > 100) {
+        return elips_fail('Kota maksimal 100 karakter.');
+    }
+    if (mb_strlen($address) > 255) {
+        return elips_fail('Alamat maksimal 255 karakter.');
+    }
+    if (!elips_marketing_valid_client_status($status)) {
+        return elips_fail('Status client tidak valid.');
+    }
+    if (mb_strlen($notes) > 1000) {
+        return elips_fail('Catatan client maksimal 1000 karakter.');
+    }
+
+    $db = elips_db();
+    if ($existing) {
+        $stmt = $db->prepare(
+            'UPDATE marketing_clients
+             SET campaign_id = ?, name = ?, company = ?, pic = ?, phone = ?, email = ?, city = ?, address = ?,
+                 status = ?, notes = ?, updated_at = UTC_TIMESTAMP()
+             WHERE id = ?'
+        );
+        $stmt->execute([
+            $campaignId, $name, $company, $pic, $phone, $email, $city, $address,
+            $status, $notes, $id,
+        ]);
+    } else {
+        $stmt = $db->prepare(
+            'INSERT INTO marketing_clients
+                (owner_id, campaign_id, name, company, pic, phone, email, city, address, status, notes, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP())'
+        );
+        $stmt->execute([
+            $ownerId, $campaignId, $name, $company, $pic, $phone, $email, $city, $address,
+            $status, $notes,
+        ]);
+        $id = (int) $db->lastInsertId();
+    }
+
+    $detail = ($existing ? 'Mengubah' : 'Menambahkan')
+        . ' client "' . $name . '"'
+        . ($company !== '' ? ' perusahaan ' . $company : '')
+        . ' status ' . $status . '.';
+    elips_audit($existing ? 'update' : 'create', 'marketing_client', $id, $name, $detail, $actor);
+
+    $row = elips_marketing_client_row($id);
+    return elips_ok(
+        $existing ? 'Client diperbarui.' : 'Client ditambahkan.',
+        $row ? elips_marketing_client_public($row) : null
+    );
+}
+
+function elips_action_marketing_client_delete(array $p): array
+{
+    $actor = elips_require_marketing_access();
+    $id = (int) ($p['id'] ?? 0);
+    $row = elips_marketing_client_row($id);
+    if (!$row) {
+        return elips_fail('Client tidak ditemukan.');
+    }
+    if ($actor['role'] !== 'admin' && (int) $row['owner_id'] !== (int) $actor['id']) {
+        return elips_fail('Anda hanya dapat menghapus client milik Anda.');
+    }
+
+    $stmt = elips_db()->prepare('DELETE FROM marketing_clients WHERE id = ?');
+    $stmt->execute([$id]);
+
+    $detail = 'Menghapus client "' . $row['name'] . '" status ' . $row['status'] . '.';
+    elips_audit('delete', 'marketing_client', $id, $row['name'], $detail, $actor);
+    return elips_ok('Client dihapus.');
+}
+
 function elips_action_marketing_lead_save(array $p): array
 {
     $actor = elips_require_marketing_access();
@@ -7679,7 +7845,7 @@ function elips_action_marketing_lead_save(array $p): array
         $id = (int) $db->lastInsertId();
     }
 
-    $label = $name . ($phone !== '' ? ' — ' . $phone : '');
+    $label = $name . ($phone !== '' ? ' â€” ' . $phone : '');
     $detail = ($existing ? 'Mengubah' : 'Menambahkan')
         . ' lead "' . $name . '"'
         . ' sumber ' . $source
@@ -7710,7 +7876,7 @@ function elips_action_marketing_lead_delete(array $p): array
     $stmt = elips_db()->prepare('DELETE FROM marketing_leads WHERE id = ?');
     $stmt->execute([$id]);
 
-    $label = $row['name'] . (!empty($row['phone']) ? ' — ' . $row['phone'] : '');
+    $label = $row['name'] . (!empty($row['phone']) ? ' â€” ' . $row['phone'] : '');
     $detail = 'Menghapus lead "' . $row['name'] . '" sumber ' . $row['source']
         . ' status ' . $row['status'] . '.';
     elips_audit('delete', 'marketing_lead', $id, $label, $detail, $actor);
@@ -7792,7 +7958,7 @@ function elips_action_marketing_followup_save(array $p): array
     );
     $sync->execute([$nextDate, $leadId]);
 
-    $label = $lead['name'] . ' — ' . $channel;
+    $label = $lead['name'] . ' â€” ' . $channel;
     $detail = ($existing ? 'Mengubah' : 'Mencatat') . ' follow-up ' . $channel
         . ' untuk lead "' . $lead['name'] . '" tanggal ' . $followupDate
         . ($outcome !== '' ? ' hasil: ' . $outcome : '')
@@ -7828,7 +7994,7 @@ function elips_action_marketing_followup_delete(array $p): array
     $stmt = $db->prepare('UPDATE marketing_leads SET next_followup_date = ?, updated_at = UTC_TIMESTAMP() WHERE id = ?');
     $stmt->execute([$nextDate ?: null, (int) $row['lead_id']]);
 
-    $label = ($row['lead_name'] ?? 'Lead') . ' — ' . $row['channel'];
+    $label = ($row['lead_name'] ?? 'Lead') . ' â€” ' . $row['channel'];
     $detail = 'Menghapus follow-up ' . $row['channel']
         . ' untuk lead "' . ($row['lead_name'] ?? '') . '"'
         . ' tanggal ' . elips_date_only($row['followup_date']) . '.';
@@ -7888,7 +8054,7 @@ function elips_action_marketing_target_save(array $p): array
         $id = (int) $db->lastInsertId();
     }
 
-    $label = 'Target ' . $period . ' — ' . ($ownerId > 0 ? ($actor['role'] === 'admin' ? 'Karyawan #' . $ownerId : $actor['name']) : '');
+    $label = 'Target ' . $period . ' â€” ' . ($ownerId > 0 ? ($actor['role'] === 'admin' ? 'Karyawan #' . $ownerId : $actor['name']) : '');
     $detail = 'Menyimpan target Marketing periode ' . $period
         . ': lead ' . $leadsTarget
         . ', follow-up ' . $followupsTarget
@@ -7917,3 +8083,4 @@ function elips_action_notification_clear(): array
     elips_db()->exec('DELETE FROM notifications');
     return elips_ok('Seluruh outbox notifikasi berhasil dibersihkan.');
 }
+
