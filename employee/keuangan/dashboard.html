@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Keuangan - ELIPS LMS</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../../assets/css/style.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link rel="manifest" href="../../manifest.webmanifest">
+    <meta name="theme-color" content="#e98c1e">
+    <link rel="icon" type="image/png" sizes="32x32" href="../../assets/icons/favicon-32.png">
+    <link rel="apple-touch-icon" href="../../assets/icons/apple-touch-icon.png">
+    <script src="../../assets/js/pwa.js" defer></script>
+</head>
+<body>
+    <header class="navbar">
+        <div class="container nav-container">
+            <div class="nav-brand"><i class="bi bi-mortarboard-fill brand-icon"></i><span class="brand-text">ELIPS LMS</span></div>
+            <nav class="nav-menu" id="navMenu">
+                <a href="../../index.html" class="nav-link">Beranda</a>
+                <a href="../shared/dashboard.html" class="nav-link">Dashboard</a>
+                <a href="dashboard.html" class="nav-link active">Keuangan</a>
+            </nav>
+            <div class="nav-actions">
+                <span class="nav-link" style="display:inline-flex;align-items:center;gap:.5rem;"><i class="bi bi-person-badge"></i><span id="employeeName">Karyawan</span></span>
+                <a href="../../index.html" class="btn btn-outline" data-logout>Keluar</a>
+            </div>
+            <button class="nav-toggle" id="navToggle" aria-label="Buka menu"><i class="bi bi-list"></i></button>
+        </div>
+    </header>
+    <div class="dashboard-layout">
+        <aside class="dashboard-sidebar">
+            <div class="dashboard-sidebar-header">
+                <div class="dashboard-user">
+                    <div class="dashboard-avatar" id="employeeAvatar">K</div>
+                    <div class="dashboard-user-info">
+                        <div class="dashboard-user-name" id="employeeSidebarName">Karyawan</div>
+                        <div class="dashboard-user-role" id="employeeDivision">Keuangan</div>
+                    </div>
+                </div>
+            </div>
+            <nav class="dashboard-nav">
+                <a href="../shared/dashboard.html" class="dashboard-nav-link"><i class="bi bi-speedometer2"></i><span>Dashboard</span></a>
+                <a href="../shared/attendance.html" class="dashboard-nav-link"><i class="bi bi-camera"></i><span>Absensi</span></a>
+                <a href="dashboard.html" class="dashboard-nav-link active"><i class="bi bi-cash-coin"></i><span>Keuangan</span></a>
+            </nav>
+        </aside>
+        <main class="dashboard-main">
+            <div class="dashboard-header">
+                <div>
+                    <h1 class="dashboard-title">Dashboard Keuangan</h1>
+                    <p class="dashboard-subtitle">Area kerja divisi Keuangan (dalam penyiapan).</p>
+                </div>
+            </div>
+            <div class="dashboard-section">
+                <div class="dashboard-section-body">
+                    <p style="margin:0 0 .75rem; color: var(--text-secondary);">Struktur folder dan navigasi untuk divisi <strong>Keuangan</strong> telah disiapkan. Tambahkan modul keuangan di folder ini, misalnya:</p>
+                    <ul style="margin:0; color: var(--text-secondary); padding-left: 1.25rem;">
+                        <li><code>employee/keuangan/&lt;modul&gt;.html</code> untuk halaman</li>
+                        <li><code>assets/js/employee/keuangan/&lt;modul&gt;.js</code> untuk logika</li>
+                        <li>Gunakan tabel/data &amp; API yang sudah ada bila relevan, atau tambahkan skema/API baru sesuai kebutuhan.</li>
+                    </ul>
+                </div>
+            </div>
+        </main>
+    </div>
+    <button class="dashboard-sidebar-toggle" id="keuSidebarToggle" type="button" aria-label="Buka menu"><i class="bi bi-list"></i></button>
+    <div class="dashboard-sidebar-backdrop" id="keuSidebarBackdrop"></div>
+    <script src="../../assets/js/config.js"></script>
+    <script src="../../assets/js/core.js"></script>
+    <script src="../../assets/js/api.js"></script>
+    <script src="../../assets/js/utils.js"></script>
+    <script src="../../assets/js/data.js"></script>
+    <script src="../../assets/js/seed.js"></script>
+    <script src="../../assets/js/sync.js"></script>
+    <script src="../../assets/js/progress.js"></script>
+    <script src="../../assets/js/auth.js"></script>
+    <script src="../../assets/js/audit.js"></script>
+    <script src="../../assets/js/notifications.js"></script>
+    <script src="../../assets/js/ui.js"></script>
+    <script src="../../assets/js/employee/shared/common.js"></script>
+    <script src="../../assets/js/employee/keuangan/dashboard.js"></script>
+</body>
+</html>

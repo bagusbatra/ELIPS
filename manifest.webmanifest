@@ -5,7 +5,7 @@
     "description": "Aplikasi absensi karyawan ELIPS LMS: catat kehadiran harian dengan foto, jam server, dan lokasi GPS.",
     "lang": "id",
     "dir": "ltr",
-    "start_url": "./employee/attendance.html",
+    "start_url": "./employee/shared/attendance.html",
     "scope": "./",
     "display": "standalone",
     "display_override": ["standalone", "minimal-ui"],
@@ -45,7 +45,7 @@
             "name": "Absensi Saya",
             "short_name": "Absensi",
             "description": "Buka halaman absen karyawan",
-            "url": "./employee/attendance.html",
+            "url": "./employee/shared/attendance.html",
             "icons": [
                 {
                     "src": "./assets/icons/icon-192.png",

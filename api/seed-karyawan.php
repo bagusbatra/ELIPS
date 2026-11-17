@@ -17,11 +17,11 @@ $employees = [
     ['Dewi Lestari', 'dewi.karyawan@example.com', '081234567801', 'marketing', '2026-10-05'],
     ['Agus Prasetyo', 'agus.karyawan@example.com', '081234567802', 'operasional', '2026-10-06'],
     ['Sri Wahyuni', 'sri.karyawan@example.com', '081234567803', 'keuangan', '2026-10-07'],
-    ['Joko Susilo', 'joko.karyawan@example.com', '081234567804', 'hrd', '2026-10-08'],
+    ['Joko Susilo', 'joko.karyawan@example.com', '081234567804', 'keuangan', '2026-10-08'],
     ['Ratna Sari', 'ratna.karyawan@example.com', '081234567805', 'marketing', '2026-10-09'],
     ['Hendra Gunawan', 'hendra.karyawan@example.com', '081234567806', 'operasional', '2026-10-10'],
     ['Maya Putri', 'maya.karyawan@example.com', '081234567807', 'keuangan', '2026-10-11'],
-    ['Eko Nugroho', 'eko.karyawan@example.com', '081234567808', 'hrd', '2026-10-12'],
+    ['Eko Nugroho', 'eko.karyawan@example.com', '081234567808', 'keuangan', '2026-10-12'],
     ['Nur Aisyah', 'nur.karyawan@example.com', '081234567809', 'marketing', '2026-10-13'],
     ['Bayu Pratama', 'bayu.karyawan@example.com', '081234567810', 'operasional', '2026-10-14'],
 ];

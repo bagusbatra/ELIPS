@@ -167,6 +167,154 @@
         renderRecent(records, loaded.error);
     }
 
+    // ---------- Operasional ----------
+    function loadOperasionalData() {
+        const users = typeof ELIPS.getUsers === 'function' ? ELIPS.getUsers() : [];
+        const branches = typeof ELIPS.getBranches === 'function' ? ELIPS.getBranches() : [];
+        const classes = typeof ELIPS.getClasses === 'function' ? ELIPS.getClasses() : [];
+        const sessions = typeof ELIPS.getClassSessions === 'function' ? ELIPS.getClassSessions() : [];
+        const enrollments = typeof ELIPS.getEnrollments === 'function' ? ELIPS.getEnrollments() : [];
+        const today = todayString();
+
+        const students = users.filter(function (u) {
+            return u && (u.role === 'student' || u.role === 'peserta');
+        });
+        const activeStudents = students.filter(function (u) {
+            return String(u.status || 'aktif').toLowerCase() !== 'nonaktif';
+        });
+        const instructors = users.filter(function (u) {
+            return u && u.role === 'instruktur';
+        });
+        const activeInstructors = instructors.filter(function (u) {
+            return String(u.status || 'aktif').toLowerCase() !== 'nonaktif';
+        });
+
+        const upcomingSessions = sessions.filter(function (s) {
+            const d = String(s.sessionDate || s.date || '');
+            const st = String(s.status || 'scheduled').toLowerCase();
+            return d >= today && st !== 'canceled' && st !== 'cancelled';
+        }).sort(function (a, b) {
+            const da = String(a.sessionDate || a.date || '');
+            const db = String(b.sessionDate || b.date || '');
+            if (da !== db) return da.localeCompare(db);
+            return String(a.startTime || '').localeCompare(String(b.startTime || ''));
+        });
+
+        const branchById = {};
+        branches.forEach(function (b) { branchById[String(b.id)] = b; });
+        const classById = {};
+        classes.forEach(function (c) { classById[String(c.id)] = c; });
+        const userById = {};
+        users.forEach(function (u) { userById[String(u.id)] = u; });
+
+        const activeEnrollments = enrollments.filter(function (e) {
+            const st = String(e.status || 'active').toLowerCase();
+            return st === 'active' || st === 'aktif';
+        });
+
+        const branchStats = {};
+        branches.forEach(function (b) {
+            branchStats[String(b.id)] = { id: b.id, name: b.name || ('Cabang ' + b.id), classes: 0, students: new Set(), upcoming: 0 };
+        });
+        const ensureBranch = function (key, label) {
+            const k = key || '_none';
+            if (!branchStats[k]) branchStats[k] = { id: key, name: label || 'Tanpa Cabang', classes: 0, students: new Set(), upcoming: 0 };
+            return branchStats[k];
+        };
+
+        classes.forEach(function (cls) {
+            const bid = cls.branchId !== undefined && cls.branchId !== null ? String(cls.branchId) : '';
+            const bname = bid && branchById[bid] ? branchById[bid].name : '';
+            ensureBranch(bid, bname).classes += 1;
+        });
+
+        activeEnrollments.forEach(function (enr) {
+            const cls = classById[String(enr.classId)];
+            if (!cls) return;
+            const bid = cls.branchId !== undefined && cls.branchId !== null ? String(cls.branchId) : '';
+            const bname = bid && branchById[bid] ? branchById[bid].name : '';
+            const bs = ensureBranch(bid, bname);
+            const sid = enr.studentId || enr.userId;
+            if (sid) bs.students.add(String(sid));
+        });
+
+        upcomingSessions.forEach(function (s) {
+            const cls = classById[String(s.classId)];
+            const bid = cls && cls.branchId !== undefined && cls.branchId !== null ? String(cls.branchId) : '';
+            const bname = bid && branchById[bid] ? branchById[bid].name : '';
+            ensureBranch(bid, bname).upcoming += 1;
+        });
+
+        return {
+            today: today,
+            students: students,
+            activeStudents: activeStudents,
+            instructors: instructors,
+            activeInstructors: activeInstructors,
+            classes: classes,
+            sessions: sessions,
+            upcomingSessions: upcomingSessions,
+            branches: branches,
+            branchById: branchById,
+            classById: classById,
+            userById: userById,
+            branchStats: branchStats
+        };
+    }
+
+    function renderOperasional() {
+        const data = loadOperasionalData();
+        setText('operasionalStatStudents', data.activeStudents.length);
+        setText('operasionalStatStudentsHint', 'Total: ' + data.students.length + ' peserta');
+        setText('operasionalStatInstructors', data.activeInstructors.length);
+        setText('operasionalStatInstructorsHint', 'Total: ' + data.instructors.length + ' instruktur');
+        setText('operasionalStatClasses', data.classes.length);
+        const running = data.classes.filter(function (c) {
+            const st = String(c.status || '').toLowerCase();
+            return st === 'active' || st === 'aktif' || st === 'ongoing' || st === 'berjalan';
+        }).length;
+        setText('operasionalStatClassesHint', running + ' berjalan • ' + data.branches.length + ' cabang');
+        setText('operasionalStatSessions', data.upcomingSessions.length);
+        const todayCount = data.upcomingSessions.filter(function (s) {
+            return String(s.sessionDate || s.date || '') === data.today;
+        }).length;
+        setText('operasionalStatSessionsHint', todayCount + ' sesi hari ini');
+
+        const branchRows = Object.keys(data.branchStats).map(function (k) { return data.branchStats[k]; })
+            .sort(function (a, b) { return String(a.name).localeCompare(String(b.name)); });
+        setText('operasionalBranchCount', branchRows.length + ' cabang');
+        const branchBody = el('operasionalBranchBody');
+        if (branchBody) {
+            if (branchRows.length === 0) {
+                branchBody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--text-secondary);">Belum ada data cabang.</td></tr>';
+            } else {
+                branchBody.innerHTML = branchRows.map(function (b) {
+                    return '<tr><td>' + escapeHtml(b.name) + '</td><td>' + b.classes + '</td><td>' + b.students.size + '</td><td>' + b.upcoming + '</td></tr>';
+                }).join('');
+            }
+        }
+
+        const sessionBody = el('operasionalSessionBody');
+        if (sessionBody) {
+            const upcoming = data.upcomingSessions.slice(0, 10);
+            if (upcoming.length === 0) {
+                sessionBody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--text-secondary);">Tidak ada jadwal terdekat.</td></tr>';
+            } else {
+                sessionBody.innerHTML = upcoming.map(function (s) {
+                    const cls = data.classById[String(s.classId)] || {};
+                    const bid = cls.branchId !== undefined && cls.branchId !== null ? String(cls.branchId) : '';
+                    const branch = bid && data.branchById[bid] ? data.branchById[bid].name : '-';
+                    const instructor = cls.instructorId && data.userById[String(cls.instructorId)]
+                        ? data.userById[String(cls.instructorId)].name
+                        : (s.instructorName || '-');
+                    const date = s.sessionDate || s.date || '-';
+                    const status = s.status || 'terjadwal';
+                    return '<tr><td>' + escapeHtml(formatDate(date)) + '</td><td>' + escapeHtml(cls.name || cls.className || '-') + '</td><td>' + escapeHtml(branch) + '</td><td>' + escapeHtml(instructor) + '</td><td>' + escapeHtml(status) + '</td></tr>';
+                }).join('');
+            }
+        }
+    }
+
     // ---------- Marketing ----------
 
     function statusLabel(status) {
@@ -647,8 +795,13 @@
         if (divisionEl) divisionEl.textContent = 'Karyawan • ' + divisionLabel;
         const greetingEl = document.getElementById('dashboardGreeting');
         if (greetingEl) {
-            greetingEl.textContent = greetingForNow() + ', ' + user.name
-                + '. Berikut ringkasan kehadiran dan aktivitas Anda hari ini.';
+            if (user.division === 'operasional') {
+                greetingEl.textContent = greetingForNow() + ', ' + user.name
+                    + '. Berikut ringkasan operasional lintas semua cabang hari ini.';
+            } else {
+                greetingEl.textContent = greetingForNow() + ', ' + user.name
+                    + '. Berikut ringkasan kehadiran dan aktivitas Anda hari ini.';
+            }
         }
         const divisionStat = document.getElementById('statDivision');
         if (divisionStat) divisionStat.textContent = divisionLabel;
@@ -673,6 +826,27 @@
             loadMarketing(user, false);
         }
 
+        if (user.division === 'operasional') {
+            const area = el('operasionalArea');
+            if (area) area.style.display = 'block';
+            ['operasionalNavLink', 'operasionalSiswaNavLink', 'operasionalTentorNavLink', 'operasionalAkademikNavLink', 'operasionalJadwalNavLink'].forEach(function (id) {
+                const node = el(id);
+                if (node) node.style.display = '';
+            });
+            renderOperasional();
+        }
+
+        if (user.division === 'keuangan') {
+            const area = el('keuanganArea');
+            if (area) area.style.display = 'block';
+            const navLink = el('keuanganNavLink');
+            if (navLink) navLink.style.display = '';
+            if (greetingEl) {
+                greetingEl.textContent = greetingForNow() + ', ' + user.name
+                    + '. Area keuangan sedang disiapkan; fitur akan ditambahkan bertahap.';
+            }
+        }
+
         window.addEventListener('storage', function (event) {
             if (!event.key || event.key === ELIPS.KEYS.session || event.key === ELIPS.KEYS.staffAttendances
                 || event.key === ELIPS.KEYS.marketingCampaigns
@@ -680,6 +854,12 @@
                 || event.key === ELIPS.KEYS.marketingTargets
                 || event.key === ELIPS.KEYS.marketingClients) {
                 window.location.reload();
+            }
+            if (user.division === 'operasional' && event.key && (
+                event.key === ELIPS.KEYS.users || event.key === ELIPS.KEYS.classes ||
+                event.key === ELIPS.KEYS.classSessions || event.key === ELIPS.KEYS.branches ||
+                event.key === ELIPS.KEYS.enrollments || event.key === ELIPS.KEYS.courses)) {
+                renderOperasional();
             }
         });
         window.addEventListener('pageshow', function (event) {

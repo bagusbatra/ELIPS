@@ -109,13 +109,12 @@
             || role === 'karyawan';
     }
 
-    const USER_DIVISIONS = ['marketing', 'operasional', 'keuangan', 'hrd'];
+    const USER_DIVISIONS = ['marketing', 'operasional', 'keuangan'];
 
     const DIVISION_LABELS = {
         marketing: 'Marketing',
         operasional: 'Operasional',
-        keuangan: 'Keuangan',
-        hrd: 'HRD'
+        keuangan: 'Keuangan'
     };
 
     function isValidDivision(division) {

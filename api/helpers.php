@@ -850,7 +850,7 @@ function elips_sanitize_html(string $html): string
 
 function elips_user_divisions(): array
 {
-    return ['marketing', 'operasional', 'keuangan', 'hrd'];
+    return ['marketing', 'operasional', 'keuangan'];
 }
 
 function elips_normalize_division(string $division): string

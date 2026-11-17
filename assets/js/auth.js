@@ -25,6 +25,7 @@
 
     function basePathPrefix() {
         const path = (window.location.pathname || '').replace(/\\/g, '/');
+        if (/\/employee\/[^/]+\/[^/]*$/.test(path)) return '../../';
         if (/\/(admin|instructor|student|employee)\/[^/]*$/.test(path)) return '../';
         return '';
     }
@@ -33,7 +34,7 @@
         const prefix = basePathPrefix();
         if (role === 'admin') return prefix + 'admin/dashboard.html';
         if (role === 'instruktur') return prefix + 'instructor/dashboard.html';
-        if (role === 'karyawan') return prefix + 'employee/dashboard.html';
+        if (role === 'karyawan') return prefix + 'employee/shared/dashboard.html';
         return prefix + 'student/dashboard.html';
     }
 
