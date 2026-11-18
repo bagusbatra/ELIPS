@@ -933,6 +933,13 @@ function elips_course_public(int $id): ?array
         'lessons' => $lessonCount,
         'totalLessons' => $lessonCount,
         'status' => $course['status'],
+        // Field tampilan katalog (index.html -> ui.js -> landing.js).
+        'location' => (string) ($course['location'] ?? ''),
+        'startDate' => elips_date_only($course['start_date'] ?? null),
+        'meetings' => (int) ($course['meetings'] ?? 0),
+        'price' => (float) ($course['price'] ?? 0),
+        'discountPrice' => (float) ($course['discount_price'] ?? 0),
+        'image' => (string) ($course['image'] ?? ''),
         'createdAt' => elips_date_only($course['created_at']),
         'updatedAt' => elips_iso($course['updated_at']),
     ];

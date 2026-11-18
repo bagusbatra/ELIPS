@@ -115,12 +115,13 @@
                 coursesGrid.innerHTML = '<p style="color: var(--text-secondary);">Belum ada kursus yang dipublikasikan.</p>';
             }
 
-            // Gambar kartu: pakai course.image bila ada, jika tidak gunakan gambar dummy bergantian.
+            // Gambar kartu: pakai course.image bila ada, jika tidak gunakan
+            // foto sementara dari internet (sama dengan data seeder PHP).
             const dummyImages = [
-                'assets/img/course-books.svg',
-                'assets/img/course-chart.svg',
-                'assets/img/course-laptop.svg',
-                'assets/img/course-certificate.svg'
+                'https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?auto=format&fit=crop&w=600&h=400&q=80',
+                'https://images.unsplash.com/photo-1542744173-8e7e53415bb0?auto=format&fit=crop&w=600&h=400&q=80',
+                'https://images.unsplash.com/photo-1497215728101-856f4ea42174?auto=format&fit=crop&w=600&h=400&q=80',
+                'https://images.unsplash.com/photo-1498050108023-c5249f4df085?auto=format&fit=crop&w=600&h=400&q=80'
             ];
             const calendarIcon = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Tanggal mulai"><rect x="3" y="5" width="18" height="16" rx="3"></rect><path d="M3 10h18M8 3v4M16 3v4"></path></svg>';
             const boardIcon = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Jumlah pertemuan"><path d="M3 4h18v12H3z"></path><path d="M12 16v4M8 20h8"></path></svg>';

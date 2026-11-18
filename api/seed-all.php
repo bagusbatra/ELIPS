@@ -23,6 +23,9 @@ $now = new DateTimeImmutable('now', $timezone);
 $today = $now->format('Y-m-d');
 $currentPeriod = $now->format('Y-m');
 $currentYear = $now->format('Y');
+// Tanggal referensi tetap untuk baris yang kuncinya bergantung pada tanggal
+// (absensi & shift). Memakai "today" akan menambah baris baru setiap hari.
+$seedAnchor = new DateTimeImmutable('2026-11-17', $timezone);
 
 $report = [];
 
@@ -83,6 +86,23 @@ function seed_ensure(PDO $db, string $table, array $where, array $data): array
         return [(int) $row['id'], false];
     }
     return [seed_insert($db, $table, $data), true];
+}
+
+/**
+ * Tambahkan kolom bila database lama belum memilikinya (MySQL/MariaDB).
+ */
+function seed_ensure_column(PDO $db, string $table, string $column, string $definition): void
+{
+    $stmt = $db->prepare(
+        'SELECT COUNT(*) FROM information_schema.COLUMNS
+         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?'
+    );
+    $stmt->execute([$table, $column]);
+    if ((int) $stmt->fetchColumn() > 0) {
+        return;
+    }
+    $db->exec("ALTER TABLE `{$table}` ADD COLUMN `{$column}` {$definition}");
+    seed_out("Kolom baru ditambahkan: {$table}.{$column}");
 }
 
 function seed_predicate_letter(PDO $db, float $score): string
@@ -207,6 +227,16 @@ $db->exec(
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
 );
 
+// DDL harus dijalankan sebelum transaksi: ALTER TABLE melakukan commit
+// implisit pada MySQL dan akan membatalkan transaksi seeding.
+// Kolom tampilan katalog dibaca ui.js dan landing.js dari snapshot.
+seed_ensure_column($db, 'courses', 'location', "VARCHAR(150) NOT NULL DEFAULT ''");
+seed_ensure_column($db, 'courses', 'start_date', 'DATE NULL');
+seed_ensure_column($db, 'courses', 'meetings', 'INT UNSIGNED NOT NULL DEFAULT 0');
+seed_ensure_column($db, 'courses', 'price', 'DECIMAL(12,2) NOT NULL DEFAULT 0.00');
+seed_ensure_column($db, 'courses', 'discount_price', 'DECIMAL(12,2) NOT NULL DEFAULT 0.00');
+seed_ensure_column($db, 'courses', 'image', "VARCHAR(255) NOT NULL DEFAULT ''");
+
 $db->beginTransaction();
 
 try {
@@ -221,6 +251,10 @@ try {
         ['Bahasa', 'bahasa'],
         ['Teknologi', 'teknologi'],
         ['Keuangan', 'keuangan'],
+        // Kategori kursus uji yang sudah ada di database (dipakai kursus ke-5).
+        ['Uji', 'uji'],
+        // Program unggulan pada index.html: TI & Desain Grafis.
+        ['Desain Grafis', 'desain-grafis'],
     ];
     $categories = [];
     foreach ($categorySeeds as [$name, $slug]) {
@@ -364,6 +398,12 @@ try {
             'instructor' => 'ahmad@example.com',
             'createdAt' => '2026-09-20',
             'description' => 'Pelatihan ini membahas konsep dasar manajemen, perencanaan, organisasi, kepemimpinan, dan pengendalian untuk meningkatkan efektivitas kerja.',
+            'location' => 'Gubeng',
+            'startDate' => '2027-01-12',
+            'meetings' => 8,
+            'price' => 500000,
+            'discountPrice' => 400000,
+            'image' => 'https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?auto=format&fit=crop&w=600&h=400&q=80',
             'modules' => [
                 'Pengantar Manajemen', 'Perencanaan (Planning)', 'Pengorganisasian (Organizing)',
                 'Kepemimpinan (Leading)', 'Pengendalian (Controlling)', 'Manajemen Sumber Daya Manusia',
@@ -377,6 +417,12 @@ try {
             'instructor' => 'siti@example.com',
             'createdAt' => '2026-09-25',
             'description' => 'Meningkatkan kemampuan komunikasi verbal, non-verbal, mendengarkan aktif, dan membangun hubungan yang harmonis di lingkungan kerja.',
+            'location' => 'Buduran',
+            'startDate' => '2027-01-26',
+            'meetings' => 6,
+            'price' => 350000,
+            'discountPrice' => 297500,
+            'image' => 'https://images.unsplash.com/photo-1542744173-8e7e53415bb0?auto=format&fit=crop&w=600&h=400&q=80',
             'modules' => [
                 'Dasar Komunikasi Efektif', 'Komunikasi Verbal & Non-Verbal', 'Mendengarkan Aktif',
                 'Komunikasi dalam Tim', 'Menangani Konflik', 'Presentasi & Negosiasi',
@@ -389,6 +435,12 @@ try {
             'instructor' => 'budi@example.com',
             'createdAt' => '2026-09-28',
             'description' => 'Pengelolaan arsip, surat menyurat, pengarsipan digital, penggunaan aplikasi perkantoran, dan tata kelola administrasi yang efisien.',
+            'location' => 'Candi',
+            'startDate' => '2027-02-09',
+            'meetings' => 10,
+            'price' => 750000,
+            'discountPrice' => 525000,
+            'image' => 'https://images.unsplash.com/photo-1497215728101-856f4ea42174?auto=format&fit=crop&w=600&h=400&q=80',
             'modules' => [
                 'Pengantar Administrasi Perkantoran', 'Pengelolaan Arsip', 'Surat Menyurat',
                 'Kearsipan Digital', 'Aplikasi Perkantoran', 'Tata Kelola Administrasi',
@@ -402,8 +454,70 @@ try {
             'instructor' => 'ahmad@example.com',
             'createdAt' => '2026-10-02',
             'description' => 'Kelas rombel Microsoft Word, Microsoft Excel, dan Microsoft PowerPoint untuk kebutuhan administrasi perkantoran.',
+            'location' => 'Gubeng',
+            'startDate' => '2027-02-23',
+            'meetings' => 12,
+            'price' => 1200000,
+            'discountPrice' => 900000,
+            'image' => 'https://images.unsplash.com/photo-1498050108023-c5249f4df085?auto=format&fit=crop&w=600&h=400&q=80',
             'modules' => [
                 'Pengenalan Microsoft Word', 'Microsoft Excel Dasar', 'Microsoft PowerPoint', 'Praktik Terpadu',
+            ],
+        ],
+        [
+            'title' => 'Kursus Server Mode',
+            'category' => 'Uji',
+            'categorySlug' => 'uji',
+            'instructor' => 'ahmad@example.com',
+            'createdAt' => '2026-11-12',
+            'description' => 'Dari JSDOM',
+            'location' => 'Candi',
+            'startDate' => '2027-03-09',
+            'meetings' => 4,
+            'price' => 250000,
+            'discountPrice' => 200000,
+            'image' => 'https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=600&h=400&q=80',
+            'modules' => [
+                'Pengantar Mode Server', 'Sinkronisasi Data', 'Studi Kasus',
+            ],
+        ],
+        [
+            'title' => 'Program Unggulan Teknologi Informasi',
+            'category' => 'Teknologi',
+            'categorySlug' => 'teknologi',
+            'instructor' => 'dian.instruktur@example.com',
+            'createdAt' => '2026-11-14',
+            'description' => 'Program 12 bulan di bidang Teknologi Informasi: jaringan, pemrograman web, basis data, dan keamanan digital dasar.',
+            'location' => 'Gubeng',
+            'startDate' => '2027-01-04',
+            'meetings' => 48,
+            'price' => 1800000,
+            'discountPrice' => 1500000,
+            'image' => 'https://images.unsplash.com/photo-1461749280684-dccba630e2f6?auto=format&fit=crop&w=600&h=400&q=80',
+            'modules' => [
+                'Fondasi: Perangkat & Sistem', 'Jaringan Komputer dan Dukungan Teknis',
+                'Pemrograman Web Dasar', 'Basis Data dan Pengolahan Data',
+                'Keamanan Digital Dasar', 'Proyek Nyata',
+                'Portofolio dan Uji Akhir',
+            ],
+        ],
+        [
+            'title' => 'Program Unggulan Desain Grafis',
+            'category' => 'Desain Grafis',
+            'categorySlug' => 'desain-grafis',
+            'instructor' => 'rudi.instruktur@example.com',
+            'createdAt' => '2026-11-14',
+            'description' => 'Program 12 bulan di bidang Desain Grafis: prinsip desain, vektor, branding, dan editing foto/video dasar.',
+            'location' => 'Candi',
+            'startDate' => '2027-01-04',
+            'meetings' => 48,
+            'price' => 1800000,
+            'discountPrice' => 1500000,
+            'image' => 'https://images.unsplash.com/photo-1626785774573-4b799315345d?auto=format&fit=crop&w=600&h=400&q=80',
+            'modules' => [
+                'Fondasi: Prinsip Desain, Warna, dan Tipografi', 'Ilustrasi dan Desain Vektor',
+                'Branding, Logo, dan Konten Media Sosial', 'Editing Foto dan Video Dasar',
+                'Proyek Nyata', 'Portofolio dan Uji Akhir',
             ],
         ],
     ];
@@ -419,22 +533,36 @@ try {
             'description' => (string) $seed['description'],
             'instructor_id' => $instructorId,
             'status' => 'published',
+            'location' => (string) $seed['location'],
+            'start_date' => (string) $seed['startDate'],
+            'meetings' => (int) $seed['meetings'],
+            'price' => (float) $seed['price'],
+            'discount_price' => (float) $seed['discountPrice'],
+            'image' => (string) $seed['image'],
             'created_at' => (string) $seed['createdAt'],
             'updated_at' => gmdate('Y-m-d H:i:s'),
         ]);
+        $courseDisplay = [
+            (string) $seed['category'],
+            $categories[(string) $seed['categorySlug']],
+            (string) $seed['description'],
+            $instructorId,
+            (string) $seed['location'],
+            (string) $seed['startDate'],
+            (int) $seed['meetings'],
+            (float) $seed['price'],
+            (float) $seed['discountPrice'],
+            (string) $seed['image'],
+        ];
         if ($created) {
             seed_bump('courses');
         } else {
             $stmt = $db->prepare(
-                "UPDATE courses SET category = ?, category_id = ?, instructor_id = ?, status = 'published',
-                    updated_at = UTC_TIMESTAMP() WHERE id = ?"
+                "UPDATE courses SET category = ?, category_id = ?, description = ?, instructor_id = ?,
+                    location = ?, start_date = ?, meetings = ?, price = ?, discount_price = ?, image = ?,
+                    status = 'published', updated_at = UTC_TIMESTAMP() WHERE id = ?"
             );
-            $stmt->execute([
-                (string) $seed['category'],
-                $categories[(string) $seed['categorySlug']],
-                $instructorId,
-                $courseId,
-            ]);
+            $stmt->execute(array_merge($courseDisplay, [$courseId]));
         }
 
         $version = seed_find($db, 'curriculum_versions', ['course_id' => $courseId, 'code' => '1.0']);
@@ -1955,7 +2083,10 @@ try {
             continue;
         }
         $certificateIndex++;
-        $certificateNumber = 'CERT-2026-MSO-' . str_pad((string) $certificateIndex, 3, '0', STR_PAD_LEFT);
+        // Format kanonik sama dengan utils.js / elips_generate_certificate_number():
+        // CERT-<tahun>-<6 heksadesimal besar>.
+        $certificateNumber = 'CERT-' . $currentYear . '-'
+            . strtoupper(substr(md5('elips-seed-certificate-' . $certificateIndex), 0, 6));
         $certificateStatus = $certificateIndex === 5 ? 'draft' : 'publish';
         $issuedAt = seed_add_days($graduatedClass['periodEnd'], 2) . ' 10:00:00';
         [$certificateId, $created] = seed_ensure($db, 'certificates', ['enrollment_id' => $enrollment['id']], [
@@ -1975,6 +2106,41 @@ try {
         if ($created) {
             seed_bump('certificates');
         }
+
+        // Migrasi data seed lama yang memakai format CERT-2026-MSO-### agar
+        // konsisten dengan generator sertifikat aplikasi.
+        $certificateRow = seed_find($db, 'certificates', ['id' => $certificateId]);
+        $oldCertificateNumber = $certificateRow ? (string) $certificateRow['certificate_number'] : '';
+        if ($oldCertificateNumber !== ''
+            && $oldCertificateNumber !== $certificateNumber
+            && preg_match('/^CERT-\d{4}-MSO-\d{3}$/', $oldCertificateNumber)) {
+            $db->prepare('UPDATE certificates SET certificate_number = ?, updated_at = UTC_TIMESTAMP() WHERE id = ?')
+                ->execute([$certificateNumber, $certificateId]);
+            $db->prepare(
+                "UPDATE audit_logs SET entity_label = ?, detail = REPLACE(detail, ?, ?)
+                 WHERE entity = 'certificate' AND entity_id = ? AND (entity_label = ? OR detail LIKE ?)"
+            )->execute([
+                $certificateNumber,
+                $oldCertificateNumber,
+                $certificateNumber,
+                $certificateId,
+                $oldCertificateNumber,
+                '%' . $oldCertificateNumber . '%',
+            ]);
+            $db->prepare(
+                "UPDATE notifications SET subject = REPLACE(subject, ?, ?), entity_label = ?
+                 WHERE entity = 'certificate' AND entity_id = ? AND (entity_label = ? OR subject LIKE ?)"
+            )->execute([
+                $oldCertificateNumber,
+                $certificateNumber,
+                $certificateNumber,
+                $certificateId,
+                $oldCertificateNumber,
+                '%' . $oldCertificateNumber . '%',
+            ]);
+            seed_out('Nomor sertifikat dinormalisasi: ' . $oldCertificateNumber . ' -> ' . $certificateNumber);
+        }
+
         if ($certificateStatus === 'publish') {
             $publishedCertificates[] = [
                 'id' => $certificateId,
@@ -2270,7 +2436,7 @@ try {
             $employees[] = $users[$email];
         }
     }
-    $attendanceStart = $now->modify('-9 days');
+    $attendanceStart = $seedAnchor->modify('-9 days');
     for ($dayOffset = 0; $dayOffset <= 9; $dayOffset++) {
         $attendanceDate = $attendanceStart->modify('+' . $dayOffset . ' days');
         if ((int) $attendanceDate->format('N') >= 6) {
@@ -2334,7 +2500,7 @@ try {
     seed_out('Absensi karyawan siap: ' . count($employees) . ' karyawan');
 
     for ($dayOffset = 0; $dayOffset < 8; $dayOffset++) {
-        $shiftDate = $now->modify('+' . $dayOffset . ' days');
+        $shiftDate = $seedAnchor->modify('+' . $dayOffset . ' days');
         if ((int) $shiftDate->format('N') >= 6) {
             continue;
         }
@@ -2644,7 +2810,9 @@ try {
     if ($db->inTransaction()) {
         $db->rollBack();
     }
-    http_response_code(500);
+    if (!headers_sent()) {
+        http_response_code(500);
+    }
     seed_out('Seed gagal: ' . $error->getMessage());
     if (PHP_SAPI === 'cli') {
         exit(1);

@@ -67,11 +67,12 @@
 
     <main>
         <!-- Hero: hanya foto, penuh lebar layar.
-             Letakkan foto di assets/img/hero.jpg (disarankan 1920 x 800 px untuk desktop;
-             tampilan HP memotong dari tengah). Selama foto belum ada, gambar dummy dipakai. -->
+             Sementara memakai foto dari internet; fallback lokal tetap disimpan
+             jika gagal memuat. Ganti dengan aset sendiri saat foto final tersedia. -->
         <section class="lp-hero" aria-label="Foto utama">
             <h1 class="sr-only">ELIPS LMS: pelatihan terarah dengan sertifikat yang dapat diverifikasi</h1>
-            <img src="assets/img/hero.jpg" width="1920" height="800" fetchpriority="high"
+            <img src="https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=1920&h=800&q=80"
+                 width="1920" height="800" fetchpriority="high"
                  alt="Suasana belajar peserta pelatihan ELIPS"
                  onerror="this.onerror=null;this.src='assets/img/hero-dummy.svg'">
         </section>
@@ -166,29 +167,30 @@
         </section>
 
         <!-- Mitra kerja sama: marquee bergeser ke kanan tanpa henti.
-             Ganti logo contoh di bawah dengan logo mitra asli (<img>), pertahankan dua grup yang identik. -->
+             Logo sementara diambil dari layanan placeholder internet;
+             ganti dengan logo mitra asli saat tersedia. Dua grup tetap identik. -->
         <section class="lp-mitra" aria-label="Perusahaan mitra">
             <div class="lp-marquee" role="group" aria-label="Logo perusahaan mitra">
                 <div class="lp-marquee-track">
                     <div class="lp-marquee-group">
-                        <div class="lp-logo"><svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="8" cy="12" r="6"/><rect x="12" y="6" width="10" height="12" rx="2" opacity=".55"/></svg>Nusantara Teknik</div>
-                        <div class="lp-logo"><svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 3l9 17H3z"/></svg>Surya Mandiri</div>
-                        <div class="lp-logo"><svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2l9 5v10l-9 5-9-5V7z"/></svg>Arunika Digital</div>
-                        <div class="lp-logo"><svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="12" cy="12" r="3"/></svg>Kencana Logistik</div>
-                        <div class="lp-logo"><svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2" opacity=".55"/><rect x="3" y="13" width="8" height="8" rx="2" opacity=".55"/><rect x="13" y="13" width="8" height="8" rx="2"/></svg>Bumi Raya</div>
-                        <div class="lp-logo"><svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 18a9 9 0 0 1 18 0z"/><circle cx="12" cy="7" r="3"/></svg>Cakra Media</div>
-                        <div class="lp-logo"><svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M5 19C5 9 11 4 20 4c0 9-5 15-15 15z"/></svg>Lentera Finansial</div>
-                        <div class="lp-logo"><svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="4" y="10" width="4" height="10" rx="1"/><rect x="10" y="4" width="4" height="16" rx="1"/><rect x="16" y="13" width="4" height="7" rx="1"/></svg>Wiguna Konsultan</div>
+                        <div class="lp-logo"><img src="https://placehold.co/160x48/e2e8f0/475569?text=Nusantara+Teknik" width="160" height="48" loading="lazy" alt="Nusantara Teknik"></div>
+                        <div class="lp-logo"><img src="https://placehold.co/160x48/e2e8f0/475569?text=Surya+Mandiri" width="160" height="48" loading="lazy" alt="Surya Mandiri"></div>
+                        <div class="lp-logo"><img src="https://placehold.co/160x48/e2e8f0/475569?text=Arunika+Digital" width="160" height="48" loading="lazy" alt="Arunika Digital"></div>
+                        <div class="lp-logo"><img src="https://placehold.co/160x48/e2e8f0/475569?text=Kencana+Logistik" width="160" height="48" loading="lazy" alt="Kencana Logistik"></div>
+                        <div class="lp-logo"><img src="https://placehold.co/160x48/e2e8f0/475569?text=Bumi+Raya" width="160" height="48" loading="lazy" alt="Bumi Raya"></div>
+                        <div class="lp-logo"><img src="https://placehold.co/160x48/e2e8f0/475569?text=Cakra+Media" width="160" height="48" loading="lazy" alt="Cakra Media"></div>
+                        <div class="lp-logo"><img src="https://placehold.co/160x48/e2e8f0/475569?text=Lentera+Finansial" width="160" height="48" loading="lazy" alt="Lentera Finansial"></div>
+                        <div class="lp-logo"><img src="https://placehold.co/160x48/e2e8f0/475569?text=Wiguna+Konsultan" width="160" height="48" loading="lazy" alt="Wiguna Konsultan"></div>
                     </div>
                     <div class="lp-marquee-group" aria-hidden="true">
-                        <div class="lp-logo"><svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="8" cy="12" r="6"/><rect x="12" y="6" width="10" height="12" rx="2" opacity=".55"/></svg>Nusantara Teknik</div>
-                        <div class="lp-logo"><svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 3l9 17H3z"/></svg>Surya Mandiri</div>
-                        <div class="lp-logo"><svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2l9 5v10l-9 5-9-5V7z"/></svg>Arunika Digital</div>
-                        <div class="lp-logo"><svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="12" cy="12" r="3"/></svg>Kencana Logistik</div>
-                        <div class="lp-logo"><svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2" opacity=".55"/><rect x="3" y="13" width="8" height="8" rx="2" opacity=".55"/><rect x="13" y="13" width="8" height="8" rx="2"/></svg>Bumi Raya</div>
-                        <div class="lp-logo"><svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 18a9 9 0 0 1 18 0z"/><circle cx="12" cy="7" r="3"/></svg>Cakra Media</div>
-                        <div class="lp-logo"><svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M5 19C5 9 11 4 20 4c0 9-5 15-15 15z"/></svg>Lentera Finansial</div>
-                        <div class="lp-logo"><svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="4" y="10" width="4" height="10" rx="1"/><rect x="10" y="4" width="4" height="16" rx="1"/><rect x="16" y="13" width="4" height="7" rx="1"/></svg>Wiguna Konsultan</div>
+                        <div class="lp-logo"><img src="https://placehold.co/160x48/e2e8f0/475569?text=Nusantara+Teknik" width="160" height="48" loading="lazy" alt=""></div>
+                        <div class="lp-logo"><img src="https://placehold.co/160x48/e2e8f0/475569?text=Surya+Mandiri" width="160" height="48" loading="lazy" alt=""></div>
+                        <div class="lp-logo"><img src="https://placehold.co/160x48/e2e8f0/475569?text=Arunika+Digital" width="160" height="48" loading="lazy" alt=""></div>
+                        <div class="lp-logo"><img src="https://placehold.co/160x48/e2e8f0/475569?text=Kencana+Logistik" width="160" height="48" loading="lazy" alt=""></div>
+                        <div class="lp-logo"><img src="https://placehold.co/160x48/e2e8f0/475569?text=Bumi+Raya" width="160" height="48" loading="lazy" alt=""></div>
+                        <div class="lp-logo"><img src="https://placehold.co/160x48/e2e8f0/475569?text=Cakra+Media" width="160" height="48" loading="lazy" alt=""></div>
+                        <div class="lp-logo"><img src="https://placehold.co/160x48/e2e8f0/475569?text=Lentera+Finansial" width="160" height="48" loading="lazy" alt=""></div>
+                        <div class="lp-logo"><img src="https://placehold.co/160x48/e2e8f0/475569?text=Wiguna+Konsultan" width="160" height="48" loading="lazy" alt=""></div>
                     </div>
                 </div>
             </div>
@@ -205,7 +207,7 @@
                     <form class="lp-cert-form" id="certForm" action="verify-certificate.html" method="get">
                         <label for="nomor-sertifikat" class="lp-label">Nomor sertifikat</label>
                         <div class="lp-cert-row">
-                            <input id="nomor-sertifikat" class="lp-input" type="text" name="no" placeholder="Contoh: ELIPS-2027-000123" autocomplete="off" required>
+                            <input id="nomor-sertifikat" class="lp-input" type="text" name="no" placeholder="Contoh: CERT-2026-ABC123" autocomplete="off" required>
                             <button class="lp-btn lp-btn-solid lp-btn-lg" type="submit">Cek sertifikat</button>
                         </div>
                         <p class="lp-hint">Nomor sertifikat tertera di bagian bawah sertifikat.</p>
@@ -229,8 +231,9 @@
                     <a class="lp-btn lp-btn-slide lp-btn-lg" href="#profil"><span class="lp-slide-txt"><span class="lp-slide-in"><span>Lihat profil lengkap</span><span aria-hidden="true">Kenali ELIPS</span></span></span></a>
                 </div>
                 <div class="lp-profil-media">
-                    <!-- Ganti dengan assets/img/profil.jpg (rasio 4:3, disarankan 1200 x 900 px) -->
-                    <img src="assets/img/profil.jpg" width="1200" height="900" loading="lazy"
+                    <!-- Sementara memakai foto dari internet; ganti dengan aset sendiri saat tersedia. -->
+                    <img src="https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&w=1200&h=900&q=80"
+                         width="1200" height="900" loading="lazy"
                          alt="Suasana kegiatan belajar di ELIPS"
                          onerror="this.onerror=null;this.src='assets/img/course-laptop.svg'">
                 </div>

@@ -10,9 +10,9 @@ body.landing {
     --lp-ink: #1c1410;
     --lp-muted: #5e4d43;
     --lp-orange: #e98c1e;
-    --lp-orange-deep: #a85d06;   /* teks/tombol di atas putih, kontras 4.5:1 */
+    --lp-orange-deep: #e98c1e;   /* teks/tombol di atas putih, kontras 4.5:1 */
     --lp-orange-text: #8a4a03;
-    --lp-bar: #b85508;           /* navbar saat di-scroll (teks putih) */
+    --lp-bar: #e98c1e;           /* navbar saat di-scroll (teks putih) */
     --lp-foot: #9a4607;          /* footer oren gelap (teks terang) */
     --lp-tint: #fff3e8;
     --lp-tint-strong: #ffe6d4;
@@ -610,7 +610,7 @@ body.landing :focus-visible {
     padding: 4px 10px;
     border-radius: 999px;
     background: var(--lp-orange);
-    color: var(--lp-ink);
+    color: var(--lp-tint);
     font-size: 12px;
     font-weight: 700;
     white-space: nowrap;
