@@ -75,6 +75,11 @@
                 instructorId: 2,
                 instructorName: 'Ahmad Fauzi, M.M.',
                 status: 'published',
+                location: 'Gubeng',
+                startDate: '2027-01-12',
+                meetings: 8,
+                price: 500000,
+                discountPrice: 400000,
                 createdAt: '2026-09-20'
             },
             {
@@ -85,6 +90,11 @@
                 instructorId: 3,
                 instructorName: 'Siti Nurhaliza, S.Psi.',
                 status: 'draft',
+                location: 'Buduran',
+                startDate: '2027-01-26',
+                meetings: 6,
+                price: 350000,
+                discountPrice: 297500,
                 createdAt: '2026-09-25'
             },
             {
@@ -95,6 +105,11 @@
                 instructorId: 4,
                 instructorName: 'Budi Santoso, A.Md.',
                 status: 'draft',
+                location: 'Candi',
+                startDate: '2027-02-09',
+                meetings: 10,
+                price: 750000,
+                discountPrice: 525000,
                 createdAt: '2026-09-28'
             },
             {
@@ -105,6 +120,11 @@
                 instructorId: 2,
                 instructorName: 'Ahmad Fauzi, M.M.',
                 status: 'draft',
+                location: 'Gubeng',
+                startDate: '2027-02-23',
+                meetings: 12,
+                price: 1200000,
+                discountPrice: 900000,
                 createdAt: '2026-10-02'
             }
         ];

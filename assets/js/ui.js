@@ -21,7 +21,7 @@
         const sessionUser = ELIPS.getSessionUser();
         if (sessionUser) {
             const dashboardPath = ELIPS.dashboardPathForRole(sessionUser.role);
-            const authActions = document.querySelector('.nav-actions');
+            const authActions = document.querySelector('.nav-actions, .lp-nav-actions');
             if (authActions && authActions.querySelector('a[href$="login.html"]')) {
                 authActions.innerHTML = [
                     '<a href="' + dashboardPath + '" class="btn btn-ghost"><i class="bi bi-speedometer2"></i> Dashboard</a>',
@@ -115,24 +115,68 @@
                 coursesGrid.innerHTML = '<p style="color: var(--text-secondary);">Belum ada kursus yang dipublikasikan.</p>';
             }
 
-            published.forEach(function (course) {
-                const lessons = ELIPS.getLessonsByCourse(course.id).length;
+            // Gambar kartu: pakai course.image bila ada, jika tidak gunakan gambar dummy bergantian.
+            const dummyImages = [
+                'assets/img/course-books.svg',
+                'assets/img/course-chart.svg',
+                'assets/img/course-laptop.svg',
+                'assets/img/course-certificate.svg'
+            ];
+            const calendarIcon = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Tanggal mulai"><rect x="3" y="5" width="18" height="16" rx="3"></rect><path d="M3 10h18M8 3v4M16 3v4"></path></svg>';
+            const boardIcon = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Jumlah pertemuan"><path d="M3 4h18v12H3z"></path><path d="M12 16v4M8 20h8"></path></svg>';
+            const rupiah = function (n) { return 'Rp ' + Number(n).toLocaleString('id-ID'); };
+
+            published.forEach(function (course, index) {
                 const modules = ELIPS.getModulesByCourse(course.id).length;
+                const lessons = ELIPS.getLessonsByCourse(course.id).length;
                 const isEnrolled = enrollments.some(function (e) { return e.courseId === course.id; });
-                const card = document.createElement('a');
-                card.href = 'course-detail.html?id=' + course.id;
-                card.className = 'course-card';
+
+                // Kolom opsional pada data kursus: location, startDate, meetings, price, discountPrice, image.
+                const location = course.location ? String(course.location) : '';
+                const chip = location || course.category || '';
+                const image = course.image || dummyImages[index % dummyImages.length];
+
+                const metaParts = [];
+                if (course.startDate) {
+                    const d = new Date(course.startDate);
+                    if (!isNaN(d.getTime())) {
+                        metaParts.push('<span>' + calendarIcon + d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) + '</span>');
+                    }
+                }
+                if (course.meetings) {
+                    metaParts.push('<span>' + boardIcon + Number(course.meetings) + ' pertemuan</span>');
+                } else if (metaParts.length === 0 && modules > 0) {
+                    // Tanpa jadwal: tampilkan jumlah modul dan pelajaran sebagai gantinya.
+                    metaParts.push('<span>' + boardIcon + modules + ' modul, ' + lessons + ' pelajaran</span>');
+                }
+
+                let priceHtml = '';
+                const price = Number(course.price) || 0;
+                const discountPrice = Number(course.discountPrice) || 0;
+                if (price > 0 && discountPrice > 0 && discountPrice < price) {
+                    const percent = Math.round((1 - discountPrice / price) * 100);
+                    priceHtml = '<div class="lp-price"><div class="lp-price-col"><span class="lp-price-old">' + rupiah(price) +
+                        '</span><span class="lp-price-now">' + rupiah(discountPrice) + '</span></div><span class="lp-badge">-' + percent + '%</span></div>';
+                } else if (price > 0) {
+                    priceHtml = '<div class="lp-price"><div class="lp-price-col"><span class="lp-price-now">' + rupiah(price) + '</span></div></div>';
+                }
+
+                const card = document.createElement('article');
+                card.className = 'lp-card';
+                if (location) card.setAttribute('data-lokasi', location);
                 card.innerHTML = [
-                    '<div class="course-card-img"></div>',
-                    '<div class="course-card-content">',
-                    '  <span class="course-card-category">' + ELIPS.escapeHtml(course.category) + '</span>',
-                    '  <h3 class="course-card-title">' + ELIPS.escapeHtml(course.title) + '</h3>',
-                    '  <p class="course-card-desc">' + ELIPS.escapeHtml(course.description) + '</p>',
-                    '  <div class="course-card-meta">',
-                    '    <span><i class="bi bi-collection"></i> ' + modules + ' Modul</span>',
-                    '    <span><i class="bi bi-journal-text"></i> ' + lessons + ' Pelajaran</span>',
-                    '  </div>',
-                    isEnrolled ? '<div style="margin-top: 0.5rem;"><span class="badge badge-success">Ditugaskan</span></div>' : '',
+                    '<div class="lp-card-media">',
+                    '  <img src="' + ELIPS.escapeHtml(image) + '" alt="" loading="lazy" width="600" height="400">',
+                    chip ? '  <span class="lp-chip">' + ELIPS.escapeHtml(chip) + '</span>' : '',
+                    '</div>',
+                    '<div class="lp-card-body">',
+                    '  <h3 class="lp-card-title">' + ELIPS.escapeHtml(course.title) + '</h3>',
+                    metaParts.length ? '  <div class="lp-card-meta">' + metaParts.join('') + '</div>' : '',
+                    priceHtml,
+                    isEnrolled ? '  <span class="badge badge-success" style="align-self: flex-start;">Ditugaskan</span>' : '',
+                    '  <a class="lp-btn lp-btn-slide" href="course-detail.html?id=' + course.id + '" aria-label="Lihat detail ' + ELIPS.escapeHtml(course.title) + '">',
+                    '    <span class="lp-slide-txt"><span class="lp-slide-in"><span>Lihat Detail</span><span aria-hidden="true">Selengkapnya</span></span></span>',
+                    '  </a>',
                     '</div>'
                 ].join('');
                 coursesGrid.appendChild(card);
