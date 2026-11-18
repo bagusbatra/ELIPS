@@ -5,6 +5,8 @@
 //  2. Menu hamburger: aria-expanded, tutup saat tautan dipilih,
 //     tombol Esc, klik di luar, atau layar melebar.
 //  3. Filter lokasi pada daftar pelatihan.
+//  4. Hero carousel: tiga foto bergantian tiap 10 detik, jeda saat di-hover.
+//  5. Animasi masuk/keluar konten saat scroll atas/bawah (IntersectionObserver).
 // Dimuat SETELAH ui.js, karena ui.js yang merender kartu kursus
 // dan membuka/menutup menu lewat class "active" pada #navMenu.
 // ============================================================
@@ -102,6 +104,81 @@
                     });
                     if (emptyMsg) emptyMsg.hidden = visible !== 0;
                 });
+            }
+        }
+
+        // ---------- 4. Hero carousel: 3 foto, crossfade tiap 10 detik ----------
+        var heroStage = document.querySelector('[data-hero-slides]');
+        var heroSlides = heroStage
+            ? Array.prototype.slice.call(heroStage.querySelectorAll('.lp-hero-slide'))
+            : [];
+        if (heroSlides.length > 1) {
+            var slideIndex = 0;
+            var slideTimer = null;
+            var slideDelay = 10000;
+            var reduceMotion = window.matchMedia
+                && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+            var showSlide = function (next) {
+                heroSlides[slideIndex].classList.remove('is-active');
+                slideIndex = (next + heroSlides.length) % heroSlides.length;
+                heroSlides[slideIndex].classList.add('is-active');
+            };
+            var startSlides = function () {
+                if (slideTimer !== null || reduceMotion) return;
+                slideTimer = window.setInterval(function () {
+                    showSlide(slideIndex + 1);
+                }, slideDelay);
+            };
+            var stopSlides = function () {
+                if (slideTimer === null) return;
+                window.clearInterval(slideTimer);
+                slideTimer = null;
+            };
+
+            heroStage.addEventListener('mouseenter', stopSlides);
+            heroStage.addEventListener('mouseleave', startSlides);
+            heroStage.addEventListener('focusin', stopSlides);
+            heroStage.addEventListener('focusout', startSlides);
+            document.addEventListener('visibilitychange', function () {
+                if (document.hidden) stopSlides();
+                else startSlides();
+            });
+            startSlides();
+        }
+
+        // ---------- 5. Animasi masuk/keluar saat scroll ----------
+        var revealSelector = [
+            '.lp-pel-head',
+            '.lp-grid',
+            '.lp-unggulan > .lp-container > .lp-h2',
+            '.lp-unggulan > .lp-container > .lp-lead',
+            '.lp-tracks > .lp-track',
+            '.lp-h3',
+            '.lp-steps > .lp-step',
+            '.lp-unggulan-cta',
+            '.lp-cert-panel',
+            '.lp-profil-copy',
+            '.lp-profil-media',
+            '.lp-detail-reveal'
+        ].join(',');
+        var revealItems = Array.prototype.slice.call(document.querySelectorAll(revealSelector));
+        if (revealItems.length > 0) {
+            if (!('IntersectionObserver' in window)) {
+                revealItems.forEach(function (el) {
+                    el.classList.add('lp-reveal', 'is-revealed');
+                });
+            } else {
+                revealItems.forEach(function (el, i) {
+                    el.classList.add('lp-reveal');
+                    el.style.setProperty('--reveal-delay', (i % 4) * 60 + 'ms');
+                });
+                var revealObserver = new IntersectionObserver(function (entries) {
+                    entries.forEach(function (entry) {
+                        entry.target.classList.toggle('is-revealed', entry.isIntersecting);
+                    });
+                }, { threshold: 0.05, rootMargin: '0px 0px -6% 0px' });
+                revealItems.forEach(function (el) { revealObserver.observe(el); });
             }
         }
     });

@@ -14,7 +14,7 @@ body.landing {
     --lp-orange-text: #8a4a03;
     --lp-bar: #e98c1e;           /* navbar saat di-scroll (teks putih) */
     --lp-foot: #9a4607;          /* footer oren gelap (teks terang) */
-    --lp-tint: #fff3e8;
+    --lp-tint: #fff5ea;
     --lp-tint-strong: #ffe6d4;
     --lp-line: #f0e2d4;
     --lp-line-strong: #e8d5c4;
@@ -393,15 +393,34 @@ body.landing :focus-visible {
     outline-color: #ffffff;
 }
 
-/* ---------- Hero ---------- */
-.landing .lp-hero img {
-    display: block;
+/* ---------- Hero: crossfade tiga foto ---------- */
+.landing .lp-hero {
+    position: relative;
+    overflow: hidden;
+}
+
+.landing .lp-hero-slides {
+    position: relative;
     width: 100%;
     height: 640px;
     min-height: 360px;
     max-height: 80vh;
-    object-fit: cover;
     background: var(--lp-tint-strong);
+}
+
+.landing .lp-hero-slide {
+    position: absolute;
+    inset: 0;
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    opacity: 0;
+    transition: opacity 1.2s var(--lp-ease);
+}
+
+.landing .lp-hero-slide.is-active {
+    opacity: 1;
 }
 
 /* ---------- Pelatihan ---------- */
@@ -1178,7 +1197,7 @@ body.landing :focus-visible {
         margin-top: 56px;
         font-size: 24px;
     }
-    .landing .lp-hero img {
+    .landing .lp-hero-slides {
         height: auto;
         min-height: 0;
         max-height: none;
@@ -1383,6 +1402,97 @@ body.landing :focus-visible {
     }
 }
 
+/* ---------- Aksen dekoratif minimalis pada section berlatar putih ---------- */
+.landing .lp-pelatihan,
+.landing .lp-sertifikat,
+.landing .lp-mitra {
+    position: relative;
+    overflow: hidden;
+}
+
+.landing .lp-pelatihan::before,
+.landing .lp-pelatihan::after,
+.landing .lp-sertifikat::before,
+.landing .lp-sertifikat::after,
+.landing .lp-mitra::before,
+.landing .lp-mitra::after {
+    content: "";
+    position: absolute;
+    z-index: 0;
+    pointer-events: none;
+}
+
+.landing .lp-pelatihan::before {
+    width: 380px;
+    height: 380px;
+    top: -190px;
+    right: -120px;
+    border: 1px solid rgba(233, 140, 30, 0.18);
+    border-radius: 50%;
+    box-shadow: 0 0 0 60px rgba(233, 140, 30, 0.035);
+}
+
+.landing .lp-pelatihan::after {
+    width: 180px;
+    height: 180px;
+    bottom: -90px;
+    left: -70px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(233, 140, 30, 0.12), transparent 70%);
+}
+
+.landing .lp-sertifikat::before {
+    width: 260px;
+    height: 260px;
+    top: -150px;
+    left: 6%;
+    border: 1px dashed rgba(233, 140, 30, 0.28);
+    border-radius: 50%;
+}
+
+.landing .lp-sertifikat::after {
+    width: 120px;
+    height: 120px;
+    right: 5%;
+    bottom: -60px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(233, 140, 30, 0.12), transparent 70%);
+}
+
+.landing .lp-mitra::before,
+.landing .lp-mitra::after {
+    top: 50%;
+    width: 240px;
+    height: 240px;
+    margin-top: -120px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(233, 140, 30, 0.08), transparent 70%);
+}
+
+.landing .lp-mitra::before { left: -120px; }
+.landing .lp-mitra::after { right: -120px; }
+
+.landing .lp-pelatihan > .lp-container,
+.landing .lp-sertifikat > .lp-container,
+.landing .lp-mitra > .lp-marquee {
+    position: relative;
+    z-index: 1;
+}
+
+/* ---------- Animasi masuk/keluar saat scroll ---------- */
+.landing .lp-reveal {
+    opacity: 0;
+    transform: translateY(28px);
+    transition: opacity 0.7s var(--lp-ease), transform 0.7s var(--lp-ease);
+    transition-delay: var(--reveal-delay, 0ms);
+    will-change: opacity, transform;
+}
+
+.landing .lp-reveal.is-revealed {
+    opacity: 1;
+    transform: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
     html {
         scroll-behavior: auto;
@@ -1392,5 +1502,13 @@ body.landing :focus-visible {
     }
     .landing .lp-marquee-track {
         animation: none;
+    }
+    .landing .lp-hero-slide,
+    .landing .lp-reveal {
+        transition: none !important;
+    }
+    .landing .lp-reveal {
+        opacity: 1;
+        transform: none;
     }
 }

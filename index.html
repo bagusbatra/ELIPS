@@ -66,15 +66,27 @@
     </header>
 
     <main>
-        <!-- Hero: hanya foto, penuh lebar layar.
-             Sementara memakai foto dari internet; fallback lokal tetap disimpan
-             jika gagal memuat. Ganti dengan aset sendiri saat foto final tersedia. -->
+        <!-- Hero: tiga foto bergantian dengan crossfade 10 detik.
+             Animasi diatur landing.js dan berhenti saat kursor berada di atas foto. -->
         <section class="lp-hero" aria-label="Foto utama">
             <h1 class="sr-only">ELIPS LMS: pelatihan terarah dengan sertifikat yang dapat diverifikasi</h1>
-            <img src="https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=1920&h=800&q=80"
-                 width="1920" height="800" fetchpriority="high"
-                 alt="Suasana belajar peserta pelatihan ELIPS"
-                 onerror="this.onerror=null;this.src='assets/img/hero-dummy.svg'">
+            <div class="lp-hero-slides" data-hero-slides>
+                <img class="lp-hero-slide is-active"
+                     src="https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=1920&h=800&q=80"
+                     width="1920" height="800" fetchpriority="high"
+                     alt="Peserta pelatihan ELIPS sedang belajar bersama"
+                     onerror="this.onerror=null;this.src='assets/img/hero-dummy.svg'">
+                <img class="lp-hero-slide"
+                     src="https://images.unsplash.com/photo-1521737711867-e3b97375f902?auto=format&fit=crop&w=1920&h=800&q=80"
+                     width="1920" height="800" loading="lazy"
+                     alt="Diskusi tim dalam pelatihan ELIPS"
+                     onerror="this.onerror=null;this.src='assets/img/hero-dummy.svg'">
+                <img class="lp-hero-slide"
+                     src="https://images.unsplash.com/photo-1552664730-d307ca884978?auto=format&fit=crop&w=1920&h=800&q=80"
+                     width="1920" height="800" loading="lazy"
+                     alt="Sesi kolaborasi peserta program ELIPS"
+                     onerror="this.onerror=null;this.src='assets/img/hero-dummy.svg'">
+            </div>
         </section>
 
         <!-- Pelatihan: kartu dirender oleh assets/js/ui.js, filter lokasi oleh assets/js/landing.js -->
