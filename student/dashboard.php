@@ -1,11 +1,13 @@
 <?php
+// Direktori: student/dashboard.php
 require_once __DIR__ . '/../includes/bootstrap.php';
 $page = [
     'page_script' => 'student/dashboard',
     'roles' => ['peserta'],
     'title' => 'Dashboard Peserta - ELIPS LMS',
     'area' => 'student',
-    'scripts' => ['@crud', 'crud-academic', 'ui'],
+    'css' => ['admin-registrations', 'finance'],
+    'scripts' => ['@crud', 'crud-academic', 'ui', 'pages/student/billing'],
     'sidebar' => 'student',
 ];
 layout('app', $page);
@@ -20,6 +22,8 @@ layout('app', $page);
                 <i class="bi bi-hourglass-split" style="font-size: 1.25rem; margin-top: 0.125rem;"></i>
                 <span id="studentNoticeText"></span>
             </div>
+
+            <div id="billingSection" style="margin-bottom: 1.5rem;"></div>
 
             <div class="dashboard-stats">
                 <div class="stat-card">

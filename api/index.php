@@ -1,4 +1,5 @@
 <?php
+// Direktori: api/index.php
 declare(strict_types=1);
 
 // ============================================================
@@ -49,8 +50,31 @@ try {
         ]);
     }
 
+    // Angka badge sidebar: ringan, tanpa snapshot.
+    if ($action === 'badges') {
+        elips_json_response([
+            'ok' => true,
+            'message' => '',
+            'data' => elips_badge_counts(elips_session_user()),
+        ]);
+    }
+
+    // Bukti pembayaran: berkas, bukan JSON.
+    if ($action === 'payment.proof') {
+        elips_payment_proof_send((int) ($_GET['id'] ?? 0));
+    }
+
     $result = elips_dispatch($action, $payload);
-    if ($result['ok']) {
+    // Aksi baca-saja / publik / keuangan tidak perlu snapshot penuh
+    // (data pembayaran & biodata sengaja tidak ikut snapshot).
+    $noSnapshot = [
+        'course.classes', 'course.register', 'course.registration.list',
+        'activation.info', 'password.forgot', 'password.requests', 'password.reset.issue',
+        'password.request.dismiss', 'password.reset.info', 'password.reset.complete',
+        'payment.mine', 'payment.submit', 'payment.invoices', 'payment.invoice', 'payment.record',
+        'payment.markPaid', 'payment.verify', 'payment.void', 'payment.settings.get', 'payment.settings.save',
+    ];
+    if ($result['ok'] && !in_array($action, $noSnapshot, true)) {
         // Setiap perubahan mengembalikan snapshot terbaru sehingga cache
         // client selalu identik dengan database.
         $result['snapshot'] = elips_snapshot();

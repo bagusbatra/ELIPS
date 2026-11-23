@@ -1,4 +1,5 @@
 <?php
+// Direktori: api/actions.php
 declare(strict_types=1);
 
 // ============================================================
@@ -44,12 +45,52 @@ function elips_dispatch(string $action, array $payload): array
             return elips_action_course_delete($payload);
         case 'course.status':
             return elips_action_course_status($payload);
+        case 'course.classes':
+            return elips_action_course_classes($payload);
         case 'course.register':
             return elips_action_course_register($payload);
         case 'course.registration.list':
             return elips_action_course_registration_list($payload);
-        case 'course.registration.convert':
-            return elips_action_course_registration_convert($payload);
+        case 'registration.sendActivation':
+            return elips_action_registration_send_activation($payload);
+        case 'registration.cancel':
+            return elips_action_registration_cancel($payload);
+        case 'activation.info':
+            return elips_action_activation_info($payload);
+        case 'activation.complete':
+            return elips_action_activation_complete($payload);
+        case 'password.forgot':
+            return elips_action_password_forgot($payload);
+        case 'password.requests':
+            return elips_action_password_requests($payload);
+        case 'password.reset.issue':
+            return elips_action_password_reset_issue($payload);
+        case 'password.request.dismiss':
+            return elips_action_password_request_dismiss($payload);
+        case 'password.reset.info':
+            return elips_action_password_reset_info($payload);
+        case 'password.reset.complete':
+            return elips_action_password_reset_complete($payload);
+        case 'payment.mine':
+            return elips_action_payment_mine($payload);
+        case 'payment.submit':
+            return elips_action_payment_submit($payload);
+        case 'payment.invoices':
+            return elips_action_payment_invoices($payload);
+        case 'payment.invoice':
+            return elips_action_payment_invoice($payload);
+        case 'payment.record':
+            return elips_action_payment_record($payload);
+        case 'payment.markPaid':
+            return elips_action_payment_mark_paid($payload);
+        case 'payment.verify':
+            return elips_action_payment_verify($payload);
+        case 'payment.void':
+            return elips_action_payment_void($payload);
+        case 'payment.settings.get':
+            return elips_action_payment_settings_get($payload);
+        case 'payment.settings.save':
+            return elips_action_payment_settings_save($payload);
         case 'curriculum.create':
             return elips_action_curriculum_create($payload);
         case 'curriculum.update':
@@ -268,31 +309,41 @@ function elips_payload_array(array $payload, string $key): array
 
 function elips_action_auth_login(array $p): array
 {
-    $email = strtolower(trim((string) ($p['email'] ?? '')));
+    require_once __DIR__ . '/activation.php';
+    // Kolom "email" boleh berisi email atau nomor telepon.
+    $identifier = trim((string) ($p['email'] ?? ($p['identifier'] ?? '')));
+    $identifierKey = strpos($identifier, '@') !== false ? strtolower($identifier) : elips_normalize_phone($identifier);
     $password = (string) ($p['password'] ?? '');
     $remember = filter_var($p['remember'] ?? false, FILTER_VALIDATE_BOOLEAN);
-    $limitKey = elips_request_ip() . '|' . $email;
+    $limitKey = elips_request_ip() . '|' . $identifierKey;
+    $generic = 'Email/nomor telepon atau sandi salah.';
 
     $wait = elips_rate_limit_blocked('login', $limitKey);
     if ($wait > 0) {
         return elips_fail('Terlalu banyak percobaan masuk. Coba lagi dalam ' . $wait . ' detik.');
     }
 
-    if ($email === '') return elips_fail('Email wajib diisi.');
+    if ($identifier === '') return elips_fail('Email atau nomor telepon wajib diisi.');
     if ($password === '') return elips_fail('Password wajib diisi.');
 
-    $user = elips_user_by_email($email);
+    $user = elips_user_by_identifier($identifier);
     if (!$user) {
+        // Waktu proses disamakan agar akun yang ada tidak bisa ditebak dari kecepatan respons.
+        password_verify($password, '$2y$10$usesomesillystringforsaltuMtn3DbxqQeUR3ZCVsXFEYq3lq5Gm');
         elips_rate_limit_hit('login', $limitKey);
-        return elips_fail('Email tidak terdaftar. Gunakan akun demo yang tersedia.');
+        return elips_fail($generic);
+    }
+    if ($user['status'] === 'menunggu') {
+        elips_rate_limit_hit('login', $limitKey);
+        return elips_fail('Akun Anda belum diaktifkan. Buka link aktivasi yang dikirim admin untuk membuat sandi.');
+    }
+    if (!password_verify($password, $user['password_hash'])) {
+        elips_rate_limit_hit('login', $limitKey);
+        return elips_fail($generic);
     }
     if ($user['status'] === 'nonaktif') {
         elips_rate_limit_hit('login', $limitKey);
         return elips_fail('Akun Anda nonaktif. Hubungi administrator.');
-    }
-    if (!password_verify($password, $user['password_hash'])) {
-        elips_rate_limit_hit('login', $limitKey);
-        return elips_fail('Password salah.');
     }
     elips_rate_limit_clear('login', $limitKey);
 
@@ -614,14 +665,12 @@ function elips_action_user_create(array $p): array
     if ($division !== '' && !in_array($division, elips_user_divisions(), true)) return elips_fail('Divisi pengguna tidak valid.');
     if (!in_array($status, ['aktif', 'nonaktif'], true)) return elips_fail('Status pengguna tidak valid.');
 
-    $anonymous = $actor === null;
-    if ($anonymous) {
-        // Pendaftaran mandiri hanya boleh membuat akun peserta aktif.
-        if ($role !== 'peserta' || $status !== 'aktif') {
-            return elips_fail('Anda tidak berhak menambahkan pengguna dengan role ini.');
-        }
-        $division = '';
-    } elseif ($actor['role'] !== 'admin') {
+    if ($actor === null) {
+        // Pendaftaran mandiri ditutup: calon siswa mendaftar lewat halaman program,
+        // lalu akunnya dibuat admin lewat link aktivasi.
+        return elips_fail('Pendaftaran akun langsung ditutup. Pilih program di halaman Pelatihan lalu isi formulir pendaftaran.');
+    }
+    if ($actor['role'] !== 'admin') {
         return elips_fail('Anda tidak berhak menambahkan pengguna.');
     }
 
@@ -632,19 +681,16 @@ function elips_action_user_create(array $p): array
         return elips_fail('Email sudah digunakan oleh pengguna lain.');
     }
 
-    $stmt = elips_db()->prepare(
-        'INSERT INTO users (name, email, phone, password_hash, role, division, status, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP())'
-    );
-    $stmt->execute([$name, $email, $phone, password_hash($password, PASSWORD_DEFAULT), $role, $division, $status]);
-    $id = (int) elips_db()->lastInsertId();
+    require_once __DIR__ . '/activation.php';
+    $phoneCheck = elips_user_phone_norm_check($phone, null);
+    if ($phoneCheck['error'] !== '') return elips_fail($phoneCheck['error']);
 
-    if ($anonymous) {
-        $newUser = elips_user_row($id);
-        $_SESSION['user_id'] = $id;
-        $_SESSION['logged_in_at'] = gmdate('c');
-        $_SESSION['session_version'] = $newUser ? (int) $newUser['session_version'] : 0;
-    }
+    $stmt = elips_db()->prepare(
+        'INSERT INTO users (name, email, phone, phone_norm, password_hash, role, division, status, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP())'
+    );
+    $stmt->execute([$name, $email, $phone, $phoneCheck['norm'], password_hash($password, PASSWORD_DEFAULT), $role, $division, $status]);
+    $id = (int) elips_db()->lastInsertId();
 
     elips_audit(
         'create',
@@ -653,7 +699,7 @@ function elips_action_user_create(array $p): array
         $name,
         'Menambahkan pengguna "' . $name . '" dengan role ' . $role
             . ($division !== '' ? ' divisi ' . $division : '') . '.',
-        $anonymous ? elips_user_row($id) : $actor
+        $actor
     );
 
     return elips_ok('Pengguna berhasil ditambahkan.', elips_public_user($id));
@@ -688,8 +734,19 @@ function elips_action_user_update(array $p): array
     if (!filter_var($nextEmail, FILTER_VALIDATE_EMAIL)) return elips_fail('Email tidak valid.');
     if (!in_array($nextRole, ['admin', 'instruktur', 'peserta', 'karyawan'], true)) return elips_fail('Role pengguna tidak valid.');
     if ($nextDivision !== '' && !in_array($nextDivision, elips_user_divisions(), true)) return elips_fail('Divisi pengguna tidak valid.');
-    if (!in_array($nextStatus, ['aktif', 'nonaktif'], true)) return elips_fail('Status pengguna tidak valid.');
+    if ($user['status'] === 'menunggu') {
+        if ($nextStatus !== 'menunggu' || $password !== '') {
+            return elips_fail('Akun ini menunggu aktivasi. Kirim link aktivasi dari menu Pendaftar; sandi dibuat sendiri oleh siswa.');
+        }
+    } elseif (!in_array($nextStatus, ['aktif', 'nonaktif'], true)) {
+        return elips_fail('Status pengguna tidak valid.');
+    }
     if ($password !== '' && strlen($password) < 8) return elips_fail('Password minimal 8 karakter.');
+    require_once __DIR__ . '/activation.php';
+    $phoneCheck = array_key_exists('phone', $data)
+        ? elips_user_phone_norm_check($nextPhone, $id)
+        : ['norm' => $user['phone_norm'] ?? null, 'error' => ''];
+    if ($phoneCheck['error'] !== '') return elips_fail($phoneCheck['error']);
 
     // Divisi hanya bermakna untuk role karyawan.
     if ($nextRole !== 'karyawan') $nextDivision = '';
@@ -709,14 +766,14 @@ function elips_action_user_update(array $p): array
 
     if ($password !== '') {
         $stmt = elips_db()->prepare(
-            'UPDATE users SET name = ?, email = ?, phone = ?, role = ?, division = ?, status = ?, password_hash = ?, updated_at = UTC_TIMESTAMP() WHERE id = ?'
+            'UPDATE users SET name = ?, email = ?, phone = ?, phone_norm = ?, role = ?, division = ?, status = ?, password_hash = ?, updated_at = UTC_TIMESTAMP() WHERE id = ?'
         );
-        $stmt->execute([$nextName, $nextEmail, $nextPhone, $nextRole, $nextDivision, $nextStatus, password_hash($password, PASSWORD_DEFAULT), $id]);
+        $stmt->execute([$nextName, $nextEmail, $nextPhone, $phoneCheck['norm'], $nextRole, $nextDivision, $nextStatus, password_hash($password, PASSWORD_DEFAULT), $id]);
     } else {
         $stmt = elips_db()->prepare(
-            'UPDATE users SET name = ?, email = ?, phone = ?, role = ?, division = ?, status = ?, updated_at = UTC_TIMESTAMP() WHERE id = ?'
+            'UPDATE users SET name = ?, email = ?, phone = ?, phone_norm = ?, role = ?, division = ?, status = ?, updated_at = UTC_TIMESTAMP() WHERE id = ?'
         );
-        $stmt->execute([$nextName, $nextEmail, $nextPhone, $nextRole, $nextDivision, $nextStatus, $id]);
+        $stmt->execute([$nextName, $nextEmail, $nextPhone, $phoneCheck['norm'], $nextRole, $nextDivision, $nextStatus, $id]);
     }
 
     if ($previous['role'] === 'instruktur' && $nextRole !== 'instruktur') {
@@ -780,6 +837,13 @@ function elips_action_user_delete(array $p): array
     if ($user['role'] === 'admin') {
         $count = (int) elips_db()->query("SELECT COUNT(*) FROM users WHERE role = 'admin'")->fetchColumn();
         if ($count <= 1) return elips_fail('Minimal satu akun Admin harus tersedia.');
+    }
+
+    elips_migrate_activation_schema();
+    $stmt = elips_db()->prepare('SELECT COUNT(*) FROM invoices WHERE student_id = ?');
+    $stmt->execute([$id]);
+    if ((int) $stmt->fetchColumn() > 0) {
+        return elips_fail('Pengguna ini memiliki tagihan/riwayat pembayaran sehingga tidak dapat dihapus. Nonaktifkan akunnya.');
     }
 
     if ($user['role'] === 'instruktur') {
@@ -1088,7 +1152,7 @@ function elips_action_curriculum_create(array $p): array
     $code = trim((string) ($p['code'] ?? ''));
     if ($code === '') $code = elips_next_curriculum_code($courseId);
     $name = trim((string) ($p['name'] ?? ''));
-    if ($name === '') $name = 'Kurikulum ' . $code . ' â€” ' . $course['title'];
+    if ($name === '') $name = 'Kurikulum ' . $code . ' — ' . $course['title'];
 
     $db = elips_db();
     $stmt = $db->prepare('SELECT id FROM curriculum_versions WHERE course_id = ? AND code = ? LIMIT 1');
@@ -1223,7 +1287,7 @@ function elips_action_curriculum_clone(array $p): array
     $code = trim((string) ($p['code'] ?? ''));
     if ($code === '') $code = elips_next_curriculum_code($courseId);
     $name = trim((string) ($p['name'] ?? ''));
-    if ($name === '') $name = 'Kurikulum ' . $code . ' â€” revisi dari ' . $source['code'];
+    if ($name === '') $name = 'Kurikulum ' . $code . ' — revisi dari ' . $source['code'];
 
     $db = elips_db();
     $stmt = $db->prepare('SELECT id FROM curriculum_versions WHERE course_id = ? AND code = ? LIMIT 1');
@@ -1823,7 +1887,7 @@ function elips_action_enrollment_assign(array $p): array
             'create',
             'enrollment',
             $enrollmentId,
-            $student['name'] . ' â€” ' . ($course ? $course['title'] : 'Kursus #' . $courseId),
+            $student['name'] . ' — ' . ($course ? $course['title'] : 'Kursus #' . $courseId),
             'Menugaskan "' . $student['name'] . '" ke kursus "' . ($course ? $course['title'] : 'Kursus #' . $courseId) . '".',
             $actor
         );
@@ -1897,7 +1961,7 @@ function elips_action_enrollment_assign_class(array $p): array
             'create',
             'enrollment',
             $enrollmentId,
-            $student['name'] . ' â€” ' . $class['name'],
+            $student['name'] . ' — ' . $class['name'],
             'Mendaftarkan "' . $student['name'] . '" ke kelas "' . $class['name'] . '" (' . $class['code'] . ').',
             $actor
         );
@@ -1932,7 +1996,7 @@ function elips_action_enrollment_class_status(array $p): array
     $student = elips_user_row((int) $enrollment['student_id']);
     $class = elips_class_row((int) $enrollment['class_id']);
     $label = ($student ? $student['name'] : 'Peserta #' . $enrollment['student_id'])
-        . ' â€” ' . ($class ? $class['name'] : 'Kelas #' . $enrollment['class_id']);
+        . ' — ' . ($class ? $class['name'] : 'Kelas #' . $enrollment['class_id']);
 
     elips_audit(
         'status',
@@ -1963,7 +2027,7 @@ function elips_action_enrollment_status(array $p): array
 
     $student = elips_user_row((int) $enrollment['student_id']);
     $course = elips_course_row((int) $enrollment['course_id']);
-    $label = ($student ? $student['name'] : 'Peserta #' . $enrollment['student_id']) . ' â€” ' .
+    $label = ($student ? $student['name'] : 'Peserta #' . $enrollment['student_id']) . ' — ' .
         ($course ? $course['title'] : 'Kursus #' . $enrollment['course_id']);
 
     elips_audit(
@@ -1992,7 +2056,7 @@ function elips_action_enrollment_delete(array $p): array
     $courseId = (int) $enrollment['course_id'];
     $student = elips_user_row($studentId);
     $course = elips_course_row($courseId);
-    $label = ($student ? $student['name'] : 'Peserta #' . $studentId) . ' â€” ' .
+    $label = ($student ? $student['name'] : 'Peserta #' . $studentId) . ' — ' .
         ($course ? $course['title'] : 'Kursus #' . $courseId);
 
     $db = elips_db();
@@ -2184,7 +2248,7 @@ function elips_session_store(array $class, array $p, array $actor, int $sessionN
         'create',
         'session',
         $id,
-        $class['name'] . ' â€” Pertemuan ' . $sessionNumber,
+        $class['name'] . ' — Pertemuan ' . $sessionNumber,
         'Menambahkan sesi pertemuan ' . $sessionNumber . ' untuk kelas "' . $class['name'] . '" pada '
             . $values['sessionDate'] . ' pukul ' . substr($values['startTime'], 0, 5)
             . '-' . substr($values['endTime'], 0, 5) . ' (' . $values['plannedJp'] . ' JP).',
@@ -2431,7 +2495,7 @@ function elips_action_session_status(array $p): array
     $stmt->execute([$status, round($actualJp, 2), $notes, (int) $actor['id'], $id]);
 
     $class = elips_class_row((int) $session['class_id']);
-    $label = ($class ? $class['name'] : 'Kelas #' . $session['class_id']) . ' â€” Pertemuan ' . $session['session_number'];
+    $label = ($class ? $class['name'] : 'Kelas #' . $session['class_id']) . ' — Pertemuan ' . $session['session_number'];
     elips_audit(
         'status',
         'session',
@@ -2465,7 +2529,7 @@ function elips_action_session_delete(array $p): array
     }
 
     $class = elips_class_row((int) $session['class_id']);
-    $label = ($class ? $class['name'] : 'Kelas #' . $session['class_id']) . ' â€” Pertemuan ' . $session['session_number'];
+    $label = ($class ? $class['name'] : 'Kelas #' . $session['class_id']) . ' — Pertemuan ' . $session['session_number'];
 
     $stmt = elips_db()->prepare('DELETE FROM class_sessions WHERE id = ?');
     $stmt->execute([$id]);
@@ -2636,7 +2700,7 @@ function elips_action_attendance_save_bulk(array $p): array
         'attendance',
         'session',
         $sessionId,
-        ($class ? $class['name'] : 'Kelas #' . $session['class_id']) . ' â€” Pertemuan ' . $session['session_number'],
+        ($class ? $class['name'] : 'Kelas #' . $session['class_id']) . ' — Pertemuan ' . $session['session_number'],
         'Menyimpan presensi sesi pertemuan ' . $session['session_number'] . ': '
             . $saved . ' baru, ' . $updated . ' diperbarui, ' . $corrected . ' dikoreksi.',
         $actor
@@ -2709,7 +2773,7 @@ function elips_action_attendance_correct(array $p): array
     $student = elips_user_row((int) $attendance['student_id']);
     $class = elips_class_row((int) $session['class_id']);
     $label = ($student ? $student['name'] : 'Peserta #' . $attendance['student_id'])
-        . ' â€” ' . ($class ? $class['name'] : 'Kelas #' . $session['class_id'])
+        . ' — ' . ($class ? $class['name'] : 'Kelas #' . $session['class_id'])
         . ' / Pertemuan ' . $session['session_number'];
 
     elips_audit(
@@ -5126,9 +5190,9 @@ function elips_action_grade_save(array $p): array
         'grade',
         'grade',
         $gradeId,
-        $studentName . ' â€” ' . $course['title'],
+        $studentName . ' — ' . $course['title'],
         ($isNewGrade ? 'Memberi' : 'Memperbarui') . ' nilai ' . $score . ' (' . $letter . ')'
-            . ($note ? ' â€” catatan: ' . $note : '') . ' untuk ' . $studentName
+            . ($note ? ' — catatan: ' . $note : '') . ' untuk ' . $studentName
             . ' pada kursus "' . $course['title'] . '".',
         $actor
     );
@@ -5694,7 +5758,7 @@ function elips_action_grade_manual_save(array $p): array
         'grade',
         'grade_component',
         $componentId,
-        $component['name'] . ' â€” ' . $studentName,
+        $component['name'] . ' — ' . $studentName,
         'Menyimpan nilai komponen "' . $component['name'] . '" untuk ' . $studentName
             . ($score !== null ? ' sebesar ' . $score : ' dengan status ' . $status) . '.',
         $actor
@@ -5758,8 +5822,8 @@ function elips_action_grade_exempt(array $p): array
         'exempt',
         'grade_component',
         $componentId,
-        $component['name'] . ' â€” ' . $studentName,
-        'Memberi pengecualian komponen "' . $component['name'] . '" untuk ' . $studentName . ' â€” alasan: ' . $reason . '.',
+        $component['name'] . ' — ' . $studentName,
+        'Memberi pengecualian komponen "' . $component['name'] . '" untuk ' . $studentName . ' — alasan: ' . $reason . '.',
         $actor
     );
 
@@ -5859,7 +5923,7 @@ function elips_action_grade_finalize(array $p): array
             'finalize',
             'grade',
             $gradeId,
-            $studentName . ' â€” ' . $class['code'],
+            $studentName . ' — ' . $class['code'],
             'Memfinalisasi nilai akhir ' . $computed['finalScore'] . ' (' . $computed['letter'] . ') untuk ' . $studentName . '.',
             $actor
         );
@@ -6015,8 +6079,8 @@ function elips_action_grade_correct(array $p): array
         'correct',
         'grade',
         (int) $grade['id'],
-        $studentName . ' â€” ' . $course['title'],
-        'Mengoreksi nilai dari ' . $previousScore . ' (' . $previousLetter . ') menjadi ' . $newScore . ' (' . $newLetter . ') â€” alasan: ' . $reason . '.',
+        $studentName . ' — ' . $course['title'],
+        'Mengoreksi nilai dari ' . $previousScore . ' (' . $previousLetter . ') menjadi ' . $newScore . ' (' . $newLetter . ') — alasan: ' . $reason . '.',
         $actor
     );
 
@@ -6154,6 +6218,9 @@ function elips_action_certificate_approve(array $p): array
     $certificate = $stmt->fetch();
     if (!$certificate) return elips_fail('Sertifikat tidak ditemukan.');
     if ($certificate['status'] !== 'draft') return elips_fail('Sertifikat ini sudah berstatus Publish.');
+
+    $paymentBlock = elips_certificate_payment_block((int) $certificate['student_id'], (int) $certificate['course_id']);
+    if ($paymentBlock !== '') return elips_fail($paymentBlock);
 
     $previousNumber = $certificate['certificate_number'];
     $newNumber = elips_generate_certificate_number();
@@ -6440,7 +6507,7 @@ function elips_action_staff_attendance_create(array $p): array
     }
     $id = (int) $db->lastInsertId();
 
-    $label = ($kind === 'in' ? 'Absensi Masuk' : 'Absensi Pulang') . ' â€” ' . $attendanceDate;
+    $label = ($kind === 'in' ? 'Absensi Masuk' : 'Absensi Pulang') . ' — ' . $attendanceDate;
     $detail = 'Mencatat ' . ($kind === 'in' ? 'absensi masuk' : 'absensi pulang')
         . ' pada ' . $taken->format('Y-m-d H:i')
         . ($locationLabel !== '' ? ' di ' . $locationLabel : '')
@@ -6585,7 +6652,7 @@ function elips_action_staff_attendance_delete(array $p): array
     $delete->execute([$id]);
 
     $label = ($row['kind'] === 'in' ? 'Absensi Masuk' : 'Absensi Pulang')
-        . ' â€” ' . elips_date_only($row['attendance_date']);
+        . ' — ' . elips_date_only($row['attendance_date']);
     $detail = 'Menghapus catatan absensi '
         . ($row['kind'] === 'in' ? 'masuk' : 'pulang')
         . ' milik ' . $ownerName
@@ -6786,12 +6853,12 @@ function elips_action_staff_shift_save(array $p): array
     }
 
     $ownerName = $owner['name'] ?? ('Pengguna #' . $userId);
-    $label = 'Shift ' . elips_staff_shift_label($shiftType) . ' â€” ' . $shiftDate;
+    $label = 'Shift ' . elips_staff_shift_label($shiftType) . ' — ' . $shiftDate;
     $detail = ($existing ? 'Mengubah' : 'Menambahkan')
         . ' shift ' . elips_staff_shift_label($shiftType)
         . ' untuk ' . $ownerName
         . ' pada ' . $shiftDate
-        . ' (' . $startTime . 'â€“' . $endTime . ')'
+        . ' (' . $startTime . '–' . $endTime . ')'
         . ($note !== '' ? '. Catatan: ' . $note : '.');
     elips_audit($existing ? 'update' : 'create', 'staff_shift', $id, $label, $detail, $actor);
 
@@ -6816,12 +6883,12 @@ function elips_action_staff_shift_delete(array $p): array
 
     $ownerName = $row['user_name'] ?? ('Pengguna #' . (int) $row['user_id']);
     $label = 'Shift ' . elips_staff_shift_label((string) $row['shift_type'])
-        . ' â€” ' . elips_date_only($row['shift_date']);
+        . ' — ' . elips_date_only($row['shift_date']);
     $detail = 'Menghapus shift ' . elips_staff_shift_label((string) $row['shift_type'])
         . ' milik ' . $ownerName
         . ' pada ' . elips_date_only($row['shift_date'])
         . ' (' . substr((string) $row['start_time'], 0, 5)
-        . 'â€“' . substr((string) $row['end_time'], 0, 5) . ').';
+        . '–' . substr((string) $row['end_time'], 0, 5) . ').';
     elips_audit('delete', 'staff_shift', $id, $label, $detail, $actor);
     return elips_ok('Jadwal shift dihapus.');
 }
@@ -7044,7 +7111,7 @@ function elips_action_letter_save(array $p): array
         $id = (int) $db->lastInsertId();
     }
 
-    $label = elips_letter_direction_label($direction) . ' â€” ' . $letterNumber;
+    $label = elips_letter_direction_label($direction) . ' — ' . $letterNumber;
     $detail = ($existing ? 'Mengubah' : 'Menambahkan')
         . ' ' . strtolower(elips_letter_direction_label($direction))
         . ' nomor ' . $letterNumber
@@ -7075,7 +7142,7 @@ function elips_action_letter_delete(array $p): array
     $delete->execute([$id]);
 
     $label = elips_letter_direction_label((string) $row['direction'])
-        . ' â€” ' . $row['letter_number'];
+        . ' — ' . $row['letter_number'];
     $detail = 'Menghapus ' . strtolower(elips_letter_direction_label((string) $row['direction']))
         . ' nomor ' . $row['letter_number']
         . ' perihal ' . $row['subject']
@@ -7885,7 +7952,7 @@ function elips_action_marketing_lead_save(array $p): array
         $id = (int) $db->lastInsertId();
     }
 
-    $label = $name . ($phone !== '' ? ' â€” ' . $phone : '');
+    $label = $name . ($phone !== '' ? ' — ' . $phone : '');
     $detail = ($existing ? 'Mengubah' : 'Menambahkan')
         . ' lead "' . $name . '"'
         . ' sumber ' . $source
@@ -7916,7 +7983,7 @@ function elips_action_marketing_lead_delete(array $p): array
     $stmt = elips_db()->prepare('DELETE FROM marketing_leads WHERE id = ?');
     $stmt->execute([$id]);
 
-    $label = $row['name'] . (!empty($row['phone']) ? ' â€” ' . $row['phone'] : '');
+    $label = $row['name'] . (!empty($row['phone']) ? ' — ' . $row['phone'] : '');
     $detail = 'Menghapus lead "' . $row['name'] . '" sumber ' . $row['source']
         . ' status ' . $row['status'] . '.';
     elips_audit('delete', 'marketing_lead', $id, $label, $detail, $actor);
@@ -7998,7 +8065,7 @@ function elips_action_marketing_followup_save(array $p): array
     );
     $sync->execute([$nextDate, $leadId]);
 
-    $label = $lead['name'] . ' â€” ' . $channel;
+    $label = $lead['name'] . ' — ' . $channel;
     $detail = ($existing ? 'Mengubah' : 'Mencatat') . ' follow-up ' . $channel
         . ' untuk lead "' . $lead['name'] . '" tanggal ' . $followupDate
         . ($outcome !== '' ? ' hasil: ' . $outcome : '')
@@ -8034,7 +8101,7 @@ function elips_action_marketing_followup_delete(array $p): array
     $stmt = $db->prepare('UPDATE marketing_leads SET next_followup_date = ?, updated_at = UTC_TIMESTAMP() WHERE id = ?');
     $stmt->execute([$nextDate ?: null, (int) $row['lead_id']]);
 
-    $label = ($row['lead_name'] ?? 'Lead') . ' â€” ' . $row['channel'];
+    $label = ($row['lead_name'] ?? 'Lead') . ' — ' . $row['channel'];
     $detail = 'Menghapus follow-up ' . $row['channel']
         . ' untuk lead "' . ($row['lead_name'] ?? '') . '"'
         . ' tanggal ' . elips_date_only($row['followup_date']) . '.';
@@ -8094,7 +8161,7 @@ function elips_action_marketing_target_save(array $p): array
         $id = (int) $db->lastInsertId();
     }
 
-    $label = 'Target ' . $period . ' â€” ' . ($ownerId > 0 ? ($actor['role'] === 'admin' ? 'Karyawan #' . $ownerId : $actor['name']) : '');
+    $label = 'Target ' . $period . ' — ' . ($ownerId > 0 ? ($actor['role'] === 'admin' ? 'Karyawan #' . $ownerId : $actor['name']) : '');
     $detail = 'Menyimpan target Marketing periode ' . $period
         . ': lead ' . $leadsTarget
         . ', follow-up ' . $followupsTarget
@@ -8128,282 +8195,5 @@ function elips_action_notification_clear(): array
 // Data masuk ke tabel course_registrations sebagai calon peserta.
 // Role student (peserta) dibuat kemudian melalui aksi convert di bawah.
 
-function elips_ensure_course_registration_table(): void
-{
-    static $ready = false;
-    if ($ready) return;
-
-    // CREATE IF NOT EXISTS membuat fitur tetap jalan pada database yang
-    // sudah terpasang sebelum tabel ini ditambahkan ke schema.sql.
-    elips_db()->exec(<<<'SQL'
-CREATE TABLE IF NOT EXISTS `course_registrations` (
-    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
-    `course_id` INT UNSIGNED NOT NULL,
-    `course_title` VARCHAR(200) NOT NULL DEFAULT '',
-    `name` VARCHAR(150) NOT NULL,
-    `birth_place` VARCHAR(100) NOT NULL DEFAULT '',
-    `birth_date` DATE NULL,
-    `address` VARCHAR(500) NOT NULL DEFAULT '',
-    `phone` VARCHAR(40) NOT NULL DEFAULT '',
-    `email` VARCHAR(190) NOT NULL,
-    `status` ENUM('baru', 'dihubungi', 'terdaftar', 'batal') NOT NULL DEFAULT 'baru',
-    `student_id` INT UNSIGNED NULL,
-    `converted_at` DATETIME NULL,
-    `notes` VARCHAR(1000) NOT NULL DEFAULT '',
-    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    `updated_at` DATETIME NULL,
-    PRIMARY KEY (`id`),
-    KEY `idx_course_reg_course` (`course_id`),
-    KEY `idx_course_reg_email` (`email`),
-    KEY `idx_course_reg_status` (`status`),
-    CONSTRAINT `fk_course_reg_course` FOREIGN KEY (`course_id`) REFERENCES `courses` (`id`) ON DELETE CASCADE,
-    CONSTRAINT `fk_course_reg_student` FOREIGN KEY (`student_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-SQL);
-    $ready = true;
-}
-
-function elips_course_registration_row(int $id): ?array
-{
-    elips_ensure_course_registration_table();
-    $stmt = elips_db()->prepare(
-        'SELECT cr.*, u.name AS student_name
-         FROM course_registrations cr
-         LEFT JOIN users u ON u.id = cr.student_id
-         WHERE cr.id = ? LIMIT 1'
-    );
-    $stmt->execute([$id]);
-    $row = $stmt->fetch();
-    return $row ?: null;
-}
-
-function elips_course_registration_public(array $row): array
-{
-    return [
-        'id' => (int) $row['id'],
-        'courseId' => (int) $row['course_id'],
-        'courseTitle' => (string) $row['course_title'],
-        'name' => (string) $row['name'],
-        'birthPlace' => (string) $row['birth_place'],
-        'birthDate' => $row['birth_date'] === null ? null : elips_date_only($row['birth_date']),
-        'address' => (string) $row['address'],
-        'phone' => (string) $row['phone'],
-        'email' => (string) $row['email'],
-        'status' => (string) $row['status'],
-        'studentId' => $row['student_id'] === null ? null : (int) $row['student_id'],
-        'studentName' => (string) ($row['student_name'] ?? ''),
-        'convertedAt' => elips_iso($row['converted_at'] ?? null),
-        'notes' => (string) $row['notes'],
-        'createdAt' => elips_iso($row['created_at']),
-        'updatedAt' => elips_iso($row['updated_at'] ?? null),
-    ];
-}
-
-function elips_action_course_register(array $p): array
-{
-    elips_ensure_course_registration_table();
-
-    // Honeypot: bot yang mengisi field tersembunyi diberi respons sukses
-    // tanpa menyimpan data.
-    if (trim((string) ($p['website'] ?? '')) !== '') {
-        return elips_ok('Data pendaftaran berhasil dikirim.', ['id' => 0, 'accepted' => false]);
-    }
-
-    $courseId = (int) ($p['courseId'] ?? 0);
-    $course = $courseId > 0 ? elips_course_row($courseId) : null;
-    if (!$course) {
-        return elips_fail('Pelatihan tidak ditemukan.');
-    }
-    if (($course['status'] ?? '') !== 'published') {
-        return elips_fail('Pelatihan ini belum dibuka untuk pendaftaran.');
-    }
-
-    $name = trim((string) ($p['name'] ?? ''));
-    $birthPlace = trim((string) ($p['birthPlace'] ?? ''));
-    $birthDate = elips_normalize_date($p['birthDate'] ?? '');
-    $address = trim((string) ($p['address'] ?? ''));
-    $phone = trim((string) ($p['phone'] ?? ''));
-    $email = strtolower(trim((string) ($p['email'] ?? '')));
-
-    if ($name === '' || strlen($name) > 150) {
-        return elips_fail('Nama wajib diisi dan maksimal 150 karakter.');
-    }
-    if ($birthPlace === '' || strlen($birthPlace) > 100) {
-        return elips_fail('Tempat lahir wajib diisi dan maksimal 100 karakter.');
-    }
-    if (!$birthDate) {
-        return elips_fail('Tanggal lahir tidak valid.');
-    }
-    if (strtotime($birthDate . ' 00:00:00') > time()) {
-        return elips_fail('Tanggal lahir tidak boleh di masa depan.');
-    }
-    if ($address === '' || strlen($address) > 500) {
-        return elips_fail('Alamat lengkap wajib diisi dan maksimal 500 karakter.');
-    }
-    if ($phone === '' || strlen($phone) > 40) {
-        return elips_fail('No Telpon/WhatsApp wajib diisi dan maksimal 40 karakter.');
-    }
-    if (!filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($email) > 190) {
-        return elips_fail('Email aktif tidak valid.');
-    }
-
-    // Cegah dobel submit yang tidak sengaja dari email yang sama.
-    $db = elips_db();
-    $dup = $db->prepare(
-        "SELECT id FROM course_registrations
-         WHERE course_id = ? AND email = ? AND status <> 'batal'
-           AND created_at >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 1 DAY)
-         LIMIT 1"
-    );
-    $dup->execute([$courseId, $email]);
-    if ($dup->fetch()) {
-        return elips_fail('Data pendaftaran dengan email ini untuk pelatihan tersebut sudah dikirim. Kami akan segera menghubungimu.');
-    }
-
-    $stmt = $db->prepare(
-        "INSERT INTO course_registrations
-            (course_id, course_title, name, birth_place, birth_date, address, phone, email, status, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'baru', UTC_TIMESTAMP())"
-    );
-    $stmt->execute([
-        $courseId,
-        (string) $course['title'],
-        $name,
-        $birthPlace,
-        $birthDate,
-        $address,
-        $phone,
-        $email,
-    ]);
-    $id = (int) $db->lastInsertId();
-
-    elips_audit(
-        'create',
-        'course_registration',
-        $id,
-        $name . ' — ' . $course['title'],
-        'Pendaftaran publik dari halaman detail kursus.'
-    );
-
-    $row = elips_course_registration_row($id);
-    return elips_ok(
-        'Data pendaftaran berhasil dikirim. Kami akan menghubungimu.',
-        $row ? elips_course_registration_public($row) : ['id' => $id]
-    );
-}
-
-function elips_action_course_registration_list(array $p): array
-{
-    elips_require_marketing_access();
-    elips_ensure_course_registration_table();
-
-    $where = [];
-    $params = [];
-
-    $courseId = (int) ($p['courseId'] ?? 0);
-    if ($courseId > 0) {
-        $where[] = 'cr.course_id = ?';
-        $params[] = $courseId;
-    }
-
-    $status = (string) ($p['status'] ?? '');
-    if (in_array($status, ['baru', 'dihubungi', 'terdaftar', 'batal'], true)) {
-        $where[] = 'cr.status = ?';
-        $params[] = $status;
-    }
-
-    $sql = 'SELECT cr.*, u.name AS student_name
-            FROM course_registrations cr
-            LEFT JOIN users u ON u.id = cr.student_id';
-    if ($where) {
-        $sql .= ' WHERE ' . implode(' AND ', $where);
-    }
-    $sql .= ' ORDER BY cr.created_at DESC, cr.id DESC';
-
-    $stmt = elips_db()->prepare($sql);
-    $stmt->execute($params);
-
-    $items = [];
-    foreach ($stmt->fetchAll() as $row) {
-        $items[] = elips_course_registration_public($row);
-    }
-    return elips_ok('', $items);
-}
-
-function elips_action_course_registration_convert(array $p): array
-{
-    $actor = elips_require_admin();
-    elips_ensure_course_registration_table();
-
-    $id = (int) ($p['id'] ?? 0);
-    $row = elips_course_registration_row($id);
-    if (!$row) {
-        return elips_fail('Pendaftaran tidak ditemukan.');
-    }
-    if ($row['status'] === 'terdaftar') {
-        return elips_fail('Pendaftaran ini sudah dikonversi menjadi peserta.');
-    }
-    if ($row['status'] === 'batal') {
-        return elips_fail('Pendaftaran yang dibatalkan tidak dapat dikonversi.');
-    }
-
-    $existing = elips_user_by_email((string) $row['email']);
-    $created = false;
-
-    if ($existing) {
-        if (($existing['role'] ?? '') !== 'peserta') {
-            return elips_fail('Email sudah digunakan oleh pengguna dengan role lain.');
-        }
-        if (($existing['status'] ?? '') !== 'aktif') {
-            return elips_fail('Akun peserta dengan email ini sedang nonaktif.');
-        }
-        $studentId = (int) $existing['id'];
-    } else {
-        $password = (string) ($p['password'] ?? '');
-        if (strlen($password) < 8) {
-            return elips_fail('Password awal minimal 8 karakter.');
-        }
-        $stmt = elips_db()->prepare(
-            "INSERT INTO users (name, email, phone, password_hash, role, division, status, created_at)
-             VALUES (?, ?, ?, ?, 'peserta', '', 'aktif', UTC_TIMESTAMP())"
-        );
-        $stmt->execute([
-            (string) $row['name'],
-            (string) $row['email'],
-            (string) $row['phone'],
-            password_hash($password, PASSWORD_DEFAULT),
-        ]);
-        $studentId = (int) elips_db()->lastInsertId();
-        $created = true;
-    }
-
-    $stmt = elips_db()->prepare(
-        "UPDATE course_registrations
-         SET status = 'terdaftar', student_id = ?, converted_at = UTC_TIMESTAMP(),
-             updated_at = UTC_TIMESTAMP()
-         WHERE id = ?"
-    );
-    $stmt->execute([$studentId, $id]);
-
-    elips_audit(
-        $created ? 'create' : 'update',
-        'course_registration',
-        $id,
-        (string) $row['name'] . ' — ' . (string) $row['course_title'],
-        $created
-            ? 'Mengonversi pendaftaran menjadi akun peserta baru (student role).'
-            : 'Menghubungkan pendaftaran ke akun peserta yang sudah ada.',
-        $actor
-    );
-
-    $updated = elips_course_registration_row($id);
-    return elips_ok(
-        $created ? 'Pendaftaran berhasil menjadi akun peserta.' : 'Pendaftaran berhasil dihubungkan ke akun peserta.',
-        [
-            'registration' => $updated ? elips_course_registration_public($updated) : null,
-            'user' => elips_public_user($studentId),
-        ]
-    );
-}
-
+require_once __DIR__ . '/registrations.php';
 require_once __DIR__ . '/attendance_rules.php';

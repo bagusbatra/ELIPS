@@ -1,4 +1,5 @@
 <?php
+// Direktori: employee/keuangan/dashboard.php
 require_once __DIR__ . '/../../includes/bootstrap.php';
 $page = [
     'roles' => ['admin', 'karyawan'],
@@ -14,17 +15,13 @@ layout('app', $page);
             <div class="dashboard-header">
                 <div>
                     <h1 class="dashboard-title">Dashboard Keuangan</h1>
-                    <p class="dashboard-subtitle">Area kerja divisi Keuangan (dalam penyiapan).</p>
+                    <p class="dashboard-subtitle">Area kerja divisi Keuangan.</p>
                 </div>
             </div>
             <div class="dashboard-section">
                 <div class="dashboard-section-body">
-                    <p style="margin:0 0 .75rem; color: var(--text-secondary);">Struktur folder dan navigasi untuk divisi <strong>Keuangan</strong> telah disiapkan. Tambahkan modul keuangan di folder ini, misalnya:</p>
-                    <ul style="margin:0; color: var(--text-secondary); padding-left: 1.25rem;">
-                        <li><code>employee/keuangan/&lt;modul&gt;.php</code> untuk halaman</li>
-                        <li><code>assets/js/employee/keuangan/&lt;modul&gt;.js</code> untuk logika</li>
-                        <li>Gunakan tabel/data &amp; API yang sudah ada bila relevan, atau tambahkan skema/API baru sesuai kebutuhan.</li>
-                    </ul>
+                    <p style="margin:0 0 1rem; color: var(--text-secondary);">Verifikasi bukti pembayaran siswa, catat pembayaran sebagian, dan lunasi tagihan di menu Pembayaran.</p>
+                    <a class="btn btn-primary" href="<?= url('employee/keuangan/payments.php') ?>"><i class="bi bi-receipt"></i> Buka Pembayaran Siswa</a>
                 </div>
             </div>
         </main>

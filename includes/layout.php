@@ -1,4 +1,5 @@
 <?php
+// Direktori: includes/layout.php
 declare(strict_types=1);
 
 // ============================================================
@@ -80,8 +81,24 @@ function elips_crud_scripts(): array
 }
 
 /**
- * Nama bundel (tanpa .js) bila bundel aktif dan lebih baru dari semua sumbernya,
- * selain itu null -> pakai berkas satuan.
+ * Sidik jari isi berkas sumber bundel (urutan ikut dihitung). Dipakai build-assets.php
+ * untuk menulis dist/manifest.json dan di sini untuk mendeteksi bundel basi.
+ */
+function elips_bundle_hash(array $sources): string
+{
+    $ctx = hash_init('sha1');
+    foreach ($sources as $name) {
+        $src = ELIPS_ROOT . '/assets/js/' . $name . '.js';
+        hash_update($ctx, $name . ':' . (is_file($src) ? (string) sha1_file($src) : 'missing') . "\n");
+    }
+    return hash_final($ctx);
+}
+
+/**
+ * Nama bundel (tanpa .js) bila bundel aktif dan dibangun dari isi sumber yang
+ * sama persis dengan sekarang (dicek lewat dist/manifest.json), selain itu null
+ * -> pakai berkas satuan. Pengecekan memakai isi berkas, bukan waktu ubah, jadi
+ * tetap benar setelah git clone / salin berkas.
  */
 function elips_bundle_for(string $bundle, array $sources): ?string
 {
@@ -89,17 +106,20 @@ function elips_bundle_for(string $bundle, array $sources): ?string
         return null;
     }
     $file = ELIPS_ROOT . '/assets/js/dist/' . $bundle . '.js';
-    if (!is_file($file)) {
+    $manifestFile = ELIPS_ROOT . '/assets/js/dist/manifest.json';
+    if (!is_file($file) || !is_file($manifestFile)) {
         return null;
     }
-    $built = filemtime($file);
-    foreach ($sources as $name) {
-        $src = ELIPS_ROOT . '/assets/js/' . $name . '.js';
-        if (is_file($src) && filemtime($src) > $built) {
-            return null;
-        }
+    static $manifest = null;
+    if ($manifest === null) {
+        $decoded = json_decode((string) file_get_contents($manifestFile), true);
+        $manifest = is_array($decoded) ? $decoded : [];
     }
-    return 'dist/' . $bundle;
+    static $hashes = [];
+    if (!isset($hashes[$bundle])) {
+        $hashes[$bundle] = elips_bundle_hash($sources);
+    }
+    return (($manifest[$bundle] ?? '') === $hashes[$bundle]) ? 'dist/' . $bundle : null;
 }
 
 /** Daftar akhir berkas JS halaman: inti + modul halaman ('@crud' diperluas). */

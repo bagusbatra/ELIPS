@@ -1,4 +1,5 @@
 <?php
+// Direktori: index.php
 require_once __DIR__ . '/includes/bootstrap.php';
 $page = [
     'title' => 'ELIPS LMS - Platform Pelatihan dan Kursus Bersertifikat',
@@ -152,7 +153,7 @@ layout('page', $page);
                     </li>
                 </ol>
 
-                <a class="lp-btn lp-btn-solid lp-btn-lg lp-unggulan-cta" href="<?= url('register.php') ?>">Daftar program unggulan</a>
+                <a class="lp-btn lp-btn-solid lp-btn-lg lp-unggulan-cta" href="<?= url('index.php#pelatihan') ?>">Daftar program unggulan</a>
             </div>
         </section>
 

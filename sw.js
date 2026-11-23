@@ -1,3 +1,4 @@
+// Direktori: sw.js
 // ============================================================
 // ELIPS LMS - sw.js
 // Service worker PWA: network-first, tanpa cache halaman aplikasi
@@ -11,7 +12,7 @@
 
 'use strict';
 
-const CACHE_VERSION = 'v2';
+const CACHE_VERSION = 'v6-aktivasi-pembayaran';
 const STATIC_CACHE = 'elips-static-' + CACHE_VERSION;
 const OFFLINE_URL = './offline.php';
 

@@ -1,0 +1,201 @@
+/* Direktori: assets/css/finance.css */
+/* ============================================================
+   ELIPS LMS - finance.css
+   Halaman Pembayaran (admin/Keuangan) dan kartu tagihan siswa.
+   ============================================================ */
+
+.fin-badge {
+    display: inline-block;
+    padding: 0.15rem 0.6rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 700;
+}
+
+.fin-badge-unpaid { background: #fee2e2; color: #b91c1c; }
+.fin-badge-partial { background: #fef9c3; color: #854d0e; }
+.fin-badge-paid { background: #dcfce7; color: #166534; }
+.fin-badge-pending { background: #dbeafe; color: #1e40af; }
+.fin-badge-verified { background: #dcfce7; color: #166534; }
+.fin-badge-rejected { background: #fee2e2; color: #b91c1c; }
+.fin-badge-void { background: #e5e7eb; color: #374151; }
+
+.fin-number {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+
+.fin-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.fin-summary > div {
+    padding: 0.7rem 0.9rem;
+    border: 1px solid var(--border, #e5e7eb);
+    border-radius: 10px;
+    background: var(--bg-secondary, #f9fafb);
+}
+
+.fin-summary span {
+    display: block;
+    color: var(--text-secondary, #6b7280);
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.fin-summary strong {
+    display: block;
+    margin-top: 0.15rem;
+    font-size: 1rem;
+    overflow-wrap: anywhere;
+}
+
+.fin-h3 {
+    margin: 1.25rem 0 0.5rem;
+    font-size: 1rem;
+    font-weight: 700;
+}
+
+.fin-pay {
+    padding: 0.75rem 0.9rem;
+    margin-bottom: 0.6rem;
+    border: 1px solid var(--border, #e5e7eb);
+    border-radius: 10px;
+}
+
+.fin-pay-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.fin-pay-meta {
+    margin-top: 0.25rem;
+    color: var(--text-secondary, #6b7280);
+    font-size: 0.8125rem;
+    line-height: 1.5;
+}
+
+.fin-pay-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-top: 0.6rem;
+}
+
+.fin-form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0 1rem;
+}
+
+.fin-actions {
+    display: flex;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+    margin: 0.25rem 0 0.5rem;
+}
+
+.fin-empty {
+    padding: 1rem;
+    text-align: center;
+    color: var(--text-secondary, #6b7280);
+}
+
+/* Kartu tagihan di dashboard siswa */
+.bill-card {
+    margin-bottom: 1rem;
+    padding: 1rem 1.25rem;
+    border: 1px solid var(--border, #e5e7eb);
+    border-left: 4px solid #facc15;
+    border-radius: 12px;
+    background: #fff;
+}
+
+.bill-card.is-paid {
+    border-left-color: #16a34a;
+}
+
+.bill-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+    align-items: flex-start;
+}
+
+.bill-title {
+    font-weight: 700;
+}
+
+.bill-sub {
+    color: var(--text-secondary, #6b7280);
+    font-size: 0.875rem;
+}
+
+.bill-remaining {
+    font-size: 1.25rem;
+    font-weight: 800;
+}
+
+.bill-bank {
+    margin-top: 0.75rem;
+    padding: 0.65rem 0.85rem;
+    border-radius: 10px;
+    background: var(--bg-secondary, #f9fafb);
+    font-size: 0.875rem;
+    line-height: 1.5;
+}
+
+.bill-history {
+    margin-top: 0.75rem;
+    font-size: 0.875rem;
+}
+
+.bill-history table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.bill-history th,
+.bill-history td {
+    padding: 0.4rem 0.5rem;
+    border-bottom: 1px solid var(--border, #e5e7eb);
+    text-align: left;
+}
+
+.bill-number {
+    margin-top: 0.6rem;
+    padding: 0.6rem 0.85rem;
+    border-radius: 10px;
+    background: #dcfce7;
+    color: #166534;
+    font-weight: 700;
+}
+
+@media (max-width: 640px) {
+    .fin-form-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Isi modal berupa satu kolom (bukan grid dua kolom bawaan modal absensi). */
+#finModal .attendance-modal-body,
+#finActionModal .attendance-modal-body,
+#finBankModal .attendance-modal-body,
+#billModal .attendance-modal-body {
+    display: block;
+}
+
+#finModal .attendance-modal-card {
+    max-height: 92vh;
+    overflow-y: auto;
+}

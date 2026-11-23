@@ -1,3 +1,4 @@
+# Direktori: tests/browser_smoke.py
 """Smoke test browser: login lewat UI per role, buka tiap halaman, laporkan error JS/jaringan.
 Pemakaian: python3 tests/browser_smoke.py http://127.0.0.1:8099
 Butuh: pip install playwright (+ Chrome/Chromium). Env CHROME_PATH bila perlu."""
@@ -14,7 +15,7 @@ PLAN = {
     'agus.karyawan@example.com': ['employee/shared/dashboard.php','employee/operasional/akademik.php','employee/operasional/jadwal.php','employee/operasional/siswa.php','employee/operasional/tentor.php'],
     'sri.karyawan@example.com': ['employee/shared/dashboard.php','employee/keuangan/dashboard.php'],
 }
-PUBLIC = ['index.php','login.php','register.php','verify-certificate.php','course-detail.php?id=1']
+PUBLIC = ['index.php','login.php','activate.php','forgot-password.php','verify-certificate.php','course-detail.php?id=1']
 IGNORE = re.compile(r'(fonts\.g|cdn\.jsdelivr|unsplash|ERR_BLOCKED|ERR_NAME_NOT_RESOLVED|ERR_CONNECTION|ERR_TUNNEL|net::ERR_FAILED)', re.I)
 
 problems = []

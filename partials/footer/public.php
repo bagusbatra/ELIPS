@@ -1,4 +1,4 @@
-<footer class="footer">
+<?php /* Direktori: partials/footer/public.php */ ?><footer class="footer">
     <div class="container">
         <div class="footer-content">
             <div class="footer-brand">
@@ -18,7 +18,7 @@
                 <div class="footer-column">
                     <h4 class="footer-title">Akun</h4>
                     <a href="<?= url('login.php') ?>" class="footer-link">Masuk</a>
-                    <a href="<?= url('register.php') ?>" class="footer-link">Daftar</a>
+                    <a href="<?= url('index.php#pelatihan') ?>" class="footer-link">Daftar</a>
                 </div>
             </div>
         </div>

@@ -1,4 +1,5 @@
 <?php
+// Direktori: api/install.php
 declare(strict_types=1);
 
 // ============================================================
@@ -44,6 +45,11 @@ try {
         $server->exec($statement);
     }
     echo "Skema database siap.\n";
+
+    // Migrasi alur pendaftaran & aktivasi akun (idempoten, untuk database lama).
+    require_once __DIR__ . '/helpers.php';
+    require_once __DIR__ . '/migrations.php';
+    elips_migrate_activation_schema();
 
     $db = elips_db();
 
@@ -710,6 +716,7 @@ try {
     }
 
     $db->commit();
+    elips_backfill_phone_norm($db);
 
     echo "Data demo berhasil dimasukkan.\n";
     echo "Akun demo: admin@example.com / instruktur / peserta — password: " . $config['demo_password'] . "\n";

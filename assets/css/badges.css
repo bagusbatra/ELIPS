@@ -1,0 +1,39 @@
+/* Direktori: assets/css/badges.css */
+/* ============================================================
+   ELIPS LMS - badges.css
+   Angka notifikasi pada menu sidebar.
+   Merah = perlu ditangani, kuning = menunggu pelunasan.
+   ============================================================ */
+
+.dashboard-nav-link .nav-badge {
+    margin-left: auto;
+    min-width: 1.4rem;
+    height: 1.4rem;
+    padding: 0 0.45rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    line-height: 1.4rem;
+    text-align: center;
+    color: #ffffff;
+    background: #dc2626;
+}
+
+.dashboard-nav-link .nav-badge[hidden] {
+    display: none;
+}
+
+.dashboard-nav-link .nav-badge-red {
+    background: #dc2626;
+    color: #ffffff;
+}
+
+.dashboard-nav-link .nav-badge-yellow {
+    background: #facc15;
+    color: #422006;
+}
+
+/* Atribut hidden harus menang atas display bawaan tombol/form. */
+[hidden] {
+    display: none !important;
+}

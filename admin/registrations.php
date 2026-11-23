@@ -1,4 +1,5 @@
 <?php
+// Direktori: admin/registrations.php
 require_once __DIR__ . '/../includes/bootstrap.php';
 $page = [
     'page_script' => 'admin/registrations',
@@ -16,7 +17,7 @@ layout('app', $page);
                 <div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;">
                     <div>
                         <h1 class="dashboard-title">Pendaftaran Siswa</h1>
-                        <p class="dashboard-subtitle">Data calon siswa dari formulir “Daftar Sekarang”. Setelah diverifikasi, pendaftaran dapat dijadikan akun siswa (role peserta).</p>
+                        <p class="dashboard-subtitle">Data calon siswa dari formulir pendaftaran. Tekan “Kirim link aktivasi” lalu kirim link-nya lewat WhatsApp; akun aktif setelah siswa mengisi biodata dan membuat sandi.</p>
                     </div>
                     <button class="btn btn-primary" type="button" onclick="refreshRegistrations()">
                         <i class="bi bi-arrow-clockwise"></i>
@@ -41,7 +42,7 @@ layout('app', $page);
                     </div>
                     <div class="stat-card-info">
                         <div class="stat-card-value" id="regStatBaru">0</div>
-                        <div class="stat-card-label">Menunggu Diverifikasi</div>
+                        <div class="stat-card-label">Pendaftar Baru</div>
                     </div>
                 </div>
                 <div class="stat-card">
@@ -50,7 +51,7 @@ layout('app', $page);
                     </div>
                     <div class="stat-card-info">
                         <div class="stat-card-value" id="regStatTerdaftar">0</div>
-                        <div class="stat-card-label">Sudah Menjadi Siswa</div>
+                        <div class="stat-card-label">Akun Sudah Aktif</div>
                     </div>
                 </div>
                 <div class="stat-card">
@@ -75,6 +76,7 @@ layout('app', $page);
                             <option value="all">Semua Status</option>
                             <option value="baru">Baru</option>
                             <option value="dihubungi">Dihubungi</option>
+                            <option value="menunggu">Menunggu aktivasi</option>
                             <option value="terdaftar">Terdaftar</option>
                             <option value="batal">Batal</option>
                         </select>
@@ -121,36 +123,60 @@ layout('app', $page);
         </div>
     </div>
 
-    <!-- Konversi menjadi siswa -->
-    <div class="attendance-modal" id="regConvertModal" style="display: none;">
+    <!-- Link aktivasi -->
+    <div class="attendance-modal" id="regLinkModal" style="display: none;">
         <div class="attendance-modal-card">
             <div class="attendance-modal-header">
                 <div>
-                    <div class="attendance-modal-title">Jadikan Siswa</div>
-                    <div class="attendance-modal-subtitle">Ubah pendaftaran menjadi akun dengan role peserta.</div>
+                    <div class="attendance-modal-title" id="regLinkTitle">Link Aktivasi</div>
+                    <div class="attendance-modal-subtitle" id="regLinkSubtitle"></div>
                 </div>
-                <button class="attendance-modal-close" type="button" onclick="closeRegConvertModal()" aria-label="Tutup">
+                <button class="attendance-modal-close" type="button" onclick="closeRegLinkModal()" aria-label="Tutup">
                     <i class="bi bi-x-lg"></i>
                 </button>
             </div>
-            <form id="regConvertForm">
+            <div class="attendance-modal-body">
+                <div class="reg-convert-info" id="regLinkInfo"></div>
+                <div class="form-group" id="regLinkGroup">
+                    <label class="form-label" for="regLinkInput">Link unik (sekali pakai)</label>
+                    <input class="form-input" type="text" id="regLinkInput" readonly>
+                    <div class="form-hint">Link hanya tampil sekarang. Bila hilang, gunakan “Kirim ulang” untuk membuat link baru.</div>
+                </div>
+            </div>
+            <div class="attendance-modal-actions" style="padding: 0 1.5rem 1.5rem; flex-wrap: wrap;">
+                <button class="btn btn-outline" type="button" onclick="closeRegLinkModal()">Tutup</button>
+                <button class="btn btn-outline" type="button" id="regLinkCopy"><i class="bi bi-clipboard"></i> Salin link</button>
+                <a class="btn btn-primary" id="regLinkWa" href="#" target="_blank" rel="noopener noreferrer">
+                    <i class="bi bi-whatsapp"></i> Kirim lewat WhatsApp
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Batalkan pendaftaran -->
+    <div class="attendance-modal" id="regCancelModal" style="display: none;">
+        <div class="attendance-modal-card">
+            <div class="attendance-modal-header">
+                <div>
+                    <div class="attendance-modal-title">Batalkan Pendaftaran</div>
+                    <div class="attendance-modal-subtitle">Kursi kelas yang ditahan akan dilepas dan link aktivasi dicabut.</div>
+                </div>
+                <button class="attendance-modal-close" type="button" onclick="closeRegCancelModal()" aria-label="Tutup">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+            <form id="regCancelForm">
                 <div class="attendance-modal-body">
-                    <input type="hidden" id="regConvertId">
-                    <div class="reg-convert-info" id="regConvertInfo"></div>
-                    <p class="reg-inline-error" id="regConvertError" role="alert" hidden></p>
-                    <div class="form-group" id="regPasswordGroup">
-                        <label class="form-label" for="regConvertPassword">Password awal siswa</label>
-                        <input class="form-input" type="password" id="regConvertPassword" minlength="8"
-                               placeholder="Minimal 8 karakter" autocomplete="new-password">
-                        <div class="form-hint">Password ini hanya dipakai jika akun dengan email tersebut belum ada.</div>
+                    <div class="reg-convert-info" id="regCancelInfo"></div>
+                    <p class="reg-inline-error" id="regCancelError" role="alert" hidden></p>
+                    <div class="form-group">
+                        <label class="form-label" for="regCancelReason">Alasan pembatalan</label>
+                        <textarea class="form-input" id="regCancelReason" rows="3" maxlength="300" required></textarea>
                     </div>
                 </div>
                 <div class="attendance-modal-actions" style="padding: 0 1.5rem 1.5rem;">
-                    <button class="btn btn-outline" type="button" onclick="closeRegConvertModal()">Batal</button>
-                    <button class="btn btn-primary" type="submit">
-                        <i class="bi bi-person-check"></i>
-                        Jadikan Siswa
-                    </button>
+                    <button class="btn btn-outline" type="button" onclick="closeRegCancelModal()">Kembali</button>
+                    <button class="btn btn-primary" type="submit"><i class="bi bi-x-circle"></i> Batalkan Pendaftaran</button>
                 </div>
             </form>
         </div>

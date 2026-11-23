@@ -1,3 +1,13 @@
+<?php
+// Direktori: partials/sidebar/admin.php
+// Angka badge dihitung di server agar sudah benar saat halaman terbuka.
+$__badges = ['registrationsNew' => 0, 'unpaidInvoices' => 0, 'resetRequests' => 0];
+try {
+    $__badges = array_merge($__badges, elips_badge_counts(elips_current_user()));
+} catch (Throwable $e) {
+    error_log('[ELIPS badge] ' . $e->getMessage());
+}
+?>
 <aside class="dashboard-sidebar">
     <div class="dashboard-sidebar-header">
         <div class="dashboard-user">
@@ -16,6 +26,7 @@
         <a href="<?= url('admin/users.php') ?>" class="dashboard-nav-link<?= nav_active('admin/users.php') ?>">
             <i class="bi bi-people"></i>
             <span>Kelola Pengguna</span>
+            <span class="nav-badge nav-badge-red" data-badge="resetRequests" data-count="<?= (int) $__badges['resetRequests'] ?>"<?= $__badges['resetRequests'] > 0 ? '' : ' hidden' ?> title="Permintaan reset sandi"><?= (int) $__badges['resetRequests'] ?></span>
         </a>
         <a href="<?= url('admin/courses.php') ?>" class="dashboard-nav-link<?= nav_active('admin/courses.php') ?>">
             <i class="bi bi-journal-bookmark"></i>
@@ -36,6 +47,12 @@
         <a href="<?= url('admin/registrations.php') ?>" class="dashboard-nav-link<?= nav_active('admin/registrations.php') ?>">
             <i class="bi bi-person-plus"></i>
             <span>Pendaftaran Siswa</span>
+            <span class="nav-badge nav-badge-red" data-badge="registrationsNew" data-count="<?= (int) $__badges['registrationsNew'] ?>"<?= $__badges['registrationsNew'] > 0 ? '' : ' hidden' ?>><?= (int) $__badges['registrationsNew'] ?></span>
+        </a>
+        <a href="<?= url('admin/payments.php') ?>" class="dashboard-nav-link<?= nav_active('admin/payments.php') ?>">
+            <i class="bi bi-cash-coin"></i>
+            <span>Pembayaran</span>
+            <span class="nav-badge nav-badge-yellow" data-badge="unpaidInvoices" data-count="<?= (int) $__badges['unpaidInvoices'] ?>"<?= $__badges['unpaidInvoices'] > 0 ? '' : ' hidden' ?> title="Siswa aktif belum lunas"><?= (int) $__badges['unpaidInvoices'] ?></span>
         </a>
         <a href="<?= url('admin/certificates.php') ?>" class="dashboard-nav-link<?= nav_active('admin/certificates.php') ?>">
             <i class="bi bi-award"></i>
@@ -71,3 +88,4 @@
         </a>
     </nav>
 </aside>
+<script src="<?= asset('js/admin-badges.js') ?>" defer></script>

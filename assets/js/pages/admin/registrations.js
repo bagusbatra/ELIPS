@@ -1,15 +1,18 @@
+// Direktori: assets/js/pages/admin/registrations.js
 // ELIPS LMS - skrip halaman admin/registrations.php
-// Menampilkan pendaftaran publik dan mengonversinya menjadi akun peserta.
+// Pendaftaran publik: kirim link aktivasi (WhatsApp manual), kirim ulang, batalkan.
 document.addEventListener('DOMContentLoaded', function () {
     if (!ELIPS.requireRole('admin')) return;
 
     let registrations = [];
     let currentDetail = null;
-    let currentConvert = null;
+    let currentCancel = null;
+    let currentLink = null;
 
     const STATUS_META = {
-        baru: { label: 'Baru', className: '' },
+        baru: { label: 'Baru', className: 'reg-badge-baru' },
         dihubungi: { label: 'Dihubungi', className: 'badge-primary' },
+        menunggu: { label: 'Menunggu aktivasi', className: 'reg-badge-menunggu' },
         terdaftar: { label: 'Terdaftar', className: 'badge-success' },
         batal: { label: 'Batal', className: 'reg-badge-batal' }
     };
@@ -24,6 +27,10 @@ document.addEventListener('DOMContentLoaded', function () {
             id: Number(row.id || row.registrationId) || 0,
             courseId: Number(row.courseId || row.course_id) || 0,
             courseTitle: row.courseTitle || row.course_title || '',
+            classId: row.classId ? Number(row.classId) : null,
+            className: row.className || '',
+            amountDue: Number(row.amountDue) || 0,
+            activationSentAt: row.activationSentAt || null,
             name: row.name || row.nama || '',
             birthPlace: row.birthPlace || row.tempatLahir || '',
             birthDate: row.birthDate || row.tanggalLahir || '',
@@ -51,20 +58,13 @@ document.addEventListener('DOMContentLoaded', function () {
             return;
         }
 
-        registrations = ELIPS.getCourseRegistrations().map(normalize);
+        registrations = [];
+        ELIPS.toast('Mode server wajib untuk menu ini.');
     }
 
     function findById(id) {
         return registrations.find(function (row) {
             return row.id === Number(id);
-        }) || null;
-    }
-
-    function findExistingStudent(email) {
-        const target = String(email || '').toLowerCase();
-        if (!target) return null;
-        return ELIPS.getUsers().find(function (user) {
-            return String(user.email || '').toLowerCase() === target && user.role === 'peserta';
         }) || null;
     }
 
@@ -150,16 +150,19 @@ document.addEventListener('DOMContentLoaded', function () {
     function rowHtml(row) {
         let action = '';
         if (row.status === 'terdaftar') {
-            action = '<div style="display: flex; flex-direction: column; gap: 0.35rem;">'
-                + '<span class="table-course-meta">Siswa #' + esc(row.studentId || '-') + '</span>'
-                + '<a class="btn btn-ghost" href="enrollment.php"><i class="bi bi-person-check"></i> Penugasan</a>'
-                + '</div>';
+            action = '<span class="table-course-meta">Akun aktif · siswa #' + esc(row.studentId || '-') + '</span>';
         } else if (row.status === 'batal') {
             action = '<span class="table-course-meta">Dibatalkan</span>';
+        } else if (row.status === 'menunggu') {
+            action = '<button class="btn btn-primary" type="button" onclick="sendRegActivation(' + row.id + ')">'
+                + '<i class="bi bi-arrow-repeat"></i> Kirim ulang</button>'
+                + '<button class="btn btn-ghost" type="button" onclick="openRegCancelModal(' + row.id + ')">'
+                + '<i class="bi bi-x-circle"></i> Batalkan</button>';
         } else {
-            action = '<button class="btn btn-primary" type="button" onclick="openRegConvertModal(' + row.id + ')">'
-                + '<i class="bi bi-person-plus"></i> Jadikan Siswa'
-                + '</button>';
+            action = '<button class="btn btn-primary" type="button" onclick="sendRegActivation(' + row.id + ')">'
+                + '<i class="bi bi-send"></i> Kirim link aktivasi</button>'
+                + '<button class="btn btn-ghost" type="button" onclick="openRegCancelModal(' + row.id + ')">'
+                + '<i class="bi bi-x-circle"></i> Batalkan</button>';
         }
 
         return '<tr>'
@@ -169,11 +172,14 @@ document.addEventListener('DOMContentLoaded', function () {
             + '<div class="table-course-meta">' + esc(row.phone) + '</div>'
             + '</td>'
             + '<td>' + esc(row.courseTitle || ('Pelatihan #' + row.courseId))
-            + '<div class="table-course-meta">ID #' + esc(row.courseId || '-') + '</div></td>'
+            + '<div class="table-course-meta">' + esc(row.className ? 'Kelas: ' + row.className : 'Kelas belum dipilih') + '</div></td>'
             + '<td>' + esc(row.birthPlace || '-')
             + '<div class="table-course-meta">' + esc(ELIPS.formatDate(row.birthDate)) + '</div></td>'
             + '<td style="max-width: 260px;">' + esc(row.address || '-') + '</td>'
-            + '<td>' + statusBadge(row.status) + '</td>'
+            + '<td>' + statusBadge(row.status)
+            + (row.status === 'menunggu' && row.activationSentAt
+                ? '<div class="table-course-meta">Link dikirim ' + esc(ELIPS.formatDate(row.activationSentAt)) + '</div>' : '')
+            + '</td>'
             + '<td>' + esc(ELIPS.formatDate(row.createdAt)) + '</td>'
             + '<td>'
             + '<div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">'
@@ -212,64 +218,6 @@ document.addEventListener('DOMContentLoaded', function () {
         if (modal) modal.style.display = 'none';
     }
 
-    function showConvertError(message) {
-        const error = document.getElementById('regConvertError');
-        if (!error) return;
-        error.textContent = message || 'Gagal memproses pendaftaran.';
-        error.hidden = false;
-    }
-
-    function clearConvertError() {
-        const error = document.getElementById('regConvertError');
-        if (!error) return;
-        error.textContent = '';
-        error.hidden = true;
-    }
-
-    function convertLocally(registration, password) {
-        const existing = findExistingStudent(registration.email);
-        let studentId = existing ? existing.id : null;
-
-        if (!existing) {
-            const created = ELIPS.createUser({
-                name: registration.name,
-                email: registration.email,
-                phone: registration.phone,
-                password: password,
-                role: 'peserta',
-                status: 'aktif'
-            });
-            if (!created.ok) return created;
-            studentId = created.data.id;
-        }
-
-        const list = ELIPS.getCourseRegistrations();
-        let updated = false;
-        list.forEach(function (item) {
-            if (Number(item.id) === Number(registration.id)) {
-                item.status = 'terdaftar';
-                item.studentId = studentId;
-                item.convertedAt = new Date().toISOString();
-                updated = true;
-            }
-        });
-        if (!updated) {
-            list.push(Object.assign({}, registration, {
-                status: 'terdaftar',
-                studentId: studentId,
-                convertedAt: new Date().toISOString()
-            }));
-        }
-        ELIPS.setCourseRegistrations(list);
-
-        return {
-            ok: true,
-            message: existing
-                ? 'Pendaftaran berhasil dihubungkan ke akun peserta.'
-                : 'Pendaftaran berhasil menjadi akun peserta.'
-        };
-    }
-
     window.refreshRegistrations = function () {
         loadRegistrations();
         renderRegistrations();
@@ -289,6 +237,8 @@ document.addEventListener('DOMContentLoaded', function () {
         let html = '<div class="reg-detail-grid">';
         html += detailItem('Status', status.label);
         html += detailItem('Pelatihan', row.courseTitle || ('Pelatihan #' + row.courseId));
+        html += detailItem('Kelas', row.className || 'Belum dipilih');
+        html += detailItem('Tagihan', row.amountDue > 0 ? 'Rp ' + row.amountDue.toLocaleString('id-ID') : 'Gratis');
         html += detailItem('Nama', row.name);
         html += detailItem('No Telpon/WhatsApp', row.phone);
         html += detailItem('Tempat Lahir', row.birthPlace);
@@ -310,90 +260,120 @@ document.addEventListener('DOMContentLoaded', function () {
         currentDetail = null;
     };
 
-    window.openRegConvertModal = function (id) {
+    function copyText(text, done) {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(done, function () { fallbackCopy(text, done); });
+        } else {
+            fallbackCopy(text, done);
+        }
+    }
+
+    function fallbackCopy(text, done) {
+        const input = document.getElementById('regLinkInput');
+        input.focus();
+        input.select();
+        try { document.execCommand('copy'); } catch (err) { /* abaikan */ }
+        done();
+    }
+
+    function showLinkModal(row, data) {
+        currentLink = data;
+        const hasLink = !!data.link;
+        document.getElementById('regLinkTitle').textContent = hasLink ? 'Link Aktivasi' : 'Siswa Sudah Punya Akun';
+        document.getElementById('regLinkSubtitle').textContent = row.name + ' — ' + (row.courseTitle || '');
+        const info = document.getElementById('regLinkInfo');
+        if (hasLink) {
+            info.innerHTML = 'Kirim link ini ke WhatsApp <strong>' + esc(row.phone) + '</strong>. '
+                + 'Berlaku 7 hari dan hanya bisa dipakai sekali. Kursi kelas <strong>' + esc(row.className) + '</strong> ditahan untuk siswa ini.';
+        } else {
+            info.innerHTML = 'Email ini sudah memiliki akun aktif, jadi tidak ada akun baru. Siswa sudah didaftarkan ke kelas '
+                + '<strong>' + esc(row.className) + '</strong> dan tagihannya dibuat. Beri tahu siswa lewat WhatsApp.';
+        }
+        document.getElementById('regLinkGroup').hidden = !hasLink;
+        document.getElementById('regLinkInput').value = data.link || '';
+        const wa = document.getElementById('regLinkWa');
+        wa.href = data.waUrl || '#';
+        wa.hidden = !data.waUrl;
+        document.getElementById('regLinkCopy').hidden = !hasLink;
+        showModal('regLinkModal');
+    }
+
+    window.sendRegActivation = function (id) {
         const row = findById(id);
         if (!row) return;
-        currentConvert = row;
-
-        const existing = findExistingStudent(row.email);
-        const info = document.getElementById('regConvertInfo');
-        const group = document.getElementById('regPasswordGroup');
-        const password = document.getElementById('regConvertPassword');
-
-        document.getElementById('regConvertId').value = row.id;
-        clearConvertError();
-        password.value = '';
-
-        if (existing) {
-            info.innerHTML = 'Email <strong>' + esc(row.email) + '</strong> sudah digunakan oleh siswa '
-                + '<strong>' + esc(existing.name) + '</strong>. Pendaftaran akan dihubungkan ke akun tersebut.';
-            group.hidden = true;
-            password.required = false;
-        } else {
-            info.innerHTML = 'Akun baru dengan role <strong>peserta</strong> akan dibuat untuk '
-                + '<strong>' + esc(row.name) + '</strong> (' + esc(row.email) + ').';
-            group.hidden = false;
-            password.required = true;
-        }
-
-        showModal('regConvertModal');
-        if (!existing) password.focus();
-    };
-
-    window.closeRegConvertModal = function () {
-        hideModal('regConvertModal');
-        currentConvert = null;
-        clearConvertError();
-    };
-
-    const convertForm = document.getElementById('regConvertForm');
-    convertForm.addEventListener('submit', function (event) {
-        event.preventDefault();
-        if (!currentConvert) return;
-        clearConvertError();
-
-        const existing = findExistingStudent(currentConvert.email);
-        const payload = { id: currentConvert.id };
-
-        if (!existing) {
-            const password = document.getElementById('regConvertPassword').value;
-            if (password.length < 8) {
-                showConvertError('Password awal minimal 8 karakter.');
-                return;
-            }
-            payload.password = password;
-        }
-
-        let result;
-        if (ELIPS.api && ELIPS.api.enabled) {
-            result = ELIPS.api.call('course.registration.convert', payload);
-        } else {
-            result = convertLocally(currentConvert, payload.password);
-        }
-
-        if (!result.ok) {
-            showConvertError(result.message);
+        if (row.status === 'menunggu'
+            && !window.confirm('Buat link aktivasi baru? Link lama tidak akan berlaku lagi.')) {
             return;
         }
+        const result = ELIPS.api.call('registration.sendActivation', { id: row.id });
+        if (!result.ok) {
+            ELIPS.toast(result.message || 'Gagal membuat link aktivasi.');
+            return;
+        }
+        refreshRegistrations();
+        showLinkModal(row, result.data || {});
+    };
 
-        closeRegConvertModal();
+    window.closeRegLinkModal = function () {
+        hideModal('regLinkModal');
+        document.getElementById('regLinkInput').value = '';
+        currentLink = null;
+    };
+
+    document.getElementById('regLinkCopy').addEventListener('click', function () {
+        if (!currentLink || !currentLink.link) return;
+        copyText(currentLink.link, function () { ELIPS.toast('Link disalin.'); });
+    });
+
+    window.openRegCancelModal = function (id) {
+        const row = findById(id);
+        if (!row) return;
+        currentCancel = row;
+        document.getElementById('regCancelInfo').innerHTML = 'Batalkan pendaftaran <strong>' + esc(row.name)
+            + '</strong> untuk ' + esc(row.courseTitle) + '?';
+        document.getElementById('regCancelReason').value = '';
+        const error = document.getElementById('regCancelError');
+        error.hidden = true;
+        showModal('regCancelModal');
+        document.getElementById('regCancelReason').focus();
+    };
+
+    window.closeRegCancelModal = function () {
+        hideModal('regCancelModal');
+        currentCancel = null;
+    };
+
+    document.getElementById('regCancelForm').addEventListener('submit', function (event) {
+        event.preventDefault();
+        if (!currentCancel) return;
+        const reason = document.getElementById('regCancelReason').value.trim();
+        const error = document.getElementById('regCancelError');
+        const result = ELIPS.api.call('registration.cancel', { id: currentCancel.id, reason: reason });
+        if (!result.ok) {
+            error.textContent = result.message || 'Gagal membatalkan pendaftaran.';
+            error.hidden = false;
+            return;
+        }
+        closeRegCancelModal();
         ELIPS.toast(result.message);
         refreshRegistrations();
     });
 
-    ['regDetailModal', 'regConvertModal'].forEach(function (id) {
+    ['regDetailModal', 'regLinkModal', 'regCancelModal'].forEach(function (id) {
         const modal = document.getElementById(id);
         modal.addEventListener('click', function (event) {
             if (event.target !== modal) return;
             if (id === 'regDetailModal') closeRegDetailModal();
-            else closeRegConvertModal();
+            else if (id === 'regLinkModal') closeRegLinkModal();
+            else closeRegCancelModal();
         });
     });
 
     document.addEventListener('keydown', function (event) {
         if (event.key !== 'Escape') return;
         if (document.getElementById('regDetailModal').style.display === 'flex') closeRegDetailModal();
-        if (document.getElementById('regConvertModal').style.display === 'flex') closeRegConvertModal();
+        if (document.getElementById('regLinkModal').style.display === 'flex') closeRegLinkModal();
+        if (document.getElementById('regCancelModal').style.display === 'flex') closeRegCancelModal();
     });
 
     refreshRegistrations();

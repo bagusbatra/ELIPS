@@ -1,4 +1,5 @@
 <?php
+// Direktori: admin/users.php
 require_once __DIR__ . '/../includes/bootstrap.php';
 $page = [
     'page_script' => 'admin/users',
@@ -160,6 +161,7 @@ layout('app', $page);
                     <label class="form-label">Status</label>
                     <select id="userStatus" class="form-input">
                         <option value="aktif" selected>Aktif</option>
+                        <option value="menunggu" disabled>Menunggu aktivasi</option>
                         <option value="nonaktif">Nonaktif</option>
                     </select>
                 </div>
@@ -177,6 +179,24 @@ layout('app', $page);
     </div>
 
     <!-- Modal Assign Instruktur ke Kursus -->
+    <div id="resetModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; padding: 1rem;">
+        <div style="background: var(--bg-primary, #fff); border-radius: var(--radius-lg, 14px); width: 100%; max-width: 480px; padding: 1.5rem;">
+            <h3 style="font-size: 1.25rem; font-weight: 600; margin: 0 0 0.75rem;">Reset Sandi Siswa</h3>
+            <p id="resetModalInfo" style="color: var(--text-secondary); margin: 0 0 1rem;"></p>
+            <div class="form-group" id="resetLinkGroup" hidden>
+                <label class="form-label" for="resetLinkInput">Link reset (sekali pakai, berlaku 24 jam)</label>
+                <input type="text" id="resetLinkInput" class="form-input" readonly>
+            </div>
+            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; justify-content: flex-end;">
+                <button class="btn btn-ghost" type="button" onclick="dismissResetRequest()">Tutup permintaan</button>
+                <button class="btn btn-ghost" type="button" onclick="closeResetModal()">Tutup</button>
+                <button class="btn btn-primary" type="button" id="resetIssueBtn" onclick="issueResetLink()"><i class="bi bi-link-45deg"></i> Buat link reset</button>
+                <button class="btn btn-ghost" type="button" id="resetCopyBtn" onclick="copyResetLink()" hidden><i class="bi bi-clipboard"></i> Salin</button>
+                <a class="btn btn-primary" id="resetWaBtn" href="#" target="_blank" rel="noopener noreferrer" hidden><i class="bi bi-whatsapp"></i> Kirim lewat WhatsApp</a>
+            </div>
+        </div>
+    </div>
+
     <div id="assignModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; padding: 1rem;">
         <div style="background: white; border-radius: var(--radius-lg); max-width: 560px; width: 100%; max-height: 90vh; overflow-y: auto;">
             <div style="padding: 1.5rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between;">

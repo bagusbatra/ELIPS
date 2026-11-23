@@ -1,4 +1,5 @@
 <?php
+// Direktori: student/certificates.php
 require_once __DIR__ . '/../includes/bootstrap.php';
 $page = [
     'page_script' => 'student/certificates',
@@ -14,6 +15,11 @@ layout('app', $page);
             <div class="dashboard-header">
                 <h1 class="dashboard-title">Sertifikat Saya</h1>
                 <p class="dashboard-subtitle">Pantau status e-sertifikat Anda. Sertifikat terbit dapat dilihat dan diverifikasi secara publik.</p>
+            </div>
+
+            <div id="certLockNotice" style="display: none; align-items: flex-start; gap: 0.75rem; padding: 1rem 1.25rem; margin-bottom: 1.5rem; background: #fffbeb; border: 1px solid #fde68a; border-radius: var(--radius-lg); color: #92400e;">
+                <i class="bi bi-lock-fill" style="font-size: 1.25rem; margin-top: 0.125rem;"></i>
+                <span>Sertifikat untuk program yang tagihannya belum lunas terkunci. Selesaikan pembayaran di Dashboard agar sertifikat dapat diterbitkan dan dibuka.</span>
             </div>
 
             <div class="dashboard-stats">

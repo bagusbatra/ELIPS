@@ -1,3 +1,4 @@
+// Direktori: assets/js/pages/student/certificates.js
 // ELIPS LMS - skrip halaman student/certificates.php
 // Diekstrak dari inline <script>; URL relatif terhadap halaman.
 document.addEventListener('DOMContentLoaded', function () {
@@ -59,10 +60,24 @@ document.addEventListener('DOMContentLoaded', function () {
         return card;
     }
 
+    // Program yang tagihannya belum lunas: sertifikat dikunci (server juga menolak
+    // penerbitannya selama belum lunas).
+    function lockedCourseIds() {
+        if (!(ELIPS.api && ELIPS.api.enabled)) return [];
+        const result = ELIPS.api.call('payment.mine', {});
+        if (!result.ok || !result.data) return [];
+        return (result.data.certificateLockedCourseIds || []).map(Number);
+    }
+
     // Hanya sertifikat Publish yang boleh tampil di halaman siswa.
     function renderCertificates() {
-        const certificates = ELIPS.getPublishedCertificatesByStudent(student.id);
+        const locked = lockedCourseIds();
+        const all = ELIPS.getPublishedCertificatesByStudent(student.id);
+        const certificates = all.filter(function (cert) { return locked.indexOf(Number(cert.courseId)) === -1; });
         const courses = ELIPS.getCourses();
+
+        const lockNotice = document.getElementById('certLockNotice');
+        if (lockNotice) lockNotice.style.display = all.length > certificates.length || locked.length ? 'flex' : 'none';
 
         document.getElementById('statPublished').textContent = certificates.length;
         document.getElementById('statTotal').textContent = certificates.length;
@@ -102,4 +117,3 @@ document.addEventListener('DOMContentLoaded', function () {
         if (!document.hidden) renderCertificates();
     });
 });
-

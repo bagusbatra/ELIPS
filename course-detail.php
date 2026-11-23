@@ -1,4 +1,5 @@
 <?php
+// Direktori: course-detail.php
 require_once __DIR__ . '/includes/bootstrap.php';
 $page = [
     'page_script' => 'course-detail',
@@ -180,6 +181,12 @@ layout('page', $page);
                     </label>
                 </div>
 
+                <fieldset class="lp-form-field lp-form-field-full lp-class-picker" id="daftarKelasWrap" hidden>
+                    <legend>Pilih Kelas</legend>
+                    <div class="lp-class-list" id="daftarKelasList" role="radiogroup" aria-label="Pilih kelas"></div>
+                    <p class="lp-class-empty" id="daftarKelasEmpty" hidden></p>
+                </fieldset>
+
                 <input type="hidden" id="daftarCourseId" name="courseId">
                 <input type="hidden" id="daftarCourseTitle" name="courseTitle">
                 <input class="lp-hp" type="text" id="daftarWebsite" name="website" tabindex="-1"
@@ -187,7 +194,7 @@ layout('page', $page);
 
                 <div class="lp-modal-actions">
                     <button class="lp-btn lp-btn-line" type="button" data-modal-close>Tutup</button>
-                    <button class="lp-btn lp-btn-solid" type="submit">Kirim Data</button>
+                    <button class="lp-btn lp-btn-solid" type="submit" id="daftarSubmit">Kirim Data</button>
                 </div>
             </form>
         </div>

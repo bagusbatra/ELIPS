@@ -1,3 +1,4 @@
+-- Direktori: api/schema.sql
 -- ============================================================
 -- ELIPS LMS - skema database MySQL 8 (v4.0 Phase 1-3 + cabang)
 -- Jalankan melalui api/install.php agar data demo ikut terisi.
@@ -29,7 +30,7 @@ CREATE TABLE IF NOT EXISTS `users` (
     `password_hash` VARCHAR(255) NOT NULL,
     `role` ENUM('admin', 'instruktur', 'peserta', 'karyawan') NOT NULL DEFAULT 'peserta',
     `division` VARCHAR(40) NOT NULL DEFAULT '',
-    `status` ENUM('aktif', 'nonaktif') NOT NULL DEFAULT 'aktif',
+    `status` ENUM('aktif', 'nonaktif', 'menunggu') NOT NULL DEFAULT 'aktif',
     `session_version` INT UNSIGNED NOT NULL DEFAULT 0,
     `created_at` DATE NOT NULL DEFAULT (CURRENT_DATE),
     `updated_at` DATETIME NULL,
@@ -102,33 +103,6 @@ CREATE TABLE IF NOT EXISTS `courses` (
     KEY `idx_courses_location` (`location`),
     CONSTRAINT `fk_courses_instructor` FOREIGN KEY (`instructor_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
     CONSTRAINT `fk_courses_category` FOREIGN KEY (`category_id`) REFERENCES `categories` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- Calon peserta dari formulir publik halaman detail kursus.
--- Data ini belum menjadi akun student; kolom student_id dipakai saat
--- admin melakukan konversi ke role 'peserta'.
-CREATE TABLE IF NOT EXISTS `course_registrations` (
-    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
-    `course_id` INT UNSIGNED NOT NULL,
-    `course_title` VARCHAR(200) NOT NULL DEFAULT '',
-    `name` VARCHAR(150) NOT NULL,
-    `birth_place` VARCHAR(100) NOT NULL DEFAULT '',
-    `birth_date` DATE NULL,
-    `address` VARCHAR(500) NOT NULL DEFAULT '',
-    `phone` VARCHAR(40) NOT NULL DEFAULT '',
-    `email` VARCHAR(190) NOT NULL,
-    `status` ENUM('baru', 'dihubungi', 'terdaftar', 'batal') NOT NULL DEFAULT 'baru',
-    `student_id` INT UNSIGNED NULL,
-    `converted_at` DATETIME NULL,
-    `notes` VARCHAR(1000) NOT NULL DEFAULT '',
-    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    `updated_at` DATETIME NULL,
-    PRIMARY KEY (`id`),
-    KEY `idx_course_reg_course` (`course_id`),
-    KEY `idx_course_reg_email` (`email`),
-    KEY `idx_course_reg_status` (`status`),
-    CONSTRAINT `fk_course_reg_course` FOREIGN KEY (`course_id`) REFERENCES `courses` (`id`) ON DELETE CASCADE,
-    CONSTRAINT `fk_course_reg_student` FOREIGN KEY (`student_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `curriculum_versions` (
@@ -250,6 +224,43 @@ CREATE TABLE IF NOT EXISTS `enrollments` (
     CONSTRAINT `fk_enrollments_student` FOREIGN KEY (`student_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
     CONSTRAINT `fk_enrollments_course` FOREIGN KEY (`course_id`) REFERENCES `courses` (`id`) ON DELETE CASCADE,
     CONSTRAINT `fk_enrollments_class` FOREIGN KEY (`class_id`) REFERENCES `classes` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Calon peserta dari formulir publik halaman detail kursus.
+-- Data ini belum menjadi akun student; kolom student_id dipakai saat
+-- admin mengirim link aktivasi (akun 'menunggu') hingga siswa membuat sandi.
+CREATE TABLE IF NOT EXISTS `course_registrations` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `course_id` INT UNSIGNED NOT NULL,
+    `course_title` VARCHAR(200) NOT NULL DEFAULT '',
+    `class_id` INT UNSIGNED NULL,
+    `class_name` VARCHAR(150) NOT NULL DEFAULT '',
+    `amount_due` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    `name` VARCHAR(150) NOT NULL,
+    `birth_place` VARCHAR(100) NOT NULL DEFAULT '',
+    `birth_date` DATE NULL,
+    `address` VARCHAR(500) NOT NULL DEFAULT '',
+    `phone` VARCHAR(40) NOT NULL DEFAULT '',
+    `phone_norm` VARCHAR(20) NOT NULL DEFAULT '',
+    `email` VARCHAR(190) NOT NULL,
+    `status` ENUM('baru', 'dihubungi', 'menunggu', 'terdaftar', 'batal') NOT NULL DEFAULT 'baru',
+    `student_id` INT UNSIGNED NULL,
+    `enrollment_id` INT UNSIGNED NULL,
+    `converted_at` DATETIME NULL,
+    `activation_sent_at` DATETIME NULL,
+    `notes` VARCHAR(1000) NOT NULL DEFAULT '',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NULL,
+    PRIMARY KEY (`id`),
+    KEY `idx_course_reg_course` (`course_id`),
+    KEY `idx_course_reg_email` (`email`),
+    KEY `idx_course_reg_status` (`status`),
+    KEY `idx_course_reg_class` (`class_id`, `status`),
+    KEY `idx_course_reg_phone` (`phone_norm`),
+    CONSTRAINT `fk_course_reg_course` FOREIGN KEY (`course_id`) REFERENCES `courses` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_course_reg_class` FOREIGN KEY (`class_id`) REFERENCES `classes` (`id`) ON DELETE SET NULL,
+    CONSTRAINT `fk_course_reg_student` FOREIGN KEY (`student_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+    CONSTRAINT `fk_course_reg_enrollment` FOREIGN KEY (`enrollment_id`) REFERENCES `enrollments` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `class_instructor_histories` (

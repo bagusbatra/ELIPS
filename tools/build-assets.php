@@ -1,4 +1,5 @@
 <?php
+// Direktori: tools/build-assets.php
 declare(strict_types=1);
 
 // ============================================================
@@ -8,10 +9,13 @@ declare(strict_types=1);
 // (assets/js/dist/core.bundle.js dan crud.bundle.js) sehingga tiap halaman
 // memuat 2 permintaan, bukan 15+. Bila `terser` terpasang (npm i -g terser),
 // hasilnya diminify. seed.js sengaja TIDAK ikut (khusus mode demo lokal).
-// Bila sumber lebih baru daripada bundel, halaman otomatis memuat berkas
-// satuan, jadi mengedit JS tidak perlu build ulang saat development.
+// Bundel dicatat di dist/manifest.json bersama sidik jari isi sumbernya. Bila
+// isi sumber berubah dan bundel belum dibangun ulang, halaman otomatis memuat
+// berkas satuan, jadi mengedit JS tidak perlu build ulang saat development
+// (dan bundel basi tidak pernah dipakai).
 // ============================================================
 
+define('ELIPS_ROOT', dirname(__DIR__));
 require __DIR__ . '/../includes/layout.php';
 
 $root = dirname(__DIR__);
@@ -22,6 +26,7 @@ $bundles = [
 @mkdir($root . '/assets/js/dist', 0755, true);
 $hasTerser = trim((string) shell_exec(DIRECTORY_SEPARATOR === '\\' ? 'where terser 2>NUL' : 'command -v terser 2>/dev/null')) !== '';
 
+$manifest = [];
 foreach ($bundles as $out => $names) {
     $code = '';
     foreach ($names as $name) {
@@ -42,5 +47,9 @@ foreach ($bundles as $out => $names) {
             exit(1);
         }
     }
+    $manifest[basename($out, '.js')] = elips_bundle_hash($names);
     printf("%s: %d berkas -> %.1f KB%s\n", $out, count($names), filesize($target) / 1024, $hasTerser ? ' (minify)' : '');
 }
+
+file_put_contents($root . '/assets/js/dist/manifest.json', json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n");
+echo "manifest.json ditulis.\n";

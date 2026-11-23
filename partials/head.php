@@ -1,4 +1,5 @@
 <?php
+// Direktori: partials/head.php
 /** <head> bersama. Kunci $page: title, description, css[], head_extra (HTML), noindex. */
 $title = $page['title'] ?? 'ELIPS LMS';
 ?>
@@ -15,6 +16,7 @@ $title = $page['title'] ?? 'ELIPS LMS';
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="<?= asset('css/style.css') ?>">
+    <link rel="stylesheet" href="<?= asset('css/badges.css') ?>">
 <?php foreach (($page['css'] ?? []) as $css): ?>
     <link rel="stylesheet" href="<?= asset('css/' . $css . '.css') ?>">
 <?php endforeach; ?>

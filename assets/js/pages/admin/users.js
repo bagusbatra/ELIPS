@@ -1,7 +1,24 @@
+// Direktori: assets/js/pages/admin/users.js
 // ELIPS LMS - skrip halaman admin/users.php
 // Diekstrak dari inline <script>; URL relatif terhadap halaman.
 let editingUserId = null;
 let assigningInstructorId = null;
+let passwordRequests = {};
+let currentResetRequest = null;
+
+function loadPasswordRequests() {
+    passwordRequests = {};
+    if (!(ELIPS.api && ELIPS.api.enabled)) return;
+    const result = ELIPS.api.call('password.requests', {});
+    if (!result.ok) return;
+    (result.data || []).forEach(function (item) { passwordRequests[item.userId] = item; });
+}
+
+function userStatusBadge(status) {
+    if (status === 'aktif') return '<span class="badge badge-success">Aktif</span>';
+    if (status === 'menunggu') return '<span class="badge" style="background: #fef9c3; color: #854d0e;">Menunggu aktivasi</span>';
+    return '<span class="badge badge-warning">Nonaktif</span>';
+}
 
 function roleBadge(role) {
     if (role === 'admin') return '<span class="badge" style="background: #fee2e2; color: #991b1b;">Admin</span>';
@@ -35,6 +52,7 @@ function renderUsers() {
     const tbody = document.getElementById('usersTableBody');
     const users = ELIPS.getUsers();
     const courses = ELIPS.getCourses();
+    loadPasswordRequests();
     tbody.innerHTML = '';
 
     users.forEach(function (user) {
@@ -56,12 +74,13 @@ function renderUsers() {
             '<td>' + (user.role === 'karyawan' && user.division
                 ? '<span class="badge" style="background: #ecfccb; color: #3f6212;">' + ELIPS.escapeHtml(ELIPS.divisionLabel(user.division)) + '</span>'
                 : '<span style="color: var(--text-secondary);">-</span>') + '</td>',
-            '<td>' + (user.status === 'aktif' ? '<span class="badge badge-success">Aktif</span>' : '<span class="badge badge-warning">Nonaktif</span>') + '</td>',
+            '<td>' + userStatusBadge(user.status) + '</td>',
             '<td><span style="color: var(--text-secondary);">' + ELIPS.escapeHtml(user.createdAt || '-') + '</span></td>',
             '<td>',
             '  <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">',
             user.role === 'instruktur' ? '    <button class="btn btn-ghost" style="padding: 0.375rem 0.625rem; font-size: 0.8125rem;" title="Tugaskan ke kursus" onclick="openAssignModal(' + user.id + ')"><i class="bi bi-journal-check"></i></button>' : '',
             '    <button class="btn btn-ghost" style="padding: 0.375rem 0.625rem; font-size: 0.8125rem;" onclick="openUserModal(' + user.id + ')"><i class="bi bi-pencil"></i></button>',
+            passwordRequests[user.id] ? '    <button class="btn btn-primary" style="padding: 0.375rem 0.625rem; font-size: 0.8125rem;" title="Siswa meminta reset sandi" onclick="openResetModal(' + user.id + ')"><i class="bi bi-key"></i> Reset Sandi</button>' : '',
             '    <button class="btn btn-ghost" style="padding: 0.375rem 0.625rem; font-size: 0.8125rem;" title="Reset perangkat" onclick="resetUserDevice(' + user.id + ')"><i class="bi bi-phone"></i></button>',
             '    <button class="btn btn-ghost" style="padding: 0.375rem 0.625rem; font-size: 0.8125rem; color: var(--danger);" onclick="deleteUser(' + user.id + ')"><i class="bi bi-trash"></i></button>',
             '  </div>',
@@ -258,3 +277,74 @@ document.addEventListener('DOMContentLoaded', function () {
     renderUsers();
 });
 
+
+
+// ---------- Reset sandi (hanya untuk siswa yang menekan "Lupa sandi") ----------
+
+function openResetModal(userId) {
+    const request = passwordRequests[userId];
+    if (!request) {
+        ELIPS.toast('Tidak ada permintaan reset sandi untuk pengguna ini.');
+        return;
+    }
+    currentResetRequest = request;
+    document.getElementById('resetModalInfo').innerHTML = '<strong>' + ELIPS.escapeHtml(request.name) + '</strong> ('
+        + ELIPS.escapeHtml(request.email) + ') meminta reset sandi pada ' + ELIPS.escapeHtml(ELIPS.formatDate(request.requestedAt)) + '.';
+    document.getElementById('resetLinkGroup').hidden = true;
+    document.getElementById('resetLinkInput').value = '';
+    document.getElementById('resetIssueBtn').hidden = false;
+    document.getElementById('resetCopyBtn').hidden = true;
+    const wa = document.getElementById('resetWaBtn');
+    wa.hidden = true;
+    wa.href = '#';
+    document.getElementById('resetModal').style.display = 'flex';
+}
+
+function closeResetModal() {
+    document.getElementById('resetModal').style.display = 'none';
+    document.getElementById('resetLinkInput').value = '';
+    currentResetRequest = null;
+    renderUsers();
+}
+
+function issueResetLink() {
+    if (!currentResetRequest) return;
+    const result = ELIPS.api.call('password.reset.issue', { requestId: currentResetRequest.id });
+    if (!result.ok) {
+        ELIPS.toast(result.message || 'Gagal membuat link reset.');
+        return;
+    }
+    const data = result.data || {};
+    document.getElementById('resetLinkGroup').hidden = false;
+    document.getElementById('resetLinkInput').value = data.link || '';
+    document.getElementById('resetIssueBtn').hidden = true;
+    document.getElementById('resetCopyBtn').hidden = false;
+    const wa = document.getElementById('resetWaBtn');
+    wa.hidden = !data.waUrl;
+    wa.href = data.waUrl || '#';
+    ELIPS.toast('Link reset dibuat. Kirim lewat WhatsApp.');
+}
+
+function copyResetLink() {
+    const input = document.getElementById('resetLinkInput');
+    if (!input.value) return;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(input.value).then(function () { ELIPS.toast('Link disalin.'); });
+    } else {
+        input.select();
+        try { document.execCommand('copy'); } catch (err) { /* abaikan */ }
+        ELIPS.toast('Link disalin.');
+    }
+}
+
+function dismissResetRequest() {
+    if (!currentResetRequest) return;
+    if (!window.confirm('Tutup permintaan reset sandi ini tanpa mengirim link?')) return;
+    const result = ELIPS.api.call('password.request.dismiss', { requestId: currentResetRequest.id });
+    if (!result.ok) {
+        ELIPS.toast(result.message || 'Gagal menutup permintaan.');
+        return;
+    }
+    ELIPS.toast('Permintaan ditutup.');
+    closeResetModal();
+}

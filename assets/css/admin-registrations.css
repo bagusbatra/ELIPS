@@ -1,7 +1,18 @@
+/* Direktori: assets/css/admin-registrations.css */
 /* ============================================================
    ELIPS LMS - admin-registrations.css
    Gaya tambahan untuk halaman Admin > Pendaftaran Siswa.
    ============================================================ */
+
+.reg-badge-baru {
+    background: #fee2e2;
+    color: #b91c1c;
+}
+
+.reg-badge-menunggu {
+    background: #fef9c3;
+    color: #854d0e;
+}
 
 .reg-badge-batal {
     background: #fee2e2;

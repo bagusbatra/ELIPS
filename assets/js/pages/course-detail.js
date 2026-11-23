@@ -1,3 +1,4 @@
+// Direktori: assets/js/pages/course-detail.js
 // ELIPS LMS - skrip halaman course-detail.php
 // Diekstrak dari inline <script>; URL relatif terhadap halaman.
 document.addEventListener('DOMContentLoaded', function () {
@@ -34,7 +35,60 @@ document.addEventListener('DOMContentLoaded', function () {
     const daftarCourse = document.getElementById('daftarModalCourse');
     const daftarCourseId = document.getElementById('daftarCourseId');
     const daftarCourseTitle = document.getElementById('daftarCourseTitle');
+    const daftarKelasWrap = document.getElementById('daftarKelasWrap');
+    const daftarKelasList = document.getElementById('daftarKelasList');
+    const daftarKelasEmpty = document.getElementById('daftarKelasEmpty');
+    const daftarSubmit = document.getElementById('daftarSubmit');
     let lastFocused = null;
+    let classChoiceRequired = false;
+
+    function fmtPeriod(item) {
+        const start = item.periodStart ? ELIPS.formatDate(item.periodStart) : '';
+        const end = item.periodEnd ? ELIPS.formatDate(item.periodEnd) : '';
+        if (start && end) return start + ' – ' + end;
+        return start || end || 'Jadwal menyusul';
+    }
+
+    // Memuat kelas yang dibuka untuk program ini beserta sisa kuotanya (mode server).
+    function loadClassChoices() {
+        classChoiceRequired = false;
+        if (!daftarKelasWrap || !(ELIPS.api && ELIPS.api.enabled)) return;
+        const result = ELIPS.api.call('course.classes', { courseId: course.id });
+        daftarKelasWrap.hidden = false;
+        daftarKelasList.innerHTML = '';
+        daftarKelasEmpty.hidden = true;
+        if (daftarSubmit) daftarSubmit.disabled = false;
+
+        const items = result && result.ok ? (result.data || []) : [];
+        if (!items.length) {
+            daftarKelasEmpty.textContent = result && result.ok
+                ? 'Belum ada kelas yang dibuka untuk program ini. Silakan hubungi kami.'
+                : ((result && result.message) || 'Daftar kelas tidak dapat dimuat.');
+            daftarKelasEmpty.hidden = false;
+            if (daftarSubmit) daftarSubmit.disabled = true;
+            return;
+        }
+        classChoiceRequired = true;
+        items.forEach(function (item) {
+            const label = document.createElement('label');
+            label.className = 'lp-class-option' + (item.full ? ' is-full' : '');
+            const seats = item.full
+                ? 'Penuh'
+                : (item.seatsLeft === null ? 'Kuota terbuka' : 'Sisa ' + item.seatsLeft + ' kursi');
+            const place = item.branchName || item.location || '';
+            label.innerHTML = '<input type="radio" name="classId" value="' + Number(item.id) + '"'
+                + (item.full ? ' disabled' : '') + '>'
+                + '<span class="lp-class-body">'
+                + '<strong>' + ELIPS.escapeHtml(item.name) + '</strong>'
+                + '<span>' + ELIPS.escapeHtml(fmtPeriod(item)) + (place ? ' • ' + ELIPS.escapeHtml(place) : '') + '</span>'
+                + (item.scheduleNote ? '<span>' + ELIPS.escapeHtml(item.scheduleNote) + '</span>' : '')
+                + '</span>'
+                + '<em class="lp-class-seats">' + ELIPS.escapeHtml(seats) + '</em>';
+            daftarKelasList.appendChild(label);
+        });
+        const firstFree = daftarKelasList.querySelector('input:not([disabled])');
+        if (firstFree) firstFree.checked = true;
+    }
 
     function openDaftarModal() {
         if (!daftarModal) return;
@@ -43,6 +97,7 @@ document.addEventListener('DOMContentLoaded', function () {
         if (daftarCourseId) daftarCourseId.value = course.id;
         if (daftarCourseTitle) daftarCourseTitle.value = course.title;
         if (daftarError) daftarError.hidden = true;
+        loadClassChoices();
         daftarModal.hidden = false;
         document.body.classList.add('lp-modal-open');
         const firstInput = daftarForm ? daftarForm.querySelector('input:not([type="hidden"])') : null;
@@ -96,7 +151,16 @@ document.addEventListener('DOMContentLoaded', function () {
             }
 
             const websiteField = document.getElementById('daftarWebsite');
+            const chosenClass = daftarKelasList ? daftarKelasList.querySelector('input[name="classId"]:checked') : null;
+            if (classChoiceRequired && !chosenClass) {
+                if (daftarError) {
+                    daftarError.textContent = 'Pilih salah satu kelas yang masih tersedia.';
+                    daftarError.hidden = false;
+                }
+                return;
+            }
             const data = {
+                classId: chosenClass ? Number(chosenClass.value) : 0,
                 courseId: Number(daftarCourseId ? daftarCourseId.value : course.id) || course.id,
                 courseTitle: daftarCourseTitle ? daftarCourseTitle.value : course.title,
                 name: document.getElementById('daftarNama').value.trim(),
@@ -334,4 +398,3 @@ document.addEventListener('DOMContentLoaded', function () {
         };
     });
 });
-

@@ -1,1 +1,2075 @@
-!function(e){"use strict";const{success:t,failure:n,todayString:i,isValidEmail:r,isValidRole:a,isValidDivision:s,divisionLabel:u,isValidUserStatus:d}=e._;function o(t){"function"==typeof e.logAudit&&e.logAudit(t)}Object.assign(e,{createUser:function(l){if(e.api&&e.api.enabled)return e.api.call("user.create",l||{});l=l||{};const c=String(l.name||"").trim(),m=String(l.email||"").trim().toLowerCase(),f=String(l.phone||"").trim(),p=String(l.password||""),g=l.role||"peserta",k="karyawan"===g?String(l.division||"").trim().toLowerCase():"",I=l.status||"aktif";if(!c)return n("Nama wajib diisi.");if(!r(m))return n("Email tidak valid.");if(!p)return n("Password wajib diisi.");if(p.length<8)return n("Password minimal 8 karakter.");if(!a(g))return n("Role pengguna tidak valid.");if(!s(k))return n("Divisi pengguna tidak valid.");if(!d(I))return n("Status pengguna tidak valid.");const b=e.getUsers();if(b.some(function(e){return String(e.email).toLowerCase()===m}))return n("Email sudah digunakan oleh pengguna lain.");const h={id:e.nextId(b),name:c,email:m,phone:f,password:p,role:g,division:k,status:I,createdAt:i()};return b.push(h),e.setUsers(b),o({action:"create",entity:"user",entityId:h.id,entityLabel:h.name,actorId:l.actorId,detail:'Menambahkan pengguna "'+h.name+'" dengan role '+h.role+(h.division?" divisi "+u(h.division):"")+"."}),t("Pengguna berhasil ditambahkan.",h)},updateUser:function(i,u){if(e.api&&e.api.enabled)return e.api.call("user.update",{id:i,data:u||{}});u=u||{};const l=e.getUsers(),c=l.find(function(e){return e.id===Number(i)});if(!c)return n("Pengguna tidak ditemukan.");const m=void 0!==u.name?String(u.name).trim():c.name,f=void 0!==u.email?String(u.email).trim().toLowerCase():c.email,p=void 0!==u.role?u.role:c.role,g="karyawan"===p?void 0!==u.division?String(u.division).trim().toLowerCase():String(c.division||""):"",k=void 0!==u.status?u.status:c.status;if(!m)return n("Nama wajib diisi.");if(!r(f))return n("Email tidak valid.");if(!a(p))return n("Role pengguna tidak valid.");if(!s(g))return n("Divisi pengguna tidak valid.");if(!d(k))return n("Status pengguna tidak valid.");if(u.password&&String(u.password).length<8)return n("Password minimal 8 karakter.");if(l.some(function(e){return e.id!==c.id&&String(e.email).toLowerCase()===f}))return n("Email sudah digunakan oleh pengguna lain.");const I={name:c.name,email:c.email,role:c.role,division:c.division||"",status:c.status},b=I.role;c.name=m,c.email=f,void 0!==u.phone&&(c.phone=String(u.phone).trim()),c.role=p,c.division=g,c.status=k,u.password&&(c.password=u.password),c.updatedAt=(new Date).toISOString(),e.setUsers(l),"instruktur"===b&&"instruktur"!==c.role&&e._.releaseInstructorCourses(c.id,!1),"instruktur"===c.role&&(e._.syncInstructorNameOnCourses(c),"aktif"!==c.status&&e._.releaseInstructorCourses(c.id,!0));const h=[];return I.name!==c.name&&h.push("nama"),I.email!==c.email&&h.push("email"),I.role!==c.role&&h.push("role"),I.division!==c.division&&h.push("divisi"),I.status!==c.status&&h.push("status"),void 0!==u.phone&&h.push("telepon"),u.password&&h.push("password"),h.length>0&&o({action:"update",entity:"user",entityId:c.id,entityLabel:c.name,actorId:u.actorId,detail:'Memperbarui pengguna "'+c.name+'" ('+h.join(", ")+")."}),t("Pengguna berhasil diperbarui.",c)},deleteUser:function(i){if(e.api&&e.api.enabled)return e.api.call("user.delete",{id:i});const r=e.getUserById(i);return r?1===r.id?n("Akun Administrator utama tidak dapat dihapus."):"admin"===r.role&&e.getUsersByRole("admin").length<=1?n("Minimal satu akun Admin harus tersedia."):(e.setUsers(e.getUsers().filter(function(e){return e.id!==r.id})),"peserta"===r.role&&(e.setEnrollments(e.getEnrollments().filter(function(e){return e.studentId!==r.id})),e.setGrades(e.getGrades().filter(function(e){return e.studentId!==r.id})),e.setCertificates(e.getCertificates().filter(function(e){return e.studentId!==r.id})),e.setCompletedLessons(e.getCompletedLessons().filter(function(e){return e.studentId!==r.id}))),"instruktur"===r.role&&e._.releaseInstructorCourses(r.id,!1),o({action:"delete",entity:"user",entityId:r.id,entityLabel:r.name,detail:'Menghapus pengguna "'+r.name+'" dengan role '+r.role+"."}),t("Pengguna dihapus.")):n("Pengguna tidak ditemukan.")},authenticateUser:function(i,r,a){if(e.api&&e.api.enabled){const t={email:i,password:r};return a&&a.remember&&(t.remember=!0),e.api.call("auth.login",t)}const s=String(i||"").trim().toLowerCase(),u=String(r||"");if(!s)return n("Email wajib diisi.");if(!u)return n("Password wajib diisi.");const d=e.getUsers().find(function(e){return String(e.email).toLowerCase()===s});return d?"nonaktif"===d.status?n("Akun Anda nonaktif. Hubungi administrator."):u!==(d.password||e.DEFAULT_PASSWORD)?n("Password salah."):t("Login berhasil.",d):n("Email tidak terdaftar. Gunakan akun demo yang tersedia.")},resetUserDevice:function(i){if(e.api&&e.api.enabled)return e.api.call("user.resetDevice",{id:i});const r=e.getUserById(i);return r?(o({action:"revoke",entity:"user_device",entityLabel:r.name,detail:'Meriset perangkat tersimpan untuk "'+r.name+'" (mode demo).'}),t("Perangkat direset (mode demo).",{revoked:0})):n("Pengguna tidak ditemukan.")},assignInstructorToCourses:function(i,r){if(e.api&&e.api.enabled)return e.api.call("user.assignCourses",{instructorId:i,courseIds:r||[]});const a=e.getUserById(i);if(!a||"instruktur"!==a.role)return n("Pilih akun instruktur yang valid.");if("aktif"!==a.status)return n("Instruktur harus berstatus aktif.");const s=(r||[]).map(Number).filter(Boolean),u=e.getCourses();let d=0;return u.forEach(function(e){-1!==s.indexOf(e.id)?e.instructorId!==a.id?(e.instructorId=a.id,e.instructorName=a.name,d++):e.instructorName!==a.name&&(e.instructorName=a.name,d++):e.instructorId===a.id&&(e.instructorId=null,e.instructorName="","published"===e.status&&(e.status="draft"),d++)}),d>0&&(e.setCourses(u),e._.syncAllContentOwners(),o({action:"assign",entity:"course",entityLabel:a.name,detail:"Memperbarui "+d+' penugasan kursus untuk instruktur "'+a.name+'".'})),t(d+" penugasan kursus diperbarui.",{changed:d})}})}(window.ELIPS),function(e){"use strict";const{success:t,failure:n,todayString:i,isActiveInstructor:r}=e._;function a(t){"function"==typeof e.logAudit&&e.logAudit(t)}function s(i,s){if(e.api&&e.api.enabled)return e.api.call("course.status",{id:i,status:s});if("draft"!==s&&"published"!==s)return n("Status kursus tidak valid.");const u=e.getCourses(),d=u.find(function(e){return e.id===Number(i)});if(!d)return n("Kursus tidak ditemukan.");const o=d.status;if("published"===s){if(!r(d.instructorId))return n("Tugaskan instruktur aktif sebelum mempublikasikan kursus.");if(0===e.getModulesByCourse(d.id).length||0===e.getLessonsByCourse(d.id).length)return n("Tambahkan minimal satu modul dan satu materi sebelum publikasi.")}if(d.status=s,d.updatedAt=(new Date).toISOString(),"published"===s){const t=e.getCurrentCurriculumVersion(d.id);if(t&&"draft"===t.status){const n=e.getCurriculumVersions(),i=n.find(function(e){return e.id===t.id});i&&(i.status="published",i.updatedAt=(new Date).toISOString(),e.setCurriculumVersions(n)),d.curriculumVersionId=t.id,d.curriculumVersionCode=t.code,d.curriculumVersionStatus="published"}}return e.setCourses(u),o!==s&&(a({action:"published"===s?"publish":"unpublish",entity:"course",entityId:d.id,entityLabel:d.title,detail:"published"===s?'Mempublikasikan kursus "'+d.title+'".':'Mengembalikan kursus "'+d.title+'" ke Draft.'}),"published"===s&&"function"==typeof e.notifyCoursePublished&&e.notifyCoursePublished(d)),t("published"===s?"Kursus berhasil dipublikasikan.":"Kursus dikembalikan ke Draft.",d)}Object.assign(e,{createCourse:function(s){if(e.api&&e.api.enabled)return e.api.call("course.create",s||{});s=s||{};const u=String(s.title||"").trim(),d=String(s.category||"").trim(),o=String(s.description||"").trim(),l=Number(s.instructorId);if(!u)return n("Judul kursus wajib diisi.");if(!d)return n("Kategori kursus wajib diisi.");if(!l)return n("Pilih satu instruktur untuk kursus ini.");if(!r(l))return n("Instruktur harus berstatus aktif.");const c=e.getUserById(l),m=e.getCourses(),f=e.getCategories().find(function(e){return e.name===d}),p={id:e.nextId(m),title:u,category:d,categoryId:f?f.id:null,description:o,instructorId:c.id,instructorName:c.name,curriculumVersionId:null,curriculumVersionCode:null,curriculumVersionStatus:null,classes:0,enrollments:0,modules:0,lessons:0,totalLessons:0,status:"draft",createdAt:i()};m.push(p),e.setCourses(m);const g=e.getCurriculumVersions(),k={id:e.nextId(g),courseId:p.id,code:"1.0",name:"Kurikulum 1.0 — "+p.title,description:"",status:"draft",effectiveDate:null,notes:"Versi awal saat kursus dibuat.",createdBy:s.actorId||null,updatedBy:s.actorId||null,modules:0,lessons:0,classes:0,createdAt:(new Date).toISOString()};return g.push(k),e.setCurriculumVersions(g),p.curriculumVersionId=k.id,p.curriculumVersionCode=k.code,p.curriculumVersionStatus=k.status,e.setCourses(m),a({action:"create",entity:"course",entityId:p.id,entityLabel:p.title,actorId:s.actorId,detail:'Membuat kursus "'+p.title+'" (Draft) dengan instruktur '+c.name+"."}),t("Kursus baru berhasil ditambahkan dan berstatus Draft.",p)},updateCourse:function(i,s){if(e.api&&e.api.enabled)return e.api.call("course.update",{id:i,data:s||{}});s=s||{};const u=e.getCourses(),d=u.find(function(e){return e.id===Number(i)});if(!d)return n("Kursus tidak ditemukan.");const o=void 0!==s.title?String(s.title).trim():d.title,l=void 0!==s.category?String(s.category).trim():d.category,c=void 0!==s.description?String(s.description).trim():d.description,m=void 0!==s.instructorId?Number(s.instructorId):d.instructorId;if(!o)return n("Judul kursus wajib diisi.");if(!l)return n("Kategori kursus wajib diisi.");if(!m)return n("Pilih satu instruktur untuk kursus ini.");if(!r(m))return n("Instruktur harus berstatus aktif.");const f=d.instructorId,p=e.getUserById(m),g=[];if(d.title!==o&&g.push("judul"),d.category!==l&&g.push("kategori"),String(d.description||"")!==c&&g.push("deskripsi"),Number(d.instructorId)!==p.id&&g.push("instruktur"),d.title=o,d.category=l,void 0!==s.categoryId)d.categoryId=null===s.categoryId?null:Number(s.categoryId);else{const t=e.getCategories().find(function(e){return e.name===l});d.categoryId=t?t.id:null}return d.description=c,d.instructorId=p.id,d.instructorName=p.name,d.updatedAt=(new Date).toISOString(),e.setCourses(u),p.id!==Number(f)&&e._.syncAllContentOwners(),g.length>0&&a({action:"update",entity:"course",entityId:d.id,entityLabel:d.title,actorId:s.actorId,detail:'Memperbarui kursus "'+d.title+'" ('+g.join(", ")+")."}),t("Kursus berhasil diperbarui.",d)},deleteCourse:function(i){if(e.api&&e.api.enabled)return e.api.call("course.delete",{id:i});const r=e.getCourseById(i);if(!r)return n("Kursus tidak ditemukan.");const s=e.getLessonsByCourse(r.id).map(function(e){return e.id}),u=e.getClassesByCourse(r.id).map(function(e){return e.id});return e.setCourses(e.getCourses().filter(function(e){return e.id!==r.id})),e.setCurriculumVersions(e.getCurriculumVersions().filter(function(e){return e.courseId!==r.id})),e.setClasses(e.getClasses().filter(function(e){return e.courseId!==r.id})),e.setClassInstructorHistories(e.getClassInstructorHistories().filter(function(e){return-1===u.indexOf(e.classId)})),e.setModules(e.getModules().filter(function(e){return e.courseId!==r.id})),e.setLessons(e.getLessons().filter(function(e){return e.courseId!==r.id})),e.setEnrollments(e.getEnrollments().filter(function(e){return e.courseId!==r.id})),e.setGrades(e.getGrades().filter(function(e){return e.courseId!==r.id})),e.setCertificates(e.getCertificates().filter(function(e){return e.courseId!==r.id})),e.setCompletedLessons(e.getCompletedLessons().filter(function(e){return e.courseId!==r.id&&-1===s.indexOf(e.lessonId)})),a({action:"delete",entity:"course",entityId:r.id,entityLabel:r.title,detail:'Menghapus kursus "'+r.title+'" beserta modul, materi, penugasan, nilai, sertifikat, dan progres terkait.'}),t("Kursus beserta seluruh datanya berhasil dihapus.")},setCourseStatus:s,toggleCourseStatus:function(t){const i=e.getCourseById(t);return i?s(i.id,"published"===i.status?"draft":"published"):n("Kursus tidak ditemukan.")}})}(window.ELIPS),function(e){"use strict";const{success:t,failure:n,todayString:i}=e._;function r(t){"function"==typeof e.logAudit&&e.logAudit(t)}function a(t){const n=e.getUserById(t.studentId),i=e.getCourseById(t.courseId);return(n?n.name:"Peserta #"+t.studentId)+" — "+(i?i.title:"Kursus #"+t.courseId)}function s(t){return e.getClassEnrollments(t).filter(function(e){return"active"===e.status||"pending"===e.status}).length}function u(t){const n=e.getClassesByCourse(t).find(function(e){if(-1===["open","ready","ongoing"].indexOf(e.status))return!1;const t=Number(e.quota)||0;return 0===t||s(e.id)<t});return n?n.id:null}Object.assign(e,{assignStudentToCourses:function(s,d,o){if(e.api&&e.api.enabled)return e.api.call("enrollment.assign",{studentId:s,courseIds:d||[],enrolledAt:o});const l=e.getUserById(s);if(!l||"peserta"!==l.role)return n("Pilih akun peserta yang valid.");if("aktif"!==l.status)return n("Peserta harus berstatus aktif.");const c=e.getCourses(),m=(d||[]).map(Number).filter(Boolean);if(0===m.length)return n("Pilih minimal satu kursus.");if(m.some(function(e){return!c.some(function(t){return t.id===e})}))return n("Ada kursus yang tidak ditemukan.");const f=e.getEnrollments();let p=0;const g=[];return m.forEach(function(t){if(f.some(function(e){return e.studentId===l.id&&e.courseId===t}))return;const n={id:e.nextId(f),studentId:l.id,courseId:t,classId:u(t),enrolledBy:"admin",enrolledAt:o||i(),status:"active"};f.push(n),g.push({enrollment:n,course:c.find(function(e){return e.id===t})}),p++}),e.setEnrollments(f),g.forEach(function(e){r({action:"create",entity:"enrollment",entityId:e.enrollment.id,entityLabel:a(e.enrollment),detail:'Menugaskan "'+l.name+'" ke kursus "'+(e.course?e.course.title:"Kursus #"+e.enrollment.courseId)+'".'})}),t(p>0?p+" penugasan berhasil dibuat.":"Semua kursus yang dipilih sudah ditugaskan.",{added:p})},assignStudentsToClass:function(a,u,d){if(e.api&&e.api.enabled)return e.api.call("enrollment.assignClass",{classId:a,studentIds:u||[],enrolledAt:d});const o=e.getClassById(a);if(!o)return n("Kelas tidak ditemukan.");if("cancelled"===o.status||"archived"===o.status)return n("Kelas ini tidak menerima pendaftaran peserta.");const l=(u||[]).map(Number).filter(Boolean);if(0===l.length)return n("Pilih minimal satu peserta.");const c=e.getEnrollments(),m=Number(o.quota)||0;let f=s(o.id),p=0,g=0;for(const t of l){const a=e.getUserById(t);if(!a||"peserta"!==a.role)return n("Peserta #"+t+" tidak valid.");if("aktif"!==a.status)return n('Peserta "'+a.name+'" tidak aktif.');if(c.some(function(e){return e.studentId===a.id&&e.classId===o.id}))g++;else{if(m>0&&f>=m)return n("Kuota kelas sudah penuh ("+m+" peserta).");c.push({id:e.nextId(c),studentId:a.id,courseId:o.courseId,classId:o.id,enrolledBy:"admin",enrolledAt:d||i(),status:"active"}),p++,f++,r({action:"create",entity:"enrollment",entityId:c[c.length-1].id,entityLabel:a.name+" — "+o.name,detail:'Mendaftarkan "'+a.name+'" ke kelas "'+o.name+'" ('+o.code+")."})}}return e.setEnrollments(c),t(p>0?p+" peserta berhasil didaftarkan ke kelas."+(g>0?" "+g+" peserta sudah terdaftar.":""):"Semua peserta yang dipilih sudah terdaftar di kelas ini.",{added:p,skipped:g})},setEnrollmentStatus:function(i,s){if(e.api&&e.api.enabled)return e.api.call("enrollment.status",{id:i,status:s});if("active"!==s&&"dihentikan"!==s)return n("Status penugasan tidak valid.");const u=e.getEnrollments(),d=u.find(function(e){return e.id===Number(i)});return d?(d.status=s,d.updatedAt=(new Date).toISOString(),e.setEnrollments(u),r({action:"status",entity:"enrollment",entityId:d.id,entityLabel:a(d),detail:("active"===s?"Mengaktifkan":"Menghentikan")+' penugasan "'+a(d)+'".'}),t("active"===s?"Penugasan diaktifkan.":"Penugasan dihentikan.",d)):n("Penugasan tidak ditemukan.")},setEnrollmentClassStatus:function(i,s){if(e.api&&e.api.enabled)return e.api.call("enrollment.classStatus",{id:i,status:s});if(-1===["pending","active","completed","withdrawn","suspended","cancelled","dihentikan"].indexOf(s))return n("Status enrollment tidak valid.");const u=e.getEnrollments(),d=u.find(function(e){return e.id===Number(i)});return d?null===d.classId||void 0===d.classId?n("Enrollment ini bukan enrollment berbasis kelas."):(d.status=s,d.updatedAt=(new Date).toISOString(),e.setEnrollments(u),r({action:"status",entity:"enrollment",entityId:d.id,entityLabel:a(d),detail:'Mengubah status enrollment "'+a(d)+'" menjadi '+s+"."}),t("Status enrollment diperbarui menjadi "+s+".",d)):n("Enrollment tidak ditemukan.")},deleteEnrollment:function(i){if(e.api&&e.api.enabled)return e.api.call("enrollment.delete",{id:i});const s=e.getEnrollments().find(function(e){return e.id===Number(i)});if(!s)return n("Penugasan tidak ditemukan.");const u=a(s);return e.setEnrollments(e.getEnrollments().filter(function(e){return e.id!==s.id})),e.setGrades(e.getGrades().filter(function(e){return!(e.studentId===s.studentId&&e.courseId===s.courseId)})),e.setCertificates(e.getCertificates().filter(function(e){return!(e.studentId===s.studentId&&e.courseId===s.courseId)})),e.setCompletedLessons(e.getCompletedLessons().filter(function(e){return!(e.studentId===s.studentId&&e.courseId===s.courseId)})),r({action:"delete",entity:"enrollment",entityId:s.id,entityLabel:u,detail:'Menghapus penugasan "'+u+'" beserta nilai, sertifikat, dan progres terkait.'}),t("Penugasan dan data terkait berhasil dihapus.")}})}(window.ELIPS),function(e){"use strict";const{success:t,failure:n}=e._;function i(t){"function"==typeof e.logAudit&&e.logAudit(t)}function r(t,n){if(null==n)return!0;const i=e.getCourseById(t),r=e.getUserById(n);return!!i&&!!r&&"instruktur"===r.role&&i.instructorId===r.id}function a(e){return!!e&&("draft"===e.status||"published"===e.status)}function s(t,n){const i=e.getCurrentCurriculumVersion(t);if(i)return i;const r=e.getCourseById(t),a=e.getCurriculumVersions(),s=a.filter(function(e){return Number(e.courseId)===Number(t)}).map(function(e){return parseInt(String(e.code),10)||0}),u=Math.max.apply(null,[0].concat(s))+1+".0",d={id:e.nextId(a),courseId:Number(t),code:u,name:"Kurikulum "+u+(r?" — "+r.title:""),description:"",status:"draft",effectiveDate:null,notes:"Dibuat otomatis saat konten pertama ditambahkan.",createdBy:n||null,updatedBy:n||null,modules:0,lessons:0,classes:0,createdAt:(new Date).toISOString()};return a.push(d),e.setCurriculumVersions(a),d}Object.assign(e,{createModule:function(u,d,o){if(e.api&&e.api.enabled)return e.api.call("module.create",{courseId:u,data:d||{}});d=d||{};const l=e.getCourseById(u);if(!l)return n("Kursus tidak ditemukan.");if(!r(l.id,o))return n("Anda tidak berhak mengelola kursus ini.");const c=String(d.title||"").trim();if(!c)return n("Judul modul wajib diisi.");const m=s(l.id,o);if(!a(m))return n("Kurikulum kelas ini sudah dikunci atau dipensiunkan. Buat versi baru untuk melakukan perubahan.");const f=e.getModules(),p=f.filter(function(e){return e.courseId===l.id&&e.curriculumVersionId===m.id}).reduce(function(e,t){return Math.max(e,Number(t.order)||0)},0),g={id:e.nextId(f),courseId:l.id,curriculumVersionId:m.id,instructorId:l.instructorId,title:c,description:String(d.description||"").trim(),order:p+1,createdAt:(new Date).toISOString()};return f.push(g),e.setModules(f),e.syncCourseCounters(l.id),i({action:"create",entity:"module",entityId:g.id,entityLabel:g.title,actorId:o,detail:'Menambahkan modul "'+g.title+'" pada kursus "'+l.title+'".'}),t("Modul berhasil ditambahkan.",g)},updateModule:function(s,u,d){if(e.api&&e.api.enabled)return e.api.call("module.update",{id:s,data:u||{}});u=u||{};const o=e.getModules(),l=o.find(function(e){return e.id===Number(s)});if(!l)return n("Modul tidak ditemukan.");if(!r(l.courseId,d))return n("Anda tidak berhak mengelola modul ini.");if(!a(e.getCurriculumVersionById(l.curriculumVersionId)))return n("Kurikulum kelas ini sudah dikunci atau dipensiunkan. Buat versi baru untuk melakukan perubahan.");const c=void 0!==u.title?String(u.title).trim():l.title;if(!c)return n("Judul modul wajib diisi.");l.title=c,void 0!==u.description&&(l.description=String(u.description).trim()),l.updatedAt=(new Date).toISOString(),e.setModules(o);const m=e.getCourseById(l.courseId);return i({action:"update",entity:"module",entityId:l.id,entityLabel:l.title,actorId:d,detail:'Memperbarui modul "'+l.title+'" pada kursus "'+(m?m.title:"Kursus #"+l.courseId)+'".'}),t("Modul berhasil diperbarui.",l)},deleteModule:function(s,u){if(e.api&&e.api.enabled)return e.api.call("module.delete",{id:s});const d=e.getModules().find(function(e){return e.id===Number(s)});if(!d)return n("Modul tidak ditemukan.");if(!r(d.courseId,u))return n("Anda tidak berhak menghapus modul ini.");if(!a(e.getCurriculumVersionById(d.curriculumVersionId)))return n("Kurikulum kelas ini sudah dikunci atau dipensiunkan. Buat versi baru untuk melakukan perubahan.");const o=e.getLessonsByModule(d.id).map(function(e){return e.id}),l=e.getCourseById(d.courseId);return e.setModules(e.getModules().filter(function(e){return e.id!==d.id})),e.setLessons(e.getLessons().filter(function(e){return e.moduleId!==d.id})),e.setCompletedLessons(e.getCompletedLessons().filter(function(e){return-1===o.indexOf(e.lessonId)})),e.syncCourseCounters(d.courseId),i({action:"delete",entity:"module",entityId:d.id,entityLabel:d.title,actorId:u,detail:'Menghapus modul "'+d.title+'" dari kursus "'+(l?l.title:"Kursus #"+d.courseId)+'" beserta '+o.length+" materi."}),t("Modul dihapus.",{removedLessons:o.length})},createLesson:function(u,d,o){if(e.api&&e.api.enabled)return e.api.call("lesson.create",{moduleId:u,data:d||{}});d=d||{};const l=e.getModules().find(function(e){return e.id===Number(u)});if(!l)return n("Modul tidak ditemukan.");if(!r(l.courseId,o))return n("Anda tidak berhak mengelola materi ini.");let c=l.curriculumVersionId?e.getCurriculumVersionById(l.curriculumVersionId):null;if(!c){c=s(l.courseId,o),l.curriculumVersionId=c.id;const t=e.getModules(),n=t.find(function(e){return e.id===l.id});n&&(n.curriculumVersionId=c.id,e.setModules(t))}if(!a(c))return n("Kurikulum kelas ini sudah dikunci atau dipensiunkan. Buat versi baru untuk melakukan perubahan.");const m=String(d.title||"").trim(),f=d.type||"text";let p=String(d.content||"").trim();if(!m)return n("Judul materi wajib diisi.");if(-1===["text","video","file","link"].indexOf(f))return n("Tipe konten tidak valid.");if("text"!==f&&!p)return n("Isi URL atau nama file untuk tipe konten ini.");"text"===f&&(p=e.sanitizeHtml(p));const g=e.getLessons(),k=g.filter(function(e){return e.moduleId===l.id}).reduce(function(e,t){return Math.max(e,Number(t.order)||0)},0),I={id:e.nextId(g),moduleId:l.id,courseId:l.courseId,curriculumVersionId:c.id,instructorId:l.instructorId||null,title:m,type:f,content:p,order:k+1,createdAt:(new Date).toISOString()};g.push(I),e.setLessons(g),e.syncCourseCounters(l.courseId);const b=e.getCourseById(l.courseId);return i({action:"create",entity:"lesson",entityId:I.id,entityLabel:I.title,actorId:o,detail:'Menambahkan materi "'+I.title+'" pada modul "'+l.title+'" kursus "'+(b?b.title:"Kursus #"+l.courseId)+'".'}),t("Materi berhasil ditambahkan.",I)},updateLesson:function(s,u,d){if(e.api&&e.api.enabled)return e.api.call("lesson.update",{id:s,data:u||{}});u=u||{};const o=e.getLessons(),l=o.find(function(e){return e.id===Number(s)});if(!l)return n("Materi tidak ditemukan.");if(!r(l.courseId,d))return n("Anda tidak berhak mengelola materi ini.");if(!a(e.getCurriculumVersionById(l.curriculumVersionId)))return n("Kurikulum kelas ini sudah dikunci atau dipensiunkan. Buat versi baru untuk melakukan perubahan.");const c=void 0!==u.moduleId?Number(u.moduleId):l.moduleId,m=e.getModules().find(function(e){return e.id===c});if(!m||m.courseId!==l.courseId||Number(m.curriculumVersionId)!==Number(l.curriculumVersionId))return n("Modul tujuan tidak valid untuk versi kurikulum materi ini.");const f=void 0!==u.title?String(u.title).trim():l.title,p=void 0!==u.type?u.type:l.type;let g=void 0!==u.content?String(u.content).trim():l.content;if(!f)return n("Judul materi wajib diisi.");if(-1===["text","video","file","link"].indexOf(p))return n("Tipe konten tidak valid.");if("text"!==p&&!g)return n("Isi URL atau nama file untuk tipe konten ini.");if("text"===p&&(g=e.sanitizeHtml(g)),l.moduleId!==m.id){const t=e.getLessonsByModule(m.id).reduce(function(e,t){return Math.max(e,Number(t.order)||0)},0);l.order=t+1}l.moduleId=m.id,l.curriculumVersionId=m.curriculumVersionId,l.instructorId=m.instructorId||l.instructorId||null,l.title=f,l.type=p,l.content=g,l.updatedAt=(new Date).toISOString(),e.setLessons(o);const k=e.getCourseById(l.courseId);return i({action:"update",entity:"lesson",entityId:l.id,entityLabel:l.title,actorId:d,detail:'Memperbarui materi "'+l.title+'" pada modul "'+m.title+'" kursus "'+(k?k.title:"Kursus #"+l.courseId)+'".'}),t("Materi berhasil diperbarui.",l)},deleteLesson:function(s,u){if(e.api&&e.api.enabled)return e.api.call("lesson.delete",{id:s});const d=e.getLessons().find(function(e){return e.id===Number(s)});if(!d)return n("Materi tidak ditemukan.");if(!r(d.courseId,u))return n("Anda tidak berhak menghapus materi ini.");if(!a(e.getCurriculumVersionById(d.curriculumVersionId)))return n("Kurikulum kelas ini sudah dikunci atau dipensiunkan. Buat versi baru untuk melakukan perubahan.");const o=e.getCourseById(d.courseId);return e.setLessons(e.getLessons().filter(function(e){return e.id!==d.id})),e.setCompletedLessons(e.getCompletedLessons().filter(function(e){return e.lessonId!==d.id})),e.syncCourseCounters(d.courseId),i({action:"delete",entity:"lesson",entityId:d.id,entityLabel:d.title,actorId:u,detail:'Menghapus materi "'+d.title+'" dari kursus "'+(o?o.title:"Kursus #"+d.courseId)+'".'}),t("Materi dihapus.",d)}})}(window.ELIPS),function(e){"use strict";const{success:t,failure:n}=e._;function i(t){"function"==typeof e.logAudit&&e.logAudit(t)}function r(){let t;do{t="CERT-DRAFT-"+Date.now().toString().slice(-6)+"-"+Math.random().toString(36).slice(2,5).toUpperCase()}while(e.getCertificates().some(function(e){return String(e.certificateNumber)===t}));return t}function a(t){if(t&&void 0!==t.actorId&&null!==t.actorId&&""!==t.actorId)return Number(t.actorId);const n="function"==typeof e.getSessionUser?e.getSessionUser():null;return n?Number(n.id):null}function s(t,n){if(!n)return!0;const i=e.getUserById(n);return!i||("admin"===i.role||"instruktur"===i.role&&Number(t.instructorId)===Number(i.id))}Object.assign(e,{saveGrade:function(a){if(e.api&&e.api.enabled)return e.api.call("grade.save",a||{});a=a||{};const s=Number(a.studentId),u=Number(a.courseId),d=Number(a.score),o=String(a.note||"").trim();if(!s||!u)return n("Peserta atau kursus tidak valid.");if(!Number.isFinite(d)||d<0||d>100)return n("Masukkan nilai antara 0-100.");const l=e.getCourseById(u);if(!l)return n("Kursus tidak ditemukan.");if(void 0!==a.instructorId&&null!==a.instructorId&&l.instructorId!==Number(a.instructorId))return n("Anda tidak berhak menilai kursus ini.");const c=e.getEnrollments(),m=a.enrollmentId?c.find(function(e){return e.id===Number(a.enrollmentId)}):e.getEnrollment(s,u);if(!m||m.studentId!==s||m.courseId!==u)return n("Penugasan peserta pada kursus ini tidak ditemukan.");const f=e.gradeLetter(d),p=e.getGrades();let g=p.find(function(e){return e.enrollmentId===m.id||e.studentId===s&&e.courseId===u});const k=!g;if(g&&"finalized"===g.status)return n("Nilai sudah difinalisasi dan terkunci. Gunakan koreksi nilai dengan alasan.");g?(g.enrollmentId=m.id,g.score=d,g.grade=f,g.note=o,void 0!==a.instructorId&&null!==a.instructorId&&(g.instructorId=Number(a.instructorId)),g.updatedAt=(new Date).toISOString()):(g={id:e.nextId(p),enrollmentId:m.id,courseId:u,studentId:s,instructorId:void 0!==a.instructorId&&null!==a.instructorId?Number(a.instructorId):l.instructorId,score:d,grade:f,note:o,createdAt:(new Date).toISOString()},p.push(g)),e.setGrades(p);const I=e.getCertificates();let b=I.find(function(e){return e.enrollmentId===m.id||e.studentId===s&&e.courseId===u});const h=!!b;b?(b.enrollmentId=m.id,b.grade=f,b.score=d,b.issuedByInstructorAt=(new Date).toISOString(),"publish"!==b.status&&(b.status="draft"),b.certificateNumber||(b.certificateNumber=r()),b.updatedAt=(new Date).toISOString()):(b={id:e.nextId(I),studentId:s,courseId:u,enrollmentId:m.id,certificateNumber:r(),status:"draft",grade:f,score:d,issuedByInstructorAt:(new Date).toISOString(),approvedByAdminId:null,approvedAt:null,createdAt:(new Date).toISOString()},I.push(b)),e.setCertificates(I);const S=e.getUserById(s),y=S?S.name:"Peserta #"+s;return i({action:"grade",entity:"grade",entityId:g.id,entityLabel:y+" — "+l.title,actorId:a.instructorId,detail:(k?"Memberi":"Memperbarui")+" nilai "+d+" ("+f+")"+(o?" — catatan: "+o:"")+" untuk "+y+' pada kursus "'+l.title+'".'}),h||i({action:"submit",entity:"certificate",entityId:b.id,entityLabel:b.certificateNumber,actorId:a.instructorId,detail:"Membuat e-sertifikat Draft "+b.certificateNumber+" untuk "+y+' pada kursus "'+l.title+'".'}),t("Nilai disimpan. E-sertifikat Draft menunggu persetujuan Admin.",{grade:g,certificate:b})},createDraftCertificateForEnrollment:function(a,s){if(e.api&&e.api.enabled)return e.api.call("certificate.draft",{enrollmentId:a});const u=e.getEnrollments().find(function(e){return e.id===Number(a)});if(!u)return n("Penugasan peserta tidak ditemukan.");const d=e.getCourseById(u.courseId);if(!d)return n("Kursus tidak ditemukan.");if(null!=s&&d.instructorId!==Number(s))return n("Anda tidak berhak mengajukan sertifikat kursus ini.");if(e.getCertificate(u.studentId,u.courseId))return n("Sertifikat peserta ini sudah ada.");const o=e.getGrade(u.studentId,u.courseId);if(!o)return n("Peserta belum memiliki nilai.");const l=e.getCertificates(),c={id:e.nextId(l),studentId:u.studentId,courseId:u.courseId,enrollmentId:u.id,certificateNumber:r(),status:"draft",grade:o.grade,score:o.score,issuedByInstructorAt:(new Date).toISOString(),approvedByAdminId:null,approvedAt:null,createdAt:(new Date).toISOString()};l.push(c),e.setCertificates(l);const m=e.getUserById(u.studentId);return i({action:"submit",entity:"certificate",entityId:c.id,entityLabel:c.certificateNumber,actorId:s,detail:"Mengajukan e-sertifikat Draft "+c.certificateNumber+" untuk "+(m?m.name:"Peserta #"+u.studentId)+' pada kursus "'+d.title+'".'}),t("E-sertifikat Draft berhasil diajukan ke Admin.",c)},approveCertificate:function(r,a){if(e.api&&e.api.enabled)return e.api.call("certificate.approve",{id:r});const s=e.getCertificates(),u=s.find(function(e){return e.id===Number(r)});if(!u)return n("Sertifikat tidak ditemukan.");if("draft"!==u.status)return n("Sertifikat ini sudah berstatus Publish.");const d=u.certificateNumber,o=e.getUserById(u.studentId),l=e.getCourseById(u.courseId);return u.status="publish",u.approvedByAdminId=null!=a?Number(a):1,u.approvedAt=(new Date).toISOString(),u.certificateNumber&&0!==String(u.certificateNumber).indexOf("CERT-DRAFT")||(u.certificateNumber=e.generateCertificateNumber()),e.setCertificates(s),i({action:"approve",entity:"certificate",entityId:u.id,entityLabel:u.certificateNumber,actorId:a,detail:"Menyetujui e-sertifikat Draft "+d+" menjadi Publish ("+u.certificateNumber+") untuk "+(o?o.name:"Peserta #"+u.studentId)+' pada kursus "'+(l?l.title:"Kursus #"+u.courseId)+'".'}),"function"==typeof e.notifyCertificatePublished&&e.notifyCertificatePublished(u),t("Sertifikat berhasil disetujui dan diterbitkan.",u)},savePredicateRanges:function(r){if(e.api&&e.api.enabled)return e.api.call("predicate.save",r||{});const s=a(r=r||{}),u=s?e.getUserById(s):null;if(u&&"admin"!==u.role)return n("Anda tidak berhak mengubah rentang predikat.");const d=function(e){if(!Array.isArray(e)||0===e.length)return"Daftar rentang predikat wajib diisi.";const t={},n=[];for(let i=0;i<e.length;i++){const r=e[i]||{},a=String(r.letter||"").trim();if(!a||a.length>4)return"Huruf predikat #"+(i+1)+" tidak valid.";const s=a.toLowerCase();if(t[s])return'Huruf predikat "'+a+'" dipakai lebih dari sekali.';t[s]=!0;const u=Number(r.minScore),d=Number(r.maxScore);if(!isFinite(u)||!isFinite(d)||u<0||d>100||u>d)return'Rentang predikat "'+a+'" harus berada di 0-100 dan min <= max.';n.push({id:void 0===r.id||null===r.id?null:Number(r.id),letter:a,label:String(r.label||""),minScore:u,maxScore:d,sortOrder:Number(r.sortOrder)||i+1,isActive:!1!==r.isActive,createdAt:r.createdAt||(new Date).toISOString(),updatedAt:(new Date).toISOString()})}const i=n.filter(function(e){return e.isActive}).sort(function(e,t){return e.minScore-t.minScore});if(!i.length)return"Minimal satu rentang predikat harus aktif.";if(i[0].minScore>0)return"Rentang predikat aktif harus dimulai dari skor 0.";for(let e=1;e<i.length;e++){if(i[e].minScore<=i[e-1].maxScore)return"Rentang predikat tidak boleh tumpang tindih.";if(Math.round(100*(i[e].minScore-i[e-1].maxScore))/100>.01)return"Rentang predikat harus mencakup seluruh skala tanpa celah."}return i[i.length-1].maxScore<100?"Rentang predikat aktif harus mencakup skor hingga 100.":n}(r.ranges);if("string"==typeof d)return n(d);const o=d.map(function(e,t){return e.id=t+1,e});return e.setPredicateRanges(o),i({action:"predicate",entity:"predicate",entityId:null,entityLabel:"Rentang predikat",actorId:s,detail:"Memperbarui "+o.length+" rentang predikat A-E."}),t("Rentang predikat disimpan.",{ranges:o})},saveGradeScheme:function(r){if(e.api&&e.api.enabled)return e.api.call("gradeScheme.save",r||{});const u=a(r=r||{});let d=e.getGradeSchemes(),o=r.id?d.find(function(e){return Number(e.id)===Number(r.id)}):null,l=Number(r.classId)||(o?Number(o.classId):0);if(!l)return n("Kelas tidak valid.");const c=e.getClassById(l);if(!c)return n("Kelas tidak ditemukan.");if(!s(c,u))return n("Anda tidak berhak mengatur penilaian kelas ini.");o||(o=d.find(function(e){return Number(e.classId)===l})||null);const m=String(r.name||(o?o.name:"")).trim();if(!m)return n("Nama skema penilaian wajib diisi.");const f=String(r.status||(o?o.status:"draft"));if(-1===["draft","published","archived"].indexOf(f))return n("Status skema tidak valid.");if(o&&"published"===o.status&&"draft"===f)return n("Skema yang sudah dipublikasikan tidak dapat dikembalikan ke draft. Arsipkan skema untuk menggantinya.");const p=String(r.rounding||(o?o.rounding:"half_up"));if(-1===["half_up","half_down","floor","ceil"].indexOf(p))return n("Mode pembulatan tidak valid.");const g=void 0===r.passScore||null===r.passScore||""===r.passScore?Number(o?o.passScore:60):Number(r.passScore);if(!isFinite(g)||g<0||g>100)return n("Batas lulus harus antara 0-100.");const k=o?e.getGradeComponentsByScheme(o.id):[],I=Array.isArray(r.components)?r.components:k;if(!I.length&&"published"===f)return n("Skema harus memiliki minimal satu komponen sebelum dipublikasikan.");const b={},h=[];for(let e=0;e<I.length;e++){const t=I[e]||{},i=String(t.type||"");if(-1===["assignment","exam","manual"].indexOf(i))return n("Jenis komponen #"+(e+1)+" tidak valid.");const r=String(t.name||"").trim();if(!r)return n("Nama komponen #"+(e+1)+" wajib diisi.");const a=r.toLowerCase();if(b[a])return n('Nama komponen "'+r+'" dipakai lebih dari sekali.');b[a]=!0;const s=Number(t.weight);if(!isFinite(s)||s<0||s>100)return n('Bobot komponen "'+r+'" harus antara 0-100.');const u=String(t.aggregation||"weighted");if(-1===["weighted","average"].indexOf(u))return n('Agregasi komponen "'+r+'" tidak valid.');const d=void 0===t.maxScore||null===t.maxScore||""===t.maxScore?100:Number(t.maxScore);if(!isFinite(d)||d<=0||d>100)return n('Skor maksimum komponen "'+r+'" harus antara 0-100.');h.push({id:t.id?Number(t.id):null,schemeId:o?Number(o.id):null,type:i,name:r,description:String(t.description||""),weight:s,aggregation:u,maxScore:d,isRequired:!1!==t.isRequired,order:Number(t.order)||e+1,createdAt:t.createdAt||(new Date).toISOString(),updatedAt:(new Date).toISOString()})}const S=h.reduce(function(e,t){return e+t.weight},0);if("published"===f&&Math.abs(S-100)>.01)return n("Total bobot komponen harus tepat 100% sebelum skema dipublikasikan.");if(e.getGrades().filter(function(e){return o&&Number(e.schemeId)===Number(o.id)&&"finalized"===e.status}).length>0){if(k.map(function(e){return[Number(e.id),e.type,Number(e.weight)]}).join("|")!==h.map(function(e){return[Number(e.id||0),e.type,Number(e.weight)]}).join("|"))return n("Skema sudah memiliki nilai final. Komponen dan bobot tidak dapat diubah; gunakan koreksi nilai.")}o||(o={id:e.nextId(d),courseId:Number(c.courseId),courseTitle:c.courseTitle||"",classId:l,classCode:c.code||"",className:c.name||"",createdAt:(new Date).toISOString()},d.push(o)),o.name=m,o.status=f,o.passScore=g,o.rounding=p,o.notes=String(void 0!==r.notes?r.notes:o.notes||""),o.updatedBy=u,o.updatedAt=(new Date).toISOString(),e.setGradeSchemes(d);const y=e.getGradeComponentScores(),N=e.getGradeSchemeComponents(),C=N.filter(function(e){return Number(e.schemeId)!==Number(o.id)});let A=e.nextId(N);const v=[],w=h.map(function(e){const t=e.id?k.find(function(t){return Number(t.id)===Number(e.id)}):null;let n;return n=t?Object.assign(t,e,{schemeId:Number(o.id)}):Object.assign({},e,{id:A++,schemeId:Number(o.id),createdAt:e.createdAt||(new Date).toISOString()}),v.push(Number(n.id)),n});e.setGradeSchemeComponents(C.concat(w));const B=y.filter(function(e){return-1!==v.indexOf(Number(e.componentId))});return e.setGradeComponentScores(B),i({action:"status",entity:"grade_scheme",entityId:o.id,entityLabel:o.name,actorId:u,detail:'Menyimpan skema penilaian "'+o.name+'" untuk kelas '+o.classCode+"."}),t("Skema penilaian disimpan.",{scheme:o,components:e.getGradeComponentsByScheme(o.id)})},setGradeSchemeStatus:function(r){if(e.api&&e.api.enabled)return e.api.call("gradeScheme.status",r||{});const u=a(r=r||{}),d=String(r.status||"");if(-1===["draft","published","archived"].indexOf(d))return n("Status skema tidak valid.");const o=e.getGradeSchemes(),l=o.find(function(e){return Number(e.id)===Number(r.id)});if(!l)return n("Skema penilaian tidak ditemukan.");if(("published"===l.status||"archived"===l.status)&&"draft"===d)return n("Skema yang sudah dipublikasikan tidak dapat dikembalikan ke draft. Arsipkan skema untuk menggantinya.");const c=e.getClassById(l.classId);if(!c)return n("Kelas tidak ditemukan.");if(!s(c,u))return n("Anda tidak berhak mengubah skema ini.");if("published"===d){const t=e.getGradeComponentsByScheme(l.id);if(!t.length)return n("Skema harus memiliki minimal satu komponen sebelum dipublikasikan.");const i=e.gradeWeightTotal(t);if(Math.abs(i-100)>.01)return n("Total bobot komponen harus tepat 100% sebelum skema dipublikasikan.")}return l.status=d,l.updatedBy=u,l.updatedAt=(new Date).toISOString(),e.setGradeSchemes(o),i({action:"status",entity:"grade_scheme",entityId:l.id,entityLabel:l.name,actorId:u,detail:"Mengubah status skema penilaian menjadi "+d+"."}),t("Status skema diperbarui.",{scheme:l})},deleteGradeScheme:function(r){if(e.api&&e.api.enabled)return e.api.call("gradeScheme.delete",r||{});const u=a(r=r||{}),d=e.getGradeSchemes(),o=d.find(function(e){return Number(e.id)===Number(r.id)});if(!o)return n("Skema penilaian tidak ditemukan.");const l=e.getClassById(o.classId);return l?s(l,u)?"published"===o.status?n("Arsipkan skema terlebih dahulu sebelum menghapus."):(e.setGradeSchemes(d.filter(function(e){return Number(e.id)!==Number(o.id)})),e.setGradeSchemeComponents(e.getGradeSchemeComponents().filter(function(e){return Number(e.schemeId)!==Number(o.id)})),i({action:"delete",entity:"grade_scheme",entityId:o.id,entityLabel:o.name,actorId:u,detail:'Menghapus skema penilaian "'+o.name+'".'}),t("Skema penilaian dihapus.")):n("Anda tidak berhak menghapus skema ini."):n("Kelas tidak ditemukan.")},gradeRoster:function(i){if(e.api&&e.api.enabled)return e.api.call("grade.roster",i||{});const r=a(i=i||{}),u=Number(i.classId),d=e.getClassById(u);if(!d)return n("Kelas tidak ditemukan.");if(!s(d,r))return n("Anda tidak berhak melihat nilai kelas ini.");const o=e.getGradeSchemeByClass(u),l=o?Object.assign({},o,{components:e.getGradeComponentsByScheme(o.id),totalWeight:e.gradeWeightTotal(e.getGradeComponentsByScheme(o.id))}):null,c=e.getClassEnrollments(u).filter(function(e){return"active"===e.status||"pending"===e.status}).map(function(t){const n=e.getUserById(t.studentId),i=e.computeEnrollmentGrade(t,l),r=e.getGrades().find(function(e){return Number(e.enrollmentId)===Number(t.id)})||null;return{enrollmentId:Number(t.id),studentId:Number(t.studentId),studentName:n?n.name:"Peserta #"+t.studentId,studentEmail:n?n.email:"",enrollmentStatus:t.status,gradeId:r?Number(r.id):null,gradeStatus:r&&r.status||"draft",finalScore:r&&void 0!==r.finalScore&&null!==r.finalScore?r.finalScore:i.finalScore,letter:r&&r.grade?r.grade:i.letter,computedStatus:i.status,missing:i.missing,passed:i.passed,finalizedAt:r&&r.finalizedAt||null,components:i.components}});return t("",{class:{id:d.id,code:d.code,name:d.name,courseId:d.courseId},scheme:l,predicates:e.getPredicateRanges(),roster:c})},saveManualComponentScore:function(r){if(e.api&&e.api.enabled)return e.api.call("grade.manualSave",r||{});const u=a(r=r||{}),d=e.getEnrollments().find(function(e){return Number(e.id)===Number(r.enrollmentId)});if(!d)return n("Penugasan peserta tidak ditemukan.");const o=e.getGrades().find(function(e){return Number(e.enrollmentId)===Number(d.id)});if(o&&"finalized"===o.status)return n("Nilai sudah difinalisasi. Gunakan koreksi nilai dengan alasan.");const l=e.getClassById(d.classId);if(!l)return n("Kelas peserta tidak ditemukan.");if(!s(l,u))return n("Anda tidak berhak menilai peserta ini.");const c=e.getGradeSchemeByClass(d.classId);if(!c)return n("Skema penilaian kelas belum dibuat.");const m=e.getGradeComponentsByScheme(c.id).find(function(e){return Number(e.id)===Number(r.componentId)});if(!m)return n("Komponen penilaian tidak ditemukan pada skema kelas.");if("manual"!==m.type)return n("Nilai komponen tugas/ujian dihitung otomatis dari aktivitas.");const f=String(r.status||"graded");if(-1===["not_assessed","graded","excused","missing"].indexOf(f))return n("Status komponen tidak valid.");let p=null;if("graded"===f){if(void 0===r.score||null===r.score||""===r.score)return n("Masukkan nilai komponen antara 0-100.");if(p=Number(r.score),!isFinite(p)||p<0||p>100)return n("Masukkan nilai komponen antara 0-100.")}const g=e.getGradeComponentScores();let k=g.find(function(e){return Number(e.componentId)===Number(m.id)&&Number(e.enrollmentId)===Number(d.id)});const I=(new Date).toISOString(),b=u?e.getUserById(u):null;k?(k.score=p,k.status=f,k.assessorId=u,k.assessorName=b?b.name:k.assessorName||"",k.assessedAt=I,k.note=String(r.note||""),k.updatedAt=I):(k={id:e.nextId(g),componentId:Number(m.id),enrollmentId:Number(d.id),studentId:Number(d.studentId),score:p,status:f,assessorId:u,assessorName:b?b.name:"",assessedAt:I,note:String(r.note||""),createdAt:I,updatedAt:I},g.push(k)),e.setGradeComponentScores(g);const h=e.getUserById(d.studentId);return i({action:"grade",entity:"grade_component",entityId:m.id,entityLabel:m.name+" — "+(h?h.name:"Peserta #"+d.studentId),actorId:u,detail:'Menyimpan nilai komponen "'+m.name+'" untuk '+(h?h.name:"Peserta #"+d.studentId)+(null!==p?" sebesar "+p:" dengan status "+f)+"."}),t("Nilai komponen disimpan.",{computed:e.computeEnrollmentGrade(d,c)})},exemptGradeComponent:function(r){if(e.api&&e.api.enabled)return e.api.call("grade.exempt",r||{});const u=a(r=r||{}),d=String(r.reason||r.note||"").trim();if(d.length<5)return n("Alasan pengecualian wajib diisi minimal 5 karakter.");const o=e.getEnrollments().find(function(e){return Number(e.id)===Number(r.enrollmentId)});if(!o)return n("Penugasan peserta tidak ditemukan.");const l=e.getGrades().find(function(e){return Number(e.enrollmentId)===Number(o.id)});if(l&&"finalized"===l.status)return n("Nilai sudah difinalisasi. Gunakan koreksi nilai dengan alasan.");const c=e.getClassById(o.classId);if(!c)return n("Kelas peserta tidak ditemukan.");if(!s(c,u))return n("Anda tidak berhak mengecualikan komponen peserta ini.");const m=e.getGradeSchemeByClass(o.classId);if(!m)return n("Skema penilaian kelas belum dibuat.");const f=e.getGradeComponentsByScheme(m.id).find(function(e){return Number(e.id)===Number(r.componentId)});if(!f)return n("Komponen penilaian tidak ditemukan pada skema kelas.");const p=e.getGradeComponentScores();let g=p.find(function(e){return Number(e.componentId)===Number(f.id)&&Number(e.enrollmentId)===Number(o.id)});const k=(new Date).toISOString(),I=u?e.getUserById(u):null;g?(g.score=null,g.status="excused",g.assessorId=u,g.assessorName=I?I.name:g.assessorName||"",g.assessedAt=k,g.note=d,g.updatedAt=k):(g={id:e.nextId(p),componentId:Number(f.id),enrollmentId:Number(o.id),studentId:Number(o.studentId),score:null,status:"excused",assessorId:u,assessorName:I?I.name:"",assessedAt:k,note:d,createdAt:k,updatedAt:k},p.push(g)),e.setGradeComponentScores(p);const b=e.getUserById(o.studentId);return i({action:"exempt",entity:"grade_component",entityId:f.id,entityLabel:f.name+" — "+(b?b.name:"Peserta #"+o.studentId),actorId:u,detail:'Memberi pengecualian komponen "'+f.name+'" untuk '+(b?b.name:"Peserta #"+o.studentId)+" — alasan: "+d+"."}),t("Pengecualian komponen disimpan.",{computed:e.computeEnrollmentGrade(o,m)})},finalizeGrades:function(r){if(e.api&&e.api.enabled)return e.api.call("grade.finalize",r||{});const u=a(r=r||{});let d=Array.isArray(r.enrollmentIds)?r.enrollmentIds.slice():[];if(!d.length&&r.enrollmentId&&(d=[r.enrollmentId]),d=d.map(Number).filter(function(e){return e>0}),!d.length)return n("Pilih minimal satu peserta untuk difinalisasi.");const o=e.getGrades(),l=[];for(let t=0;t<d.length;t++){const r=d[t],a=e.getEnrollments().find(function(e){return Number(e.id)===r});if(!a)return n("Penugasan peserta #"+r+" tidak ditemukan.");const c=e.getClassById(a.classId);if(!c)return n("Kelas peserta tidak ditemukan.");if(!s(c,u))return n("Anda tidak berhak memfinalisasi nilai kelas ini.");const m=e.getGradeSchemeByClass(a.classId);if(!m)return n("Skema penilaian kelas belum dibuat.");if("published"!==m.status)return n("Skema penilaian harus dipublikasikan sebelum nilai difinalisasi.");const f=o.find(function(e){return Number(e.enrollmentId)===r});if(f&&"finalized"===f.status)return n("Nilai peserta #"+r+" sudah difinalisasi.");const p=e.computeEnrollmentGrade(a,m);if(p.missing.length)return n("Komponen wajib belum lengkap: "+p.missing.join(", ")+".");if("computed"!==p.status||null===p.finalScore)return n("Nilai akhir belum dapat dihitung untuk peserta #"+r+".");const g=(new Date).toISOString(),k=Math.max(0,Math.min(100,Math.round(p.finalScore)));let I=f;I?(I.schemeId=Number(m.id),I.courseId=Number(a.courseId),I.studentId=Number(a.studentId),I.instructorId=Number(c.instructorId)||u,I.score=k,I.finalScore=p.finalScore,I.grade=p.letter,I.status="finalized",I.components=p.components,I.finalizedBy=u,I.finalizedAt=g,I.computedAt=g,I.updatedAt=g):(I={id:e.nextId(o),enrollmentId:r,schemeId:Number(m.id),courseId:Number(a.courseId),studentId:Number(a.studentId),instructorId:Number(c.instructorId)||u,score:k,finalScore:p.finalScore,grade:p.letter,status:"finalized",components:p.components,note:"",finalizedBy:u,finalizedAt:g,computedAt:g,createdAt:g,updatedAt:g},o.push(I));const b=e.getUserById(a.studentId);i({action:"finalize",entity:"grade",entityId:I.id,entityLabel:(b?b.name:"Peserta #"+a.studentId)+" — "+c.code,actorId:u,detail:"Memfinalisasi nilai akhir "+p.finalScore+" ("+p.letter+") untuk "+(b?b.name:"Peserta #"+a.studentId)+"."}),l.push(I)}return e.setGrades(o),t("Nilai akhir difinalisasi dan dikunci.",{grades:l})},correctGrade:function(r){if(e.api&&e.api.enabled)return e.api.call("grade.correct",r||{});const u=a(r=r||{}),d=e.getGrades();let o=r.gradeId?d.find(function(e){return Number(e.id)===Number(r.gradeId)}):null;if(!o&&r.enrollmentId&&(o=d.find(function(e){return Number(e.enrollmentId)===Number(r.enrollmentId)})||null),!o)return n("Nilai tidak ditemukan.");if("finalized"!==o.status)return n("Koreksi hanya berlaku untuk nilai yang sudah difinalisasi.");const l=String(r.reason||"").trim();if(l.length<5)return n("Alasan koreksi wajib diisi minimal 5 karakter.");const c=e.getEnrollments().find(function(e){return Number(e.id)===Number(o.enrollmentId)});if(!c)return n("Penugasan peserta tidak ditemukan.");const m=e.getClassById(c.classId);if(m&&!s(m,u))return n("Anda tidak berhak mengoreksi nilai ini.");const f=e.getGradeSchemeById(o.schemeId);if(!f)return n("Skema penilaian nilai ini tidak ditemukan.");let p=null,g=null,k=o.components||[];if(Array.isArray(r.componentScores)&&r.componentScores.length){const t=e.getGradeComponentScores(),i=t.map(function(e){return Object.assign({},e)}),a=e.getGradeComponentsByScheme(f.id),s=(new Date).toISOString();for(let i=0;i<r.componentScores.length;i++){const d=r.componentScores[i]||{},o=Number(d.componentId);if(void 0===d.score||null===d.score||""===d.score)continue;const l=Number(d.score);if(!isFinite(l)||l<0||l>100)return n("Nilai komponen harus antara 0-100.");if(!a.some(function(e){return Number(e.id)===o}))return n("Komponen #"+o+" bukan bagian dari skema nilai ini.");let m=t.find(function(e){return Number(e.componentId)===o&&Number(e.enrollmentId)===Number(c.id)});m?(m.score=l,m.status="graded",m.assessorId=u,m.assessedAt=s,m.updatedAt=s):t.push({id:e.nextId(t),componentId:o,enrollmentId:Number(c.id),studentId:Number(c.studentId),score:l,status:"graded",assessorId:u,assessorName:"",assessedAt:s,note:"",createdAt:s,updatedAt:s})}e.setGradeComponentScores(t);const d=e.computeEnrollmentGrade(c,f);if(d.missing.length)return e.setGradeComponentScores(i),n("Komponen wajib belum lengkap: "+d.missing.join(", ")+".");if(null===d.finalScore)return e.setGradeComponentScores(i),n("Nilai akhir belum dapat dihitung.");p=d.finalScore,g=d.letter,k=d.components}else{if(void 0===r.finalScore||null===r.finalScore||""===r.finalScore)return n("Masukkan nilai komponen atau nilai akhir pengganti.");{const t=Number(r.finalScore);if(!isFinite(t)||t<0||t>100)return n("Nilai akhir harus antara 0-100.");p=e.gradeRound(t,f.rounding||"half_up"),g=e.predicateLetter(p)}}const I=void 0!==o.finalScore&&null!==o.finalScore?Number(o.finalScore):Number(o.score),b=o.grade,h=(new Date).toISOString();o.score=Math.max(0,Math.min(100,Math.round(p))),o.finalScore=p,o.grade=g,o.components=k,o.status="finalized",o.finalizedBy=u,o.finalizedAt=h,o.computedAt=h,o.updatedAt=h,e.setGrades(d);const S=e.getGradeCorrections(),y=u?e.getUserById(u):null,N={id:e.nextId(S),gradeId:Number(o.id),enrollmentId:Number(o.enrollmentId),previousScore:I,newScore:p,previousLetter:b,newLetter:g,reason:l,actorId:u,actorName:y?y.name:"",createdAt:h};S.push(N),e.setGradeCorrections(S);const C=e.getUserById(o.studentId),A=e.getCourseById(o.courseId);return i({action:"correct",entity:"grade",entityId:o.id,entityLabel:(C?C.name:"Peserta #"+o.studentId)+" — "+(A?A.title:""),actorId:u,detail:"Mengoreksi nilai dari "+I+" ("+b+") menjadi "+p+" ("+g+") — alasan: "+l+"."}),t("Koreksi nilai disimpan dan dicatat pada jejak audit.",{grade:o,correction:N})},gradeTranscript:function(i){if(e.api&&e.api.enabled)return e.api.call("grade.transcript",i||{});const r=a(i=i||{}),u=r?e.getUserById(r):null;let d=null;if(i.enrollmentId?d=e.getEnrollments().find(function(e){return Number(e.id)===Number(i.enrollmentId)}):i.studentId&&i.courseId&&(d=e.getEnrollment(i.studentId,i.courseId)),!d)return n("Penugasan peserta tidak ditemukan.");if(u&&"peserta"===u.role&&Number(d.studentId)!==Number(u.id))return n("Anda hanya dapat melihat nilai Anda sendiri.");if(u&&"peserta"!==u.role){const t=e.getClassById(d.classId),i=e.getCourseById(d.courseId);let a=!!t&&s(t,r);if(!a&&i&&(a=Number(i.instructorId)===Number(u.id)||"admin"===u.role),!a)return n("Anda tidak berhak melihat nilai peserta ini.")}const o=e.computeEnrollmentGrade(d),l=e.getGrades().find(function(e){return Number(e.enrollmentId)===Number(d.id)})||null,c=l?e.getGradeCorrectionsByGrade(l.id).map(function(t){const n=t.actorId?e.getUserById(t.actorId):null;return Object.assign({},t,{actorName:t.actorName||(n?n.name:"")})}):[];return t("",{enrollment:d,grade:l,computed:o,corrections:c})}})}(window.ELIPS);
+/* ---- crud-users.js ---- */
+// ============================================================
+// ELIPS LMS - crud-users.js
+// CRUD pengguna dan penugasan instruktur ke kursus.
+// ============================================================
+
+(function (ELIPS) {
+    'use strict';
+
+    const { success, failure, todayString, isValidEmail, isValidRole, isValidDivision, divisionLabel, isValidUserStatus } = ELIPS._;
+
+    function recordAudit(entry) {
+        if (typeof ELIPS.logAudit === 'function') ELIPS.logAudit(entry);
+    }
+
+    function createUser(data) {
+        if (ELIPS.api && ELIPS.api.enabled) return ELIPS.api.call('user.create', data || {});
+        data = data || {};
+        const name = String(data.name || '').trim();
+        const email = String(data.email || '').trim().toLowerCase();
+        const phone = String(data.phone || '').trim();
+        const password = String(data.password || '');
+        const role = data.role || 'peserta';
+        const division = role === 'karyawan' ? String(data.division || '').trim().toLowerCase() : '';
+        const status = data.status || 'aktif';
+
+        if (!name) return failure('Nama wajib diisi.');
+        if (!isValidEmail(email)) return failure('Email tidak valid.');
+        if (!password) return failure('Password wajib diisi.');
+        if (password.length < 8) return failure('Password minimal 8 karakter.');
+        if (!isValidRole(role)) return failure('Role pengguna tidak valid.');
+        if (!isValidDivision(division)) return failure('Divisi pengguna tidak valid.');
+        if (!isValidUserStatus(status)) return failure('Status pengguna tidak valid.');
+
+        const users = ELIPS.getUsers();
+        if (users.some(function (u) { return String(u.email).toLowerCase() === email; })) {
+            return failure('Email sudah digunakan oleh pengguna lain.');
+        }
+
+        const user = {
+            id: ELIPS.nextId(users),
+            name: name,
+            email: email,
+            phone: phone,
+            password: password,
+            role: role,
+            division: division,
+            status: status,
+            createdAt: todayString()
+        };
+
+        users.push(user);
+        ELIPS.setUsers(users);
+        recordAudit({
+            action: 'create',
+            entity: 'user',
+            entityId: user.id,
+            entityLabel: user.name,
+            actorId: data.actorId,
+            detail: 'Menambahkan pengguna "' + user.name + '" dengan role ' + user.role
+                + (user.division ? ' divisi ' + divisionLabel(user.division) : '') + '.'
+        });
+        return success('Pengguna berhasil ditambahkan.', user);
+    }
+
+    function updateUser(id, data) {
+        if (ELIPS.api && ELIPS.api.enabled) return ELIPS.api.call('user.update', { id: id, data: data || {} });
+        data = data || {};
+        const users = ELIPS.getUsers();
+        const user = users.find(function (u) { return u.id === Number(id); });
+        if (!user) return failure('Pengguna tidak ditemukan.');
+
+        const nextName = data.name !== undefined ? String(data.name).trim() : user.name;
+        const nextEmail = data.email !== undefined ? String(data.email).trim().toLowerCase() : user.email;
+        const nextRole = data.role !== undefined ? data.role : user.role;
+        const nextDivision = nextRole === 'karyawan'
+            ? (data.division !== undefined ? String(data.division).trim().toLowerCase() : String(user.division || ''))
+            : '';
+        const nextStatus = data.status !== undefined ? data.status : user.status;
+
+        if (!nextName) return failure('Nama wajib diisi.');
+        if (!isValidEmail(nextEmail)) return failure('Email tidak valid.');
+        if (!isValidRole(nextRole)) return failure('Role pengguna tidak valid.');
+        if (!isValidDivision(nextDivision)) return failure('Divisi pengguna tidak valid.');
+        if (!isValidUserStatus(nextStatus)) return failure('Status pengguna tidak valid.');
+        if (data.password && String(data.password).length < 8) {
+            return failure('Password minimal 8 karakter.');
+        }
+        if (users.some(function (u) { return u.id !== user.id && String(u.email).toLowerCase() === nextEmail; })) {
+            return failure('Email sudah digunakan oleh pengguna lain.');
+        }
+
+        const previous = {
+            name: user.name,
+            email: user.email,
+            role: user.role,
+            division: user.division || '',
+            status: user.status
+        };
+        const previousRole = previous.role;
+        user.name = nextName;
+        user.email = nextEmail;
+        if (data.phone !== undefined) user.phone = String(data.phone).trim();
+        user.role = nextRole;
+        user.division = nextDivision;
+        user.status = nextStatus;
+        if (data.password) user.password = data.password;
+        user.updatedAt = new Date().toISOString();
+
+        ELIPS.setUsers(users);
+
+        if (previousRole === 'instruktur' && user.role !== 'instruktur') {
+            ELIPS._.releaseInstructorCourses(user.id, false);
+        }
+        if (user.role === 'instruktur') {
+            ELIPS._.syncInstructorNameOnCourses(user);
+            if (user.status !== 'aktif') ELIPS._.releaseInstructorCourses(user.id, true);
+        }
+
+        const changes = [];
+        if (previous.name !== user.name) changes.push('nama');
+        if (previous.email !== user.email) changes.push('email');
+        if (previous.role !== user.role) changes.push('role');
+        if (previous.division !== user.division) changes.push('divisi');
+        if (previous.status !== user.status) changes.push('status');
+        if (data.phone !== undefined) changes.push('telepon');
+        if (data.password) changes.push('password');
+
+        if (changes.length > 0) {
+            recordAudit({
+                action: 'update',
+                entity: 'user',
+                entityId: user.id,
+                entityLabel: user.name,
+                actorId: data.actorId,
+                detail: 'Memperbarui pengguna "' + user.name + '" (' + changes.join(', ') + ').'
+            });
+        }
+
+        return success('Pengguna berhasil diperbarui.', user);
+    }
+
+    function deleteUser(id) {
+        if (ELIPS.api && ELIPS.api.enabled) return ELIPS.api.call('user.delete', { id: id });
+        const user = ELIPS.getUserById(id);
+        if (!user) return failure('Pengguna tidak ditemukan.');
+        if (user.id === 1) return failure('Akun Administrator utama tidak dapat dihapus.');
+        if (user.role === 'admin' && ELIPS.getUsersByRole('admin').length <= 1) {
+            return failure('Minimal satu akun Admin harus tersedia.');
+        }
+
+        ELIPS.setUsers(ELIPS.getUsers().filter(function (u) { return u.id !== user.id; }));
+
+        if (user.role === 'peserta') {
+            ELIPS.setEnrollments(ELIPS.getEnrollments().filter(function (e) { return e.studentId !== user.id; }));
+            ELIPS.setGrades(ELIPS.getGrades().filter(function (g) { return g.studentId !== user.id; }));
+            ELIPS.setCertificates(ELIPS.getCertificates().filter(function (c) { return c.studentId !== user.id; }));
+            ELIPS.setCompletedLessons(ELIPS.getCompletedLessons().filter(function (c) { return c.studentId !== user.id; }));
+        }
+
+        if (user.role === 'instruktur') {
+            ELIPS._.releaseInstructorCourses(user.id, false);
+        }
+
+        recordAudit({
+            action: 'delete',
+            entity: 'user',
+            entityId: user.id,
+            entityLabel: user.name,
+            detail: 'Menghapus pengguna "' + user.name + '" dengan role ' + user.role + '.'
+        });
+
+        return success('Pengguna dihapus.');
+    }
+
+    function authenticateUser(email, password, options) {
+        if (ELIPS.api && ELIPS.api.enabled) {
+            const payload = { email: email, password: password };
+            if (options && options.remember) payload.remember = true;
+            return ELIPS.api.call('auth.login', payload);
+        }
+        const normalizedEmail = String(email || '').trim().toLowerCase();
+        const submittedPassword = String(password || '');
+
+        if (!normalizedEmail) return failure('Email wajib diisi.');
+        if (!submittedPassword) return failure('Password wajib diisi.');
+
+        const user = ELIPS.getUsers().find(function (u) {
+            return String(u.email).toLowerCase() === normalizedEmail;
+        });
+        if (!user) return failure('Email tidak terdaftar. Gunakan akun demo yang tersedia.');
+        if (user.status === 'nonaktif') return failure('Akun Anda nonaktif. Hubungi administrator.');
+
+        // Akun lama tanpa password dimigrasikan ke password demo oleh seed.js.
+        const expectedPassword = user.password || ELIPS.DEFAULT_PASSWORD;
+        if (submittedPassword !== expectedPassword) return failure('Password salah.');
+
+        return success('Login berhasil.', user);
+    }
+
+    function resetUserDevice(userId) {
+        if (ELIPS.api && ELIPS.api.enabled) {
+            return ELIPS.api.call('user.resetDevice', { id: userId });
+        }
+        const user = ELIPS.getUserById(userId);
+        if (!user) return failure('Pengguna tidak ditemukan.');
+        recordAudit({
+            action: 'revoke',
+            entity: 'user_device',
+            entityLabel: user.name,
+            detail: 'Meriset perangkat tersimpan untuk "' + user.name + '" (mode demo).'
+        });
+        return success('Perangkat direset (mode demo).', { revoked: 0 });
+    }
+
+    function assignInstructorToCourses(instructorId, courseIds) {
+        if (ELIPS.api && ELIPS.api.enabled) {
+            return ELIPS.api.call('user.assignCourses', { instructorId: instructorId, courseIds: courseIds || [] });
+        }
+        const instructor = ELIPS.getUserById(instructorId);
+        if (!instructor || instructor.role !== 'instruktur') return failure('Pilih akun instruktur yang valid.');
+        if (instructor.status !== 'aktif') return failure('Instruktur harus berstatus aktif.');
+
+        const selected = (courseIds || []).map(Number).filter(Boolean);
+        const courses = ELIPS.getCourses();
+        let changed = 0;
+
+        courses.forEach(function (course) {
+            if (selected.indexOf(course.id) !== -1) {
+                if (course.instructorId !== instructor.id) {
+                    course.instructorId = instructor.id;
+                    course.instructorName = instructor.name;
+                    changed++;
+                } else if (course.instructorName !== instructor.name) {
+                    course.instructorName = instructor.name;
+                    changed++;
+                }
+            } else if (course.instructorId === instructor.id) {
+                course.instructorId = null;
+                course.instructorName = '';
+                if (course.status === 'published') course.status = 'draft';
+                changed++;
+            }
+        });
+
+        if (changed > 0) {
+            ELIPS.setCourses(courses);
+            ELIPS._.syncAllContentOwners();
+            recordAudit({
+                action: 'assign',
+                entity: 'course',
+                entityLabel: instructor.name,
+                detail: 'Memperbarui ' + changed + ' penugasan kursus untuk instruktur "' + instructor.name + '".'
+            });
+        }
+        return success(changed + ' penugasan kursus diperbarui.', { changed: changed });
+    }
+
+    Object.assign(ELIPS, {
+        createUser: createUser,
+        updateUser: updateUser,
+        deleteUser: deleteUser,
+        authenticateUser: authenticateUser,
+        resetUserDevice: resetUserDevice,
+        assignInstructorToCourses: assignInstructorToCourses
+    });
+})(window.ELIPS);
+;
+/* ---- crud-courses.js ---- */
+// ============================================================
+// ELIPS LMS - crud-courses.js
+// CRUD kursus dan aturan Draft/Publish.
+// ============================================================
+
+(function (ELIPS) {
+    'use strict';
+
+    const { success, failure, todayString, isActiveInstructor } = ELIPS._;
+
+    function recordAudit(entry) {
+        if (typeof ELIPS.logAudit === 'function') ELIPS.logAudit(entry);
+    }
+
+    function createCourse(data) {
+        if (ELIPS.api && ELIPS.api.enabled) return ELIPS.api.call('course.create', data || {});
+        data = data || {};
+        const title = String(data.title || '').trim();
+        const category = String(data.category || '').trim();
+        const description = String(data.description || '').trim();
+        const instructorId = Number(data.instructorId);
+
+        if (!title) return failure('Judul kursus wajib diisi.');
+        if (!category) return failure('Kategori kursus wajib diisi.');
+        if (!instructorId) return failure('Pilih satu instruktur untuk kursus ini.');
+        if (!isActiveInstructor(instructorId)) return failure('Instruktur harus berstatus aktif.');
+
+        const instructor = ELIPS.getUserById(instructorId);
+        const courses = ELIPS.getCourses();
+        const categories = ELIPS.getCategories();
+        const categoryRow = categories.find(function (c) { return c.name === category; });
+        const course = {
+            id: ELIPS.nextId(courses),
+            title: title,
+            category: category,
+            categoryId: categoryRow ? categoryRow.id : null,
+            description: description,
+            instructorId: instructor.id,
+            instructorName: instructor.name,
+            curriculumVersionId: null,
+            curriculumVersionCode: null,
+            curriculumVersionStatus: null,
+            classes: 0,
+            enrollments: 0,
+            modules: 0,
+            lessons: 0,
+            totalLessons: 0,
+            status: 'draft',
+            createdAt: todayString()
+        };
+
+        courses.push(course);
+        ELIPS.setCourses(courses);
+
+        // Setiap kursus baru dimulai dengan versi kurikulum 1.0 (draft).
+        const versions = ELIPS.getCurriculumVersions();
+        const version = {
+            id: ELIPS.nextId(versions),
+            courseId: course.id,
+            code: '1.0',
+            name: 'Kurikulum 1.0 — ' + course.title,
+            description: '',
+            status: 'draft',
+            effectiveDate: null,
+            notes: 'Versi awal saat kursus dibuat.',
+            createdBy: data.actorId || null,
+            updatedBy: data.actorId || null,
+            modules: 0,
+            lessons: 0,
+            classes: 0,
+            createdAt: new Date().toISOString()
+        };
+        versions.push(version);
+        ELIPS.setCurriculumVersions(versions);
+
+        course.curriculumVersionId = version.id;
+        course.curriculumVersionCode = version.code;
+        course.curriculumVersionStatus = version.status;
+        ELIPS.setCourses(courses);
+        recordAudit({
+            action: 'create',
+            entity: 'course',
+            entityId: course.id,
+            entityLabel: course.title,
+            actorId: data.actorId,
+            detail: 'Membuat kursus "' + course.title + '" (Draft) dengan instruktur ' + instructor.name + '.'
+        });
+        return success('Kursus baru berhasil ditambahkan dan berstatus Draft.', course);
+    }
+
+    function updateCourse(id, data) {
+        if (ELIPS.api && ELIPS.api.enabled) return ELIPS.api.call('course.update', { id: id, data: data || {} });
+        data = data || {};
+        const courses = ELIPS.getCourses();
+        const course = courses.find(function (c) { return c.id === Number(id); });
+        if (!course) return failure('Kursus tidak ditemukan.');
+
+        const title = data.title !== undefined ? String(data.title).trim() : course.title;
+        const category = data.category !== undefined ? String(data.category).trim() : course.category;
+        const description = data.description !== undefined ? String(data.description).trim() : course.description;
+        const nextInstructorId = data.instructorId !== undefined ? Number(data.instructorId) : course.instructorId;
+
+        if (!title) return failure('Judul kursus wajib diisi.');
+        if (!category) return failure('Kategori kursus wajib diisi.');
+        if (!nextInstructorId) return failure('Pilih satu instruktur untuk kursus ini.');
+        if (!isActiveInstructor(nextInstructorId)) return failure('Instruktur harus berstatus aktif.');
+
+        const previousInstructorId = course.instructorId;
+        const instructor = ELIPS.getUserById(nextInstructorId);
+
+        const changes = [];
+        if (course.title !== title) changes.push('judul');
+        if (course.category !== category) changes.push('kategori');
+        if (String(course.description || '') !== description) changes.push('deskripsi');
+        if (Number(course.instructorId) !== instructor.id) changes.push('instruktur');
+
+        course.title = title;
+        course.category = category;
+        if (data.categoryId !== undefined) {
+            course.categoryId = data.categoryId === null ? null : Number(data.categoryId);
+        } else {
+            const match = ELIPS.getCategories().find(function (c) { return c.name === category; });
+            course.categoryId = match ? match.id : null;
+        }
+        course.description = description;
+        course.instructorId = instructor.id;
+        course.instructorName = instructor.name;
+        course.updatedAt = new Date().toISOString();
+
+        // Status kursus tidak diubah lewat edit. Publikasi memakai aksi khusus.
+        ELIPS.setCourses(courses);
+        if (instructor.id !== Number(previousInstructorId)) ELIPS._.syncAllContentOwners();
+
+        if (changes.length > 0) {
+            recordAudit({
+                action: 'update',
+                entity: 'course',
+                entityId: course.id,
+                entityLabel: course.title,
+                actorId: data.actorId,
+                detail: 'Memperbarui kursus "' + course.title + '" (' + changes.join(', ') + ').'
+            });
+        }
+        return success('Kursus berhasil diperbarui.', course);
+    }
+
+    function deleteCourse(id) {
+        if (ELIPS.api && ELIPS.api.enabled) return ELIPS.api.call('course.delete', { id: id });
+        const course = ELIPS.getCourseById(id);
+        if (!course) return failure('Kursus tidak ditemukan.');
+
+        const lessonIds = ELIPS.getLessonsByCourse(course.id).map(function (lesson) { return lesson.id; });
+        const classIds = ELIPS.getClassesByCourse(course.id).map(function (item) { return item.id; });
+        ELIPS.setCourses(ELIPS.getCourses().filter(function (c) { return c.id !== course.id; }));
+        ELIPS.setCurriculumVersions(ELIPS.getCurriculumVersions().filter(function (v) { return v.courseId !== course.id; }));
+        ELIPS.setClasses(ELIPS.getClasses().filter(function (item) { return item.courseId !== course.id; }));
+        ELIPS.setClassInstructorHistories(ELIPS.getClassInstructorHistories().filter(function (history) {
+            return classIds.indexOf(history.classId) === -1;
+        }));
+        ELIPS.setModules(ELIPS.getModules().filter(function (m) { return m.courseId !== course.id; }));
+        ELIPS.setLessons(ELIPS.getLessons().filter(function (l) { return l.courseId !== course.id; }));
+        ELIPS.setEnrollments(ELIPS.getEnrollments().filter(function (e) { return e.courseId !== course.id; }));
+        ELIPS.setGrades(ELIPS.getGrades().filter(function (g) { return g.courseId !== course.id; }));
+        ELIPS.setCertificates(ELIPS.getCertificates().filter(function (c) { return c.courseId !== course.id; }));
+        ELIPS.setCompletedLessons(ELIPS.getCompletedLessons().filter(function (progress) {
+            return progress.courseId !== course.id && lessonIds.indexOf(progress.lessonId) === -1;
+        }));
+
+        recordAudit({
+            action: 'delete',
+            entity: 'course',
+            entityId: course.id,
+            entityLabel: course.title,
+            detail: 'Menghapus kursus "' + course.title + '" beserta modul, materi, penugasan, nilai, sertifikat, dan progres terkait.'
+        });
+        return success('Kursus beserta seluruh datanya berhasil dihapus.');
+    }
+
+    function setCourseStatus(id, status) {
+        if (ELIPS.api && ELIPS.api.enabled) return ELIPS.api.call('course.status', { id: id, status: status });
+        if (status !== 'draft' && status !== 'published') return failure('Status kursus tidak valid.');
+        const courses = ELIPS.getCourses();
+        const course = courses.find(function (c) { return c.id === Number(id); });
+        if (!course) return failure('Kursus tidak ditemukan.');
+        const previousStatus = course.status;
+
+        if (status === 'published') {
+            if (!isActiveInstructor(course.instructorId)) {
+                return failure('Tugaskan instruktur aktif sebelum mempublikasikan kursus.');
+            }
+            if (ELIPS.getModulesByCourse(course.id).length === 0 || ELIPS.getLessonsByCourse(course.id).length === 0) {
+                return failure('Tambahkan minimal satu modul dan satu materi sebelum publikasi.');
+            }
+        }
+
+        course.status = status;
+        course.updatedAt = new Date().toISOString();
+
+        if (status === 'published') {
+            const version = ELIPS.getCurrentCurriculumVersion(course.id);
+            if (version && version.status === 'draft') {
+                const versions = ELIPS.getCurriculumVersions();
+                const target = versions.find(function (v) { return v.id === version.id; });
+                if (target) {
+                    target.status = 'published';
+                    target.updatedAt = new Date().toISOString();
+                    ELIPS.setCurriculumVersions(versions);
+                }
+                course.curriculumVersionId = version.id;
+                course.curriculumVersionCode = version.code;
+                course.curriculumVersionStatus = 'published';
+            }
+        }
+
+        ELIPS.setCourses(courses);
+
+        if (previousStatus !== status) {
+            recordAudit({
+                action: status === 'published' ? 'publish' : 'unpublish',
+                entity: 'course',
+                entityId: course.id,
+                entityLabel: course.title,
+                detail: status === 'published'
+                    ? 'Mempublikasikan kursus "' + course.title + '".'
+                    : 'Mengembalikan kursus "' + course.title + '" ke Draft.'
+            });
+
+            if (status === 'published' && typeof ELIPS.notifyCoursePublished === 'function') {
+                ELIPS.notifyCoursePublished(course);
+            }
+        }
+        return success(status === 'published' ? 'Kursus berhasil dipublikasikan.' : 'Kursus dikembalikan ke Draft.', course);
+    }
+
+    function toggleCourseStatus(id) {
+        const course = ELIPS.getCourseById(id);
+        if (!course) return failure('Kursus tidak ditemukan.');
+        return setCourseStatus(course.id, course.status === 'published' ? 'draft' : 'published');
+    }
+
+    Object.assign(ELIPS, {
+        createCourse: createCourse,
+        updateCourse: updateCourse,
+        deleteCourse: deleteCourse,
+        setCourseStatus: setCourseStatus,
+        toggleCourseStatus: toggleCourseStatus
+    });
+})(window.ELIPS);
+;
+/* ---- crud-enrollments.js ---- */
+// ============================================================
+// ELIPS LMS - crud-enrollments.js
+// CRUD penugasan siswa ke kursus (enrollment).
+// ============================================================
+
+(function (ELIPS) {
+    'use strict';
+
+    const { success, failure, todayString } = ELIPS._;
+
+    function recordAudit(entry) {
+        if (typeof ELIPS.logAudit === 'function') ELIPS.logAudit(entry);
+    }
+
+    function enrollmentLabel(enrollment) {
+        const student = ELIPS.getUserById(enrollment.studentId);
+        const course = ELIPS.getCourseById(enrollment.courseId);
+        return (student ? student.name : 'Peserta #' + enrollment.studentId) + ' — ' +
+            (course ? course.title : 'Kursus #' + enrollment.courseId);
+    }
+
+    function activeCountForClass(classId) {
+        return ELIPS.getClassEnrollments(classId).filter(function (e) {
+            return e.status === 'active' || e.status === 'pending';
+        }).length;
+    }
+
+    // Kompatibilitas v3: enrollment berbasis kursus diarahkan ke kelas aktif
+    // yang masih memiliki kuota bila tersedia.
+    function pickOpenClass(courseId) {
+        const found = ELIPS.getClassesByCourse(courseId).find(function (item) {
+            if (['open', 'ready', 'ongoing'].indexOf(item.status) === -1) return false;
+            const quota = Number(item.quota) || 0;
+            return quota === 0 || activeCountForClass(item.id) < quota;
+        });
+        return found ? found.id : null;
+    }
+
+    function assignStudentToCourses(studentId, courseIds, enrolledAt) {
+        if (ELIPS.api && ELIPS.api.enabled) {
+            return ELIPS.api.call('enrollment.assign', {
+                studentId: studentId,
+                courseIds: courseIds || [],
+                enrolledAt: enrolledAt
+            });
+        }
+        const student = ELIPS.getUserById(studentId);
+        if (!student || student.role !== 'peserta') return failure('Pilih akun peserta yang valid.');
+        if (student.status !== 'aktif') return failure('Peserta harus berstatus aktif.');
+
+        const courses = ELIPS.getCourses();
+        const requested = (courseIds || []).map(Number).filter(Boolean);
+        if (requested.length === 0) return failure('Pilih minimal satu kursus.');
+
+        const invalid = requested.some(function (courseId) {
+            return !courses.some(function (course) { return course.id === courseId; });
+        });
+        if (invalid) return failure('Ada kursus yang tidak ditemukan.');
+
+        const enrollments = ELIPS.getEnrollments();
+        let added = 0;
+        const created = [];
+        requested.forEach(function (courseId) {
+            const exists = enrollments.some(function (e) {
+                return e.studentId === student.id && e.courseId === courseId;
+            });
+            if (exists) return;
+            const enrollment = {
+                id: ELIPS.nextId(enrollments),
+                studentId: student.id,
+                courseId: courseId,
+                classId: pickOpenClass(courseId),
+                enrolledBy: 'admin',
+                enrolledAt: enrolledAt || todayString(),
+                status: 'active'
+            };
+            enrollments.push(enrollment);
+            created.push({
+                enrollment: enrollment,
+                course: courses.find(function (course) { return course.id === courseId; })
+            });
+            added++;
+        });
+
+        ELIPS.setEnrollments(enrollments);
+        created.forEach(function (item) {
+            recordAudit({
+                action: 'create',
+                entity: 'enrollment',
+                entityId: item.enrollment.id,
+                entityLabel: enrollmentLabel(item.enrollment),
+                detail: 'Menugaskan "' + student.name + '" ke kursus "' +
+                    (item.course ? item.course.title : 'Kursus #' + item.enrollment.courseId) + '".'
+            });
+        });
+        return success(
+            added > 0 ? added + ' penugasan berhasil dibuat.' : 'Semua kursus yang dipilih sudah ditugaskan.',
+            { added: added }
+        );
+    }
+
+    function setEnrollmentStatus(id, status) {
+        if (ELIPS.api && ELIPS.api.enabled) return ELIPS.api.call('enrollment.status', { id: id, status: status });
+        if (status !== 'active' && status !== 'dihentikan') return failure('Status penugasan tidak valid.');
+        const enrollments = ELIPS.getEnrollments();
+        const enrollment = enrollments.find(function (e) { return e.id === Number(id); });
+        if (!enrollment) return failure('Penugasan tidak ditemukan.');
+        enrollment.status = status;
+        enrollment.updatedAt = new Date().toISOString();
+        ELIPS.setEnrollments(enrollments);
+        recordAudit({
+            action: 'status',
+            entity: 'enrollment',
+            entityId: enrollment.id,
+            entityLabel: enrollmentLabel(enrollment),
+            detail: (status === 'active' ? 'Mengaktifkan' : 'Menghentikan') + ' penugasan "' +
+                enrollmentLabel(enrollment) + '".'
+        });
+        return success(status === 'active' ? 'Penugasan diaktifkan.' : 'Penugasan dihentikan.', enrollment);
+    }
+
+    function deleteEnrollment(id) {
+        if (ELIPS.api && ELIPS.api.enabled) return ELIPS.api.call('enrollment.delete', { id: id });
+        const enrollment = ELIPS.getEnrollments().find(function (e) { return e.id === Number(id); });
+        if (!enrollment) return failure('Penugasan tidak ditemukan.');
+        const label = enrollmentLabel(enrollment);
+
+        ELIPS.setEnrollments(ELIPS.getEnrollments().filter(function (e) { return e.id !== enrollment.id; }));
+        ELIPS.setGrades(ELIPS.getGrades().filter(function (g) {
+            return !(g.studentId === enrollment.studentId && g.courseId === enrollment.courseId);
+        }));
+        ELIPS.setCertificates(ELIPS.getCertificates().filter(function (c) {
+            return !(c.studentId === enrollment.studentId && c.courseId === enrollment.courseId);
+        }));
+        ELIPS.setCompletedLessons(ELIPS.getCompletedLessons().filter(function (progress) {
+            return !(progress.studentId === enrollment.studentId && progress.courseId === enrollment.courseId);
+        }));
+
+        recordAudit({
+            action: 'delete',
+            entity: 'enrollment',
+            entityId: enrollment.id,
+            entityLabel: label,
+            detail: 'Menghapus penugasan "' + label + '" beserta nilai, sertifikat, dan progres terkait.'
+        });
+        return success('Penugasan dan data terkait berhasil dihapus.');
+    }
+
+    function assignStudentsToClass(classId, studentIds, enrolledAt) {
+        if (ELIPS.api && ELIPS.api.enabled) {
+            return ELIPS.api.call('enrollment.assignClass', {
+                classId: classId,
+                studentIds: studentIds || [],
+                enrolledAt: enrolledAt
+            });
+        }
+
+        const targetClass = ELIPS.getClassById(classId);
+        if (!targetClass) return failure('Kelas tidak ditemukan.');
+        if (targetClass.status === 'cancelled' || targetClass.status === 'archived') {
+            return failure('Kelas ini tidak menerima pendaftaran peserta.');
+        }
+
+        const requested = (studentIds || []).map(Number).filter(Boolean);
+        if (requested.length === 0) return failure('Pilih minimal satu peserta.');
+
+        const enrollments = ELIPS.getEnrollments();
+        const quota = Number(targetClass.quota) || 0;
+        let activeCount = activeCountForClass(targetClass.id);
+        let added = 0;
+        let skipped = 0;
+
+        for (const studentId of requested) {
+            const student = ELIPS.getUserById(studentId);
+            if (!student || student.role !== 'peserta') return failure('Peserta #' + studentId + ' tidak valid.');
+            if (student.status !== 'aktif') return failure('Peserta "' + student.name + '" tidak aktif.');
+
+            const exists = enrollments.some(function (e) {
+                return e.studentId === student.id && e.classId === targetClass.id;
+            });
+            if (exists) {
+                skipped++;
+                continue;
+            }
+            if (quota > 0 && activeCount >= quota) {
+                return failure('Kuota kelas sudah penuh (' + quota + ' peserta).');
+            }
+
+            enrollments.push({
+                id: ELIPS.nextId(enrollments),
+                studentId: student.id,
+                courseId: targetClass.courseId,
+                classId: targetClass.id,
+                enrolledBy: 'admin',
+                enrolledAt: enrolledAt || todayString(),
+                status: 'active'
+            });
+            added++;
+            activeCount++;
+            recordAudit({
+                action: 'create',
+                entity: 'enrollment',
+                entityId: enrollments[enrollments.length - 1].id,
+                entityLabel: student.name + ' — ' + targetClass.name,
+                detail: 'Mendaftarkan "' + student.name + '" ke kelas "' + targetClass.name +
+                    '" (' + targetClass.code + ').'
+            });
+        }
+
+        ELIPS.setEnrollments(enrollments);
+        return success(
+            added > 0
+                ? added + ' peserta berhasil didaftarkan ke kelas.' + (skipped > 0 ? ' ' + skipped + ' peserta sudah terdaftar.' : '')
+                : 'Semua peserta yang dipilih sudah terdaftar di kelas ini.',
+            { added: added, skipped: skipped }
+        );
+    }
+
+    function setEnrollmentClassStatus(id, status) {
+        if (ELIPS.api && ELIPS.api.enabled) {
+            return ELIPS.api.call('enrollment.classStatus', { id: id, status: status });
+        }
+        const allowed = ['pending', 'active', 'completed', 'withdrawn', 'suspended', 'cancelled', 'dihentikan'];
+        if (allowed.indexOf(status) === -1) return failure('Status enrollment tidak valid.');
+        const enrollments = ELIPS.getEnrollments();
+        const enrollment = enrollments.find(function (e) { return e.id === Number(id); });
+        if (!enrollment) return failure('Enrollment tidak ditemukan.');
+        if (enrollment.classId === null || enrollment.classId === undefined) {
+            return failure('Enrollment ini bukan enrollment berbasis kelas.');
+        }
+
+        enrollment.status = status;
+        enrollment.updatedAt = new Date().toISOString();
+        ELIPS.setEnrollments(enrollments);
+        recordAudit({
+            action: 'status',
+            entity: 'enrollment',
+            entityId: enrollment.id,
+            entityLabel: enrollmentLabel(enrollment),
+            detail: 'Mengubah status enrollment "' + enrollmentLabel(enrollment) + '" menjadi ' + status + '.'
+        });
+        return success('Status enrollment diperbarui menjadi ' + status + '.', enrollment);
+    }
+
+    Object.assign(ELIPS, {
+        assignStudentToCourses: assignStudentToCourses,
+        assignStudentsToClass: assignStudentsToClass,
+        setEnrollmentStatus: setEnrollmentStatus,
+        setEnrollmentClassStatus: setEnrollmentClassStatus,
+        deleteEnrollment: deleteEnrollment
+    });
+})(window.ELIPS);
+;
+/* ---- crud-content.js ---- */
+// ============================================================
+// ELIPS LMS - crud-content.js
+// CRUD modul dan materi pada kursus yang diampu instruktur.
+// ============================================================
+
+(function (ELIPS) {
+    'use strict';
+
+    const { success, failure } = ELIPS._;
+
+    function recordAudit(entry) {
+        if (typeof ELIPS.logAudit === 'function') ELIPS.logAudit(entry);
+    }
+
+    function canManageCourse(courseId, actorId) {
+        if (actorId === undefined || actorId === null) return true;
+        const course = ELIPS.getCourseById(courseId);
+        const actor = ELIPS.getUserById(actorId);
+        return !!course && !!actor && actor.role === 'instruktur' && course.instructorId === actor.id;
+    }
+
+    function isVersionEditable(version) {
+        return !!version && (version.status === 'draft' || version.status === 'published');
+    }
+
+    // Mode lokal membuat versi kurikulum awal bila kursus belum memilikinya,
+    // meniru perilaku auto-version pada backend.
+    function ensureCourseVersion(courseId, actorId) {
+        const existing = ELIPS.getCurrentCurriculumVersion(courseId);
+        if (existing) return existing;
+
+        const course = ELIPS.getCourseById(courseId);
+        const versions = ELIPS.getCurriculumVersions();
+        const majors = versions
+            .filter(function (v) { return Number(v.courseId) === Number(courseId); })
+            .map(function (v) { return parseInt(String(v.code), 10) || 0; });
+        const code = (Math.max.apply(null, [0].concat(majors)) + 1) + '.0';
+        const version = {
+            id: ELIPS.nextId(versions),
+            courseId: Number(courseId),
+            code: code,
+            name: 'Kurikulum ' + code + (course ? ' — ' + course.title : ''),
+            description: '',
+            status: 'draft',
+            effectiveDate: null,
+            notes: 'Dibuat otomatis saat konten pertama ditambahkan.',
+            createdBy: actorId || null,
+            updatedBy: actorId || null,
+            modules: 0,
+            lessons: 0,
+            classes: 0,
+            createdAt: new Date().toISOString()
+        };
+        versions.push(version);
+        ELIPS.setCurriculumVersions(versions);
+        return version;
+    }
+
+    function lockedVersionMessage() {
+        return 'Kurikulum kelas ini sudah dikunci atau dipensiunkan. Buat versi baru untuk melakukan perubahan.';
+    }
+
+    // ---------- Modules ----------
+    function createModule(courseId, data, actorId) {
+        if (ELIPS.api && ELIPS.api.enabled) return ELIPS.api.call('module.create', { courseId: courseId, data: data || {} });
+        data = data || {};
+        const course = ELIPS.getCourseById(courseId);
+        if (!course) return failure('Kursus tidak ditemukan.');
+        if (!canManageCourse(course.id, actorId)) return failure('Anda tidak berhak mengelola kursus ini.');
+
+        const title = String(data.title || '').trim();
+        if (!title) return failure('Judul modul wajib diisi.');
+
+        const version = ensureCourseVersion(course.id, actorId);
+        if (!isVersionEditable(version)) return failure(lockedVersionMessage());
+
+        const modules = ELIPS.getModules();
+        const maxOrder = modules
+            .filter(function (item) { return item.courseId === course.id && item.curriculumVersionId === version.id; })
+            .reduce(function (max, item) { return Math.max(max, Number(item.order) || 0); }, 0);
+
+        const module = {
+            id: ELIPS.nextId(modules),
+            courseId: course.id,
+            curriculumVersionId: version.id,
+            instructorId: course.instructorId,
+            title: title,
+            description: String(data.description || '').trim(),
+            order: maxOrder + 1,
+            createdAt: new Date().toISOString()
+        };
+        modules.push(module);
+        ELIPS.setModules(modules);
+        ELIPS.syncCourseCounters(course.id);
+        recordAudit({
+            action: 'create',
+            entity: 'module',
+            entityId: module.id,
+            entityLabel: module.title,
+            actorId: actorId,
+            detail: 'Menambahkan modul "' + module.title + '" pada kursus "' + course.title + '".'
+        });
+        return success('Modul berhasil ditambahkan.', module);
+    }
+
+    function updateModule(id, data, actorId) {
+        if (ELIPS.api && ELIPS.api.enabled) return ELIPS.api.call('module.update', { id: id, data: data || {} });
+        data = data || {};
+        const modules = ELIPS.getModules();
+        const module = modules.find(function (item) { return item.id === Number(id); });
+        if (!module) return failure('Modul tidak ditemukan.');
+        if (!canManageCourse(module.courseId, actorId)) return failure('Anda tidak berhak mengelola modul ini.');
+        if (!isVersionEditable(ELIPS.getCurriculumVersionById(module.curriculumVersionId))) {
+            return failure(lockedVersionMessage());
+        }
+
+        const title = data.title !== undefined ? String(data.title).trim() : module.title;
+        if (!title) return failure('Judul modul wajib diisi.');
+
+        module.title = title;
+        if (data.description !== undefined) module.description = String(data.description).trim();
+        module.updatedAt = new Date().toISOString();
+        ELIPS.setModules(modules);
+        const course = ELIPS.getCourseById(module.courseId);
+        recordAudit({
+            action: 'update',
+            entity: 'module',
+            entityId: module.id,
+            entityLabel: module.title,
+            actorId: actorId,
+            detail: 'Memperbarui modul "' + module.title + '" pada kursus "' +
+                (course ? course.title : 'Kursus #' + module.courseId) + '".'
+        });
+        return success('Modul berhasil diperbarui.', module);
+    }
+
+    function deleteModule(id, actorId) {
+        if (ELIPS.api && ELIPS.api.enabled) return ELIPS.api.call('module.delete', { id: id });
+        const module = ELIPS.getModules().find(function (item) { return item.id === Number(id); });
+        if (!module) return failure('Modul tidak ditemukan.');
+        if (!canManageCourse(module.courseId, actorId)) return failure('Anda tidak berhak menghapus modul ini.');
+        if (!isVersionEditable(ELIPS.getCurriculumVersionById(module.curriculumVersionId))) {
+            return failure(lockedVersionMessage());
+        }
+
+        const lessonIds = ELIPS.getLessonsByModule(module.id).map(function (lesson) { return lesson.id; });
+        const course = ELIPS.getCourseById(module.courseId);
+        ELIPS.setModules(ELIPS.getModules().filter(function (item) { return item.id !== module.id; }));
+        ELIPS.setLessons(ELIPS.getLessons().filter(function (lesson) { return lesson.moduleId !== module.id; }));
+        ELIPS.setCompletedLessons(ELIPS.getCompletedLessons().filter(function (progress) {
+            return lessonIds.indexOf(progress.lessonId) === -1;
+        }));
+        ELIPS.syncCourseCounters(module.courseId);
+        recordAudit({
+            action: 'delete',
+            entity: 'module',
+            entityId: module.id,
+            entityLabel: module.title,
+            actorId: actorId,
+            detail: 'Menghapus modul "' + module.title + '" dari kursus "' +
+                (course ? course.title : 'Kursus #' + module.courseId) + '" beserta ' + lessonIds.length + ' materi.'
+        });
+        return success('Modul dihapus.', { removedLessons: lessonIds.length });
+    }
+
+    // ---------- Lessons ----------
+    function createLesson(moduleId, data, actorId) {
+        if (ELIPS.api && ELIPS.api.enabled) return ELIPS.api.call('lesson.create', { moduleId: moduleId, data: data || {} });
+        data = data || {};
+        const module = ELIPS.getModules().find(function (item) { return item.id === Number(moduleId); });
+        if (!module) return failure('Modul tidak ditemukan.');
+        if (!canManageCourse(module.courseId, actorId)) return failure('Anda tidak berhak mengelola materi ini.');
+
+        let version = module.curriculumVersionId
+            ? ELIPS.getCurriculumVersionById(module.curriculumVersionId)
+            : null;
+        if (!version) {
+            version = ensureCourseVersion(module.courseId, actorId);
+            module.curriculumVersionId = version.id;
+            const storedModules = ELIPS.getModules();
+            const storedModule = storedModules.find(function (item) { return item.id === module.id; });
+            if (storedModule) {
+                storedModule.curriculumVersionId = version.id;
+                ELIPS.setModules(storedModules);
+            }
+        }
+        if (!isVersionEditable(version)) return failure(lockedVersionMessage());
+
+        const title = String(data.title || '').trim();
+        const type = data.type || 'text';
+        let content = String(data.content || '').trim();
+        if (!title) return failure('Judul materi wajib diisi.');
+        if (['text', 'video', 'file', 'link'].indexOf(type) === -1) return failure('Tipe konten tidak valid.');
+        if (type !== 'text' && !content) return failure('Isi URL atau nama file untuk tipe konten ini.');
+        if (type === 'text') content = ELIPS.sanitizeHtml(content);
+
+        const lessons = ELIPS.getLessons();
+        const maxOrder = lessons
+            .filter(function (item) { return item.moduleId === module.id; })
+            .reduce(function (max, item) { return Math.max(max, Number(item.order) || 0); }, 0);
+
+        const lesson = {
+            id: ELIPS.nextId(lessons),
+            moduleId: module.id,
+            courseId: module.courseId,
+            curriculumVersionId: version.id,
+            instructorId: module.instructorId || null,
+            title: title,
+            type: type,
+            content: content,
+            order: maxOrder + 1,
+            createdAt: new Date().toISOString()
+        };
+        lessons.push(lesson);
+        ELIPS.setLessons(lessons);
+        ELIPS.syncCourseCounters(module.courseId);
+        const course = ELIPS.getCourseById(module.courseId);
+        recordAudit({
+            action: 'create',
+            entity: 'lesson',
+            entityId: lesson.id,
+            entityLabel: lesson.title,
+            actorId: actorId,
+            detail: 'Menambahkan materi "' + lesson.title + '" pada modul "' + module.title + '" kursus "' +
+                (course ? course.title : 'Kursus #' + module.courseId) + '".'
+        });
+        return success('Materi berhasil ditambahkan.', lesson);
+    }
+
+    function updateLesson(id, data, actorId) {
+        if (ELIPS.api && ELIPS.api.enabled) return ELIPS.api.call('lesson.update', { id: id, data: data || {} });
+        data = data || {};
+        const lessons = ELIPS.getLessons();
+        const lesson = lessons.find(function (item) { return item.id === Number(id); });
+        if (!lesson) return failure('Materi tidak ditemukan.');
+        if (!canManageCourse(lesson.courseId, actorId)) return failure('Anda tidak berhak mengelola materi ini.');
+        if (!isVersionEditable(ELIPS.getCurriculumVersionById(lesson.curriculumVersionId))) {
+            return failure(lockedVersionMessage());
+        }
+
+        const nextModuleId = data.moduleId !== undefined ? Number(data.moduleId) : lesson.moduleId;
+        const targetModule = ELIPS.getModules().find(function (item) { return item.id === nextModuleId; });
+        if (!targetModule
+            || targetModule.courseId !== lesson.courseId
+            || Number(targetModule.curriculumVersionId) !== Number(lesson.curriculumVersionId)) {
+            return failure('Modul tujuan tidak valid untuk versi kurikulum materi ini.');
+        }
+
+        const title = data.title !== undefined ? String(data.title).trim() : lesson.title;
+        const type = data.type !== undefined ? data.type : lesson.type;
+        let content = data.content !== undefined ? String(data.content).trim() : lesson.content;
+        if (!title) return failure('Judul materi wajib diisi.');
+        if (['text', 'video', 'file', 'link'].indexOf(type) === -1) return failure('Tipe konten tidak valid.');
+        if (type !== 'text' && !content) return failure('Isi URL atau nama file untuk tipe konten ini.');
+        if (type === 'text') content = ELIPS.sanitizeHtml(content);
+
+        if (lesson.moduleId !== targetModule.id) {
+            const maxOrder = ELIPS.getLessonsByModule(targetModule.id)
+                .reduce(function (max, item) { return Math.max(max, Number(item.order) || 0); }, 0);
+            lesson.order = maxOrder + 1;
+        }
+        lesson.moduleId = targetModule.id;
+        lesson.curriculumVersionId = targetModule.curriculumVersionId;
+        lesson.instructorId = targetModule.instructorId || lesson.instructorId || null;
+        lesson.title = title;
+        lesson.type = type;
+        lesson.content = content;
+        lesson.updatedAt = new Date().toISOString();
+        ELIPS.setLessons(lessons);
+        const course = ELIPS.getCourseById(lesson.courseId);
+        recordAudit({
+            action: 'update',
+            entity: 'lesson',
+            entityId: lesson.id,
+            entityLabel: lesson.title,
+            actorId: actorId,
+            detail: 'Memperbarui materi "' + lesson.title + '" pada modul "' + targetModule.title + '" kursus "' +
+                (course ? course.title : 'Kursus #' + lesson.courseId) + '".'
+        });
+        return success('Materi berhasil diperbarui.', lesson);
+    }
+
+    function deleteLesson(id, actorId) {
+        if (ELIPS.api && ELIPS.api.enabled) return ELIPS.api.call('lesson.delete', { id: id });
+        const lesson = ELIPS.getLessons().find(function (item) { return item.id === Number(id); });
+        if (!lesson) return failure('Materi tidak ditemukan.');
+        if (!canManageCourse(lesson.courseId, actorId)) return failure('Anda tidak berhak menghapus materi ini.');
+        if (!isVersionEditable(ELIPS.getCurriculumVersionById(lesson.curriculumVersionId))) {
+            return failure(lockedVersionMessage());
+        }
+        const course = ELIPS.getCourseById(lesson.courseId);
+
+        ELIPS.setLessons(ELIPS.getLessons().filter(function (item) { return item.id !== lesson.id; }));
+        ELIPS.setCompletedLessons(ELIPS.getCompletedLessons().filter(function (progress) {
+            return progress.lessonId !== lesson.id;
+        }));
+        ELIPS.syncCourseCounters(lesson.courseId);
+        recordAudit({
+            action: 'delete',
+            entity: 'lesson',
+            entityId: lesson.id,
+            entityLabel: lesson.title,
+            actorId: actorId,
+            detail: 'Menghapus materi "' + lesson.title + '" dari kursus "' +
+                (course ? course.title : 'Kursus #' + lesson.courseId) + '".'
+        });
+        return success('Materi dihapus.', lesson);
+    }
+
+    Object.assign(ELIPS, {
+        createModule: createModule,
+        updateModule: updateModule,
+        deleteModule: deleteModule,
+        createLesson: createLesson,
+        updateLesson: updateLesson,
+        deleteLesson: deleteLesson
+    });
+})(window.ELIPS);
+;
+/* ---- crud-grades.js ---- */
+// ============================================================
+// ELIPS LMS - crud-grades.js
+// Input nilai dan alur sertifikat Draft -> Publish.
+// ============================================================
+
+(function (ELIPS) {
+    'use strict';
+
+    const { success, failure } = ELIPS._;
+
+    function recordAudit(entry) {
+        if (typeof ELIPS.logAudit === 'function') ELIPS.logAudit(entry);
+    }
+
+    function generateDraftCertificateNumber() {
+        let number;
+        do {
+            number = 'CERT-DRAFT-' + Date.now().toString().slice(-6) + '-' +
+                Math.random().toString(36).slice(2, 5).toUpperCase();
+        } while (ELIPS.getCertificates().some(function (cert) {
+            return String(cert.certificateNumber) === number;
+        }));
+        return number;
+    }
+
+    function saveGrade(payload) {
+        if (ELIPS.api && ELIPS.api.enabled) return ELIPS.api.call('grade.save', payload || {});
+        payload = payload || {};
+        const studentId = Number(payload.studentId);
+        const courseId = Number(payload.courseId);
+        const score = Number(payload.score);
+        const note = String(payload.note || '').trim();
+
+        if (!studentId || !courseId) return failure('Peserta atau kursus tidak valid.');
+        if (!Number.isFinite(score) || score < 0 || score > 100) return failure('Masukkan nilai antara 0-100.');
+
+        const course = ELIPS.getCourseById(courseId);
+        if (!course) return failure('Kursus tidak ditemukan.');
+        if (payload.instructorId !== undefined && payload.instructorId !== null &&
+            course.instructorId !== Number(payload.instructorId)) {
+            return failure('Anda tidak berhak menilai kursus ini.');
+        }
+
+        const enrollments = ELIPS.getEnrollments();
+        const enrollment = payload.enrollmentId
+            ? enrollments.find(function (e) { return e.id === Number(payload.enrollmentId); })
+            : ELIPS.getEnrollment(studentId, courseId);
+        if (!enrollment || enrollment.studentId !== studentId || enrollment.courseId !== courseId) {
+            return failure('Penugasan peserta pada kursus ini tidak ditemukan.');
+        }
+
+        const letter = ELIPS.gradeLetter(score);
+        const grades = ELIPS.getGrades();
+        let grade = grades.find(function (item) {
+            return item.enrollmentId === enrollment.id ||
+                (item.studentId === studentId && item.courseId === courseId);
+        });
+        const isNewGrade = !grade;
+
+        if (grade && grade.status === 'finalized') {
+            return failure('Nilai sudah difinalisasi dan terkunci. Gunakan koreksi nilai dengan alasan.');
+        }
+
+        if (grade) {
+            grade.enrollmentId = enrollment.id;
+            grade.score = score;
+            grade.grade = letter;
+            grade.note = note;
+            if (payload.instructorId !== undefined && payload.instructorId !== null) {
+                grade.instructorId = Number(payload.instructorId);
+            }
+            grade.updatedAt = new Date().toISOString();
+        } else {
+            grade = {
+                id: ELIPS.nextId(grades),
+                enrollmentId: enrollment.id,
+                courseId: courseId,
+                studentId: studentId,
+                instructorId: payload.instructorId !== undefined && payload.instructorId !== null
+                    ? Number(payload.instructorId)
+                    : course.instructorId,
+                score: score,
+                grade: letter,
+                note: note,
+                createdAt: new Date().toISOString()
+            };
+            grades.push(grade);
+        }
+        ELIPS.setGrades(grades);
+
+        const certificates = ELIPS.getCertificates();
+        let certificate = certificates.find(function (cert) {
+            return cert.enrollmentId === enrollment.id ||
+                (cert.studentId === studentId && cert.courseId === courseId);
+        });
+        const certificateExisted = !!certificate;
+
+        if (certificate) {
+            certificate.enrollmentId = enrollment.id;
+            certificate.grade = letter;
+            certificate.score = score;
+            certificate.issuedByInstructorAt = new Date().toISOString();
+            if (certificate.status !== 'publish') certificate.status = 'draft';
+            if (!certificate.certificateNumber) certificate.certificateNumber = generateDraftCertificateNumber();
+            certificate.updatedAt = new Date().toISOString();
+        } else {
+            certificate = {
+                id: ELIPS.nextId(certificates),
+                studentId: studentId,
+                courseId: courseId,
+                enrollmentId: enrollment.id,
+                certificateNumber: generateDraftCertificateNumber(),
+                status: 'draft',
+                grade: letter,
+                score: score,
+                issuedByInstructorAt: new Date().toISOString(),
+                approvedByAdminId: null,
+                approvedAt: null,
+                createdAt: new Date().toISOString()
+            };
+            certificates.push(certificate);
+        }
+        ELIPS.setCertificates(certificates);
+
+        const student = ELIPS.getUserById(studentId);
+        const studentName = student ? student.name : 'Peserta #' + studentId;
+        recordAudit({
+            action: 'grade',
+            entity: 'grade',
+            entityId: grade.id,
+            entityLabel: studentName + ' — ' + course.title,
+            actorId: payload.instructorId,
+            detail: (isNewGrade ? 'Memberi' : 'Memperbarui') + ' nilai ' + score + ' (' + letter + ')' +
+                (note ? ' — catatan: ' + note : '') + ' untuk ' +
+                studentName + ' pada kursus "' + course.title + '".'
+        });
+
+        if (!certificateExisted) {
+            recordAudit({
+                action: 'submit',
+                entity: 'certificate',
+                entityId: certificate.id,
+                entityLabel: certificate.certificateNumber,
+                actorId: payload.instructorId,
+                detail: 'Membuat e-sertifikat Draft ' + certificate.certificateNumber + ' untuk ' +
+                    studentName + ' pada kursus "' + course.title + '".'
+            });
+        }
+
+        return success('Nilai disimpan. E-sertifikat Draft menunggu persetujuan Admin.', {
+            grade: grade,
+            certificate: certificate
+        });
+    }
+
+    function createDraftCertificateForEnrollment(enrollmentId, instructorId) {
+        if (ELIPS.api && ELIPS.api.enabled) {
+            return ELIPS.api.call('certificate.draft', { enrollmentId: enrollmentId });
+        }
+        const enrollment = ELIPS.getEnrollments().find(function (e) { return e.id === Number(enrollmentId); });
+        if (!enrollment) return failure('Penugasan peserta tidak ditemukan.');
+
+        const course = ELIPS.getCourseById(enrollment.courseId);
+        if (!course) return failure('Kursus tidak ditemukan.');
+        if (instructorId !== undefined && instructorId !== null && course.instructorId !== Number(instructorId)) {
+            return failure('Anda tidak berhak mengajukan sertifikat kursus ini.');
+        }
+        if (ELIPS.getCertificate(enrollment.studentId, enrollment.courseId)) {
+            return failure('Sertifikat peserta ini sudah ada.');
+        }
+
+        const grade = ELIPS.getGrade(enrollment.studentId, enrollment.courseId);
+        if (!grade) return failure('Peserta belum memiliki nilai.');
+
+        const certificates = ELIPS.getCertificates();
+        const certificate = {
+            id: ELIPS.nextId(certificates),
+            studentId: enrollment.studentId,
+            courseId: enrollment.courseId,
+            enrollmentId: enrollment.id,
+            certificateNumber: generateDraftCertificateNumber(),
+            status: 'draft',
+            grade: grade.grade,
+            score: grade.score,
+            issuedByInstructorAt: new Date().toISOString(),
+            approvedByAdminId: null,
+            approvedAt: null,
+            createdAt: new Date().toISOString()
+        };
+        certificates.push(certificate);
+        ELIPS.setCertificates(certificates);
+
+        const student = ELIPS.getUserById(enrollment.studentId);
+        recordAudit({
+            action: 'submit',
+            entity: 'certificate',
+            entityId: certificate.id,
+            entityLabel: certificate.certificateNumber,
+            actorId: instructorId,
+            detail: 'Mengajukan e-sertifikat Draft ' + certificate.certificateNumber + ' untuk ' +
+                (student ? student.name : 'Peserta #' + enrollment.studentId) + ' pada kursus "' + course.title + '".'
+        });
+        return success('E-sertifikat Draft berhasil diajukan ke Admin.', certificate);
+    }
+
+    function approveCertificate(id, adminId) {
+        if (ELIPS.api && ELIPS.api.enabled) return ELIPS.api.call('certificate.approve', { id: id });
+        const certificates = ELIPS.getCertificates();
+        const certificate = certificates.find(function (cert) { return cert.id === Number(id); });
+        if (!certificate) return failure('Sertifikat tidak ditemukan.');
+        if (certificate.status !== 'draft') return failure('Sertifikat ini sudah berstatus Publish.');
+
+        const previousNumber = certificate.certificateNumber;
+        const student = ELIPS.getUserById(certificate.studentId);
+        const course = ELIPS.getCourseById(certificate.courseId);
+
+        certificate.status = 'publish';
+        certificate.approvedByAdminId = adminId !== undefined && adminId !== null ? Number(adminId) : 1;
+        certificate.approvedAt = new Date().toISOString();
+        if (!certificate.certificateNumber || String(certificate.certificateNumber).indexOf('CERT-DRAFT') === 0) {
+            certificate.certificateNumber = ELIPS.generateCertificateNumber();
+        }
+        ELIPS.setCertificates(certificates);
+
+        recordAudit({
+            action: 'approve',
+            entity: 'certificate',
+            entityId: certificate.id,
+            entityLabel: certificate.certificateNumber,
+            actorId: adminId,
+            detail: 'Menyetujui e-sertifikat Draft ' + previousNumber + ' menjadi Publish (' +
+                certificate.certificateNumber + ') untuk ' + (student ? student.name : 'Peserta #' + certificate.studentId) +
+                ' pada kursus "' + (course ? course.title : 'Kursus #' + certificate.courseId) + '".'
+        });
+
+        if (typeof ELIPS.notifyCertificatePublished === 'function') {
+            ELIPS.notifyCertificatePublished(certificate);
+        }
+        return success('Sertifikat berhasil disetujui dan diterbitkan.', certificate);
+    }
+
+    // ---------- Penilaian & finalisasi (Phase 6) ----------
+    function resolveActorId(payload) {
+        if (payload && payload.actorId !== undefined && payload.actorId !== null && payload.actorId !== '') {
+            return Number(payload.actorId);
+        }
+        const session = typeof ELIPS.getSessionUser === 'function' ? ELIPS.getSessionUser() : null;
+        return session ? Number(session.id) : null;
+    }
+
+    function actorCanManageClass(classItem, actorId) {
+        if (!actorId) return true;
+        const actor = ELIPS.getUserById(actorId);
+        if (!actor) return true;
+        if (actor.role === 'admin') return true;
+        return actor.role === 'instruktur' && Number(classItem.instructorId) === Number(actor.id);
+    }
+
+    function validatePredicateRanges(ranges) {
+        if (!Array.isArray(ranges) || ranges.length === 0) return 'Daftar rentang predikat wajib diisi.';
+        const seen = {};
+        const normalized = [];
+        for (let i = 0; i < ranges.length; i++) {
+            const range = ranges[i] || {};
+            const letter = String(range.letter || '').trim();
+            if (!letter || letter.length > 4) return 'Huruf predikat #' + (i + 1) + ' tidak valid.';
+            const key = letter.toLowerCase();
+            if (seen[key]) return 'Huruf predikat "' + letter + '" dipakai lebih dari sekali.';
+            seen[key] = true;
+            const min = Number(range.minScore);
+            const max = Number(range.maxScore);
+            if (!isFinite(min) || !isFinite(max) || min < 0 || max > 100 || min > max) {
+                return 'Rentang predikat "' + letter + '" harus berada di 0-100 dan min <= max.';
+            }
+            normalized.push({
+                id: range.id === undefined || range.id === null ? null : Number(range.id),
+                letter: letter,
+                label: String(range.label || ''),
+                minScore: min,
+                maxScore: max,
+                sortOrder: Number(range.sortOrder) || (i + 1),
+                isActive: range.isActive !== false,
+                createdAt: range.createdAt || new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            });
+        }
+        const active = normalized.filter(function (r) { return r.isActive; })
+            .sort(function (a, b) { return a.minScore - b.minScore; });
+        if (!active.length) return 'Minimal satu rentang predikat harus aktif.';
+        if (active[0].minScore > 0) return 'Rentang predikat aktif harus dimulai dari skor 0.';
+        for (let i = 1; i < active.length; i++) {
+            if (active[i].minScore <= active[i - 1].maxScore) return 'Rentang predikat tidak boleh tumpang tindih.';
+            if (Math.round((active[i].minScore - active[i - 1].maxScore) * 100) / 100 > 0.01) {
+                return 'Rentang predikat harus mencakup seluruh skala tanpa celah.';
+            }
+        }
+        if (active[active.length - 1].maxScore < 100) return 'Rentang predikat aktif harus mencakup skor hingga 100.';
+        return normalized;
+    }
+
+    function savePredicateRanges(payload) {
+        if (ELIPS.api && ELIPS.api.enabled) return ELIPS.api.call('predicate.save', payload || {});
+        payload = payload || {};
+        const actorId = resolveActorId(payload);
+        const actor = actorId ? ELIPS.getUserById(actorId) : null;
+        if (actor && actor.role !== 'admin') return failure('Anda tidak berhak mengubah rentang predikat.');
+        const normalized = validatePredicateRanges(payload.ranges);
+        if (typeof normalized === 'string') return failure(normalized);
+        const ranges = normalized.map(function (range, index) {
+            range.id = index + 1;
+            return range;
+        });
+        ELIPS.setPredicateRanges(ranges);
+        recordAudit({
+            action: 'predicate',
+            entity: 'predicate',
+            entityId: null,
+            entityLabel: 'Rentang predikat',
+            actorId: actorId,
+            detail: 'Memperbarui ' + ranges.length + ' rentang predikat A-E.'
+        });
+        return success('Rentang predikat disimpan.', { ranges: ranges });
+    }
+
+    function saveGradeScheme(payload) {
+        if (ELIPS.api && ELIPS.api.enabled) return ELIPS.api.call('gradeScheme.save', payload || {});
+        payload = payload || {};
+        const actorId = resolveActorId(payload);
+        let schemes = ELIPS.getGradeSchemes();
+        let scheme = payload.id ? schemes.find(function (s) { return Number(s.id) === Number(payload.id); }) : null;
+        let classId = Number(payload.classId) || (scheme ? Number(scheme.classId) : 0);
+        if (!classId) return failure('Kelas tidak valid.');
+        const classItem = ELIPS.getClassById(classId);
+        if (!classItem) return failure('Kelas tidak ditemukan.');
+        if (!actorCanManageClass(classItem, actorId)) return failure('Anda tidak berhak mengatur penilaian kelas ini.');
+        if (!scheme) {
+            scheme = schemes.find(function (s) { return Number(s.classId) === classId; }) || null;
+        }
+
+        const name = String(payload.name || (scheme ? scheme.name : '')).trim();
+        if (!name) return failure('Nama skema penilaian wajib diisi.');
+        const status = String(payload.status || (scheme ? scheme.status : 'draft'));
+        if (['draft', 'published', 'archived'].indexOf(status) === -1) return failure('Status skema tidak valid.');
+        if (scheme && scheme.status === 'published' && status === 'draft') {
+            return failure('Skema yang sudah dipublikasikan tidak dapat dikembalikan ke draft. Arsipkan skema untuk menggantinya.');
+        }
+        const rounding = String(payload.rounding || (scheme ? scheme.rounding : 'half_up'));
+        if (['half_up', 'half_down', 'floor', 'ceil'].indexOf(rounding) === -1) return failure('Mode pembulatan tidak valid.');
+        const passScore = payload.passScore === undefined || payload.passScore === null || payload.passScore === ''
+            ? Number(scheme ? scheme.passScore : 60) : Number(payload.passScore);
+        if (!isFinite(passScore) || passScore < 0 || passScore > 100) return failure('Batas lulus harus antara 0-100.');
+
+        const existingComponents = scheme ? ELIPS.getGradeComponentsByScheme(scheme.id) : [];
+        const inputComponents = Array.isArray(payload.components) ? payload.components : existingComponents;
+        if (!inputComponents.length && status === 'published') {
+            return failure('Skema harus memiliki minimal satu komponen sebelum dipublikasikan.');
+        }
+        const seenNames = {};
+        const components = [];
+        for (let i = 0; i < inputComponents.length; i++) {
+            const input = inputComponents[i] || {};
+            const type = String(input.type || '');
+            if (['assignment', 'exam', 'manual'].indexOf(type) === -1) return failure('Jenis komponen #' + (i + 1) + ' tidak valid.');
+            const componentName = String(input.name || '').trim();
+            if (!componentName) return failure('Nama komponen #' + (i + 1) + ' wajib diisi.');
+            const nameKey = componentName.toLowerCase();
+            if (seenNames[nameKey]) return failure('Nama komponen "' + componentName + '" dipakai lebih dari sekali.');
+            seenNames[nameKey] = true;
+            const weight = Number(input.weight);
+            if (!isFinite(weight) || weight < 0 || weight > 100) return failure('Bobot komponen "' + componentName + '" harus antara 0-100.');
+            const aggregation = String(input.aggregation || 'weighted');
+            if (['weighted', 'average'].indexOf(aggregation) === -1) return failure('Agregasi komponen "' + componentName + '" tidak valid.');
+            const maxScore = input.maxScore === undefined || input.maxScore === null || input.maxScore === ''
+                ? 100 : Number(input.maxScore);
+            if (!isFinite(maxScore) || maxScore <= 0 || maxScore > 100) return failure('Skor maksimum komponen "' + componentName + '" harus antara 0-100.');
+            components.push({
+                id: input.id ? Number(input.id) : null,
+                schemeId: scheme ? Number(scheme.id) : null,
+                type: type,
+                name: componentName,
+                description: String(input.description || ''),
+                weight: weight,
+                aggregation: aggregation,
+                maxScore: maxScore,
+                isRequired: input.isRequired !== false,
+                order: Number(input.order) || (i + 1),
+                createdAt: input.createdAt || new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            });
+        }
+        const totalWeight = components.reduce(function (total, c) { return total + c.weight; }, 0);
+        if (status === 'published' && Math.abs(totalWeight - 100) > 0.01) {
+            return failure('Total bobot komponen harus tepat 100% sebelum skema dipublikasikan.');
+        }
+
+        const finalizedCount = ELIPS.getGrades().filter(function (g) {
+            return scheme && Number(g.schemeId) === Number(scheme.id) && g.status === 'finalized';
+        }).length;
+        if (finalizedCount > 0) {
+            const current = existingComponents.map(function (c) { return [Number(c.id), c.type, Number(c.weight)]; }).join('|');
+            const next = components.map(function (c) { return [Number(c.id || 0), c.type, Number(c.weight)]; }).join('|');
+            if (current !== next) {
+                return failure('Skema sudah memiliki nilai final. Komponen dan bobot tidak dapat diubah; gunakan koreksi nilai.');
+            }
+        }
+
+        if (!scheme) {
+            scheme = {
+                id: ELIPS.nextId(schemes),
+                courseId: Number(classItem.courseId),
+                courseTitle: classItem.courseTitle || '',
+                classId: classId,
+                classCode: classItem.code || '',
+                className: classItem.name || '',
+                createdAt: new Date().toISOString()
+            };
+            schemes.push(scheme);
+        }
+        scheme.name = name;
+        scheme.status = status;
+        scheme.passScore = passScore;
+        scheme.rounding = rounding;
+        scheme.notes = String(payload.notes !== undefined ? payload.notes : (scheme.notes || ''));
+        scheme.updatedBy = actorId;
+        scheme.updatedAt = new Date().toISOString();
+        ELIPS.setGradeSchemes(schemes);
+
+        const componentScores = ELIPS.getGradeComponentScores();
+        const allExistingComponents = ELIPS.getGradeSchemeComponents();
+        const otherComponents = allExistingComponents.filter(function (c) {
+            return Number(c.schemeId) !== Number(scheme.id);
+        });
+        let nextComponentId = ELIPS.nextId(allExistingComponents);
+        const keptIds = [];
+        const savedComponents = components.map(function (component) {
+            const existing = component.id
+                ? existingComponents.find(function (c) { return Number(c.id) === Number(component.id); })
+                : null;
+            let saved;
+            if (existing) {
+                saved = Object.assign(existing, component, { schemeId: Number(scheme.id) });
+            } else {
+                saved = Object.assign({}, component, {
+                    id: nextComponentId++,
+                    schemeId: Number(scheme.id),
+                    createdAt: component.createdAt || new Date().toISOString()
+                });
+            }
+            keptIds.push(Number(saved.id));
+            return saved;
+        });
+        ELIPS.setGradeSchemeComponents(otherComponents.concat(savedComponents));
+        // Hapus nilai komponen yang komponennya sudah tidak ada.
+        const remainingScores = componentScores.filter(function (score) {
+            return keptIds.indexOf(Number(score.componentId)) !== -1;
+        });
+        ELIPS.setGradeComponentScores(remainingScores);
+
+        recordAudit({
+            action: 'status',
+            entity: 'grade_scheme',
+            entityId: scheme.id,
+            entityLabel: scheme.name,
+            actorId: actorId,
+            detail: 'Menyimpan skema penilaian "' + scheme.name + '" untuk kelas ' + scheme.classCode + '.'
+        });
+        return success('Skema penilaian disimpan.', { scheme: scheme, components: ELIPS.getGradeComponentsByScheme(scheme.id) });
+    }
+
+    function setGradeSchemeStatus(payload) {
+        if (ELIPS.api && ELIPS.api.enabled) return ELIPS.api.call('gradeScheme.status', payload || {});
+        payload = payload || {};
+        const actorId = resolveActorId(payload);
+        const status = String(payload.status || '');
+        if (['draft', 'published', 'archived'].indexOf(status) === -1) return failure('Status skema tidak valid.');
+        const schemes = ELIPS.getGradeSchemes();
+        const scheme = schemes.find(function (s) { return Number(s.id) === Number(payload.id); });
+        if (!scheme) return failure('Skema penilaian tidak ditemukan.');
+        if ((scheme.status === 'published' || scheme.status === 'archived') && status === 'draft') {
+            return failure('Skema yang sudah dipublikasikan tidak dapat dikembalikan ke draft. Arsipkan skema untuk menggantinya.');
+        }
+        const classItem = ELIPS.getClassById(scheme.classId);
+        if (!classItem) return failure('Kelas tidak ditemukan.');
+        if (!actorCanManageClass(classItem, actorId)) return failure('Anda tidak berhak mengubah skema ini.');
+        if (status === 'published') {
+            const components = ELIPS.getGradeComponentsByScheme(scheme.id);
+            if (!components.length) return failure('Skema harus memiliki minimal satu komponen sebelum dipublikasikan.');
+            const total = ELIPS.gradeWeightTotal(components);
+            if (Math.abs(total - 100) > 0.01) return failure('Total bobot komponen harus tepat 100% sebelum skema dipublikasikan.');
+        }
+        scheme.status = status;
+        scheme.updatedBy = actorId;
+        scheme.updatedAt = new Date().toISOString();
+        ELIPS.setGradeSchemes(schemes);
+        recordAudit({
+            action: 'status',
+            entity: 'grade_scheme',
+            entityId: scheme.id,
+            entityLabel: scheme.name,
+            actorId: actorId,
+            detail: 'Mengubah status skema penilaian menjadi ' + status + '.'
+        });
+        return success('Status skema diperbarui.', { scheme: scheme });
+    }
+
+    function deleteGradeScheme(payload) {
+        if (ELIPS.api && ELIPS.api.enabled) return ELIPS.api.call('gradeScheme.delete', payload || {});
+        payload = payload || {};
+        const actorId = resolveActorId(payload);
+        const schemes = ELIPS.getGradeSchemes();
+        const scheme = schemes.find(function (s) { return Number(s.id) === Number(payload.id); });
+        if (!scheme) return failure('Skema penilaian tidak ditemukan.');
+        const classItem = ELIPS.getClassById(scheme.classId);
+        if (!classItem) return failure('Kelas tidak ditemukan.');
+        if (!actorCanManageClass(classItem, actorId)) return failure('Anda tidak berhak menghapus skema ini.');
+        if (scheme.status === 'published') return failure('Arsipkan skema terlebih dahulu sebelum menghapus.');
+        ELIPS.setGradeSchemes(schemes.filter(function (s) { return Number(s.id) !== Number(scheme.id); }));
+        ELIPS.setGradeSchemeComponents(ELIPS.getGradeSchemeComponents().filter(function (c) {
+            return Number(c.schemeId) !== Number(scheme.id);
+        }));
+        recordAudit({
+            action: 'delete',
+            entity: 'grade_scheme',
+            entityId: scheme.id,
+            entityLabel: scheme.name,
+            actorId: actorId,
+            detail: 'Menghapus skema penilaian "' + scheme.name + '".'
+        });
+        return success('Skema penilaian dihapus.');
+    }
+
+    function gradeRoster(payload) {
+        if (ELIPS.api && ELIPS.api.enabled) return ELIPS.api.call('grade.roster', payload || {});
+        payload = payload || {};
+        const actorId = resolveActorId(payload);
+        const classId = Number(payload.classId);
+        const classItem = ELIPS.getClassById(classId);
+        if (!classItem) return failure('Kelas tidak ditemukan.');
+        if (!actorCanManageClass(classItem, actorId)) return failure('Anda tidak berhak melihat nilai kelas ini.');
+        const schemeRow = ELIPS.getGradeSchemeByClass(classId);
+        const scheme = schemeRow ? Object.assign({}, schemeRow, {
+            components: ELIPS.getGradeComponentsByScheme(schemeRow.id),
+            totalWeight: ELIPS.gradeWeightTotal(ELIPS.getGradeComponentsByScheme(schemeRow.id))
+        }) : null;
+        const roster = ELIPS.getClassEnrollments(classId)
+            .filter(function (e) { return e.status === 'active' || e.status === 'pending'; })
+            .map(function (enrollment) {
+                const student = ELIPS.getUserById(enrollment.studentId);
+                const computed = ELIPS.computeEnrollmentGrade(enrollment, scheme);
+                const grade = ELIPS.getGrades().find(function (g) {
+                    return Number(g.enrollmentId) === Number(enrollment.id);
+                }) || null;
+                return {
+                    enrollmentId: Number(enrollment.id),
+                    studentId: Number(enrollment.studentId),
+                    studentName: student ? student.name : 'Peserta #' + enrollment.studentId,
+                    studentEmail: student ? student.email : '',
+                    enrollmentStatus: enrollment.status,
+                    gradeId: grade ? Number(grade.id) : null,
+                    gradeStatus: grade ? (grade.status || 'draft') : 'draft',
+                    finalScore: grade && grade.finalScore !== undefined && grade.finalScore !== null ? grade.finalScore : computed.finalScore,
+                    letter: grade && grade.grade ? grade.grade : computed.letter,
+                    computedStatus: computed.status,
+                    missing: computed.missing,
+                    passed: computed.passed,
+                    finalizedAt: grade ? grade.finalizedAt || null : null,
+                    components: computed.components
+                };
+            });
+        return success('', {
+            class: { id: classItem.id, code: classItem.code, name: classItem.name, courseId: classItem.courseId },
+            scheme: scheme,
+            predicates: ELIPS.getPredicateRanges(),
+            roster: roster
+        });
+    }
+
+    function saveManualComponentScore(payload) {
+        if (ELIPS.api && ELIPS.api.enabled) return ELIPS.api.call('grade.manualSave', payload || {});
+        payload = payload || {};
+        const actorId = resolveActorId(payload);
+        const enrollment = ELIPS.getEnrollments().find(function (e) { return Number(e.id) === Number(payload.enrollmentId); });
+        if (!enrollment) return failure('Penugasan peserta tidak ditemukan.');
+        const grade = ELIPS.getGrades().find(function (g) { return Number(g.enrollmentId) === Number(enrollment.id); });
+        if (grade && grade.status === 'finalized') return failure('Nilai sudah difinalisasi. Gunakan koreksi nilai dengan alasan.');
+        const classItem = ELIPS.getClassById(enrollment.classId);
+        if (!classItem) return failure('Kelas peserta tidak ditemukan.');
+        if (!actorCanManageClass(classItem, actorId)) return failure('Anda tidak berhak menilai peserta ini.');
+        const scheme = ELIPS.getGradeSchemeByClass(enrollment.classId);
+        if (!scheme) return failure('Skema penilaian kelas belum dibuat.');
+        const component = ELIPS.getGradeComponentsByScheme(scheme.id).find(function (c) {
+            return Number(c.id) === Number(payload.componentId);
+        });
+        if (!component) return failure('Komponen penilaian tidak ditemukan pada skema kelas.');
+        if (component.type !== 'manual') return failure('Nilai komponen tugas/ujian dihitung otomatis dari aktivitas.');
+        const status = String(payload.status || 'graded');
+        if (['not_assessed', 'graded', 'excused', 'missing'].indexOf(status) === -1) return failure('Status komponen tidak valid.');
+        let score = null;
+        if (status === 'graded') {
+            if (payload.score === undefined || payload.score === null || payload.score === '') {
+                return failure('Masukkan nilai komponen antara 0-100.');
+            }
+            score = Number(payload.score);
+            if (!isFinite(score) || score < 0 || score > 100) return failure('Masukkan nilai komponen antara 0-100.');
+        }
+        const scores = ELIPS.getGradeComponentScores();
+        let record = scores.find(function (s) {
+            return Number(s.componentId) === Number(component.id) && Number(s.enrollmentId) === Number(enrollment.id);
+        });
+        const now = new Date().toISOString();
+        const actor = actorId ? ELIPS.getUserById(actorId) : null;
+        if (record) {
+            record.score = score;
+            record.status = status;
+            record.assessorId = actorId;
+            record.assessorName = actor ? actor.name : record.assessorName || '';
+            record.assessedAt = now;
+            record.note = String(payload.note || '');
+            record.updatedAt = now;
+        } else {
+            record = {
+                id: ELIPS.nextId(scores),
+                componentId: Number(component.id),
+                enrollmentId: Number(enrollment.id),
+                studentId: Number(enrollment.studentId),
+                score: score,
+                status: status,
+                assessorId: actorId,
+                assessorName: actor ? actor.name : '',
+                assessedAt: now,
+                note: String(payload.note || ''),
+                createdAt: now,
+                updatedAt: now
+            };
+            scores.push(record);
+        }
+        ELIPS.setGradeComponentScores(scores);
+        const student = ELIPS.getUserById(enrollment.studentId);
+        recordAudit({
+            action: 'grade',
+            entity: 'grade_component',
+            entityId: component.id,
+            entityLabel: component.name + ' — ' + (student ? student.name : 'Peserta #' + enrollment.studentId),
+            actorId: actorId,
+            detail: 'Menyimpan nilai komponen "' + component.name + '" untuk ' +
+                (student ? student.name : 'Peserta #' + enrollment.studentId) +
+                (score !== null ? ' sebesar ' + score : ' dengan status ' + status) + '.'
+        });
+        return success('Nilai komponen disimpan.', { computed: ELIPS.computeEnrollmentGrade(enrollment, scheme) });
+    }
+
+    function exemptGradeComponent(payload) {
+        if (ELIPS.api && ELIPS.api.enabled) return ELIPS.api.call('grade.exempt', payload || {});
+        payload = payload || {};
+        const actorId = resolveActorId(payload);
+        const reason = String(payload.reason || payload.note || '').trim();
+        if (reason.length < 5) return failure('Alasan pengecualian wajib diisi minimal 5 karakter.');
+        const enrollment = ELIPS.getEnrollments().find(function (e) { return Number(e.id) === Number(payload.enrollmentId); });
+        if (!enrollment) return failure('Penugasan peserta tidak ditemukan.');
+        const grade = ELIPS.getGrades().find(function (g) { return Number(g.enrollmentId) === Number(enrollment.id); });
+        if (grade && grade.status === 'finalized') return failure('Nilai sudah difinalisasi. Gunakan koreksi nilai dengan alasan.');
+        const classItem = ELIPS.getClassById(enrollment.classId);
+        if (!classItem) return failure('Kelas peserta tidak ditemukan.');
+        if (!actorCanManageClass(classItem, actorId)) return failure('Anda tidak berhak mengecualikan komponen peserta ini.');
+        const scheme = ELIPS.getGradeSchemeByClass(enrollment.classId);
+        if (!scheme) return failure('Skema penilaian kelas belum dibuat.');
+        const component = ELIPS.getGradeComponentsByScheme(scheme.id).find(function (c) {
+            return Number(c.id) === Number(payload.componentId);
+        });
+        if (!component) return failure('Komponen penilaian tidak ditemukan pada skema kelas.');
+        const scores = ELIPS.getGradeComponentScores();
+        let record = scores.find(function (s) {
+            return Number(s.componentId) === Number(component.id) && Number(s.enrollmentId) === Number(enrollment.id);
+        });
+        const now = new Date().toISOString();
+        const actor = actorId ? ELIPS.getUserById(actorId) : null;
+        if (record) {
+            record.score = null;
+            record.status = 'excused';
+            record.assessorId = actorId;
+            record.assessorName = actor ? actor.name : record.assessorName || '';
+            record.assessedAt = now;
+            record.note = reason;
+            record.updatedAt = now;
+        } else {
+            record = {
+                id: ELIPS.nextId(scores),
+                componentId: Number(component.id),
+                enrollmentId: Number(enrollment.id),
+                studentId: Number(enrollment.studentId),
+                score: null,
+                status: 'excused',
+                assessorId: actorId,
+                assessorName: actor ? actor.name : '',
+                assessedAt: now,
+                note: reason,
+                createdAt: now,
+                updatedAt: now
+            };
+            scores.push(record);
+        }
+        ELIPS.setGradeComponentScores(scores);
+        const student = ELIPS.getUserById(enrollment.studentId);
+        recordAudit({
+            action: 'exempt',
+            entity: 'grade_component',
+            entityId: component.id,
+            entityLabel: component.name + ' — ' + (student ? student.name : 'Peserta #' + enrollment.studentId),
+            actorId: actorId,
+            detail: 'Memberi pengecualian komponen "' + component.name + '" untuk ' +
+                (student ? student.name : 'Peserta #' + enrollment.studentId) + ' — alasan: ' + reason + '.'
+        });
+        return success('Pengecualian komponen disimpan.', { computed: ELIPS.computeEnrollmentGrade(enrollment, scheme) });
+    }
+
+    function finalizeGrades(payload) {
+        if (ELIPS.api && ELIPS.api.enabled) return ELIPS.api.call('grade.finalize', payload || {});
+        payload = payload || {};
+        const actorId = resolveActorId(payload);
+        let enrollmentIds = Array.isArray(payload.enrollmentIds) ? payload.enrollmentIds.slice() : [];
+        if (!enrollmentIds.length && payload.enrollmentId) enrollmentIds = [payload.enrollmentId];
+        enrollmentIds = enrollmentIds.map(Number).filter(function (id) { return id > 0; });
+        if (!enrollmentIds.length) return failure('Pilih minimal satu peserta untuk difinalisasi.');
+
+        const grades = ELIPS.getGrades();
+        const finalized = [];
+        for (let i = 0; i < enrollmentIds.length; i++) {
+            const enrollmentId = enrollmentIds[i];
+            const enrollment = ELIPS.getEnrollments().find(function (e) { return Number(e.id) === enrollmentId; });
+            if (!enrollment) return failure('Penugasan peserta #' + enrollmentId + ' tidak ditemukan.');
+            const classItem = ELIPS.getClassById(enrollment.classId);
+            if (!classItem) return failure('Kelas peserta tidak ditemukan.');
+            if (!actorCanManageClass(classItem, actorId)) return failure('Anda tidak berhak memfinalisasi nilai kelas ini.');
+            const scheme = ELIPS.getGradeSchemeByClass(enrollment.classId);
+            if (!scheme) return failure('Skema penilaian kelas belum dibuat.');
+            if (scheme.status !== 'published') return failure('Skema penilaian harus dipublikasikan sebelum nilai difinalisasi.');
+            const existing = grades.find(function (g) { return Number(g.enrollmentId) === enrollmentId; });
+            if (existing && existing.status === 'finalized') return failure('Nilai peserta #' + enrollmentId + ' sudah difinalisasi.');
+            const computed = ELIPS.computeEnrollmentGrade(enrollment, scheme);
+            if (computed.missing.length) return failure('Komponen wajib belum lengkap: ' + computed.missing.join(', ') + '.');
+            if (computed.status !== 'computed' || computed.finalScore === null) {
+                return failure('Nilai akhir belum dapat dihitung untuk peserta #' + enrollmentId + '.');
+            }
+            const now = new Date().toISOString();
+            const scoreInt = Math.max(0, Math.min(100, Math.round(computed.finalScore)));
+            let grade = existing;
+            if (grade) {
+                grade.schemeId = Number(scheme.id);
+                grade.courseId = Number(enrollment.courseId);
+                grade.studentId = Number(enrollment.studentId);
+                grade.instructorId = Number(classItem.instructorId) || actorId;
+                grade.score = scoreInt;
+                grade.finalScore = computed.finalScore;
+                grade.grade = computed.letter;
+                grade.status = 'finalized';
+                grade.components = computed.components;
+                grade.finalizedBy = actorId;
+                grade.finalizedAt = now;
+                grade.computedAt = now;
+                grade.updatedAt = now;
+            } else {
+                grade = {
+                    id: ELIPS.nextId(grades),
+                    enrollmentId: enrollmentId,
+                    schemeId: Number(scheme.id),
+                    courseId: Number(enrollment.courseId),
+                    studentId: Number(enrollment.studentId),
+                    instructorId: Number(classItem.instructorId) || actorId,
+                    score: scoreInt,
+                    finalScore: computed.finalScore,
+                    grade: computed.letter,
+                    status: 'finalized',
+                    components: computed.components,
+                    note: '',
+                    finalizedBy: actorId,
+                    finalizedAt: now,
+                    computedAt: now,
+                    createdAt: now,
+                    updatedAt: now
+                };
+                grades.push(grade);
+            }
+            const student = ELIPS.getUserById(enrollment.studentId);
+            recordAudit({
+                action: 'finalize',
+                entity: 'grade',
+                entityId: grade.id,
+                entityLabel: (student ? student.name : 'Peserta #' + enrollment.studentId) + ' — ' + classItem.code,
+                actorId: actorId,
+                detail: 'Memfinalisasi nilai akhir ' + computed.finalScore + ' (' + computed.letter + ') untuk ' +
+                    (student ? student.name : 'Peserta #' + enrollment.studentId) + '.'
+            });
+            finalized.push(grade);
+        }
+        ELIPS.setGrades(grades);
+        return success('Nilai akhir difinalisasi dan dikunci.', { grades: finalized });
+    }
+
+    function correctGrade(payload) {
+        if (ELIPS.api && ELIPS.api.enabled) return ELIPS.api.call('grade.correct', payload || {});
+        payload = payload || {};
+        const actorId = resolveActorId(payload);
+        const grades = ELIPS.getGrades();
+        let grade = payload.gradeId ? grades.find(function (g) { return Number(g.id) === Number(payload.gradeId); }) : null;
+        if (!grade && payload.enrollmentId) {
+            grade = grades.find(function (g) { return Number(g.enrollmentId) === Number(payload.enrollmentId); }) || null;
+        }
+        if (!grade) return failure('Nilai tidak ditemukan.');
+        if (grade.status !== 'finalized') return failure('Koreksi hanya berlaku untuk nilai yang sudah difinalisasi.');
+        const reason = String(payload.reason || '').trim();
+        if (reason.length < 5) return failure('Alasan koreksi wajib diisi minimal 5 karakter.');
+        const enrollment = ELIPS.getEnrollments().find(function (e) { return Number(e.id) === Number(grade.enrollmentId); });
+        if (!enrollment) return failure('Penugasan peserta tidak ditemukan.');
+        const classItem = ELIPS.getClassById(enrollment.classId);
+        if (classItem && !actorCanManageClass(classItem, actorId)) return failure('Anda tidak berhak mengoreksi nilai ini.');
+        const scheme = ELIPS.getGradeSchemeById(grade.schemeId);
+        if (!scheme) return failure('Skema penilaian nilai ini tidak ditemukan.');
+
+        let newScore = null;
+        let newLetter = null;
+        let snapshot = grade.components || [];
+
+        if (Array.isArray(payload.componentScores) && payload.componentScores.length) {
+            const scores = ELIPS.getGradeComponentScores();
+            const scoresBackup = scores.map(function (record) { return Object.assign({}, record); });
+            const components = ELIPS.getGradeComponentsByScheme(scheme.id);
+            const now = new Date().toISOString();
+            for (let i = 0; i < payload.componentScores.length; i++) {
+                const entry = payload.componentScores[i] || {};
+                const componentId = Number(entry.componentId);
+                if (entry.score === undefined || entry.score === null || entry.score === '') continue;
+                const score = Number(entry.score);
+                if (!isFinite(score) || score < 0 || score > 100) return failure('Nilai komponen harus antara 0-100.');
+                if (!components.some(function (c) { return Number(c.id) === componentId; })) {
+                    return failure('Komponen #' + componentId + ' bukan bagian dari skema nilai ini.');
+                }
+                let record = scores.find(function (s) {
+                    return Number(s.componentId) === componentId && Number(s.enrollmentId) === Number(enrollment.id);
+                });
+                if (record) {
+                    record.score = score;
+                    record.status = 'graded';
+                    record.assessorId = actorId;
+                    record.assessedAt = now;
+                    record.updatedAt = now;
+                } else {
+                    scores.push({
+                        id: ELIPS.nextId(scores),
+                        componentId: componentId,
+                        enrollmentId: Number(enrollment.id),
+                        studentId: Number(enrollment.studentId),
+                        score: score,
+                        status: 'graded',
+                        assessorId: actorId,
+                        assessorName: '',
+                        assessedAt: now,
+                        note: '',
+                        createdAt: now,
+                        updatedAt: now
+                    });
+                }
+            }
+            ELIPS.setGradeComponentScores(scores);
+            const computed = ELIPS.computeEnrollmentGrade(enrollment, scheme);
+            if (computed.missing.length) {
+                ELIPS.setGradeComponentScores(scoresBackup);
+                return failure('Komponen wajib belum lengkap: ' + computed.missing.join(', ') + '.');
+            }
+            if (computed.finalScore === null) {
+                ELIPS.setGradeComponentScores(scoresBackup);
+                return failure('Nilai akhir belum dapat dihitung.');
+            }
+            newScore = computed.finalScore;
+            newLetter = computed.letter;
+            snapshot = computed.components;
+        } else if (payload.finalScore !== undefined && payload.finalScore !== null && payload.finalScore !== '') {
+            const manual = Number(payload.finalScore);
+            if (!isFinite(manual) || manual < 0 || manual > 100) return failure('Nilai akhir harus antara 0-100.');
+            newScore = ELIPS.gradeRound(manual, scheme.rounding || 'half_up');
+            newLetter = ELIPS.predicateLetter(newScore);
+        } else {
+            return failure('Masukkan nilai komponen atau nilai akhir pengganti.');
+        }
+
+        const previousScore = grade.finalScore !== undefined && grade.finalScore !== null ? Number(grade.finalScore) : Number(grade.score);
+        const previousLetter = grade.grade;
+        const now = new Date().toISOString();
+        grade.score = Math.max(0, Math.min(100, Math.round(newScore)));
+        grade.finalScore = newScore;
+        grade.grade = newLetter;
+        grade.components = snapshot;
+        grade.status = 'finalized';
+        grade.finalizedBy = actorId;
+        grade.finalizedAt = now;
+        grade.computedAt = now;
+        grade.updatedAt = now;
+        ELIPS.setGrades(grades);
+
+        const corrections = ELIPS.getGradeCorrections();
+        const actor = actorId ? ELIPS.getUserById(actorId) : null;
+        const correction = {
+            id: ELIPS.nextId(corrections),
+            gradeId: Number(grade.id),
+            enrollmentId: Number(grade.enrollmentId),
+            previousScore: previousScore,
+            newScore: newScore,
+            previousLetter: previousLetter,
+            newLetter: newLetter,
+            reason: reason,
+            actorId: actorId,
+            actorName: actor ? actor.name : '',
+            createdAt: now
+        };
+        corrections.push(correction);
+        ELIPS.setGradeCorrections(corrections);
+
+        const student = ELIPS.getUserById(grade.studentId);
+        const course = ELIPS.getCourseById(grade.courseId);
+        recordAudit({
+            action: 'correct',
+            entity: 'grade',
+            entityId: grade.id,
+            entityLabel: (student ? student.name : 'Peserta #' + grade.studentId) + ' — ' + (course ? course.title : ''),
+            actorId: actorId,
+            detail: 'Mengoreksi nilai dari ' + previousScore + ' (' + previousLetter + ') menjadi ' + newScore + ' (' + newLetter + ') — alasan: ' + reason + '.'
+        });
+        return success('Koreksi nilai disimpan dan dicatat pada jejak audit.', { grade: grade, correction: correction });
+    }
+
+    function gradeTranscript(payload) {
+        if (ELIPS.api && ELIPS.api.enabled) return ELIPS.api.call('grade.transcript', payload || {});
+        payload = payload || {};
+        const actorId = resolveActorId(payload);
+        const actor = actorId ? ELIPS.getUserById(actorId) : null;
+        let enrollment = null;
+        if (payload.enrollmentId) {
+            enrollment = ELIPS.getEnrollments().find(function (e) { return Number(e.id) === Number(payload.enrollmentId); });
+        } else if (payload.studentId && payload.courseId) {
+            enrollment = ELIPS.getEnrollment(payload.studentId, payload.courseId);
+        }
+        if (!enrollment) return failure('Penugasan peserta tidak ditemukan.');
+        if (actor && actor.role === 'peserta' && Number(enrollment.studentId) !== Number(actor.id)) {
+            return failure('Anda hanya dapat melihat nilai Anda sendiri.');
+        }
+        if (actor && actor.role !== 'peserta') {
+            const classItem = ELIPS.getClassById(enrollment.classId);
+            const course = ELIPS.getCourseById(enrollment.courseId);
+            let allowed = classItem ? actorCanManageClass(classItem, actorId) : false;
+            if (!allowed && course) allowed = Number(course.instructorId) === Number(actor.id) || actor.role === 'admin';
+            if (!allowed) return failure('Anda tidak berhak melihat nilai peserta ini.');
+        }
+        const computed = ELIPS.computeEnrollmentGrade(enrollment);
+        const grade = ELIPS.getGrades().find(function (g) { return Number(g.enrollmentId) === Number(enrollment.id); }) || null;
+        const corrections = grade ? ELIPS.getGradeCorrectionsByGrade(grade.id).map(function (row) {
+            const actor = row.actorId ? ELIPS.getUserById(row.actorId) : null;
+            return Object.assign({}, row, { actorName: row.actorName || (actor ? actor.name : '') });
+        }) : [];
+        return success('', {
+            enrollment: enrollment,
+            grade: grade,
+            computed: computed,
+            corrections: corrections
+        });
+    }
+
+    Object.assign(ELIPS, {
+        saveGrade: saveGrade,
+        createDraftCertificateForEnrollment: createDraftCertificateForEnrollment,
+        approveCertificate: approveCertificate,
+        savePredicateRanges: savePredicateRanges,
+        saveGradeScheme: saveGradeScheme,
+        setGradeSchemeStatus: setGradeSchemeStatus,
+        deleteGradeScheme: deleteGradeScheme,
+        gradeRoster: gradeRoster,
+        saveManualComponentScore: saveManualComponentScore,
+        exemptGradeComponent: exemptGradeComponent,
+        finalizeGrades: finalizeGrades,
+        correctGrade: correctGrade,
+        gradeTranscript: gradeTranscript
+    });
+})(window.ELIPS);
+;

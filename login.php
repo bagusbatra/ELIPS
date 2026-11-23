@@ -1,4 +1,5 @@
 ﻿<?php
+// Direktori: login.php
 require_once __DIR__ . '/includes/bootstrap.php';
 $page = [
     'title' => 'Masuk - ELIPS LMS',
@@ -44,11 +45,12 @@ layout('page', $page);
                     <p class="auth-error" id="loginError" role="alert" hidden></p>
 
                     <div class="auth-field">
-                        <label for="email">Email</label>
+                        <label for="email">Email atau No. telepon</label>
                         <div class="auth-input">
-                            <i class="bi bi-envelope" aria-hidden="true"></i>
-                            <input type="email" id="email" class="form-input" name="email"
-                                   placeholder="nama@example.com" autocomplete="username" required>
+                            <i class="bi bi-person" aria-hidden="true"></i>
+                            <input type="text" id="email" class="form-input" name="email"
+                                   placeholder="nama@example.com atau 08xxxxxxxxxx" autocomplete="username"
+                                   inputmode="email" autocapitalize="none" spellcheck="false" required>
                         </div>
                     </div>
 
@@ -65,6 +67,8 @@ layout('page', $page);
                         </div>
                     </div>
 
+                    <p class="auth-forgot"><a href="<?= url('forgot-password.php') ?>">Lupa sandi?</a></p>
+
                     <label class="auth-remember" for="remember">
                         <input type="checkbox" id="remember" name="remember" checked>
                         <span class="auth-checkbox" aria-hidden="true"><i class="bi bi-check-lg"></i></span>
@@ -78,8 +82,9 @@ layout('page', $page);
                 </form>
 
                 <div class="auth-divider"><span>atau</span></div>
-                <p class="auth-signup">Belum punya akun? <a href="<?= url('register.php') ?>">Daftar sekarang</a></p>
+                <p class="auth-signup">Belum punya akun? <a href="<?= url('index.php#pelatihan') ?>">Pilih program &amp; daftar</a></p>
 
+                <?php if (strtolower((string) getenv('ELIPS_ENV')) !== 'production'): ?>
                 <details class="auth-demo">
                     <summary>
                         <span><i class="bi bi-lightbulb" aria-hidden="true"></i> Akun demo untuk mencoba</span>
@@ -101,6 +106,7 @@ layout('page', $page);
                         <p class="auth-demo-note">Password semua akun demo: <strong>elips123</strong></p>
                     </div>
                 </details>
+                <?php endif; ?>
             </div>
 
             <a class="auth-back" href="<?= url('index.php') ?>">
@@ -109,4 +115,3 @@ layout('page', $page);
         </main>
     </div>
 <?php end_layout(); ?>
-

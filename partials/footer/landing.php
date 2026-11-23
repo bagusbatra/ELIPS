@@ -1,4 +1,4 @@
-<?php $lpHome = is_current('index.php') ? '' : url('index.php'); ?>
+<?php /* Direktori: partials/footer/landing.php */ ?><?php $lpHome = is_current('index.php') ? '' : url('index.php'); ?>
 <footer class="lp-footer">
     <div class="lp-container">
         <div class="lp-foot-top">
@@ -21,7 +21,7 @@
                 <div class="lp-foot-col">
                     <h4>Akun</h4>
                     <a href="<?= url('login.php') ?>">Masuk</a>
-                    <a href="<?= url('register.php') ?>">Daftar</a>
+                    <a href="<?= url('index.php#pelatihan') ?>">Daftar</a>
                 </div>
                 <div class="lp-foot-col" id="kontak">
                     <h4>Kontak</h4>
