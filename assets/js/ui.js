@@ -22,10 +22,10 @@
         if (sessionUser) {
             const dashboardPath = ELIPS.dashboardPathForRole(sessionUser.role);
             const authActions = document.querySelector('.nav-actions, .lp-nav-actions');
-            if (authActions && authActions.querySelector('a[href$="login.html"]')) {
+            if (authActions && authActions.querySelector('a[href$="login.php"]')) {
                 authActions.innerHTML = [
                     '<a href="' + dashboardPath + '" class="btn btn-ghost"><i class="bi bi-speedometer2"></i> Dashboard</a>',
-                    '<a href="' + ELIPS.basePathPrefix() + 'index.html" class="btn btn-outline" data-logout>Keluar</a>'
+                    '<a href="' + ELIPS.basePathPrefix() + 'index.php" class="btn btn-outline" data-logout>Keluar</a>'
                 ].join('');
             }
 
@@ -37,7 +37,7 @@
                 dashboardLink.textContent = 'Dashboard';
 
                 const logoutLink = document.createElement('a');
-                logoutLink.href = ELIPS.basePathPrefix() + 'index.html';
+                logoutLink.href = ELIPS.basePathPrefix() + 'index.php';
                 logoutLink.className = 'nav-link mobile-session-link';
                 logoutLink.setAttribute('data-session-link', '1');
                 logoutLink.setAttribute('data-logout', '1');
@@ -175,7 +175,7 @@
                     metaParts.length ? '  <div class="lp-card-meta">' + metaParts.join('') + '</div>' : '',
                     priceHtml,
                     isEnrolled ? '  <span class="badge badge-success" style="align-self: flex-start;">Ditugaskan</span>' : '',
-                    '  <a class="lp-btn lp-btn-slide" href="course-detail.html?id=' + course.id + '" aria-label="Lihat detail ' + ELIPS.escapeHtml(course.title) + '">',
+                    '  <a class="lp-btn lp-btn-slide" href="course-detail.php?id=' + course.id + '" aria-label="Lihat detail ' + ELIPS.escapeHtml(course.title) + '">',
                     '    <span class="lp-slide-txt"><span class="lp-slide-in"><span>Lihat Detail</span><span aria-hidden="true">Selengkapnya</span></span></span>',
                     '  </a>',
                     '</div>'
@@ -207,13 +207,13 @@
                 ELIPS.setCurrentUser(user.id);
                 ELIPS.toast('Berhasil masuk sebagai ' + user.name);
                 if (user.role === 'admin') {
-                    window.location.href = 'admin/dashboard.html';
+                    window.location.href = 'admin/dashboard.php';
                 } else if (user.role === 'instruktur') {
-                    window.location.href = 'instructor/dashboard.html';
+                    window.location.href = 'instructor/dashboard.php';
                 } else if (user.role === 'karyawan') {
-                    window.location.href = 'employee/shared/dashboard.html';
+                    window.location.href = 'employee/shared/dashboard.php';
                 } else {
-                    window.location.href = 'student/dashboard.html';
+                    window.location.href = 'student/dashboard.php';
                 }
             });
         }
@@ -222,7 +222,7 @@
         document.querySelectorAll('[data-logout]').forEach(function (link) {
             link.addEventListener('click', function () {
                 ELIPS.logout();
-                window.location.href = link.getAttribute('href') || 'index.html';
+                window.location.href = link.getAttribute('href') || 'index.php';
             });
         });
 

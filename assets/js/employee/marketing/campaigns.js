@@ -340,7 +340,7 @@
         const user = ELIPS.requireRole('karyawan');
         if (!user) return;
         if (user.division !== 'marketing') {
-            window.location.replace('dashboard.html');
+            window.location.replace(ELIPS.basePathPrefix() + 'employee/shared/dashboard.php');
             return;
         }
 

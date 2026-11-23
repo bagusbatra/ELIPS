@@ -43,6 +43,7 @@
     }
 
     function basePrefix() {
+        if (typeof window.ELIPS_BASE === 'string') return window.ELIPS_BASE + '/';
         const path = (window.location.pathname || '').replace(/\\/g, '/');
         if (/\/(admin|instructor|student|employee)\/[^/]*$/.test(path)) return '../';
         return '';

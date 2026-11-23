@@ -517,7 +517,7 @@
         const user = ELIPS.requireRole('karyawan');
         if (!user) return;
         if (user.division !== 'marketing' && user.role !== 'admin') {
-            window.location.replace('dashboard.html');
+            window.location.replace(ELIPS.basePathPrefix() + 'employee/shared/dashboard.php');
             return;
         }
         state.session = user;

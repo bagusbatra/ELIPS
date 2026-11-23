@@ -24,6 +24,7 @@
     }
 
     function basePathPrefix() {
+        if (typeof window.ELIPS_BASE === 'string') return window.ELIPS_BASE + '/';
         const path = (window.location.pathname || '').replace(/\\/g, '/');
         if (/\/employee\/[^/]+\/[^/]*$/.test(path)) return '../../';
         if (/\/(admin|instructor|student|employee)\/[^/]*$/.test(path)) return '../';
@@ -32,17 +33,17 @@
 
     function dashboardPathForRole(role) {
         const prefix = basePathPrefix();
-        if (role === 'admin') return prefix + 'admin/dashboard.html';
-        if (role === 'instruktur') return prefix + 'instructor/dashboard.html';
-        if (role === 'karyawan') return prefix + 'employee/shared/dashboard.html';
-        return prefix + 'student/dashboard.html';
+        if (role === 'admin') return prefix + 'admin/dashboard.php';
+        if (role === 'instruktur') return prefix + 'instructor/dashboard.php';
+        if (role === 'karyawan') return prefix + 'employee/shared/dashboard.php';
+        return prefix + 'student/dashboard.php';
     }
 
     function requireRole(role) {
         let user = getSessionUser();
         if (!user) user = resumeSession();
         if (!user) {
-            window.location.href = basePathPrefix() + 'login.html';
+            window.location.href = basePathPrefix() + 'login.php';
             return null;
         }
         if (user.role !== role) {

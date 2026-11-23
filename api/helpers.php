@@ -1764,6 +1764,11 @@ function elips_staff_attendance_public(array $row, bool $includePhoto = true): a
         'connectionType' => $row['connection_type'],
         'online' => (bool) $row['online'],
         'notes' => $row['notes'],
+        'status' => (string) ($row['status'] ?? 'on_time'),
+        'lateMinutes' => (int) ($row['late_minutes'] ?? 0),
+        'distanceM' => isset($row['distance_m']) && $row['distance_m'] !== null ? (float) $row['distance_m'] : null,
+        'geofenceName' => (string) ($row['geofence_name'] ?? ''),
+        'flags' => (string) ($row['flags'] ?? ''),
         'createdAt' => elips_iso($row['created_at']),
         'updatedAt' => elips_iso($row['updated_at']),
     ];

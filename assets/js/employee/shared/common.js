@@ -4,7 +4,7 @@
     function guardEmployee(allowedDivisions) {
         var user = ELIPS.getSessionUser();
         if (!user) {
-            window.location.replace(ELIPS.basePathPrefix() + 'login.html');
+            window.location.replace(ELIPS.basePathPrefix() + 'login.php');
             return null;
         }
         if (user.role === 'admin') return user;

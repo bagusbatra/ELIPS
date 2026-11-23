@@ -295,6 +295,37 @@
         });
     }
 
+    function esc(value) {
+        return String(value === null || value === undefined ? '' : value).replace(/[&<>"']/g, function (ch) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch];
+        });
+    }
+
+    // Ringkasan otomatis dihitung server (terlambat/pulang cepat/alpa sesuai shift).
+    function loadSummary(payload) {
+        const body = $('recapSummaryBody');
+        if (!body) return;
+        const result = ELIPS.api.call('staffAttendance.summary', {
+            from: payload.from, to: payload.to, userId: payload.userId
+        });
+        if (!result || !result.ok) {
+            body.innerHTML = '<tr><td colspan="7"><div class="attendance-empty">' + esc((result && result.message) || 'Ringkasan tidak tersedia.') + '</div></td></tr>';
+            return;
+        }
+        const rows = (result.data && result.data.rows) || [];
+        if (!rows.length) {
+            body.innerHTML = '<tr><td colspan="7"><div class="attendance-empty">Belum ada data.</div></td></tr>';
+            return;
+        }
+        body.innerHTML = rows.map(function (r) {
+            const hours = (Number(r.workMinutes || 0) / 60).toFixed(1);
+            const late = r.lateCount ? r.lateCount + 'x (' + r.lateMinutes + ' mnt)' : '-';
+            return '<tr><td>' + esc(r.name) + '</td><td>' + r.presentDays + '</td><td>' + late + '</td><td>' +
+                (r.earlyLeaveCount || '-') + '</td><td>' + (r.missingCheckout || '-') + '</td><td>' +
+                (r.absentDays || '-') + '</td><td>' + hours + ' jam</td></tr>';
+        }).join('');
+    }
+
     function load() {
         if (state.loading) return;
         const filters = readFilters();
@@ -324,6 +355,7 @@
                 state.to = data.to || filters.to;
                 setInputs(state.from, state.to);
                 render(data.rows || []);
+                loadSummary({ from: state.from, to: state.to, userId: payload.userId });
                 return;
             }
 

@@ -1,6 +1,6 @@
 // ============================================================
 // ELIPS LMS - landing.js
-// Perilaku khusus halaman awal (index.html):
+// Perilaku khusus halaman awal (index.php):
 //  1. Navbar berubah menjadi bar oren melengkung saat di-scroll.
 //  2. Menu hamburger: aria-expanded, tutup saat tautan dipilih,
 //     tombol Esc, klik di luar, atau layar melebar.

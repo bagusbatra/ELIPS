@@ -9,6 +9,8 @@ declare(strict_types=1);
 // ============================================================
 
 require __DIR__ . '/db.php';
+require __DIR__ . '/setup-guard.php';
+elips_setup_guard('seed');
 
 header('Content-Type: text/plain; charset=utf-8');
 

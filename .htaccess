@@ -1,0 +1,12 @@
+# ELIPS LMS - Apache (Laragon). Aktifkan mod_rewrite.
+Options -Indexes
+
+# Berkas komponen tidak boleh dibuka langsung dari browser.
+RewriteEngine On
+RewriteRule ^(includes|partials)/ - [F,L]
+
+# Tautan lama (*.html) -> *.php (301), hanya jika berkas .php-nya ada.
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{DOCUMENT_ROOT}%{REQUEST_URI} ^(.+)\.html$
+RewriteCond %1.php -f
+RewriteRule ^(.+)\.html$ $1.php [R=301,L]

@@ -102,6 +102,10 @@ function elips_dispatch(string $action, array $payload): array
             return elips_action_staff_attendance_create($payload);
         case 'staffAttendance.list':
             return elips_action_staff_attendance_list($payload);
+        case 'staffAttendance.summary':
+            return elips_action_staff_attendance_summary($payload);
+        case 'staffAttendance.mySummary':
+            return elips_action_staff_attendance_my_summary($payload);
         case 'staffAttendance.recap':
             return elips_action_staff_attendance_recap($payload);
         case 'staffAttendance.delete':
@@ -6292,6 +6296,11 @@ function elips_action_staff_attendance_create(array $p): array
         return elips_fail('Tipe foto absensi tidak didukung.');
     }
     $photoMime = $detectedMime;
+    $dimensionError = elips_photo_dimension_error($imageInfo);
+    if ($dimensionError !== null) {
+        return elips_fail($dimensionError);
+    }
+    $photoHash = hash('sha256', $binary);
 
     $rawLat = $p['latitude'] ?? null;
     $rawLng = $p['longitude'] ?? null;
@@ -6338,6 +6347,19 @@ function elips_action_staff_attendance_create(array $p): array
     }
     $locationSource = 'gps';
 
+    // Validasi lokasi di server: akurasi GPS dan radius kantor (geofence).
+    $geo = elips_geofence_check($latitude, $longitude, $accuracy);
+    if (!$geo['ok']) {
+        return elips_fail($geo['message']);
+    }
+    $flags = [];
+    if (!empty($geo['outside'])) {
+        $flags[] = 'outside_geofence';
+    }
+    if ($locationLabel === '' && $geo['name'] !== '') {
+        $locationLabel = $geo['name'];
+    }
+
     $timezone = $timezoneName;
     $ipAddress = mb_substr(trim((string) ($_SERVER['REMOTE_ADDR'] ?? '')), 0, 45);
     $userAgent = mb_substr(trim((string) ($p['userAgent'] ?? '')), 0, 255);
@@ -6358,6 +6380,16 @@ function elips_action_staff_attendance_create(array $p): array
     $notes = mb_substr(trim((string) ($p['notes'] ?? '')), 0, 2000);
 
     $db = elips_db();
+
+    // Foto identik yang pernah dipakai pengguna yang sama = kemungkinan foto lama.
+    if (elips_attendance_cfg()['reject_reused_photo']) {
+        $dup = $db->prepare('SELECT 1 FROM staff_attendances WHERE user_id = ? AND photo_hash = ? LIMIT 1');
+        $dup->execute([(int) $actor['id'], $photoHash]);
+        if ($dup->fetchColumn()) {
+            return elips_fail('Foto ini sudah pernah dipakai. Ambil foto baru langsung dari kamera.');
+        }
+    }
+    $statusInfo = elips_attendance_status($kind, $taken, (int) $actor['id']);
 
     // Aturan harian: maksimal satu absen masuk dan satu absen pulang.
     // Unique key di database menjadi pengaman terakhir saat terjadi balapan.
@@ -6382,8 +6414,9 @@ function elips_action_staff_attendance_create(array $p): array
             (user_id, kind, attendance_date, taken_at, timezone, photo, photo_mime,
              latitude, longitude, accuracy_m, location_label, location_source,
              ip_address, user_agent, platform, language, screen, device_memory,
-             hardware_concurrency, connection_type, online, notes, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP())'
+             hardware_concurrency, connection_type, online, notes,
+             photo_hash, distance_m, geofence_name, status, late_minutes, flags, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP())'
     );
     try {
         $stmt->execute([
@@ -6391,6 +6424,7 @@ function elips_action_staff_attendance_create(array $p): array
             $encoded, $photoMime, $latitude, $longitude, $accuracy, $locationLabel, $locationSource,
             $ipAddress, $userAgent, $platform, $language, $screen, $deviceMemory,
             $hardwareConcurrency, $connectionType, $online, $notes,
+            $photoHash, $geo['distance'], $geo['name'], $statusInfo['status'], $statusInfo['minutes'], implode(',', $flags),
         ]);
     } catch (PDOException $e) {
         if ((string) $e->getCode() === '23000') {
@@ -8084,3 +8118,4 @@ function elips_action_notification_clear(): array
     return elips_ok('Seluruh outbox notifikasi berhasil dibersihkan.');
 }
 
+require_once __DIR__ . '/attendance_rules.php';

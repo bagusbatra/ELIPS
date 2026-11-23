@@ -2,7 +2,7 @@
 // ELIPS LMS - sw.js
 // Service worker PWA: network-first, tanpa cache halaman aplikasi
 // dan tanpa cache API. Cache hanya dipakai sebagai fallback offline
-// untuk aset statis dan halaman offline.html.
+// untuk aset statis dan halaman offline.php.
 //
 // Naikkan CACHE_VERSION saat strategi cache berubah. Perubahan file
 // tetap langsung terlihat karena semua permintaan selalu mencoba
@@ -11,9 +11,9 @@
 
 'use strict';
 
-const CACHE_VERSION = 'v1';
+const CACHE_VERSION = 'v2';
 const STATIC_CACHE = 'elips-static-' + CACHE_VERSION;
-const OFFLINE_URL = './offline.html';
+const OFFLINE_URL = './offline.php';
 
 // Hanya halaman offline dan ikon yang disiapkan saat instalasi.
 // Halaman aplikasi tidak pernah dimasukkan ke cache.
@@ -88,7 +88,7 @@ self.addEventListener('fetch', function (event) {
     // API tidak pernah disentuh service worker: selalu jaringan, tanpa cache.
     if (url.pathname.indexOf('/api/') !== -1) return;
 
-    // Navigasi halaman: network-first. Bila offline, tampilkan offline.html.
+    // Navigasi halaman: network-first. Bila offline, tampilkan offline.php.
     // Halaman aplikasi tidak pernah disimpan sehingga versi baru langsung terlihat.
     if (request.mode === 'navigate') {
         event.respondWith(

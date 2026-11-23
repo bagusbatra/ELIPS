@@ -1,0 +1,139 @@
+<?php
+require_once __DIR__ . '/../includes/bootstrap.php';
+$page = [
+    'page_script' => 'instructor/profile',
+    'roles' => ['instruktur'],
+    'title' => 'Profil Saya - ELIPS LMS',
+    'area' => 'instructor',
+    'scripts' => ['@crud', 'ui'],
+    'sidebar' => 'instructor',
+];
+layout('app', $page);
+?>
+        <main class="dashboard-main">
+            <div class="dashboard-header">
+                <h1 class="dashboard-title">Profil Saya</h1>
+                <p class="dashboard-subtitle">Kelola informasi akun instruktur dan lihat ringkasan kursus yang Anda ampu.</p>
+            </div>
+
+            <div class="dashboard-stats">
+                <div class="stat-card">
+                    <div class="stat-card-icon blue">
+                        <i class="bi bi-journal-bookmark"></i>
+                    </div>
+                    <div class="stat-card-info">
+                        <div class="stat-card-value" id="statCourses">0</div>
+                        <div class="stat-card-label">Kursus Diampu</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-card-icon green">
+                        <i class="bi bi-people"></i>
+                    </div>
+                    <div class="stat-card-info">
+                        <div class="stat-card-value" id="statStudents">0</div>
+                        <div class="stat-card-label">Peserta Aktif</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-card-icon orange">
+                        <i class="bi bi-collection-play"></i>
+                    </div>
+                    <div class="stat-card-info">
+                        <div class="stat-card-value" id="statLessons">0</div>
+                        <div class="stat-card-label">Total Pelajaran</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-card-icon purple">
+                        <i class="bi bi-patch-check"></i>
+                    </div>
+                    <div class="stat-card-info">
+                        <div class="stat-card-value" id="statCertificates">0</div>
+                        <div class="stat-card-label">Sertifikat Terbit</div>
+                    </div>
+                </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; align-items: start;">
+                <div class="dashboard-section" style="margin-bottom: 0;">
+                    <div class="dashboard-section-header">
+                        <h2 class="dashboard-section-title">Informasi Akun</h2>
+                    </div>
+                    <div class="dashboard-section-body">
+                        <div style="display: flex; flex-direction: column; align-items: center; text-align: center; gap: 0.5rem; padding: 0.5rem 0 1.5rem; border-bottom: 1px solid var(--border); margin-bottom: 1.5rem;">
+                            <div class="dashboard-avatar" id="profileAvatar" style="width: 88px; height: 88px; font-size: 2rem;">AF</div>
+                            <div style="font-size: 1.125rem; font-weight: 600; color: var(--text-primary);" id="profileName">Ahmad Fauzi, M.M.</div>
+                            <div style="color: var(--text-secondary); font-size: 0.875rem;" id="profileEmail">ahmad@example.com</div>
+                            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; justify-content: center; margin-top: 0.25rem;">
+                                <span class="badge badge-primary"><i class="bi bi-person-badge"></i> Instruktur</span>
+                                <span class="badge badge-success" id="profileStatus"><i class="bi bi-check-circle"></i> Aktif</span>
+                            </div>
+                        </div>
+                        <div style="display: flex; flex-direction: column; gap: 0.75rem; font-size: 0.9375rem;">
+                            <div style="display: flex; justify-content: space-between; gap: 1rem;">
+                                <span style="color: var(--text-secondary);">ID Instruktur</span>
+                                <strong id="profileId">-</strong>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; gap: 1rem;">
+                                <span style="color: var(--text-secondary);">No. Telepon</span>
+                                <strong id="profilePhone">-</strong>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; gap: 1rem;">
+                                <span style="color: var(--text-secondary);">Terdaftar Sejak</span>
+                                <strong id="profileCreatedAt">-</strong>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="dashboard-section" style="margin-bottom: 0;">
+                    <div class="dashboard-section-header">
+                        <h2 class="dashboard-section-title">Ubah Data Profil</h2>
+                    </div>
+                    <div class="dashboard-section-body">
+                        <form id="profileForm" style="display: flex; flex-direction: column; gap: 1rem;">
+                            <div class="form-group">
+                                <label class="form-label" for="profileNameInput">Nama Lengkap *</label>
+                                <input type="text" id="profileNameInput" class="form-input" placeholder="Nama lengkap" required>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" for="profileEmailInput">Email</label>
+                                <input type="email" id="profileEmailInput" class="form-input" readonly style="background: var(--bg); cursor: not-allowed;">
+                                <small class="form-hint">Email digunakan untuk login dan tidak dapat diubah sendiri.</small>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" for="profilePhoneInput">No. Telepon</label>
+                                <input type="tel" id="profilePhoneInput" class="form-input" placeholder="08xxxxxxxxxx">
+                            </div>
+                            <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; padding-top: 0.25rem;">
+                                <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> Simpan Perubahan</button>
+                                <button type="button" class="btn btn-ghost" id="resetProfileBtn"><i class="bi bi-arrow-counterclockwise"></i> Reset</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <div class="dashboard-section" style="margin-top: 1.5rem;">
+                <div class="dashboard-section-header">
+                    <h2 class="dashboard-section-title">Ringkasan Kursus</h2>
+                    <a href="<?= url('instructor/manage-course.php') ?>" class="btn btn-ghost">Kelola Kursus <i class="bi bi-arrow-right"></i></a>
+                </div>
+                <div class="dashboard-section-body" style="padding: 0; overflow-x: auto;">
+                    <table class="dashboard-table">
+                        <thead>
+                            <tr>
+                                <th>Kursus</th>
+                                <th>Peserta</th>
+                                <th>Modul / Pelajaran</th>
+                                <th>Status</th>
+                                <th>Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody id="profileCoursesBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+<?php end_layout(); ?>

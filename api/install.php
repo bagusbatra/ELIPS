@@ -8,6 +8,8 @@ declare(strict_types=1);
 // ============================================================
 
 require __DIR__ . '/db.php';
+require __DIR__ . '/setup-guard.php';
+elips_setup_guard('install');
 
 $isCli = PHP_SAPI === 'cli';
 $fresh = $isCli && in_array('--fresh', $argv ?? [], true);
@@ -31,6 +33,8 @@ try {
 
     // Buang komentar baris agar pemisahan pernyataan SQL tetap bersih.
     $schema = preg_replace('/^\s*--.*$/m', '', $schema);
+    // Nama database mengikuti config/env (ELIPS_DB_NAME), bukan nilai tetap di schema.sql.
+    $schema = str_replace('`elips_lms`', '`' . $dbConfig['name'] . '`', (string) $schema);
     $statements = array_filter(array_map('trim', explode(';', (string) $schema)));
     $server = elips_db(false);
     foreach ($statements as $statement) {
@@ -199,6 +203,24 @@ try {
         echo "Aturan absensi harian diterapkan di database.\n";
     }
 
+    // ---------- Migrasi: validasi & status absensi server-side ----------
+    $attendanceColumns = [
+        'photo_hash' => "ALTER TABLE staff_attendances ADD COLUMN photo_hash CHAR(64) NOT NULL DEFAULT '' AFTER notes",
+        'distance_m' => 'ALTER TABLE staff_attendances ADD COLUMN distance_m DECIMAL(10,2) NULL AFTER photo_hash',
+        'geofence_name' => "ALTER TABLE staff_attendances ADD COLUMN geofence_name VARCHAR(150) NOT NULL DEFAULT '' AFTER distance_m",
+        'status' => "ALTER TABLE staff_attendances ADD COLUMN status VARCHAR(20) NOT NULL DEFAULT 'on_time' AFTER geofence_name",
+        'late_minutes' => 'ALTER TABLE staff_attendances ADD COLUMN late_minutes INT NOT NULL DEFAULT 0 AFTER status',
+        'flags' => "ALTER TABLE staff_attendances ADD COLUMN flags VARCHAR(255) NOT NULL DEFAULT '' AFTER late_minutes",
+    ];
+    foreach ($attendanceColumns as $column => $sql) {
+        if (!(bool) $db->query('SHOW COLUMNS FROM staff_attendances LIKE ' . $db->quote($column))->fetch()) {
+            $db->exec($sql);
+        }
+    }
+    if (!(bool) $db->query("SHOW INDEX FROM staff_attendances WHERE Key_name = 'idx_staff_attendances_photo'")->fetch()) {
+        $db->exec('ALTER TABLE staff_attendances ADD KEY idx_staff_attendances_photo (user_id, photo_hash)');
+    }
+
     // Rentang predikat default mengikuti pemetaan huruf yang sudah dipakai
     // versi sebelumnya, sehingga perilaku lama tetap konsisten.
     $predicateCount = (int) $db->query('SELECT COUNT(*) FROM predicate_ranges')->fetchColumn();
@@ -244,6 +266,15 @@ try {
     $userCount = (int) $db->query('SELECT COUNT(*) FROM users')->fetchColumn();
     if ($userCount > 0) {
         echo "Data sudah ada (" . $userCount . " pengguna). Seed dilewati.\n";
+        elips_install_lock_write();
+        echo "Instalasi selesai.\n";
+        exit;
+    }
+
+    if (($config['env'] ?? 'development') === 'production') {
+        elips_install_lock_write();
+        echo "Skema siap (production: data demo TIDAK dimasukkan).\n";
+        echo "Buat akun admin pertama: php api/create-admin.php email@domain.com \"Nama Admin\"\n";
         echo "Instalasi selesai.\n";
         exit;
     }
@@ -682,6 +713,7 @@ try {
 
     echo "Data demo berhasil dimasukkan.\n";
     echo "Akun demo: admin@example.com / instruktur / peserta — password: " . $config['demo_password'] . "\n";
+    elips_install_lock_write();
     echo "Instalasi selesai.\n";
 } catch (Throwable $e) {
     if (isset($db) && $db->inTransaction()) {
