@@ -11,7 +11,6 @@
         </nav>
         <div class="nav-actions">
             <a href="<?= url('login.php') ?>" class="btn btn-ghost">Masuk</a>
-            <a href="<?= url('register.php') ?>" class="btn btn-primary">Daftar</a>
         </div> 
         <button class="nav-toggle" id="navToggle">
             <i class="bi bi-list"></i>

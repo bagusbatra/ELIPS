@@ -109,7 +109,34 @@
             const user = ELIPS.getCurrentUser();
             const enrollments = user ? ELIPS.getEnrollmentsByStudent(user.id) : [];
             coursesGrid.innerHTML = '';
-            const published = ELIPS.getCourses().filter(function (c) { return c.status === 'published'; });
+            // Urutkan kartu dari tanggal mulai terdekat; tanpa tanggal diletakkan di akhir.
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const todayStamp = today.getTime();
+
+            function startDateStamp(course) {
+                const raw = course && course.startDate ? String(course.startDate).slice(0, 10) : '';
+                if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null;
+                const stamp = new Date(raw + 'T00:00:00').getTime();
+                return isNaN(stamp) ? null : stamp;
+            }
+
+            const published = ELIPS.getCourses()
+                .filter(function (c) { return c.status === 'published'; })
+                .map(function (course) { return { course: course, stamp: startDateStamp(course) }; })
+                .sort(function (a, b) {
+                    function group(item) {
+                        if (item.stamp === null) return 2;
+                        return item.stamp >= todayStamp ? 0 : 1;
+                    }
+                    const groupA = group(a);
+                    const groupB = group(b);
+                    if (groupA !== groupB) return groupA - groupB;
+                    if (groupA === 2) return 0;
+                    // Yang sudah lewat diurutkan dari paling baru, tanpa tanggal di akhir.
+                    return groupA === 1 ? b.stamp - a.stamp : a.stamp - b.stamp;
+                })
+                .map(function (item) { return item.course; });
 
             if (published.length === 0) {
                 coursesGrid.innerHTML = '<p style="color: var(--text-secondary);">Belum ada kursus yang dipublikasikan.</p>';

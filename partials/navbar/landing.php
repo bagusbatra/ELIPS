@@ -14,12 +14,10 @@
             <a href="<?= $lpHome ?>#kontak" class="lp-menu-link">Kontak</a>
             <div class="lp-menu-actions lp-mobile-auth">
                 <a href="<?= url('login.php') ?>" class="lp-btn lp-btn-line">Masuk</a>
-                <a href="<?= url('register.php') ?>" class="lp-btn lp-btn-solid">Daftar</a>
             </div>
         </nav>
         <div class="lp-nav-actions nav-actions">
             <a href="<?= url('login.php') ?>" class="lp-btn lp-btn-ghost">Masuk</a>
-            <a href="<?= url('register.php') ?>" class="lp-btn lp-btn-solid lp-btn-register">Daftar</a>
         </div>
         <button class="lp-menu-btn" id="navToggle" type="button" aria-label="Buka menu" aria-controls="navMenu" aria-expanded="false">
             <svg class="ic-open" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>

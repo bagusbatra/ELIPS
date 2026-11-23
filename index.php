@@ -59,11 +59,28 @@ layout('page', $page);
                         <p class="lp-lead">Pilih kursus yang sesuai dengan kebutuhan pengembangan dirimu.</p>
                     </div>
                     <div class="lp-lok" id="lokasiWrap" hidden>
-                        <svg class="lp-lok-ic" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>
-                        <select class="lp-lok-select" id="lokasiFilter" aria-label="Filter lokasi pelatihan">
-                            <option value="">Semua lokasi</option>
-                        </select>
-                        <svg class="lp-lok-chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+                        <div class="lp-lok-field" data-lok-field>
+                            <span class="lp-lok-ic" aria-hidden="true">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>
+                            </span>
+                            <!-- Select tetap ada sebagai sumber nilai; landing.js menggantinya dengan dropdown kustom. -->
+                            <select class="lp-lok-select" id="lokasiFilter" aria-label="Filter lokasi pelatihan">
+                                <option value="">Semua lokasi</option>
+                            </select>
+                            <button class="lp-lok-trigger" type="button" data-lok-trigger
+                                    aria-haspopup="listbox" aria-expanded="false" aria-controls="lokasiOptions"
+                                    aria-label="Filter lokasi pelatihan: Semua lokasi">
+                                <span class="lp-lok-copy">
+                                    <span class="lp-lok-caption">Lokasi</span>
+                                    <span class="lp-lok-value" data-lok-value>Semua lokasi</span>
+                                </span>
+                                <span class="lp-lok-chev" aria-hidden="true">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+                                </span>
+                            </button>
+                            <div class="lp-lok-menu" id="lokasiOptions" role="listbox"
+                                 aria-label="Pilih lokasi pelatihan" aria-hidden="true" tabindex="-1"></div>
+                        </div>
                     </div>
                 </div>
                 <div class="lp-grid" id="coursesGrid"></div>

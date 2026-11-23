@@ -22,6 +22,140 @@
         }
     }
 
+    // Dropdown lokasi: select asli tetap jadi sumber nilai, tampilannya
+    // diganti menjadi panel kustom yang lebih lembut dan mudah dipakai.
+    function setupLocationDropdown(select, wrap) {
+        var trigger = wrap.querySelector('[data-lok-trigger]');
+        var valueLabel = wrap.querySelector('[data-lok-value]');
+        var menu = wrap.querySelector('[role="listbox"]');
+        if (!trigger || !valueLabel || !menu) return;
+
+        var checkIcon = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+        var options = [];
+        var activeIndex = -1;
+
+        function selectedText() {
+            var selected = select.options[select.selectedIndex];
+            return selected ? selected.text : 'Semua lokasi';
+        }
+
+        function syncValue() {
+            var text = selectedText();
+            valueLabel.textContent = text;
+            trigger.setAttribute('aria-label', 'Filter lokasi pelatihan: ' + text);
+            options.forEach(function (item) {
+                var isSelected = item.getAttribute('data-value') === select.value;
+                item.setAttribute('aria-selected', isSelected ? 'true' : 'false');
+            });
+        }
+
+        function setActive(index) {
+            if (!options.length) return;
+            activeIndex = (index + options.length) % options.length;
+            options.forEach(function (item, i) {
+                item.classList.toggle('is-active', i === activeIndex);
+            });
+            options[activeIndex].scrollIntoView({ block: 'nearest' });
+        }
+
+        function openMenu() {
+            if (wrap.classList.contains('is-open')) return;
+            wrap.classList.add('is-open');
+            trigger.setAttribute('aria-expanded', 'true');
+            menu.setAttribute('aria-hidden', 'false');
+            var current = options.findIndex(function (item) {
+                return item.getAttribute('data-value') === select.value;
+            });
+            setActive(current >= 0 ? current : 0);
+            menu.focus();
+        }
+
+        function closeMenu(returnFocus) {
+            if (!wrap.classList.contains('is-open')) return;
+            wrap.classList.remove('is-open');
+            trigger.setAttribute('aria-expanded', 'false');
+            menu.setAttribute('aria-hidden', 'true');
+            if (returnFocus) trigger.focus();
+        }
+
+        function choose(index) {
+            var item = options[index];
+            if (!item) return;
+            select.value = item.getAttribute('data-value') || '';
+            select.dispatchEvent(new Event('change', { bubbles: true }));
+            closeMenu(true);
+        }
+
+        Array.prototype.forEach.call(select.options, function (option, index) {
+            var item = document.createElement('div');
+            item.className = 'lp-lok-option';
+            item.id = 'lokasi-option-' + index;
+            item.setAttribute('role', 'option');
+            item.setAttribute('tabindex', '-1');
+            item.setAttribute('data-value', option.value);
+
+            var icon = document.createElement('span');
+            icon.className = 'lp-lok-option-check';
+            icon.setAttribute('aria-hidden', 'true');
+            icon.innerHTML = checkIcon;
+
+            var text = document.createElement('span');
+            text.textContent = option.text;
+
+            item.appendChild(icon);
+            item.appendChild(text);
+            menu.appendChild(item);
+            options.push(item);
+        });
+
+        trigger.addEventListener('click', function () {
+            if (wrap.classList.contains('is-open')) closeMenu(false);
+            else openMenu();
+        });
+
+        trigger.addEventListener('keydown', function (e) {
+            if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                openMenu();
+            }
+        });
+
+        menu.addEventListener('click', function (e) {
+            var item = e.target.closest('.lp-lok-option');
+            if (item) choose(options.indexOf(item));
+        });
+
+        menu.addEventListener('mousemove', function (e) {
+            var item = e.target.closest('.lp-lok-option');
+            if (item) {
+                var index = options.indexOf(item);
+                if (index !== activeIndex) setActive(index);
+            }
+        });
+
+        menu.addEventListener('keydown', function (e) {
+            if (e.key === 'ArrowDown') { e.preventDefault(); setActive(activeIndex + 1); }
+            else if (e.key === 'ArrowUp') { e.preventDefault(); setActive(activeIndex - 1); }
+            else if (e.key === 'Home') { e.preventDefault(); setActive(0); }
+            else if (e.key === 'End') { e.preventDefault(); setActive(options.length - 1); }
+            else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); choose(activeIndex); }
+            else if (e.key === 'Escape') { e.preventDefault(); closeMenu(true); }
+            else if (e.key === 'Tab') { closeMenu(false); }
+        });
+
+        select.addEventListener('change', syncValue);
+        document.addEventListener('click', function (e) {
+            if (!wrap.contains(e.target)) closeMenu(false);
+        });
+        window.addEventListener('resize', function () { closeMenu(false); });
+
+        // Select disembunyikan tetapi tetap dipakai sebagai penyimpan nilai.
+        select.setAttribute('tabindex', '-1');
+        select.setAttribute('aria-hidden', 'true');
+        wrap.classList.add('is-enhanced');
+        syncValue();
+    }
+
     ready(function () {
         // ---------- 1. Navbar saat di-scroll ----------
         var nav = document.getElementById('lpNav');
@@ -93,6 +227,7 @@
                     select.appendChild(option);
                 });
                 wrap.hidden = false;
+                setupLocationDropdown(select, wrap);
 
                 select.addEventListener('change', function () {
                     var chosen = select.value;
