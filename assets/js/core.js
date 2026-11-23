@@ -59,6 +59,7 @@
         marketingLeads: 'elips_marketingLeads',
         marketingFollowups: 'elips_marketingFollowups',
         marketingTargets: 'elips_marketingTargets',
+        courseRegistrations: 'elips_courseRegistrations',
         session: 'elips_session'
     };
 

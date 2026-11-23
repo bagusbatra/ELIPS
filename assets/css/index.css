@@ -149,10 +149,33 @@ body.landing :focus-visible {
     color: var(--lp-orange-deep);
 }
 
+/* Tombol Masuk di navbar: sekarang punya warna solid sebagai CTA utama. */
+.landing .lp-nav-actions .lp-btn-ghost {
+    background: var(--lp-orange-deep);
+    color: #ffffff;
+}
+
+.landing .lp-nav-actions .lp-btn-ghost:hover {
+    background: #8a4a03;
+    color: #ffffff;
+}
+
 .landing .lp-btn-line {
     background: #ffffff;
     border: 1px solid var(--lp-line-strong);
     color: var(--lp-ink);
+}
+
+.landing .lp-menu-actions .lp-btn-line {
+    background: var(--lp-orange-deep);
+    border-color: var(--lp-orange-deep);
+    color: #ffffff;
+}
+
+.landing .lp-menu-actions .lp-btn-line:hover {
+    background: #8a4a03;
+    border-color: #8a4a03;
+    color: #ffffff;
 }
 
 /* Tombol slide: warna meluncur dari kiri, teks berganti ke teks kedua saat hover/fokus */
@@ -265,7 +288,9 @@ body.landing :focus-visible {
     font-weight: 500;
     font-size: 15px;
     white-space: nowrap;
-    transition: color 0.15s;
+    padding: 6px 0 4px;
+    border-bottom: 2px solid transparent;
+    transition: color 0.15s, border-color 0.2s, background 0.2s;
 }
 
 .landing .lp-menu-link:hover {
@@ -274,8 +299,7 @@ body.landing :focus-visible {
 
 .landing .lp-menu-link.is-current {
     color: var(--lp-orange-deep);
-    border-bottom: 2px solid var(--lp-orange);
-    padding: 6px 0 4px;
+    border-bottom-color: var(--lp-orange);
 }
 
 .landing .lp-nav-actions {
@@ -387,6 +411,18 @@ body.landing :focus-visible {
 .landing .lp-nav.is-scrolled .lp-btn-register {
     background: #ffffff;
     color: var(--lp-orange-text);
+}
+
+/* Di atas bar oren, tombol Masuk jadi putih agar tetap kontras. */
+.landing .lp-nav.is-scrolled .lp-nav-actions .lp-btn-ghost {
+    background: #ffffff;
+    color: var(--lp-orange-text);
+}
+
+.landing .lp-nav.is-scrolled .lp-nav-actions .lp-btn-ghost:hover {
+    background: var(--lp-tint-strong);
+    color: var(--lp-orange-text);
+    text-decoration: none;
 }
 
 .landing .lp-nav.is-scrolled :focus-visible {
@@ -1307,7 +1343,7 @@ body.landing :focus-visible {
     }
     .landing .lp-menu-actions {
         display: grid;
-        grid-template-columns: 1fr 1fr;
+        grid-template-columns: 1fr;
         gap: 10px;
         margin-top: 8px;
         padding-top: 12px;

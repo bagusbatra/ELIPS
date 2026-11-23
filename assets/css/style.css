@@ -177,6 +177,17 @@ body {
     color: var(--text-primary);
 }
 
+/* Tombol Masuk pada navbar publik memakai warna utama agar lebih terlihat. */
+.navbar .nav-actions .btn-ghost {
+    background: var(--primary);
+    color: #ffffff;
+}
+
+.navbar .nav-actions .btn-ghost:hover {
+    background: var(--primary-dark);
+    color: #ffffff;
+}
+
 .btn-outline {
     background: transparent;
     color: var(--primary);

@@ -126,4 +126,68 @@ layout('page', $page);
             </div>
         </section>
     </main>
+
+    <!-- Popup formulir pendaftaran untuk pengunjung yang belum login -->
+    <div class="lp-modal" id="daftarModal" hidden>
+        <div class="lp-modal-backdrop" data-modal-close></div>
+        <div class="lp-modal-dialog" role="dialog" aria-modal="true"
+             aria-labelledby="daftarModalTitle" aria-describedby="daftarModalDesc">
+            <div class="lp-modal-head">
+                <div>
+                    <span class="lp-modal-eyebrow">Formulir pendaftaran</span>
+                    <h2 id="daftarModalTitle">Daftar pelatihan</h2>
+                    <p id="daftarModalDesc">Lengkapi data berikut untuk <strong id="daftarModalCourse">pelatihan ini</strong>.</p>
+                </div>
+                <button class="lp-modal-x" type="button" data-modal-close aria-label="Tutup formulir">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+                </button>
+            </div>
+
+            <form class="lp-modal-form" id="daftarForm">
+                <p class="lp-modal-error" id="daftarError" role="alert" hidden></p>
+
+                <div class="lp-form-row">
+                    <label class="lp-form-field" for="daftarNama">
+                        <span>Nama</span>
+                        <input type="text" id="daftarNama" name="nama" placeholder="Nama lengkap" autocomplete="name" required>
+                    </label>
+                    <label class="lp-form-field" for="daftarTempatLahir">
+                        <span>Tempat Lahir</span>
+                        <input type="text" id="daftarTempatLahir" name="tempatLahir" placeholder="Contoh: Jakarta" required>
+                    </label>
+                </div>
+
+                <div class="lp-form-row lp-form-row-single">
+                    <label class="lp-form-field" for="daftarTanggalLahir">
+                        <span>Tanggal Lahir</span>
+                        <input type="date" id="daftarTanggalLahir" name="tanggalLahir" required>
+                    </label>
+                </div>
+
+                <label class="lp-form-field lp-form-field-full" for="daftarAlamat">
+                    <span>Alamat Lengkap</span>
+                    <textarea id="daftarAlamat" name="alamat" rows="3" placeholder="Alamat sesuai identitas" required></textarea>
+                </label>
+
+                <div class="lp-form-row">
+                    <label class="lp-form-field" for="daftarPhone">
+                        <span>No Telpon/WhatsApp</span>
+                        <input type="tel" id="daftarPhone" name="phone" placeholder="08xxxxxxxxxx" autocomplete="tel" required>
+                    </label>
+                    <label class="lp-form-field" for="daftarEmail">
+                        <span>Email Aktif</span>
+                        <input type="email" id="daftarEmail" name="email" placeholder="nama@example.com" autocomplete="email" required>
+                    </label>
+                </div>
+
+                <input type="hidden" id="daftarCourseId" name="courseId">
+                <input type="hidden" id="daftarCourseTitle" name="courseTitle">
+
+                <div class="lp-modal-actions">
+                    <button class="lp-btn lp-btn-line" type="button" data-modal-close>Tutup</button>
+                    <button class="lp-btn lp-btn-solid" type="submit">Kirim Data</button>
+                </div>
+            </form>
+        </div>
+    </div>
 <?php end_layout(); ?>

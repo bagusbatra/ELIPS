@@ -26,6 +26,99 @@ document.addEventListener('DOMContentLoaded', function () {
         return;
     }
 
+    // ---------- Popup formulir pendaftaran (pengunjung belum login) ----------
+    const daftarModal = document.getElementById('daftarModal');
+    const daftarDialog = daftarModal ? daftarModal.querySelector('.lp-modal-dialog') : null;
+    const daftarForm = document.getElementById('daftarForm');
+    const daftarError = document.getElementById('daftarError');
+    const daftarCourse = document.getElementById('daftarModalCourse');
+    const daftarCourseId = document.getElementById('daftarCourseId');
+    const daftarCourseTitle = document.getElementById('daftarCourseTitle');
+    let lastFocused = null;
+
+    function openDaftarModal() {
+        if (!daftarModal) return;
+        lastFocused = document.activeElement;
+        if (daftarCourse) daftarCourse.textContent = course.title;
+        if (daftarCourseId) daftarCourseId.value = course.id;
+        if (daftarCourseTitle) daftarCourseTitle.value = course.title;
+        if (daftarError) daftarError.hidden = true;
+        daftarModal.hidden = false;
+        document.body.classList.add('lp-modal-open');
+        const firstInput = daftarForm ? daftarForm.querySelector('input:not([type="hidden"])') : null;
+        if (firstInput) firstInput.focus();
+    }
+
+    function closeDaftarModal() {
+        if (!daftarModal || daftarModal.hidden) return;
+        daftarModal.hidden = true;
+        document.body.classList.remove('lp-modal-open');
+        if (daftarForm) daftarForm.reset();
+        if (lastFocused && typeof lastFocused.focus === 'function') lastFocused.focus();
+        lastFocused = null;
+    }
+
+    if (daftarModal && daftarForm) {
+        daftarModal.querySelectorAll('[data-modal-close]').forEach(function (element) {
+            element.addEventListener('click', closeDaftarModal);
+        });
+
+        document.addEventListener('keydown', function (e) {
+            if (!daftarModal || daftarModal.hidden) return;
+            if (e.key === 'Escape') {
+                closeDaftarModal();
+                return;
+            }
+            if (e.key !== 'Tab' || !daftarDialog) return;
+
+            const focusable = Array.prototype.slice.call(daftarDialog.querySelectorAll(
+                'button:not([disabled]), input:not([type="hidden"]):not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'
+            )).filter(function (element) { return element.offsetParent !== null; });
+            if (!focusable.length) return;
+
+            const first = focusable[0];
+            const last = focusable[focusable.length - 1];
+            if (e.shiftKey && document.activeElement === first) {
+                e.preventDefault();
+                last.focus();
+            } else if (!e.shiftKey && document.activeElement === last) {
+                e.preventDefault();
+                first.focus();
+            }
+        });
+
+        daftarForm.addEventListener('submit', function (e) {
+            e.preventDefault();
+            if (daftarError) daftarError.hidden = true;
+            if (!daftarForm.checkValidity()) {
+                daftarForm.reportValidity();
+                return;
+            }
+
+            const data = {
+                courseId: Number(daftarCourseId ? daftarCourseId.value : course.id) || course.id,
+                courseTitle: daftarCourseTitle ? daftarCourseTitle.value : course.title,
+                nama: document.getElementById('daftarNama').value.trim(),
+                tempatLahir: document.getElementById('daftarTempatLahir').value.trim(),
+                tanggalLahir: document.getElementById('daftarTanggalLahir').value,
+                alamat: document.getElementById('daftarAlamat').value.trim(),
+                phone: document.getElementById('daftarPhone').value.trim(),
+                email: document.getElementById('daftarEmail').value.trim().toLowerCase()
+            };
+
+            if (typeof ELIPS.addCourseRegistration === 'function') {
+                ELIPS.addCourseRegistration(data);
+            } else {
+                const list = ELIPS.read(ELIPS.KEYS.courseRegistrations, []);
+                list.push(Object.assign({ id: Date.now(), createdAt: new Date().toISOString() }, data));
+                ELIPS.write(ELIPS.KEYS.courseRegistrations, list);
+            }
+
+            closeDaftarModal();
+            ELIPS.toast('Data pendaftaran berhasil dikirim. Kami akan menghubungimu.');
+        });
+    }
+
     document.title = course.title + ' - ELIPS LMS';
     document.getElementById('courseCategory').textContent = course.category || 'Kursus';
     document.getElementById('courseTitle').textContent = course.title;
@@ -137,9 +230,7 @@ document.addEventListener('DOMContentLoaded', function () {
     // Tombol aksi: belum login -> Daftar Sekarang.
     if (!user) {
         enrollBtnText.textContent = 'Daftar Sekarang';
-        enrollBtn.onclick = function () {
-            window.location.href = 'register.php?course=' + course.id;
-        };
+        enrollBtn.onclick = openDaftarModal;
     } else {
         if (!isEnrolled && !isAdmin && !isInstructor) {
             enrollBtnText.textContent = 'Belum Ditugaskan';

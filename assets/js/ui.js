@@ -214,19 +214,35 @@
         // Login handler: email + password diverifikasi melalui API CRUD.
         const loginForm = document.getElementById('loginForm');
         if (loginForm) {
+            const emailInput = document.getElementById('email');
+            const passwordInput = document.getElementById('password');
+            const rememberInput = document.getElementById('remember');
+            const loginError = document.getElementById('loginError');
+
+            function clearLoginError() {
+                if (!loginError) return;
+                loginError.textContent = '';
+                loginError.hidden = true;
+            }
+
             loginForm.addEventListener('submit', function (e) {
                 e.preventDefault();
-                const emailInput = document.getElementById('email');
-                const passwordInput = document.getElementById('password');
+                clearLoginError();
+
                 const email = (emailInput ? emailInput.value : '').trim().toLowerCase();
                 const password = passwordInput ? passwordInput.value : '';
-                const rememberInput = document.getElementById('remember');
 
                 const result = ELIPS.authenticateUser(email, password, {
                     remember: rememberInput ? rememberInput.checked : false
                 });
                 if (!result.ok) {
-                    ELIPS.toast(result.message);
+                    if (loginError) {
+                        loginError.textContent = result.message;
+                        loginError.hidden = false;
+                        if (emailInput) emailInput.focus();
+                    } else {
+                        ELIPS.toast(result.message);
+                    }
                     return;
                 }
 
@@ -242,6 +258,32 @@
                 } else {
                     window.location.href = 'student/dashboard.php';
                 }
+            });
+
+            [emailInput, passwordInput].forEach(function (input) {
+                if (input) input.addEventListener('input', clearLoginError);
+            });
+
+            // Tampilkan/sembunyikan password.
+            const togglePassword = loginForm.querySelector('[data-toggle-password]');
+            if (togglePassword && passwordInput) {
+                togglePassword.addEventListener('click', function () {
+                    const show = passwordInput.type === 'password';
+                    passwordInput.type = show ? 'text' : 'password';
+                    togglePassword.setAttribute('aria-label', show ? 'Sembunyikan password' : 'Tampilkan password');
+                    togglePassword.setAttribute('aria-pressed', show ? 'true' : 'false');
+                    togglePassword.innerHTML = '<i class="bi bi-' + (show ? 'eye-slash' : 'eye') + '" aria-hidden="true"></i>';
+                });
+            }
+
+            // Klik akun demo mengisi kredensial secara otomatis.
+            document.querySelectorAll('[data-demo-email]').forEach(function (button) {
+                button.addEventListener('click', function () {
+                    if (emailInput) emailInput.value = button.getAttribute('data-demo-email') || '';
+                    if (passwordInput) passwordInput.value = 'elips123';
+                    clearLoginError();
+                    if (passwordInput) passwordInput.focus();
+                });
             });
         }
 

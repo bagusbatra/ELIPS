@@ -1,51 +1,112 @@
-<?php
+﻿<?php
 require_once __DIR__ . '/includes/bootstrap.php';
 $page = [
     'title' => 'Masuk - ELIPS LMS',
+    'body_class' => 'auth-page',
+    'css' => ['auth'],
     'scripts' => ['@crud', 'ui'],
 ];
 layout('page', $page);
 ?>
-    <div class="auth-container">
-        <div class="auth-card">
-            <div class="auth-header">
-                <a href="<?= url('index.php') ?>" class="auth-logo">
-                    <i class="bi bi-mortarboard-fill"></i>
-                    <span>ELIPS LMS</span>
-                </a>
-                <h1 class="auth-title">Selamat Datang Kembali</h1>
-                <p class="auth-subtitle">Masuk untuk melanjutkan pembelajaran</p>
+    <div class="auth-shell">
+        <aside class="auth-aside">
+            <a href="<?= url('index.php') ?>" class="auth-brand">
+                <i class="bi bi-mortarboard-fill" aria-hidden="true"></i>
+                <span>ELIPS LMS</span>
+            </a>
+
+            <div class="auth-aside-copy">
+                <span class="auth-eyebrow">BELAJAR LEBIH TERARAH</span>
+                <h1>Satu tempat untuk pelatihan, progres, dan sertifikatmu.</h1>
+                <p>Lanjutkan perjalanan belajarmu. Jadwal, materi, dan sertifikat tersimpan rapi di sini.</p>
+                <ul class="auth-highlights">
+                    <li><i class="bi bi-calendar-check" aria-hidden="true"></i>Jadwal pelatihan yang jelas</li>
+                    <li><i class="bi bi-graph-up-arrow" aria-hidden="true"></i>Progres belajar terpantau</li>
+                    <li><i class="bi bi-patch-check" aria-hidden="true"></i>Sertifikat yang bisa diverifikasi</li>
+                </ul>
             </div>
-            <div class="auth-body">
-                <form class="auth-form" id="loginForm" action="#" method="get">
-                    <div class="form-group">
-                        <label class="form-label" for="email">Email</label>
-                        <input type="email" id="email" class="form-input" placeholder="nama@example.com" required>
+
+            <div class="auth-aside-foot">
+                <i class="bi bi-quote" aria-hidden="true"></i>
+                <span>Platform pelatihan dan kursus bersertifikat untuk langkah karier berikutnya.</span>
+            </div>
+        </aside>
+
+        <main class="auth-main">
+            <div class="auth-card">
+                <div class="auth-card-head">
+                    <span class="auth-mark" aria-hidden="true"><i class="bi bi-box-arrow-in-right"></i></span>
+                    <h2>Selamat datang kembali</h2>
+                    <p>Masuk untuk melanjutkan pembelajaran.</p>
+                </div>
+
+                <form class="auth-form" id="loginForm" action="<?= url('login.php') ?>" method="post">
+                    <p class="auth-error" id="loginError" role="alert" hidden></p>
+
+                    <div class="auth-field">
+                        <label for="email">Email</label>
+                        <div class="auth-input">
+                            <i class="bi bi-envelope" aria-hidden="true"></i>
+                            <input type="email" id="email" class="form-input" name="email"
+                                   placeholder="nama@example.com" autocomplete="username" required>
+                        </div>
                     </div>
-                    <div class="form-group">
-                        <label class="form-label" for="password">Password</label>
-                        <input type="password" id="password" class="form-input" placeholder="Masukkan password" required>
+
+                    <div class="auth-field">
+                        <label for="password">Password</label>
+                        <div class="auth-input">
+                            <i class="bi bi-lock" aria-hidden="true"></i>
+                            <input type="password" id="password" class="form-input" name="password"
+                                   placeholder="Masukkan password" autocomplete="current-password" required>
+                            <button class="auth-toggle-pass" type="button" data-toggle-password
+                                    aria-label="Tampilkan password" aria-pressed="false">
+                                <i class="bi bi-eye" aria-hidden="true"></i>
+                            </button>
+                        </div>
                     </div>
-                    <div class="form-group" style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem;">
-                        <input type="checkbox" id="remember" checked style="width: 1rem; height: 1rem; accent-color: var(--primary);">
-                        <label for="remember" style="font-size: 0.875rem; color: var(--text-secondary); cursor: pointer;">Ingat saya di perangkat ini</label>
-                    </div>
-                    <button type="submit" class="btn btn-primary btn-lg" style="width: 100%;">
-                        <i class="bi bi-box-arrow-in-right"></i>
+
+                    <label class="auth-remember" for="remember">
+                        <input type="checkbox" id="remember" name="remember" checked>
+                        <span class="auth-checkbox" aria-hidden="true"><i class="bi bi-check-lg"></i></span>
+                        <span>Ingat saya di perangkat ini</span>
+                    </label>
+
+                    <button type="submit" class="auth-submit">
                         Masuk
+                        <i class="bi bi-arrow-right" aria-hidden="true"></i>
                     </button>
                 </form>
+
+                <div class="auth-divider"><span>atau</span></div>
+                <p class="auth-signup">Belum punya akun? <a href="<?= url('register.php') ?>">Daftar sekarang</a></p>
+
+                <details class="auth-demo">
+                    <summary>
+                        <span><i class="bi bi-lightbulb" aria-hidden="true"></i> Akun demo untuk mencoba</span>
+                        <i class="bi bi-chevron-down" aria-hidden="true"></i>
+                    </summary>
+                    <div class="auth-demo-body">
+                        <button type="button" class="auth-demo-account" data-demo-email="admin@example.com">
+                            <span><i class="bi bi-shield-check" aria-hidden="true"></i> Admin</span>
+                            <span>admin@example.com</span>
+                        </button>
+                        <button type="button" class="auth-demo-account" data-demo-email="ahmad@example.com">
+                            <span><i class="bi bi-person-badge" aria-hidden="true"></i> Instruktur</span>
+                            <span>ahmad@example.com</span>
+                        </button>
+                        <button type="button" class="auth-demo-account" data-demo-email="budi.student@example.com">
+                            <span><i class="bi bi-person" aria-hidden="true"></i> Peserta</span>
+                            <span>budi.student@example.com</span>
+                        </button>
+                        <p class="auth-demo-note">Password semua akun demo: <strong>elips123</strong></p>
+                    </div>
+                </details>
             </div>
-            <div class="auth-footer">
-                Belum punya akun? <a href="<?= url('register.php') ?>">Daftar sekarang</a>
-            </div>
-            <div style="padding: 1rem 2rem 1.5rem; border-top: 1px solid var(--border); font-size: 0.8125rem; color: var(--text-secondary); line-height: 1.7;">
-                <strong>Akun demo:</strong><br>
-                Admin: admin@example.com<br>
-                Instruktur: ahmad@example.com / siti@example.com<br>
-                Peserta: budi.student@example.com / ani@example.com<br>
-                <span style="font-size: 0.75rem;">(password semua akun demo: <strong>elips123</strong>)</span>
-            </div>
-        </div>
+
+            <a class="auth-back" href="<?= url('index.php') ?>">
+                <i class="bi bi-arrow-left" aria-hidden="true"></i> Kembali ke beranda
+            </a>
+        </main>
     </div>
 <?php end_layout(); ?>
+

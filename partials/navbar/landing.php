@@ -6,12 +6,12 @@
             <span>ELIPS LMS</span>
         </a>
         <nav class="lp-menu" id="navMenu" aria-label="Menu utama">
-            <a href="<?= url('index.php') ?>" class="lp-menu-link<?= is_current('index.php') ? ' is-current' : '' ?>"<?= is_current('index.php') ? ' aria-current="page"' : '' ?>>Beranda</a>
-            <a href="<?= $lpHome ?>#pelatihan" class="lp-menu-link">Pelatihan</a>
-            <a href="<?= $lpHome ?>#unggulan" class="lp-menu-link">Program Unggulan</a>
-            <a href="<?= $lpHome ?>#sertifikat" class="lp-menu-link">Cek Sertifikat</a>
-            <a href="<?= $lpHome ?>#profil" class="lp-menu-link">Profil</a>
-            <a href="<?= $lpHome ?>#kontak" class="lp-menu-link">Kontak</a>
+            <a href="<?= url('index.php') ?>" class="lp-menu-link<?= is_current('index.php') ? ' is-current' : '' ?>" data-section="beranda"<?= is_current('index.php') ? ' aria-current="location"' : '' ?>>Beranda</a>
+            <a href="<?= $lpHome ?>#pelatihan" class="lp-menu-link" data-section="pelatihan">Pelatihan</a>
+            <a href="<?= $lpHome ?>#unggulan" class="lp-menu-link" data-section="unggulan">Program Unggulan</a>
+            <a href="<?= $lpHome ?>#sertifikat" class="lp-menu-link" data-section="sertifikat">Cek Sertifikat</a>
+            <a href="<?= $lpHome ?>#profil" class="lp-menu-link" data-section="profil">Profil</a>
+            <a href="<?= $lpHome ?>#kontak" class="lp-menu-link" data-section="kontak">Kontak</a>
             <div class="lp-menu-actions lp-mobile-auth">
                 <a href="<?= url('login.php') ?>" class="lp-btn lp-btn-line">Masuk</a>
             </div>

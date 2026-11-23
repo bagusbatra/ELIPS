@@ -4,9 +4,10 @@
 //  1. Navbar berubah menjadi bar oren melengkung saat di-scroll.
 //  2. Menu hamburger: aria-expanded, tutup saat tautan dipilih,
 //     tombol Esc, klik di luar, atau layar melebar.
-//  3. Filter lokasi pada daftar pelatihan.
-//  4. Hero carousel: tiga foto bergantian tiap 10 detik, jeda saat di-hover.
-//  5. Animasi masuk/keluar konten saat scroll atas/bawah (IntersectionObserver).
+//  3. Tab menu aktif mengikuti bagian yang sedang dilihat (scrollspy).
+//  4. Filter lokasi pada daftar pelatihan.
+//  5. Hero carousel: tiga foto bergantian tiap 10 detik, jeda saat di-hover.
+//  6. Animasi masuk/keluar konten saat scroll atas/bawah (IntersectionObserver).
 // Dimuat SETELAH ui.js, karena ui.js yang merender kartu kursus
 // dan membuka/menutup menu lewat class "active" pada #navMenu.
 // ============================================================
@@ -156,6 +157,105 @@
         syncValue();
     }
 
+    // Menu aktif mengikuti bagian yang sedang dilihat, bukan selalu Beranda.
+    function setupNavScrollSpy() {
+        var menu = document.getElementById('navMenu');
+        if (!menu) return;
+
+        var links = Array.prototype.slice.call(menu.querySelectorAll('.lp-menu-link[data-section]'));
+        if (!links.length) return;
+
+        var entries = links.map(function (link) {
+            var id = link.getAttribute('data-section');
+            return {
+                id: id,
+                link: link,
+                el: id === 'beranda' ? null : document.getElementById(id)
+            };
+        });
+
+        // Hanya jalankan di halaman yang memang punya bagian-bagian tersebut.
+        var hasSections = entries.some(function (entry) {
+            return entry.id !== 'beranda' && entry.el;
+        });
+        if (!hasSections) return;
+
+        var lockedId = null;
+        var unlockTimer = null;
+
+        function setActive(id) {
+            links.forEach(function (link) {
+                var isActive = link.getAttribute('data-section') === id;
+                link.classList.toggle('is-current', isActive);
+                if (isActive) link.setAttribute('aria-current', 'location');
+                else link.removeAttribute('aria-current');
+            });
+        }
+
+        function topOf(entry) {
+            if (!entry.el) return 0;
+            var scrollTop = window.pageYOffset || document.documentElement.scrollTop || 0;
+            return entry.el.getBoundingClientRect().top + scrollTop;
+        }
+
+        function currentSection() {
+            var scrollTop = window.pageYOffset || document.documentElement.scrollTop || 0;
+            var doc = document.documentElement;
+            var lastId = entries[entries.length - 1].id;
+
+            // Di bagian paling bawah halaman, biarkan menu terakhir yang menyala.
+            if (scrollTop + window.innerHeight >= doc.scrollHeight - 8) return lastId;
+
+            var line = scrollTop + Math.min(160, window.innerHeight * 0.3);
+            var active = entries[0].id;
+            entries.forEach(function (entry) {
+                if (line >= topOf(entry)) active = entry.id;
+            });
+            return active;
+        }
+
+        function findEntry(id) {
+            return entries.filter(function (entry) { return entry.id === id; })[0] || null;
+        }
+
+        function refresh() {
+            var scrollTop = window.pageYOffset || document.documentElement.scrollTop || 0;
+            if (lockedId) {
+                var entry = findEntry(lockedId);
+                var target = entry ? Math.max(0, topOf(entry) - 96) : 0;
+                if (Math.abs(scrollTop - target) < 12) lockedId = null;
+                else return;
+            }
+            setActive(currentSection());
+        }
+
+        menu.addEventListener('click', function (e) {
+            var link = e.target.closest('.lp-menu-link[data-section]');
+            if (!link) return;
+
+            var id = link.getAttribute('data-section');
+            setActive(id);
+            lockedId = id;
+            window.clearTimeout(unlockTimer);
+            unlockTimer = window.setTimeout(function () {
+                lockedId = null;
+                refresh();
+            }, 1500);
+        });
+
+        window.addEventListener('scroll', refresh, { passive: true });
+        window.addEventListener('resize', refresh);
+        window.addEventListener('load', refresh);
+        window.addEventListener('hashchange', function () {
+            var hash = (window.location.hash || '').replace('#', '');
+            setActive(hash && findEntry(hash) && findEntry(hash).el ? hash : currentSection());
+        });
+
+        var initialHash = (window.location.hash || '').replace('#', '');
+        var initialEntry = findEntry(initialHash);
+        setActive(initialEntry && initialEntry.el ? initialHash : currentSection());
+    }
+
     ready(function () {
         // ---------- 1. Navbar saat di-scroll ----------
         var nav = document.getElementById('lpNav');
@@ -204,7 +304,10 @@
             });
         }
 
-        // ---------- 3. Filter lokasi ----------
+        // ---------- 3. Tab menu aktif mengikuti bagian yang dilihat ----------
+        setupNavScrollSpy();
+
+        // ---------- 4. Filter lokasi ----------
         var grid = document.getElementById('coursesGrid');
         var wrap = document.getElementById('lokasiWrap');
         var select = document.getElementById('lokasiFilter');
@@ -242,7 +345,7 @@
             }
         }
 
-        // ---------- 4. Hero carousel: 3 foto, crossfade tiap 10 detik ----------
+        // ---------- 5. Hero carousel: 3 foto, crossfade tiap 10 detik ----------
         var heroStage = document.querySelector('[data-hero-slides]');
         var heroSlides = heroStage
             ? Array.prototype.slice.call(heroStage.querySelectorAll('.lp-hero-slide'))
@@ -282,7 +385,7 @@
             startSlides();
         }
 
-        // ---------- 5. Animasi masuk/keluar saat scroll ----------
+        // ---------- 6. Animasi masuk/keluar saat scroll ----------
         var revealSelector = [
             '.lp-pel-head',
             '.lp-grid',

@@ -674,12 +674,246 @@
     }
 }
 
+/* ---------- Popup formulir pendaftaran ---------- */
+@keyframes lpModalFade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes lpModalIn {
+    from { opacity: 0; transform: translateY(16px) scale(0.98); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+body.lp-modal-open {
+    overflow: hidden;
+}
+
+.landing .lp-modal[hidden] {
+    display: none;
+}
+
+.landing .lp-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+}
+
+.landing .lp-modal-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(28, 20, 16, 0.56);
+    backdrop-filter: blur(3px);
+    animation: lpModalFade 0.2s ease both;
+}
+
+.landing .lp-modal-dialog {
+    position: relative;
+    width: 100%;
+    max-width: 640px;
+    max-height: calc(100vh - 48px);
+    overflow-y: auto;
+    border-radius: 24px;
+    background: #ffffff;
+    box-shadow: 0 30px 80px rgba(28, 20, 16, 0.32);
+    animation: lpModalIn 0.26s var(--lp-ease) both;
+}
+
+.landing .lp-modal-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 28px 32px 20px;
+    border-bottom: 1px solid var(--lp-line);
+}
+
+.landing .lp-modal-eyebrow {
+    color: var(--lp-orange-text);
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
+
+.landing .lp-modal-head h2 {
+    margin: 6px 0 4px;
+    font-family: var(--lp-display);
+    font-size: 26px;
+    font-weight: 800;
+    letter-spacing: -0.025em;
+}
+
+.landing .lp-modal-head p {
+    margin: 0;
+    color: var(--lp-muted);
+    font-size: 14px;
+}
+
+.landing .lp-modal-head p strong {
+    color: var(--lp-ink);
+}
+
+.landing .lp-modal-x {
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 38px;
+    height: 38px;
+    border: 0;
+    border-radius: 10px;
+    background: var(--lp-tint);
+    color: var(--lp-ink);
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s;
+}
+
+.landing .lp-modal-x:hover {
+    background: var(--lp-tint-strong);
+    color: var(--lp-orange-text);
+}
+
+.landing .lp-modal-form {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 24px 32px 28px;
+}
+
+.landing .lp-modal-error {
+    margin: 0;
+    padding: 11px 14px;
+    border: 1px solid #fecaca;
+    border-radius: 10px;
+    background: #fef2f2;
+    color: #b91c1c;
+    font-size: 13px;
+}
+
+.landing .lp-modal-error[hidden] {
+    display: none;
+}
+
+.landing .lp-form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+}
+
+.landing .lp-form-row-single {
+    grid-template-columns: 1fr;
+}
+
+.landing .lp-form-row-single .lp-form-field {
+    max-width: calc(50% - 7px);
+}
+
+.landing .lp-form-field {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+}
+
+.landing .lp-form-field-full {
+    grid-column: 1 / -1;
+}
+
+.landing .lp-form-field > span {
+    color: var(--lp-ink);
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.landing .lp-form-field input,
+.landing .lp-form-field textarea {
+    width: 100%;
+    min-height: 46px;
+    padding: 11px 14px;
+    border: 1px solid var(--lp-line-strong);
+    border-radius: 12px;
+    background: #ffffff;
+    color: var(--lp-ink);
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.4;
+    transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+}
+
+.landing .lp-form-field textarea {
+    min-height: 88px;
+    resize: vertical;
+}
+
+.landing .lp-form-field input::placeholder,
+.landing .lp-form-field textarea::placeholder {
+    color: #b6a397;
+}
+
+.landing .lp-form-field input:focus,
+.landing .lp-form-field textarea:focus {
+    outline: none;
+    border-color: var(--lp-orange);
+    background: #fffdfa;
+    box-shadow: 0 0 0 4px rgba(233, 140, 30, 0.16);
+}
+
+.landing .lp-modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 4px;
+    padding-top: 20px;
+    border-top: 1px solid var(--lp-line);
+}
+
+.landing .lp-modal-actions .lp-btn {
+    min-width: 120px;
+}
+
+@media (max-width: 700px) {
+    .landing .lp-modal {
+        align-items: flex-end;
+        padding: 14px;
+    }
+    .landing .lp-modal-dialog {
+        max-height: calc(100vh - 28px);
+        border-radius: 20px 20px 0 0;
+    }
+    .landing .lp-modal-head {
+        padding: 22px 20px 16px;
+    }
+    .landing .lp-modal-head h2 {
+        font-size: 22px;
+    }
+    .landing .lp-modal-form {
+        padding: 20px;
+    }
+    .landing .lp-form-row {
+        grid-template-columns: 1fr;
+    }
+    .landing .lp-form-row-single .lp-form-field {
+        max-width: none;
+    }
+    .landing .lp-modal-actions {
+        flex-direction: column-reverse;
+    }
+    .landing .lp-modal-actions .lp-btn {
+        width: 100%;
+    }
+}
+
 @media (prefers-reduced-motion: reduce) {
     .landing .lp-detail-fact,
     .landing .lp-module {
         transition: none;
     }
-    .landing .lp-ghost-module {
+    .landing .lp-ghost-module,
+    .landing .lp-modal-backdrop,
+    .landing .lp-modal-dialog {
         animation: none;
     }
 }

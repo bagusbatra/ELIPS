@@ -22,6 +22,19 @@
     function setCourses(list) { return write(KEYS.courses, list); }
     function getCourseById(id) { return getCourses().find(function (c) { return c.id === Number(id); }) || null; }
 
+    // Pendaftaran dari formulir publik pada halaman detail kursus.
+    function getCourseRegistrations() { return read(KEYS.courseRegistrations, []); }
+    function setCourseRegistrations(list) { return write(KEYS.courseRegistrations, list); }
+    function addCourseRegistration(data) {
+        const list = getCourseRegistrations();
+        const entry = Object.assign({
+            id: ELIPS.nextId(list),
+            createdAt: new Date().toISOString()
+        }, data);
+        setCourseRegistrations(list.concat(entry));
+        return entry;
+    }
+
     // ---------- Branches / cabang ----------
     function getBranches() { return read(KEYS.branches, []); }
     function setBranches(list) { return write(KEYS.branches, list); }
@@ -730,6 +743,9 @@
         getCourses: getCourses,
         setCourses: setCourses,
         getCourseById: getCourseById,
+        getCourseRegistrations: getCourseRegistrations,
+        setCourseRegistrations: setCourseRegistrations,
+        addCourseRegistration: addCourseRegistration,
         getBranches: getBranches,
         setBranches: setBranches,
         getBranchById: getBranchById,
