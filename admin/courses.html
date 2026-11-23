@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kelola Kursus - ELIPS LMS</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../assets/css/style.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+
+    <link rel="manifest" href="../manifest.webmanifest">
+    <meta name="theme-color" content="#e98c1e">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="ELIPS">
+    <link rel="icon" type="image/png" sizes="32x32" href="../assets/icons/favicon-32.png">
+    <link rel="apple-touch-icon" href="../assets/icons/apple-touch-icon.png">
+    <script src="../assets/js/pwa.js" defer></script>
+</head>
+<body>
+    <header class="navbar">
+        <div class="container nav-container">
+            <div class="nav-brand">
+                <i class="bi bi-mortarboard-fill brand-icon"></i>
+                <span class="brand-text">ELIPS LMS</span>
+            </div>
+            <nav class="nav-menu" id="navMenu">
+                <a href="../index.html" class="nav-link">Beranda</a>
+                <a href="../index.html#courses" class="nav-link">Kursus</a>
+                <a href="../verify-certificate.html" class="nav-link">Verifikasi Sertifikat</a>
+            </nav>
+            <div class="nav-actions">
+                <a href="dashboard.html" class="tn btn-ghost">Dashboard</a>
+                <a href="../index.html" class="btn btn-outline" data-logout>Keluar</a>
+            </div>
+            <button class="nav-toggle" id="navToggle">
+                <i class="bi bi-list"></i>
+            </button>
+        </div>
+    </header>
+
+    <div class="dashboard-layout">
+        <aside class="dashboard-sidebar">
+            <div class="dashboard-sidebar-header">
+                <div class="dashboard-user">
+                    <div class="dashboard-avatar">AD</div>
+                    <div class="dashboard-user-info">
+                        <div class="dashboard-user-name">Administrator</div>
+                        <div class="dashboard-user-role">Admin</div>
+                    </div>
+                </div>
+            </div>
+            <nav class="dashboard-nav">
+                <a href="dashboard.html" class="dashboard-nav-link">
+                    <i class="bi bi-speedometer2"></i>
+                    <span>Dashboard</span>
+                </a>
+                <a href="users.html" class="dashboard-nav-link">
+                    <i class="bi bi-people"></i>
+                    <span>Kelola Pengguna</span>
+                </a>
+                <a href="courses.html" class="dashboard-nav-link active">
+                    <i class="bi bi-journal-bookmark"></i>
+                    <span>Kelola Kursus</span>
+                </a>
+                <a href="academic.html" class="dashboard-nav-link">
+                    <i class="bi bi-diagram-3"></i>
+                    <span>Kurikulum &amp; Kelas</span>
+                </a>
+                <a href="schedule.html" class="dashboard-nav-link">
+                    <i class="bi bi-calendar-week"></i>
+                    <span>Kalender &amp; Jadwal</span>
+                </a>
+                <a href="enrollment.html" class="dashboard-nav-link">
+                    <i class="bi bi-person-check"></i>
+                    <span>Penugasan Siswa</span>
+                </a>
+                <a href="certificates.html" class="dashboard-nav-link">
+                    <i class="bi bi-award"></i>
+                    <span>Kelola Sertifikat</span>
+                </a>
+                <a href="reports.html" class="dashboard-nav-link">
+                    <i class="bi bi-file-earmark-bar-graph"></i>
+                    <span>Laporan</span>
+                </a>
+                <a href="attendance-recap.html" class="dashboard-nav-link">
+                    <i class="bi bi-calendar2-check"></i>
+                    <span>Rekap Absensi</span>
+                </a>
+                <a href="shifts.html" class="dashboard-nav-link">
+                    <i class="bi bi-clock-history"></i>
+                    <span>Shift Karyawan</span>
+                </a>
+                <a href="letters.html" class="dashboard-nav-link">
+                    <i class="bi bi-envelope-paper"></i>
+                    <span>Surat Menyurat</span>
+                </a>
+                <a href="notifications.html" class="dashboard-nav-link">
+                    <i class="bi bi-envelope"></i>
+                    <span>Notifikasi</span>
+                </a>
+                <a href="audit.html" class="dashboard-nav-link">
+                    <i class="bi bi-clock-history"></i>
+                    <span>Audit Trail</span>
+                </a>
+                <a href="settings.html" class="dashboard-nav-link">
+                    <i class="bi bi-gear"></i>
+                    <span>Pengaturan</span>
+                </a>
+            </nav>
+        </aside>
+
+        <main class="dashboard-main">
+            <div class="dashboard-header">
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;">
+                    <div>
+                        <h1 class="dashboard-title">Kelola Kursus</h1>
+                        <p class="dashboard-subtitle">Tambah atau kelola kursus baru dan tugaskan instruktur.</p>
+                    </div>
+                    <button class="btn btn-primary" onclick="openCourseModal()">
+                        <i class="bi bi-plus-lg"></i>
+                        Tambah Kursus
+                    </button>
+                </div>
+            </div>
+
+            <div class="dashboard-section">
+                <div class="dashboard-section-header">
+                    <h2 class="dashboard-section-title">Daftar Kursus</h2>
+                    <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center;">
+                        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                            <button class="btn btn-primary" id="filterAll" onclick="filterCourses('all')">Semua</button>
+                            <button class="btn btn-ghost" id="filterPublished" onclick="filterCourses('published')">Dipublikasi</button>
+                            <button class="btn btn-ghost" id="filterDraft" onclick="filterCourses('draft')">Draft</button>
+                        </div>
+                        <input type="text" id="searchCourse" class="form-input" style="max-width: 250px;" placeholder="Cari kursus..." onkeyup="searchCourses()">
+                    </div>
+                </div>
+                <div class="dashboard-section-body" style="padding: 0; overflow-x: auto;">
+                    <table class="dashboard-table">
+                        <thead>
+                            <tr>
+                                <th>Kursus</th>
+                                <th>Instruktur</th>
+                                <th>Modul/Pelajaran</th>
+                                <th>Peserta</th>
+                                <th>Status</th>
+                                <th>Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody id="coursesTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modal Tambah/Edit Kursus -->
+    <div id="courseModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; padding: 1rem;">
+        <div style="background: white; border-radius: var(--radius-lg); max-width: 560px; width: 100%; max-height: 90vh; overflow-y: auto;">
+            <div style="padding: 1.5rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between;">
+                <h3 style="font-size: 1.25rem; font-weight: 600;" id="courseModalTitle">Tambah Kursus Baru</h3>
+                <button onclick="closeCourseModal()" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--text-secondary);">
+                    <i class="bi bi-x"></i>
+                </button>
+            </div>
+            <div style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem;">
+                <div class="form-group">
+                    <label class="form-label">Judul Kursus *</label>
+                    <input type="text" id="courseTitle" class="form-input" placeholder="Masukkan judul kursus">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Kategori *</label>
+                    <input type="text" id="courseCategory" class="form-input" placeholder="Pelatihan / Soft Skill / Administrasi">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Deskripsi</label>
+                    <textarea id="courseDesc" class="form-input" rows="3" placeholder="Deskripsi singkat kursus"></textarea>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Instruktur * (1 Kursus = 1 Instruktur)</label>
+                    <select id="courseInstructor" class="form-input"></select>
+                    <small class="form-hint">Pilih instruktur yang bertanggung jawab atas kursus ini</small>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Status</label>
+                    <input type="text" class="form-input" value="Draft (otomatis)" disabled>
+                    <small class="form-hint">Kursus baru selalu berstatus Draft. Publikasi dilakukan lewat tombol Publikasi setelah modul dan materi tersedia.</small>
+                </div>
+            </div>
+            <div style="padding: 1.5rem; border-top: 1px solid var(--border); display: flex; gap: 0.75rem; justify-content: flex-end;">
+                <button class="btn btn-ghost" onclick="closeCourseModal()">Batal</button>
+                <button class="btn btn-primary" onclick="saveCourse()">Simpan Kursus</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="../assets/js/config.js"></script>
+    <script src="../assets/js/core.js"></script>
+    <script src="../assets/js/api.js"></script>
+    <script src="../assets/js/utils.js"></script>
+    <script src="../assets/js/data.js"></script>
+    <script src="../assets/js/seed.js"></script>
+    <script src="../assets/js/sync.js"></script>
+    <script src="../assets/js/progress.js"></script>
+    <script src="../assets/js/auth.js"></script>
+    <script src="../assets/js/audit.js"></script>
+    <script src="../assets/js/notifications.js"></script>
+    <script src="../assets/js/crud-users.js"></script>
+    <script src="../assets/js/crud-courses.js"></script>
+    <script src="../assets/js/crud-enrollments.js"></script>
+    <script src="../assets/js/crud-content.js"></script>
+    <script src="../assets/js/crud-grades.js"></script>
+    <script src="../assets/js/ui.js"></script>
+    <script>
+        let editingCourseId = null;
+
+        function renderCourses() {
+            const tbody = document.getElementById('coursesTableBody');
+            const courses = ELIPS.getCourses();
+            const enrollments = ELIPS.getEnrollments();
+            tbody.innerHTML = '';
+
+            if (courses.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-secondary);">Belum ada kursus</td></tr>';
+                return;
+            }
+
+            courses.slice().sort(function (a, b) { return Number(b.id) - Number(a.id); }).forEach(function (course) {
+                const modules = ELIPS.getModulesByCourse(course.id).length;
+                const lessons = ELIPS.getLessonsByCourse(course.id).length;
+                const participantCount = enrollments.filter(function (e) { return e.courseId === course.id; }).length;
+                const instructor = course.instructorName || 'Belum ditugaskan';
+                const tr = document.createElement('tr');
+                tr.setAttribute('data-status', course.status);
+                tr.innerHTML = [
+                    '<td>',
+                    '  <div class="table-course">',
+                    '    <div class="table-course-img"></div>',
+                    '    <div class="table-course-info">',
+                    '      <div class="table-course-title">' + ELIPS.escapeHtml(course.title) + '</div>',
+                    '      <div class="table-course-meta">' + ELIPS.escapeHtml(course.category) + '</div>',
+                    '    </div>',
+                    '  </div>',
+                    '</td>',
+                    '<td><span>' + ELIPS.escapeHtml(instructor) + '</span></td>',
+                    '<td><span>' + modules + ' Modul &bull; ' + lessons + ' Pelajaran</span></td>',
+                    '<td><span>' + participantCount + ' Peserta</span></td>',
+                    '<td><span class="badge ' + (course.status === 'published' ? 'badge-success' : 'badge-warning') + '">' + (course.status === 'published' ? 'Dipublikasi' : 'Draft') + '</span></td>',
+                    '<td>',
+                    '  <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">',
+                    '    <button class="btn btn-ghost" style="padding: 0.375rem 0.625rem; font-size: 0.8125rem;" onclick="openCourseModal(' + course.id + ')"><i class="bi bi-pencil"></i></button>',
+                    '    <button class="btn btn-ghost" style="padding: 0.375rem 0.625rem; font-size: 0.8125rem;" onclick="togglePublish(' + course.id + ')"><i class="bi ' + (course.status === 'published' ? 'bi-eye-slash' : 'bi-send-check') + '"></i> ' + (course.status === 'published' ? 'Draft' : 'Publikasi') + '</button>',
+                    '    <a href="../course-detail.html?id=' + course.id + '" class="btn btn-ghost" style="padding: 0.375rem 0.625rem; font-size: 0.8125rem;"><i class="bi bi-eye"></i></a>',
+                    '    <button class="btn btn-ghost" style="padding: 0.375rem 0.625rem; font-size: 0.8125rem; color: var(--danger);" onclick="removeCourse(' + course.id + ')" title="Hapus kursus"><i class="bi bi-trash"></i></button>',
+                    '  </div>',
+                    '</td>'
+                ].join('');
+                tbody.appendChild(tr);
+            });
+        }
+
+        function openCourseModal(courseId) {
+            editingCourseId = courseId || null;
+            const select = document.getElementById('courseInstructor');
+            select.innerHTML = '<option value="">-- Pilih Instruktur --</option>';
+            ELIPS.getUsersByRole('instruktur').filter(function (u) { return u.status === 'aktif'; }).forEach(function (inst) {
+                select.innerHTML += '<option value="' + inst.id + '">' + ELIPS.escapeHtml(inst.name) + '</option>';
+            });
+
+            if (editingCourseId) {
+                const course = ELIPS.getCourseById(editingCourseId);
+                document.getElementById('courseModalTitle').textContent = 'Edit Kursus';
+                document.getElementById('courseTitle').value = course.title || '';
+                document.getElementById('courseCategory').value = course.category || '';
+                document.getElementById('courseDesc').value = course.description || '';
+                select.value = String(course.instructorId || '');
+            } else {
+                document.getElementById('courseModalTitle').textContent = 'Tambah Kursus Baru';
+                document.getElementById('courseTitle').value = '';
+                document.getElementById('courseCategory').value = '';
+                document.getElementById('courseDesc').value = '';
+                select.value = '';
+            }
+            document.getElementById('courseModal').style.display = 'flex';
+        }
+
+        function closeCourseModal() {
+            document.getElementById('courseModal').style.display = 'none';
+            editingCourseId = null;
+        }
+
+        function saveCourse() {
+            const payload = {
+                title: document.getElementById('courseTitle').value.trim(),
+                category: document.getElementById('courseCategory').value.trim(),
+                description: document.getElementById('courseDesc').value.trim(),
+                instructorId: parseInt(document.getElementById('courseInstructor').value, 10)
+            };
+
+            const result = editingCourseId
+                ? ELIPS.updateCourse(editingCourseId, payload)
+                : ELIPS.createCourse(payload);
+
+            if (!result.ok) {
+                ELIPS.toast(result.message);
+                return;
+            }
+
+            ELIPS.toast(result.message);
+            closeCourseModal();
+            renderCourses();
+        }
+
+        function togglePublish(courseId) {
+            const course = ELIPS.getCourseById(courseId);
+            if (!course) return;
+            const nextStatus = course.status === 'published' ? 'draft' : 'published';
+            const label = nextStatus === 'published' ? 'mempublikasikan' : 'mengubah ke draft';
+            if (!confirm('Yakin ' + label + ' kursus "' + course.title + '"?')) return;
+
+            const result = ELIPS.toggleCourseStatus(courseId);
+            ELIPS.toast(result.message);
+            renderCourses();
+        }
+
+        function removeCourse(courseId) {
+            const course = ELIPS.getCourseById(courseId);
+            if (!course) return;
+            if (!confirm('Hapus kursus "' + course.title + '"? Modul, materi, penugasan, nilai, dan sertifikat terkait juga akan dihapus.')) return;
+
+            const result = ELIPS.deleteCourse(courseId);
+            ELIPS.toast(result.message);
+            renderCourses();
+        }
+
+        function filterCourses(status) {
+            const rows = document.querySelectorAll('#coursesTableBody tr');
+            const buttons = document.querySelectorAll('#filterAll, #filterPublished, #filterDraft');
+            buttons.forEach(function (btn) {
+                btn.classList.remove('btn-primary');
+                btn.classList.add('btn-ghost');
+            });
+
+            const activeBtn = status === 'all' ? 'filterAll' : status === 'published' ? 'filterPublished' : 'filterDraft';
+            document.getElementById(activeBtn).classList.remove('btn-ghost');
+            document.getElementById(activeBtn).classList.add('btn-primary');
+
+            rows.forEach(function (row) {
+                row.style.display = status === 'all' || row.getAttribute('data-status') === status ? '' : 'none';
+            });
+        }
+
+        function searchCourses() {
+            const input = document.getElementById('searchCourse').value.toLowerCase();
+            document.querySelectorAll('#coursesTableBody tr').forEach(function (row) {
+                const titleEl = row.querySelector('.table-course-title');
+                const title = titleEl ? titleEl.textContent.toLowerCase() : '';
+                row.style.display = title.includes(input) ? '' : 'none';
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            if (!ELIPS.requireRole('admin')) return;
+            renderCourses();
+        });
+    </script>
+</body>
+</html>

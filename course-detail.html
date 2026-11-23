@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Detail Kursus - ELIPS LMS</title>
+    <meta name="description" content="Lihat detail pelatihan ELIPS LMS: materi, instruktur, jadwal, dan pendaftaran kursus.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="assets/css/style.css">
+    <link rel="stylesheet" href="assets/css/index.css">
+    <link rel="stylesheet" href="assets/css/course-detail.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+
+    <link rel="manifest" href="manifest.webmanifest">
+    <meta name="theme-color" content="#e98c1e">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="ELIPS">
+    <link rel="icon" type="image/png" sizes="32x32" href="assets/icons/favicon-32.png">
+    <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
+    <script src="assets/js/pwa.js" defer></script>
+</head>
+<body class="landing">
+    <!-- Navbar mengikuti halaman index: berubah jadi bar oren saat di-scroll (landing.js) -->
+    <header class="lp-nav" id="lpNav">
+        <div class="lp-nav-bar">
+            <a href="index.html" class="lp-brand" aria-label="ELIPS LMS, ke Beranda">
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 9l10-5 10 5-10 5z"/><path d="M6 11.5V16c0 1.5 3 3 6 3s6-1.5 6-3v-4.5"/><path d="M22 9v6"/></svg>
+                <span>ELIPS LMS</span>
+            </a>
+            <nav class="lp-menu" id="navMenu" aria-label="Menu utama">
+                <a href="index.html" class="lp-menu-link">Beranda</a>
+                <a href="index.html#pelatihan" class="lp-menu-link">Pelatihan</a>
+                <a href="index.html#unggulan" class="lp-menu-link">Program Unggulan</a>
+                <a href="index.html#sertifikat" class="lp-menu-link">Cek Sertifikat</a>
+                <a href="index.html#profil" class="lp-menu-link">Profil</a>
+                <div class="lp-menu-actions lp-mobile-auth">
+                    <a href="login.html" class="lp-btn lp-btn-line">Masuk</a>
+                    <a href="register.html" class="lp-btn lp-btn-solid">Daftar</a>
+                </div>
+            </nav>
+            <div class="lp-nav-actions nav-actions">
+                <a href="login.html" class="lp-btn lp-btn-ghost">Masuk</a>
+                <a href="register.html" class="lp-btn lp-btn-solid lp-btn-register">Daftar</a>
+            </div>
+            <button class="lp-menu-btn" id="navToggle" type="button" aria-label="Buka menu" aria-controls="navMenu" aria-expanded="false">
+                <svg class="ic-open" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+                <svg class="ic-close" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+            </button>
+        </div>
+    </header>
+
+    <main>
+        <!-- Header detail: latar tint + dekorasi minimalis seperti section di index -->
+        <section class="lp-detail-hero" aria-labelledby="courseTitle">
+            <div class="lp-container">
+                <nav class="lp-crumb" aria-label="Breadcrumb">
+                    <a href="index.html">Beranda</a>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>
+                    <a href="index.html#pelatihan">Pelatihan</a>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>
+                    <span>Detail Kursus</span>
+                </nav>
+
+                <div class="lp-detail-hero-grid lp-detail-reveal">
+                    <div class="lp-detail-hero-copy">
+                        <span class="lp-detail-tag" id="courseCategory">Pelatihan</span>
+                        <h1 class="lp-detail-title" id="courseTitle">Pelatihan Manajemen Dasar</h1>
+                        <p class="lp-detail-lead" id="courseDesc">Pelatihan ini membahas konsep dasar manajemen, perencanaan, organisasi, kepemimpinan, dan pengendalian untuk meningkatkan efektivitas kerja.</p>
+
+                        <div class="lp-detail-facts">
+                            <div class="lp-detail-fact">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>
+                                <span><small>Instruktur</small><strong id="courseInstructor">Ahmad Fauzi, M.M.</strong></span>
+                            </div>
+                            <div class="lp-detail-fact">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M3 10h18"/></svg>
+                                <span><small>Materi</small><strong id="courseMeta">8 Modul • 24 Pelajaran</strong></span>
+                            </div>
+                            <div class="lp-detail-fact">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>
+                                <span><small>Lokasi</small><strong id="courseLocation">-</strong></span>
+                            </div>
+                            <div class="lp-detail-fact">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>
+                                <span><small>Mulai</small><strong id="courseStartDate">-</strong></span>
+                            </div>
+                            <div class="lp-detail-fact">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+                                <span><small>Durasi</small><strong id="courseMeetings">-</strong></span>
+                            </div>
+                        </div>
+
+                        <!-- Harga dan tombol aksi disatukan di hero -->
+                        <div class="lp-detail-cta">
+                            <div class="lp-detail-price">
+                                <span class="lp-detail-price-label">Biaya pelatihan</span>
+                                <div class="lp-detail-price-row">
+                                    <span class="lp-price-old" id="coursePriceOld" hidden></span>
+                                    <span class="lp-price-now" id="coursePrice">Gratis</span>
+                                    <span class="lp-badge" id="courseDiscount" hidden></span>
+                                </div>
+                            </div>
+                            <button id="enrollBtn" class="lp-btn lp-btn-solid lp-btn-lg lp-enroll-btn" type="button">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+                                <span id="enrollBtnText">Daftar Sekarang</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="lp-detail-hero-media">
+                        <div class="lp-detail-hero-frame">
+                            <img id="courseImage" src="assets/img/course-laptop.svg" width="1200" height="1200"
+                                 alt="Foto pelatihan ELIPS"
+                                 onerror="this.onerror=null;this.src='assets/img/course-laptop.svg'">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="lp-section lp-detail-section">
+            <div class="lp-container">
+                <div class="lp-detail-layout">
+                    <div class="lp-detail-main">
+                        <article class="lp-detail-panel lp-detail-reveal">
+                            <h2 class="lp-detail-h2">Tentang Kursus</h2>
+                            <p class="lp-detail-text">Kursus ini dirancang untuk memberikan pemahaman komprehensif tentang manajemen dasar. Peserta akan mempelajari fungsi-fungsi manajemen, pengambilan keputusan, komunikasi efektif, serta manajemen waktu dan sumber daya.</p>
+                        </article>
+
+                        <article class="lp-detail-panel lp-detail-reveal">
+                            <h2 class="lp-detail-h2">Daftar Modul &amp; Pelajaran</h2>
+                            <p class="lp-detail-hint" id="moduleHint">Klik modul untuk melihat daftar pelajarannya.</p>
+                            <div class="lp-modules" id="courseModulesList">
+                                <div class="lp-module">
+                                    <button class="lp-module-head" type="button" aria-expanded="false">
+                                        <span class="lp-module-info"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="lp-module-title">Modul 1: Pengantar Manajemen</span></span>
+                                        <span class="lp-module-right"><span class="lp-module-count">1 Pelajaran</span><svg class="lp-module-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></span>
+                                    </button>
+                                </div>
+                            </div>
+                        </article>
+
+                        <nav class="lp-detail-pager lp-detail-reveal" aria-label="Navigasi pelatihan">
+                            <button class="lp-btn lp-btn-line lp-pager-btn" id="prevCourse" type="button">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg>
+                                <span>Sebelumnya</span>
+                            </button>
+                            <button class="lp-btn lp-btn-line lp-pager-btn" id="nextCourse" type="button">
+                                <span>Selanjutnya</span>
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+                            </button>
+                        </nav>
+                    </div>
+
+                    <aside class="lp-detail-side" aria-label="Pelatihan lainnya">
+                        <div class="lp-detail-related lp-detail-reveal">
+                            <h2 class="lp-detail-related-title">Pelatihan Lainnya</h2>
+                            <div class="lp-related-list" id="relatedCourses"></div>
+                        </div>
+                    </aside>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="lp-footer">
+        <div class="lp-container">
+            <div class="lp-foot-top">
+                <div class="lp-foot-brand">
+                    <div class="lp-foot-logo">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 9l10-5 10 5-10 5z"/><path d="M6 11.5V16c0 1.5 3 3 6 3s6-1.5 6-3v-4.5"/><path d="M22 9v6"/></svg>
+                        ELIPS LMS
+                    </div>
+                    <p>Platform Learning Management System untuk pelatihan dan kursus.</p>
+                </div>
+                <div class="lp-foot-cols">
+                    <div class="lp-foot-col">
+                        <h4>Navigasi</h4>
+                        <a href="index.html">Beranda</a>
+                        <a href="index.html#pelatihan">Pelatihan</a>
+                        <a href="index.html#unggulan">Program Unggulan</a>
+                        <a href="index.html#sertifikat">Cek Sertifikat</a>
+                        <a href="index.html#profil">Profil</a>
+                    </div>
+                    <div class="lp-foot-col">
+                        <h4>Akun</h4>
+                        <a href="login.html">Masuk</a>
+                        <a href="register.html">Daftar</a>
+                    </div>
+                    <div class="lp-foot-col">
+                        <h4>Kontak</h4>
+                        <p><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>[ALAMAT LENGKAP]</p>
+                        <p><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>[EMAIL]</p>
+                        <p><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"/></svg>[NOMOR TELEPON]</p>
+                    </div>
+                </div>
+            </div>
+            <div class="lp-foot-bottom">
+                <p>&copy; 2026 ELIPS LMS. All rights reserved.</p>
+                <div>
+                    <a href="#privasi">Kebijakan Privasi</a>
+                    <a href="#syarat">Syarat dan Ketentuan</a>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script src="assets/js/config.js"></script>
+    <script src="assets/js/core.js"></script>
+    <script src="assets/js/api.js"></script>
+    <script src="assets/js/utils.js"></script>
+    <script src="assets/js/data.js"></script>
+    <script src="assets/js/seed.js"></script>
+    <script src="assets/js/sync.js"></script>
+    <script src="assets/js/progress.js"></script>
+    <script src="assets/js/auth.js"></script>
+    <script src="assets/js/audit.js"></script>
+    <script src="assets/js/notifications.js"></script>
+    <script src="assets/js/crud-users.js"></script>
+    <script src="assets/js/crud-courses.js"></script>
+    <script src="assets/js/crud-enrollments.js"></script>
+    <script src="assets/js/crud-content.js"></script>
+    <script src="assets/js/crud-grades.js"></script>
+    <script src="assets/js/ui.js"></script>
+    <script src="assets/js/landing.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const params = new URLSearchParams(window.location.search);
+            const courseId = parseInt(params.get('id'), 10) || 1;
+            const course = ELIPS.getCourseById(courseId);
+            const user = ELIPS.getCurrentUser();
+            const enrollBtn = document.getElementById('enrollBtn');
+            const enrollBtnText = document.getElementById('enrollBtnText');
+            const modulesList = document.getElementById('courseModulesList');
+
+            const iconFolder = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
+            const iconChevron = '<svg class="lp-module-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>';
+            const iconLock = '<svg class="lp-module-lock" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>';
+            const iconFile = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v5h4M9 13h6M9 17h6"/></svg>';
+            const iconPlay = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 5l11 7-11 7z"/></svg>';
+            const iconCalendar = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>';
+            const iconBoard = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4h18v12H3z"/><path d="M12 16v4M8 20h8"/></svg>';
+            const rupiah = function (n) { return 'Rp ' + Number(n).toLocaleString('id-ID'); };
+
+            if (!course) {
+                document.getElementById('courseTitle').textContent = 'Kursus Tidak Ditemukan';
+                document.getElementById('courseDesc').textContent = 'Kursus yang Anda cari tidak tersedia. Kembali ke daftar pelatihan untuk memilih kursus lain.';
+                enrollBtn.hidden = true;
+                modulesList.innerHTML = '<p class="lp-detail-empty">Kursus tidak tersedia.</p>';
+                return;
+            }
+
+            document.title = course.title + ' - ELIPS LMS';
+            document.getElementById('courseCategory').textContent = course.category || 'Kursus';
+            document.getElementById('courseTitle').textContent = course.title;
+            document.getElementById('courseDesc').textContent = course.description || '';
+            document.getElementById('courseInstructor').textContent = course.instructorName || 'Belum ditugaskan';
+
+            const structure = ELIPS.getCourseStructure(course.id);
+            let totalLessons = 0;
+            structure.forEach(function (item) { totalLessons += item.lessons.length; });
+            document.getElementById('courseMeta').textContent = structure.length + ' Modul • ' + totalLessons + ' Pelajaran';
+
+            // Informasi katalog tambahan dari courses (lihat seed-all.php).
+            const heroImage = document.getElementById('courseImage');
+            if (heroImage && course.image) heroImage.src = course.image;
+            document.getElementById('courseLocation').textContent = course.location || '-';
+
+            const startEl = document.getElementById('courseStartDate');
+            if (course.startDate) {
+                const startDate = new Date(course.startDate);
+                startEl.textContent = isNaN(startDate.getTime())
+                    ? course.startDate
+                    : startDate.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+            }
+            document.getElementById('courseMeetings').textContent = course.meetings
+                ? Number(course.meetings) + ' Pertemuan' : '-';
+
+            // Harga kini tampil di hero, bukan di kartu samping.
+            const price = Number(course.price) || 0;
+            const discountPrice = Number(course.discountPrice) || 0;
+            const priceOld = document.getElementById('coursePriceOld');
+            const priceNow = document.getElementById('coursePrice');
+            const discountBadge = document.getElementById('courseDiscount');
+            if (price > 0 && discountPrice > 0 && discountPrice < price) {
+                priceOld.textContent = rupiah(price);
+                priceOld.hidden = false;
+                priceNow.textContent = rupiah(discountPrice);
+                discountBadge.textContent = '-' + Math.round((1 - discountPrice / price) * 100) + '%';
+                discountBadge.hidden = false;
+            } else if (price > 0) {
+                priceNow.textContent = rupiah(price);
+            }
+
+            // Hak akses materi: hanya peserta yang terdaftar aktif di kursus ini
+            // (plus admin/instruktur) yang boleh membuka seluruh modul.
+            const enrollment = user ? ELIPS.getEnrollment(user.id, course.id) : null;
+            const isEnrolled = !!(enrollment && enrollment.status === 'active');
+            const isAdmin = !!(user && user.role === 'admin');
+            const isInstructor = !!(user && user.role === 'instruktur' && course.instructorId === user.id);
+            const canOpenAllModules = (!!user && user.role === 'peserta' && isEnrolled) || isAdmin || isInstructor;
+            const freeModuleCount = 2;
+
+            // Modul & pelajaran: accordion. Pengunjung hanya melihat 2 modul pertama;
+            // sisanya disembunyikan denganPlaceholder bergradasi agar jumlah modul tetap terlihat.
+            const visibleStructure = canOpenAllModules ? structure : structure.slice(0, freeModuleCount);
+            const hiddenModuleCount = structure.length - visibleStructure.length;
+
+            const moduleHint = document.getElementById('moduleHint');
+            if (moduleHint && hiddenModuleCount > 0) {
+                moduleHint.innerHTML = '<strong>' + ELIPS.escapeHtml(course.title) + '</strong>';
+            }
+
+            if (structure.length === 0) {
+                modulesList.innerHTML = '<p class="lp-detail-empty">Instruktur belum menambahkan modul untuk kursus ini.</p>';
+            } else {
+                const moduleHtml = visibleStructure.map(function (item, index) {
+                    const panelId = 'module-panel-' + index;
+                    const lessons = item.lessons.map(function (lesson) {
+                        const icon = lesson.type === 'video' ? iconPlay : iconFile;
+                        return '<div class="lp-lesson">' + icon + '<span>' + ELIPS.escapeHtml(lesson.title) + '</span></div>';
+                    }).join('');
+                    return '<div class="lp-module">' +
+                        '<button class="lp-module-head" type="button" aria-expanded="false" aria-controls="' + panelId + '">' +
+                        '<span class="lp-module-info">' + iconFolder + '<span class="lp-module-title">' + ELIPS.escapeHtml(item.module.title) + '</span></span>' +
+                        '<span class="lp-module-right"><span class="lp-module-count">' + item.lessons.length + ' Pelajaran</span>' + iconChevron + '</span>' +
+                        '</button>' +
+                        '<div class="lp-lessons" id="' + panelId + '" hidden>' + lessons + '</div>' +
+                        '</div>';
+                }).join('');
+
+                const hiddenModules = canOpenAllModules ? [] : structure.slice(freeModuleCount);
+                const teaserHtml = hiddenModules.length > 0
+                    ? '<div class="lp-modules-teaser">' +
+                        hiddenModules.map(function (item) {
+                            return '<div class="lp-ghost-module">' + iconFolder +
+                                '<span class="lp-ghost-title">' + ELIPS.escapeHtml(item.module.title) + '</span>' +
+                                '<span class="lp-ghost-count">' + item.lessons.length + ' Pelajaran</span>' +
+                                '</div>';
+                        }).join('') +
+                        '</div>' +
+                        '<div class="lp-modules-lock-note">' + iconLock +
+                        '<span><strong>' + hiddenModuleCount + ' modul lainnya terkunci</strong>' +
+                        '<small>Ikuti pelatihan ini untuk membuka seluruh materi.</small></span>' +
+                        '</div>'
+                    : '';
+
+                modulesList.innerHTML = moduleHtml + teaserHtml;
+            }
+
+            modulesList.addEventListener('click', function (event) {
+                const head = event.target.closest('.lp-module-head');
+                if (!head) return;
+                const panel = document.getElementById(head.getAttribute('aria-controls'));
+                const willOpen = !head.closest('.lp-module').classList.contains('is-open');
+                head.closest('.lp-module').classList.toggle('is-open', willOpen);
+                head.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+                if (panel) panel.hidden = !willOpen;
+            });
+
+            // Tombol aksi: belum login -> Daftar Sekarang.
+            if (!user) {
+                enrollBtnText.textContent = 'Daftar Sekarang';
+                enrollBtn.onclick = function () {
+                    window.location.href = 'register.html?course=' + course.id;
+                };
+            } else {
+                if (!isEnrolled && !isAdmin && !isInstructor) {
+                    enrollBtnText.textContent = 'Belum Ditugaskan';
+                    enrollBtn.disabled = true;
+                    enrollBtn.onclick = function () {
+                        ELIPS.toast('Siswa hanya dapat mengakses kursus yang ditugaskan oleh Admin.');
+                    };
+                    const note = document.createElement('p');
+                    note.className = 'lp-detail-note';
+                    note.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5h.01"/></svg> Penugasan siswa ke kursus dilakukan oleh Admin melalui menu Penugasan Siswa.';
+                    enrollBtn.parentElement.appendChild(note);
+                    return;
+                }
+
+                if (course.status !== 'published' && !isAdmin && !isInstructor) {
+                    enrollBtnText.textContent = 'Kursus Belum Dibuka';
+                    enrollBtn.disabled = true;
+                    return;
+                }
+
+                enrollBtnText.textContent = isEnrolled || isAdmin || isInstructor ? 'Lanjutkan Belajar' : 'Mulai Belajar';
+                enrollBtn.onclick = function () {
+                    window.location.href = 'learning.html?id=' + course.id;
+                };
+            }
+
+            // Kartu pelatihan lain di samping (komponen .lp-card sama seperti index).
+            const published = ELIPS.getCourses().filter(function (c) {
+                return c.status === 'published' && c.id !== course.id;
+            }).slice(0, 3);
+            const related = document.getElementById('relatedCourses');
+            if (published.length === 0) {
+                related.innerHTML = '<p class="lp-related-empty">Belum ada pelatihan lain yang tersedia.</p>';
+            } else {
+            related.innerHTML = published.map(function (item) {
+                const chip = item.location || item.category || '';
+                const image = item.image || 'assets/img/course-laptop.svg';
+                const meta = [];
+                if (item.startDate) {
+                    const d = new Date(item.startDate);
+                    if (!isNaN(d.getTime())) {
+                        meta.push('<span>' + iconCalendar + d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) + '</span>');
+                    }
+                }
+                if (item.meetings) meta.push('<span>' + iconBoard + Number(item.meetings) + ' pertemuan</span>');
+
+                const p = Number(item.price) || 0;
+                const disc = Number(item.discountPrice) || 0;
+                let priceHtml = '';
+                if (p > 0 && disc > 0 && disc < p) {
+                    priceHtml = '<div class="lp-price"><div class="lp-price-col">' +
+                        '<span class="lp-price-old">' + rupiah(p) + '</span>' +
+                        '<span class="lp-price-now">' + rupiah(disc) + '</span></div>' +
+                        '<span class="lp-badge">-' + Math.round((1 - disc / p) * 100) + '%</span></div>';
+                } else if (p > 0) {
+                    priceHtml = '<div class="lp-price"><div class="lp-price-col"><span class="lp-price-now">' + rupiah(p) + '</span></div></div>';
+                }
+
+                return '<article class="lp-card">' +
+                    '<div class="lp-card-media"><img src="' + ELIPS.escapeHtml(image) + '" alt="" loading="lazy" width="600" height="400">' +
+                    (chip ? '<span class="lp-chip">' + ELIPS.escapeHtml(chip) + '</span>' : '') + '</div>' +
+                    '<div class="lp-card-body">' +
+                    '<h3 class="lp-card-title">' + ELIPS.escapeHtml(item.title) + '</h3>' +
+                    (meta.length ? '<div class="lp-card-meta">' + meta.join('') + '</div>' : '') +
+                    priceHtml +
+                    '<a class="lp-btn lp-btn-slide" href="course-detail.html?id=' + item.id + '" aria-label="Lihat detail ' + ELIPS.escapeHtml(item.title) + '">' +
+                    '<span class="lp-slide-txt"><span class="lp-slide-in"><span>Lihat Detail</span><span aria-hidden="true">Selengkapnya</span></span></span>' +
+                    '</a></div></article>';
+            }).join('');
+            }
+
+            // Navigasi sebelumnya / selanjutnya berurutan sesuai katalog.
+            const catalog = ELIPS.getCourses().filter(function (c) { return c.status === 'published'; });
+            const position = catalog.findIndex(function (c) { return c.id === course.id; });
+            const prevBtn = document.getElementById('prevCourse');
+            const nextBtn = document.getElementById('nextCourse');
+            const prev = position > 0 ? catalog[position - 1] : null;
+            const next = position !== -1 && position < catalog.length - 1 ? catalog[position + 1] : null;
+
+            [
+                { button: prevBtn, target: prev, label: 'Sebelumnya' },
+                { button: nextBtn, target: next, label: 'Selanjutnya' }
+            ].forEach(function (entry) {
+                if (!entry.button) return;
+                if (!entry.target) {
+                    entry.button.disabled = true;
+                    return;
+                }
+                entry.button.setAttribute('title', entry.target.title);
+                entry.button.setAttribute('aria-label', entry.label + ': ' + entry.target.title);
+                entry.button.onclick = function () {
+                    window.location.href = 'course-detail.html?id=' + entry.target.id;
+                };
+            });
+        });
+    </script>
+</body>
+</html>
