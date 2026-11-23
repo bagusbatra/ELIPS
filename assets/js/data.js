@@ -23,16 +23,23 @@
     function getCourseById(id) { return getCourses().find(function (c) { return c.id === Number(id); }) || null; }
 
     // Pendaftaran dari formulir publik pada halaman detail kursus.
+    // Mode server: tersimpan di tabel course_registrations lewat API.
+    // Mode lokal: fallback ke localStorage untuk demo tanpa database.
     function getCourseRegistrations() { return read(KEYS.courseRegistrations, []); }
     function setCourseRegistrations(list) { return write(KEYS.courseRegistrations, list); }
     function addCourseRegistration(data) {
+        if (ELIPS.api && ELIPS.api.enabled) {
+            return ELIPS.api.call('course.register', data || {});
+        }
+
         const list = getCourseRegistrations();
         const entry = Object.assign({
             id: ELIPS.nextId(list),
+            status: 'baru',
             createdAt: new Date().toISOString()
         }, data);
         setCourseRegistrations(list.concat(entry));
-        return entry;
+        return { ok: true, message: 'Data pendaftaran berhasil dikirim. Kami akan menghubungimu.', data: entry };
     }
 
     // ---------- Branches / cabang ----------

@@ -36,6 +36,9 @@ layout('app', $page);
 ```
 JS halaman: `assets/js/pages/admin/halaman-baru.js`. Login/register/learning memakai `layout('page', ...)`.
 
+## Pendaftaran publik (calon student)
+Formulir "Daftar Sekarang" di `course-detail.php` menyimpan data ke tabel `course_registrations` lewat aksi `course.register` (bisa dipanggil tanpa login). Status awalnya `baru`, jadi belum menjadi akun. Data bisa dilihat dan diverifikasi di menu **Admin > Pendaftaran Siswa** (`admin/registrations.php`). Dari halaman itu admin dapat membaca data lewat `course.registration.list` lalu memanggil `course.registration.convert` untuk membuat akun dengan `role='peserta'` (student) atau menghubungkan ke akun peserta yang sudah ada. Tabel sudah ada di `api/schema.sql` dan juga dibuat otomatis saat aksi pertama dijalankan pada database lama.
+
 ## Absensi karyawan (divalidasi di server)
 Jam ditentukan server; foto harus gambar asli (min 200 px, bukan duplikat foto lama); GPS wajib & akurasi maks `max_accuracy_m`; geofence kantor opsional (`ELIPS_GEOFENCE` JSON, `ELIPS_GEOFENCE_ENFORCE=1` untuk menolak di luar radius, tanpa itu hanya diberi flag). Status terlambat/pulang cepat dihitung terhadap shift (atau jam default di `api/config.php`). Rekap otomatis: aksi API `staffAttendance.summary` / `mySummary`, tabel "Ringkasan Otomatis" di Admin > Rekap Absensi, dan CLI `php api/cron-attendance.php [--month=YYYY-MM]` (CSV di `storage/`). Jadwalkan harian lewat cron / Task Scheduler.
 

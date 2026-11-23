@@ -7,7 +7,7 @@ from playwright.sync_api import sync_playwright
 BASE = (sys.argv[1] if len(sys.argv) > 1 else 'http://127.0.0.1:8099').rstrip('/')
 PASS = 'elips123'
 PLAN = {
-    'admin@example.com': ['admin/dashboard.php','admin/users.php','admin/courses.php','admin/academic.php','admin/schedule.php','admin/enrollment.php','admin/certificates.php','admin/reports.php','admin/attendance-recap.php','admin/shifts.php','admin/letters.php','admin/audit.php','admin/notifications.php','admin/settings.php'],
+    'admin@example.com': ['admin/dashboard.php','admin/users.php','admin/courses.php','admin/academic.php','admin/schedule.php','admin/enrollment.php','admin/registrations.php','admin/certificates.php','admin/reports.php','admin/attendance-recap.php','admin/shifts.php','admin/letters.php','admin/audit.php','admin/notifications.php','admin/settings.php'],
     'ahmad@example.com': ['instructor/dashboard.php','instructor/manage-course.php','instructor/students.php','instructor/certificates.php','instructor/profile.php'],
     'ani@example.com': ['student/dashboard.php','student/courses.php','student/certificates.php','student/profile.php','learning.php'],
     'dewi.karyawan@example.com': ['employee/shared/dashboard.php','employee/shared/attendance.php','employee/marketing/campaigns.php','employee/marketing/clients.php','employee/marketing/tasks.php','employee/marketing/reports.php'],

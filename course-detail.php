@@ -182,6 +182,8 @@ layout('page', $page);
 
                 <input type="hidden" id="daftarCourseId" name="courseId">
                 <input type="hidden" id="daftarCourseTitle" name="courseTitle">
+                <input class="lp-hp" type="text" id="daftarWebsite" name="website" tabindex="-1"
+                       autocomplete="off" aria-hidden="true">
 
                 <div class="lp-modal-actions">
                     <button class="lp-btn lp-btn-line" type="button" data-modal-close>Tutup</button>

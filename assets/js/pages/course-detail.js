@@ -95,27 +95,35 @@ document.addEventListener('DOMContentLoaded', function () {
                 return;
             }
 
+            const websiteField = document.getElementById('daftarWebsite');
             const data = {
                 courseId: Number(daftarCourseId ? daftarCourseId.value : course.id) || course.id,
                 courseTitle: daftarCourseTitle ? daftarCourseTitle.value : course.title,
-                nama: document.getElementById('daftarNama').value.trim(),
-                tempatLahir: document.getElementById('daftarTempatLahir').value.trim(),
-                tanggalLahir: document.getElementById('daftarTanggalLahir').value,
-                alamat: document.getElementById('daftarAlamat').value.trim(),
+                name: document.getElementById('daftarNama').value.trim(),
+                birthPlace: document.getElementById('daftarTempatLahir').value.trim(),
+                birthDate: document.getElementById('daftarTanggalLahir').value,
+                address: document.getElementById('daftarAlamat').value.trim(),
                 phone: document.getElementById('daftarPhone').value.trim(),
-                email: document.getElementById('daftarEmail').value.trim().toLowerCase()
+                email: document.getElementById('daftarEmail').value.trim().toLowerCase(),
+                website: websiteField ? websiteField.value : ''
             };
 
-            if (typeof ELIPS.addCourseRegistration === 'function') {
-                ELIPS.addCourseRegistration(data);
-            } else {
-                const list = ELIPS.read(ELIPS.KEYS.courseRegistrations, []);
-                list.push(Object.assign({ id: Date.now(), createdAt: new Date().toISOString() }, data));
-                ELIPS.write(ELIPS.KEYS.courseRegistrations, list);
+            const result = typeof ELIPS.addCourseRegistration === 'function'
+                ? ELIPS.addCourseRegistration(data)
+                : null;
+
+            if (result && result.ok === false) {
+                if (daftarError) {
+                    daftarError.textContent = result.message || 'Pendaftaran gagal disimpan.';
+                    daftarError.hidden = false;
+                } else {
+                    ELIPS.toast(result.message || 'Pendaftaran gagal disimpan.');
+                }
+                return;
             }
 
             closeDaftarModal();
-            ELIPS.toast('Data pendaftaran berhasil dikirim. Kami akan menghubungimu.');
+            ELIPS.toast((result && result.message) || 'Data pendaftaran berhasil dikirim. Kami akan menghubungimu.');
         });
     }
 

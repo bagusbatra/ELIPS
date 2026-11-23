@@ -33,6 +33,10 @@
             <i class="bi bi-person-check"></i>
             <span>Penugasan Siswa</span>
         </a>
+        <a href="<?= url('admin/registrations.php') ?>" class="dashboard-nav-link<?= nav_active('admin/registrations.php') ?>">
+            <i class="bi bi-person-plus"></i>
+            <span>Pendaftaran Siswa</span>
+        </a>
         <a href="<?= url('admin/certificates.php') ?>" class="dashboard-nav-link<?= nav_active('admin/certificates.php') ?>">
             <i class="bi bi-award"></i>
             <span>Kelola Sertifikat</span>

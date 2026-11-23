@@ -798,6 +798,11 @@ body.lp-modal-open {
     display: none;
 }
 
+/* Honeypot: tidak terlihat dan tidak masuk focus trap. */
+.landing .lp-hp {
+    display: none;
+}
+
 .landing .lp-form-row {
     display: grid;
     grid-template-columns: 1fr 1fr;

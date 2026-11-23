@@ -1,0 +1,80 @@
+/* ============================================================
+   ELIPS LMS - admin-registrations.css
+   Gaya tambahan untuk halaman Admin > Pendaftaran Siswa.
+   ============================================================ */
+
+.reg-badge-batal {
+    background: #fee2e2;
+    color: #b91c1c;
+}
+
+.reg-detail-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px 20px;
+}
+
+.reg-detail-item {
+    min-width: 0;
+}
+
+.reg-detail-item.is-full {
+    grid-column: 1 / -1;
+}
+
+.reg-detail-label {
+    display: block;
+    margin-bottom: 5px;
+    color: var(--text-secondary, #6b7280);
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.reg-detail-value {
+    color: var(--text-primary, #111827);
+    font-size: 0.9375rem;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.reg-convert-info {
+    margin-bottom: 1rem;
+    padding: 0.85rem 1rem;
+    border: 1px solid var(--border, #e5e7eb);
+    border-radius: 10px;
+    background: var(--bg-secondary, #f9fafb);
+    color: var(--text-secondary, #6b7280);
+    font-size: 0.875rem;
+    line-height: 1.5;
+}
+
+.reg-convert-info strong {
+    color: var(--text-primary, #111827);
+}
+
+.reg-inline-error {
+    margin: 0 0 1rem;
+    padding: 0.75rem 0.9rem;
+    border: 1px solid #fecaca;
+    border-radius: 10px;
+    background: #fef2f2;
+    color: #b91c1c;
+    font-size: 0.875rem;
+}
+
+.reg-inline-error[hidden] {
+    display: none;
+}
+
+@media (max-width: 700px) {
+    .reg-detail-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .reg-detail-item.is-full {
+        grid-column: auto;
+    }
+}

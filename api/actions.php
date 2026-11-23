@@ -44,6 +44,12 @@ function elips_dispatch(string $action, array $payload): array
             return elips_action_course_delete($payload);
         case 'course.status':
             return elips_action_course_status($payload);
+        case 'course.register':
+            return elips_action_course_register($payload);
+        case 'course.registration.list':
+            return elips_action_course_registration_list($payload);
+        case 'course.registration.convert':
+            return elips_action_course_registration_convert($payload);
         case 'curriculum.create':
             return elips_action_curriculum_create($payload);
         case 'curriculum.update':
@@ -8116,6 +8122,288 @@ function elips_action_notification_clear(): array
     $actor = elips_require_admin();
     elips_db()->exec('DELETE FROM notifications');
     return elips_ok('Seluruh outbox notifikasi berhasil dibersihkan.');
+}
+
+// ---------- Pendaftaran publik dari halaman detail kursus ----------
+// Data masuk ke tabel course_registrations sebagai calon peserta.
+// Role student (peserta) dibuat kemudian melalui aksi convert di bawah.
+
+function elips_ensure_course_registration_table(): void
+{
+    static $ready = false;
+    if ($ready) return;
+
+    // CREATE IF NOT EXISTS membuat fitur tetap jalan pada database yang
+    // sudah terpasang sebelum tabel ini ditambahkan ke schema.sql.
+    elips_db()->exec(<<<'SQL'
+CREATE TABLE IF NOT EXISTS `course_registrations` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `course_id` INT UNSIGNED NOT NULL,
+    `course_title` VARCHAR(200) NOT NULL DEFAULT '',
+    `name` VARCHAR(150) NOT NULL,
+    `birth_place` VARCHAR(100) NOT NULL DEFAULT '',
+    `birth_date` DATE NULL,
+    `address` VARCHAR(500) NOT NULL DEFAULT '',
+    `phone` VARCHAR(40) NOT NULL DEFAULT '',
+    `email` VARCHAR(190) NOT NULL,
+    `status` ENUM('baru', 'dihubungi', 'terdaftar', 'batal') NOT NULL DEFAULT 'baru',
+    `student_id` INT UNSIGNED NULL,
+    `converted_at` DATETIME NULL,
+    `notes` VARCHAR(1000) NOT NULL DEFAULT '',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NULL,
+    PRIMARY KEY (`id`),
+    KEY `idx_course_reg_course` (`course_id`),
+    KEY `idx_course_reg_email` (`email`),
+    KEY `idx_course_reg_status` (`status`),
+    CONSTRAINT `fk_course_reg_course` FOREIGN KEY (`course_id`) REFERENCES `courses` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_course_reg_student` FOREIGN KEY (`student_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+SQL);
+    $ready = true;
+}
+
+function elips_course_registration_row(int $id): ?array
+{
+    elips_ensure_course_registration_table();
+    $stmt = elips_db()->prepare(
+        'SELECT cr.*, u.name AS student_name
+         FROM course_registrations cr
+         LEFT JOIN users u ON u.id = cr.student_id
+         WHERE cr.id = ? LIMIT 1'
+    );
+    $stmt->execute([$id]);
+    $row = $stmt->fetch();
+    return $row ?: null;
+}
+
+function elips_course_registration_public(array $row): array
+{
+    return [
+        'id' => (int) $row['id'],
+        'courseId' => (int) $row['course_id'],
+        'courseTitle' => (string) $row['course_title'],
+        'name' => (string) $row['name'],
+        'birthPlace' => (string) $row['birth_place'],
+        'birthDate' => $row['birth_date'] === null ? null : elips_date_only($row['birth_date']),
+        'address' => (string) $row['address'],
+        'phone' => (string) $row['phone'],
+        'email' => (string) $row['email'],
+        'status' => (string) $row['status'],
+        'studentId' => $row['student_id'] === null ? null : (int) $row['student_id'],
+        'studentName' => (string) ($row['student_name'] ?? ''),
+        'convertedAt' => elips_iso($row['converted_at'] ?? null),
+        'notes' => (string) $row['notes'],
+        'createdAt' => elips_iso($row['created_at']),
+        'updatedAt' => elips_iso($row['updated_at'] ?? null),
+    ];
+}
+
+function elips_action_course_register(array $p): array
+{
+    elips_ensure_course_registration_table();
+
+    // Honeypot: bot yang mengisi field tersembunyi diberi respons sukses
+    // tanpa menyimpan data.
+    if (trim((string) ($p['website'] ?? '')) !== '') {
+        return elips_ok('Data pendaftaran berhasil dikirim.', ['id' => 0, 'accepted' => false]);
+    }
+
+    $courseId = (int) ($p['courseId'] ?? 0);
+    $course = $courseId > 0 ? elips_course_row($courseId) : null;
+    if (!$course) {
+        return elips_fail('Pelatihan tidak ditemukan.');
+    }
+    if (($course['status'] ?? '') !== 'published') {
+        return elips_fail('Pelatihan ini belum dibuka untuk pendaftaran.');
+    }
+
+    $name = trim((string) ($p['name'] ?? ''));
+    $birthPlace = trim((string) ($p['birthPlace'] ?? ''));
+    $birthDate = elips_normalize_date($p['birthDate'] ?? '');
+    $address = trim((string) ($p['address'] ?? ''));
+    $phone = trim((string) ($p['phone'] ?? ''));
+    $email = strtolower(trim((string) ($p['email'] ?? '')));
+
+    if ($name === '' || strlen($name) > 150) {
+        return elips_fail('Nama wajib diisi dan maksimal 150 karakter.');
+    }
+    if ($birthPlace === '' || strlen($birthPlace) > 100) {
+        return elips_fail('Tempat lahir wajib diisi dan maksimal 100 karakter.');
+    }
+    if (!$birthDate) {
+        return elips_fail('Tanggal lahir tidak valid.');
+    }
+    if (strtotime($birthDate . ' 00:00:00') > time()) {
+        return elips_fail('Tanggal lahir tidak boleh di masa depan.');
+    }
+    if ($address === '' || strlen($address) > 500) {
+        return elips_fail('Alamat lengkap wajib diisi dan maksimal 500 karakter.');
+    }
+    if ($phone === '' || strlen($phone) > 40) {
+        return elips_fail('No Telpon/WhatsApp wajib diisi dan maksimal 40 karakter.');
+    }
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($email) > 190) {
+        return elips_fail('Email aktif tidak valid.');
+    }
+
+    // Cegah dobel submit yang tidak sengaja dari email yang sama.
+    $db = elips_db();
+    $dup = $db->prepare(
+        "SELECT id FROM course_registrations
+         WHERE course_id = ? AND email = ? AND status <> 'batal'
+           AND created_at >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 1 DAY)
+         LIMIT 1"
+    );
+    $dup->execute([$courseId, $email]);
+    if ($dup->fetch()) {
+        return elips_fail('Data pendaftaran dengan email ini untuk pelatihan tersebut sudah dikirim. Kami akan segera menghubungimu.');
+    }
+
+    $stmt = $db->prepare(
+        "INSERT INTO course_registrations
+            (course_id, course_title, name, birth_place, birth_date, address, phone, email, status, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'baru', UTC_TIMESTAMP())"
+    );
+    $stmt->execute([
+        $courseId,
+        (string) $course['title'],
+        $name,
+        $birthPlace,
+        $birthDate,
+        $address,
+        $phone,
+        $email,
+    ]);
+    $id = (int) $db->lastInsertId();
+
+    elips_audit(
+        'create',
+        'course_registration',
+        $id,
+        $name . ' — ' . $course['title'],
+        'Pendaftaran publik dari halaman detail kursus.'
+    );
+
+    $row = elips_course_registration_row($id);
+    return elips_ok(
+        'Data pendaftaran berhasil dikirim. Kami akan menghubungimu.',
+        $row ? elips_course_registration_public($row) : ['id' => $id]
+    );
+}
+
+function elips_action_course_registration_list(array $p): array
+{
+    elips_require_marketing_access();
+    elips_ensure_course_registration_table();
+
+    $where = [];
+    $params = [];
+
+    $courseId = (int) ($p['courseId'] ?? 0);
+    if ($courseId > 0) {
+        $where[] = 'cr.course_id = ?';
+        $params[] = $courseId;
+    }
+
+    $status = (string) ($p['status'] ?? '');
+    if (in_array($status, ['baru', 'dihubungi', 'terdaftar', 'batal'], true)) {
+        $where[] = 'cr.status = ?';
+        $params[] = $status;
+    }
+
+    $sql = 'SELECT cr.*, u.name AS student_name
+            FROM course_registrations cr
+            LEFT JOIN users u ON u.id = cr.student_id';
+    if ($where) {
+        $sql .= ' WHERE ' . implode(' AND ', $where);
+    }
+    $sql .= ' ORDER BY cr.created_at DESC, cr.id DESC';
+
+    $stmt = elips_db()->prepare($sql);
+    $stmt->execute($params);
+
+    $items = [];
+    foreach ($stmt->fetchAll() as $row) {
+        $items[] = elips_course_registration_public($row);
+    }
+    return elips_ok('', $items);
+}
+
+function elips_action_course_registration_convert(array $p): array
+{
+    $actor = elips_require_admin();
+    elips_ensure_course_registration_table();
+
+    $id = (int) ($p['id'] ?? 0);
+    $row = elips_course_registration_row($id);
+    if (!$row) {
+        return elips_fail('Pendaftaran tidak ditemukan.');
+    }
+    if ($row['status'] === 'terdaftar') {
+        return elips_fail('Pendaftaran ini sudah dikonversi menjadi peserta.');
+    }
+    if ($row['status'] === 'batal') {
+        return elips_fail('Pendaftaran yang dibatalkan tidak dapat dikonversi.');
+    }
+
+    $existing = elips_user_by_email((string) $row['email']);
+    $created = false;
+
+    if ($existing) {
+        if (($existing['role'] ?? '') !== 'peserta') {
+            return elips_fail('Email sudah digunakan oleh pengguna dengan role lain.');
+        }
+        if (($existing['status'] ?? '') !== 'aktif') {
+            return elips_fail('Akun peserta dengan email ini sedang nonaktif.');
+        }
+        $studentId = (int) $existing['id'];
+    } else {
+        $password = (string) ($p['password'] ?? '');
+        if (strlen($password) < 8) {
+            return elips_fail('Password awal minimal 8 karakter.');
+        }
+        $stmt = elips_db()->prepare(
+            "INSERT INTO users (name, email, phone, password_hash, role, division, status, created_at)
+             VALUES (?, ?, ?, ?, 'peserta', '', 'aktif', UTC_TIMESTAMP())"
+        );
+        $stmt->execute([
+            (string) $row['name'],
+            (string) $row['email'],
+            (string) $row['phone'],
+            password_hash($password, PASSWORD_DEFAULT),
+        ]);
+        $studentId = (int) elips_db()->lastInsertId();
+        $created = true;
+    }
+
+    $stmt = elips_db()->prepare(
+        "UPDATE course_registrations
+         SET status = 'terdaftar', student_id = ?, converted_at = UTC_TIMESTAMP(),
+             updated_at = UTC_TIMESTAMP()
+         WHERE id = ?"
+    );
+    $stmt->execute([$studentId, $id]);
+
+    elips_audit(
+        $created ? 'create' : 'update',
+        'course_registration',
+        $id,
+        (string) $row['name'] . ' — ' . (string) $row['course_title'],
+        $created
+            ? 'Mengonversi pendaftaran menjadi akun peserta baru (student role).'
+            : 'Menghubungkan pendaftaran ke akun peserta yang sudah ada.',
+        $actor
+    );
+
+    $updated = elips_course_registration_row($id);
+    return elips_ok(
+        $created ? 'Pendaftaran berhasil menjadi akun peserta.' : 'Pendaftaran berhasil dihubungkan ke akun peserta.',
+        [
+            'registration' => $updated ? elips_course_registration_public($updated) : null,
+            'user' => elips_public_user($studentId),
+        ]
+    );
 }
 
 require_once __DIR__ . '/attendance_rules.php';
