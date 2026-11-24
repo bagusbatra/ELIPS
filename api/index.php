@@ -79,7 +79,8 @@ try {
         'tutor.document.remove', 'tutor.activationComplete',
         'payment.markPaid', 'payment.verify', 'payment.void', 'payment.settings.get', 'payment.settings.save',
     ];
-    if ($result['ok'] && !in_array($action, $noSnapshot, true)) {
+    // Portal tentor (tp.*) dan halaman publikasi (cp.*) memuat datanya sendiri per halaman, tanpa snapshot.
+    if ($result['ok'] && !in_array($action, $noSnapshot, true) && strpos($action, 'tp.') !== 0 && strpos($action, 'cp.') !== 0) {
         // Setiap perubahan mengembalikan snapshot terbaru sehingga cache
         // client selalu identik dengan database.
         $result['snapshot'] = elips_snapshot();

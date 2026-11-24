@@ -253,7 +253,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     if (structure.length === 0) {
-        modulesList.innerHTML = '<p class="lp-detail-empty">Instruktur belum menambahkan modul untuk kursus ini.</p>';
+        modulesList.innerHTML = '<p class="lp-detail-empty">Tentor belum menambahkan modul untuk kursus ini.</p>';
     } else {
         const moduleHtml = visibleStructure.map(function (item, index) {
             const panelId = 'module-panel-' + index;

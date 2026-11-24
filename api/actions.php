@@ -61,6 +61,42 @@ function elips_dispatch(string $action, array $payload): array
             return elips_action_tutor_document_remove($payload);
         case 'tutor.activationComplete':
             return elips_action_tutor_activation_complete($payload);
+        case 'cp.get':
+            return elips_action_cp_get($payload);
+        case 'cp.structure.save':
+            return elips_action_cp_structure_save($payload);
+        case 'cp.structure.copy':
+            return elips_action_cp_structure_copy($payload);
+        case 'cp.angkatan.create':
+            return elips_action_cp_angkatan_create($payload);
+        case 'tp.dashboard':
+            return elips_action_tp_dashboard($payload);
+        case 'tp.classes':
+            return elips_action_tp_classes($payload);
+        case 'tp.class.detail':
+            return elips_action_tp_class_detail($payload);
+        case 'tp.curriculum.courses':
+            return elips_action_tp_curriculum_courses($payload);
+        case 'tp.curriculum.get':
+            return elips_action_tp_curriculum_get($payload);
+        case 'tp.curriculum.save':
+            return elips_action_tp_curriculum_save($payload);
+        case 'tp.grading.classes':
+            return elips_action_tp_grading_classes($payload);
+        case 'tp.grading.tasks':
+            return elips_action_tp_grading_tasks($payload);
+        case 'tp.grading.submissions':
+            return elips_action_tp_grading_submissions($payload);
+        case 'tp.grading.score':
+            return elips_action_tp_grading_score($payload);
+        case 'tp.final.list':
+            return elips_action_tp_final_list($payload);
+        case 'tp.final.get':
+            return elips_action_tp_final_get($payload);
+        case 'tp.final.save':
+            return elips_action_tp_final_save($payload);
+        case 'tp.final.send':
+            return elips_action_tp_final_send($payload);
         case 'system.resetData':
             return elips_action_system_reset_data($payload);
         case 'course.classes':
@@ -8231,4 +8267,6 @@ require_once __DIR__ . '/registrations.php';
 require_once __DIR__ . '/academic.php';
 require_once __DIR__ . '/maintenance.php';
 require_once __DIR__ . '/tutors.php';
+require_once __DIR__ . '/tutor_portal.php';
+require_once __DIR__ . '/course_publish.php';
 require_once __DIR__ . '/attendance_rules.php';

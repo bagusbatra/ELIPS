@@ -168,19 +168,19 @@ $accounts = [
     'karyawan-keuangan' => ['sri.karyawan@example.com', 'employee/shared/dashboard.php'],
 ];
 $allowed = [
-    'admin' => ['admin/dashboard.php', 'admin/users.php', 'admin/attendance-recap.php', 'admin/shifts.php', 'learning.php',
+    'admin' => ['admin/dashboard.php', 'admin/users.php', 'admin/attendance-recap.php', 'admin/shifts.php', 'admin/course-publish.php?id=1', 'learning.php',
                 'employee/operasional/siswa.php', 'employee/keuangan/dashboard.php'],
-    'instruktur' => ['instructor/dashboard.php', 'instructor/manage-course.php', 'learning.php'],
+    'instruktur' => ['instructor/dashboard.php', 'instructor/manage-course.php', 'instructor/angkatan.php', 'instructor/angkatan-detail.php?id=1', 'instructor/kurikulum.php', 'instructor/kurikulum-draf.php?course=1', 'instructor/penilaian.php', 'instructor/penilaian-angkatan.php?id=1', 'instructor/penilaian-tugas.php?assignment=1', 'instructor/penilaian-akhir.php?id=1', 'instructor/penilaian-rapor.php?id=1&student=1', 'learning.php'],
     'peserta' => ['student/dashboard.php', 'student/courses.php', 'learning.php'],
     'karyawan-marketing' => ['employee/shared/dashboard.php', 'employee/shared/attendance.php', 'employee/marketing/tasks.php', 'employee/marketing/campaigns.php'],
-    'karyawan-operasional' => ['employee/shared/dashboard.php', 'employee/operasional/siswa.php', 'employee/operasional/jadwal.php'],
+    'karyawan-operasional' => ['employee/shared/dashboard.php', 'employee/operasional/siswa.php', 'employee/operasional/jadwal.php', 'employee/operasional/kursus-publikasi.php?id=1'],
     'karyawan-keuangan' => ['employee/shared/dashboard.php', 'employee/keuangan/dashboard.php'],
 ];
 $forbidden = [
     'admin' => ['instructor/dashboard.php', 'student/dashboard.php', 'employee/shared/dashboard.php', 'employee/marketing/tasks.php'],
-    'instruktur' => ['admin/dashboard.php', 'student/dashboard.php', 'employee/shared/attendance.php'],
+    'instruktur' => ['admin/dashboard.php', 'admin/course-publish.php?id=1', 'student/dashboard.php', 'employee/shared/attendance.php'],
     'peserta' => ['admin/dashboard.php', 'admin/users.php', 'instructor/dashboard.php', 'employee/shared/dashboard.php'],
-    'karyawan-marketing' => ['admin/dashboard.php', 'student/dashboard.php', 'employee/operasional/siswa.php', 'employee/keuangan/dashboard.php', 'learning.php'],
+    'karyawan-marketing' => ['admin/dashboard.php', 'employee/operasional/kursus-publikasi.php?id=1', 'student/dashboard.php', 'employee/operasional/siswa.php', 'employee/keuangan/dashboard.php', 'learning.php'],
     'karyawan-operasional' => ['admin/users.php', 'employee/marketing/tasks.php', 'employee/keuangan/dashboard.php'],
     'karyawan-keuangan' => ['admin/users.php', 'employee/marketing/tasks.php', 'employee/operasional/siswa.php'],
 ];
@@ -1193,6 +1193,327 @@ $pdo->exec("DELETE FROM classes WHERE code IN ('UJI-ACT-01','UJI-ACT-02','UJI-AC
 $pdo->exec("UPDATE courses SET price = 0, discount_price = 0 WHERE id IN (1, 2)");
 $pdo->exec("UPDATE courses SET status = 'draft' WHERE id = 2");
 foreach (glob($root . '/storage/payment-proofs/*') ?: [] as $f) { if (basename($f) !== '.htaccess') { @unlink($f); } }
+
+
+// ============================================================
+echo "\n== Portal tentor (kurikulum, penilaian tugas, penilaian akhir)\n";
+$tpTentor = (int) $pdo->query("SELECT id FROM users WHERE email = 'ahmad@example.com'")->fetchColumn();
+$pdo->exec("INSERT INTO courses (title, category, description, instructor_id, status) VALUES ('Kursus Uji Portal', 'Uji', 'Uji', $tpTentor, 'published')");
+$tpCourse = (int) $pdo->lastInsertId();
+$pdo->exec("INSERT INTO curriculum_versions (course_id, code, name, description, status, notes) VALUES ($tpCourse, 'UJI-V1', 'Versi uji', '', 'published', '')");
+$tpVer = (int) $pdo->lastInsertId();
+$tpModules = [];
+foreach ([['Modul Word', 1], ['Modul Excel', 2]] as [$mt, $mo]) {
+    $pdo->prepare("INSERT INTO modules (course_id, curriculum_version_id, title, description, sort_order) VALUES (?, ?, ?, '', ?)")->execute([$tpCourse, $tpVer, $mt, $mo]);
+    $tpModules[] = (int) $pdo->lastInsertId();
+}
+$tpLessons = [];
+foreach ([[0, 'Format teks', 1], [0, 'Sisipkan gambar', 2], [1, 'Rumus dasar', 1], [1, 'Fungsi IF', 2]] as [$mi, $lt, $lo]) {
+    $pdo->prepare("INSERT INTO lessons (module_id, course_id, curriculum_version_id, title, content, sort_order) VALUES (?, ?, ?, ?, '', ?)")->execute([$tpModules[$mi], $tpCourse, $tpVer, $lt, $lo]);
+    $tpLessons[] = (int) $pdo->lastInsertId();
+}
+$pdo->prepare("INSERT INTO classes (code, name, course_id, curriculum_version_id, instructor_id, period_start, period_end, quota, status, notes)
+               VALUES ('UJI-TP-01', 'Uji Portal 1', ?, ?, ?, '2026-09-01', '2026-10-30', 10, 'ongoing', '')")->execute([$tpCourse, $tpVer, $tpTentor]);
+$tpClass = (int) $pdo->lastInsertId();
+$pdo->prepare("INSERT INTO classes (code, name, course_id, curriculum_version_id, instructor_id, period_start, period_end, quota, status, notes)
+               VALUES ('UJI-TP-02', 'Uji Portal 2', ?, ?, ?, '2027-01-12', '2027-03-12', 10, 'open', '')")->execute([$tpCourse, $tpVer, $tpTentor]);
+$tpClass2 = (int) $pdo->lastInsertId();
+for ($n = 1; $n <= 4; $n++) {
+    $st = $n <= 2 ? 'confirmed' : 'scheduled';
+    $pdo->prepare("INSERT INTO class_sessions (class_id, session_number, title, session_date, status, planned_jp, notes) VALUES (?, ?, ?, ?, ?, 2, '')")
+        ->execute([$tpClass, $n, "Sesi $n", date('Y-m-d', strtotime("2026-09-0$n")), $st]);
+}
+$tpEnroll = [];
+foreach (['Siswa Uji A', 'Siswa Uji B'] as $i => $nm) {
+    $pdo->prepare("INSERT INTO users (name, email, phone, password_hash, role, status, created_at) VALUES (?, ?, '', 'x', 'peserta', 'aktif', CURDATE())")->execute([$nm, "tp-siswa$i@example.com"]);
+    $sid = (int) $pdo->lastInsertId();
+    $pdo->prepare("INSERT INTO enrollments (student_id, course_id, class_id, status) VALUES (?, ?, ?, 'active')")->execute([$sid, $tpCourse, $tpClass]);
+    $tpEnroll[] = ['student' => $sid, 'enrollment' => (int) $pdo->lastInsertId()];
+}
+
+$tp = $clients['instruktur'];
+$anonTp = new Client($base);
+t('tp.dashboard ditolak tanpa login', empty($anonTp->api('tp.dashboard')['ok']));
+t('tp.dashboard ditolak untuk admin', empty($clients['admin']->api('tp.dashboard')['ok']));
+t('tp.dashboard ditolak untuk peserta', empty($clients['peserta']->api('tp.classes')['ok']));
+
+$res = $tp->api('tp.dashboard');
+t('tp.dashboard ok tanpa snapshot', !empty($res['ok']) && !isset($res['snapshot']), $res['message'] ?? '');
+t('dashboard memuat angkatan uji', in_array('UJI-TP-01', array_column($res['data']['classes'] ?? [], 'code'), true));
+
+$res = $tp->api('tp.class.detail', ['classId' => $tpClass]);
+t('detail angkatan: 4 sesi, 2 terkunci', count($res['data']['sessions'] ?? []) === 4 && count(array_filter($res['data']['sessions'], fn($x) => $x['locked'])) === 2, json_encode($res['message'] ?? ''));
+t('detail angkatan: 2 siswa', count($res['data']['students'] ?? []) === 2);
+t('angkatan tentor lain ditolak', empty($tp->api('tp.class.detail', ['classId' => 999999])['ok']));
+
+$res = $tp->api('tp.curriculum.courses');
+t('kartu kurikulum memuat kursus uji', in_array($tpCourse, array_column($res['data']['courses'] ?? [], 'courseId'), true));
+$res = $tp->api('tp.curriculum.get', ['courseId' => $tpCourse]);
+t('kurikulum: 2 modul, sesi 1-2 terkunci', count($res['data']['modules'] ?? []) === 2 && $res['data']['modules'][0]['lessons'][0]['locked'] && !$res['data']['modules'][1]['lessons'][0]['locked'], json_encode($res['message'] ?? ''));
+
+$task = ['title' => 'Latihan rumus', 'instructions' => 'Kerjakan', 'dueDays' => 3, 'format' => 'file_upload', 'maxScore' => 100, 'weight' => 20];
+$res = $tp->api('tp.curriculum.save', ['courseId' => $tpCourse, 'versionId' => $tpVer, 'lessons' => [[
+    'id' => $tpLessons[2], 'objective' => 'Memahami rumus', 'durationJp' => 3,
+    'materials' => [['title' => 'Slide rumus', 'kind' => 'dokumen', 'content' => 'slide.pdf']], 'tasks' => [$task],
+]]]);
+t('simpan isi sesi 3 berhasil', !empty($res['ok']) && count($res['data']['changed'] ?? []) === 1, $res['message'] ?? '');
+$taskId = (int) ($res['data']['lessons'][0]['tasks'][0]['id'] ?? 0);
+t('template penugasan tersimpan dengan id', $taskId > 0);
+$cnt = (int) $pdo->query("SELECT COUNT(*) FROM assignments WHERE template_task_id = $taskId")->fetchColumn();
+t('penugasan disalin ke 2 angkatan (sesi belum terkunci)', $cnt === 2, (string) $cnt);
+$due = (string) $pdo->query("SELECT due_at FROM assignments WHERE template_task_id = $taskId AND class_id = $tpClass")->fetchColumn();
+t('tenggat = tanggal sesi + 3 hari', strpos($due, '2026-09-06') === 0, $due);
+
+$res = $tp->api('tp.curriculum.save', ['courseId' => $tpCourse, 'versionId' => $tpVer, 'lessons' => [[
+    'id' => $tpLessons[2], 'objective' => 'Memahami rumus', 'durationJp' => 3,
+    'materials' => [['id' => (int) $pdo->query("SELECT id FROM lesson_materials WHERE lesson_id = {$tpLessons[2]}")->fetchColumn(), 'title' => 'Slide rumus', 'kind' => 'dokumen', 'content' => 'slide.pdf']],
+    'tasks' => [array_merge($task, ['id' => $taskId])],
+]]]);
+t('simpan tanpa perubahan tidak mencatat riwayat', !empty($res['ok']) && count($res['data']['changed'] ?? [1]) === 0, json_encode($res['data']['changed'] ?? null));
+
+$res = $tp->api('tp.curriculum.save', ['courseId' => $tpCourse, 'versionId' => $tpVer, 'lessons' => [['id' => $tpLessons[0], 'objective' => 'ubah', 'materials' => [], 'tasks' => []]]]);
+t('sesi terkonfirmasi tidak bisa diubah', empty($res['ok']) && strpos($res['message'] ?? '', 'terkunci') !== false, $res['message'] ?? '');
+$res = $tp->api('tp.curriculum.save', ['courseId' => $tpCourse, 'versionId' => $tpVer, 'lessons' => [['id' => $tpLessons[3], 'objective' => '', 'materials' => [], 'tasks' => [['title' => '  ']]]]]);
+t('penugasan tanpa judul ditolak', empty($res['ok']));
+$res = $tp->api('tp.curriculum.save', ['courseId' => $tpCourse, 'versionId' => $tpVer, 'lessons' => [['id' => $tpLessons[3], 'objective' => '', 'durationJp' => 200, 'materials' => [], 'tasks' => []]]]);
+t('durasi di luar batas ditolak', empty($res['ok']));
+$logs = (int) $pdo->query("SELECT COUNT(*) FROM curriculum_change_log WHERE course_id = $tpCourse")->fetchColumn();
+t('riwayat perubahan tercatat', $logs === 1, (string) $logs);
+
+// Penilaian tugas
+$assignId = (int) $pdo->query("SELECT id FROM assignments WHERE template_task_id = $taskId AND class_id = $tpClass")->fetchColumn();
+foreach ($tpEnroll as $i => $e) {
+    $pdo->prepare("INSERT INTO submissions (assignment_id, enrollment_id, student_id, status, text_answer, feedback) VALUES (?, ?, ?, 'submitted', 'jawaban', '')")
+        ->execute([$assignId, $e['enrollment'], $e['student']]);
+}
+$res = $tp->api('tp.grading.submissions', ['assignmentId' => $assignId]);
+t('daftar pengumpulan: 2 siswa perlu dinilai', count(array_filter($res['data']['students'] ?? [], fn($x) => $x['state'] === 'perlu')) === 2, json_encode($res['message'] ?? ''));
+$sub1 = (int) ($res['data']['students'][0]['submissionId'] ?? 0);
+t('nilai di atas maksimal ditolak', empty($tp->api('tp.grading.score', ['submissionId' => $sub1, 'score' => 150])['ok']));
+t('nilai kosong ditolak', empty($tp->api('tp.grading.score', ['submissionId' => $sub1, 'score' => ''])['ok']));
+t('admin tidak bisa memberi nilai lewat portal tentor', empty($clients['admin']->api('tp.grading.score', ['submissionId' => $sub1, 'score' => 80])['ok']));
+$res = $tp->api('tp.grading.score', ['submissionId' => $sub1, 'score' => 88.5]);
+t('nilai tugas tersimpan', !empty($res['ok']) && $res['data']['score'] === 88.5, $res['message'] ?? '');
+$st = $pdo->query("SELECT status, score FROM submissions WHERE id = $sub1")->fetch();
+t('status pengumpulan menjadi reviewed', $st['status'] === 'reviewed' && (float) $st['score'] === 88.5);
+$res = $tp->api('tp.grading.classes');
+$row = array_values(array_filter($res['data']['classes'] ?? [], fn($x) => $x['id'] === $tpClass))[0] ?? null;
+t('kartu penilaian: 1 perlu dinilai, akhir terkunci', $row && $row['pending'] === 1 && $row['finalState'] === 'locked', json_encode($row));
+
+// Penilaian akhir
+$res = $tp->api('tp.final.list', ['classId' => $tpClass]);
+t('penilaian akhir terkunci sebelum semua sesi dikonfirmasi', empty($res['ok']) && strpos($res['message'] ?? '', '2 dari 4') !== false, $res['message'] ?? '');
+$pdo->exec("UPDATE class_sessions SET status = 'confirmed' WHERE class_id = $tpClass");
+$res = $tp->api('tp.final.list', ['classId' => $tpClass]);
+t('penilaian akhir terbuka setelah semua dikonfirmasi', !empty($res['ok']) && count($res['data']['students'] ?? []) === 2, $res['message'] ?? '');
+t('template awal dari kurikulum (4 sub materi)', ($res['data']['template']['source'] ?? '') === 'curriculum' && ($res['data']['template']['items'] ?? 0) === 4);
+
+$e1 = $tpEnroll[0]['enrollment'];
+$e2 = $tpEnroll[1]['enrollment'];
+$res = $tp->api('tp.final.get', ['classId' => $tpClass, 'enrollmentId' => $e1]);
+t('struktur awal: 2 materi', count($res['data']['structure'] ?? []) === 2 && ($res['data']['source'] ?? '') === 'curriculum', json_encode($res['message'] ?? ''));
+$structure = [
+    ['title' => 'MICROSOFT WORD', 'items' => [['title' => 'Mengelola format teks', 'jp' => 2, 'score' => 94], ['title' => 'Menyisipkan gambar', 'jp' => 2, 'score' => 98]]],
+    ['title' => 'MICROSOFT EXCEL', 'items' => [['title' => 'Formula sederhana', 'jp' => 3, 'score' => 97], ['title' => 'Fungsi IF', 'jp' => 3, 'score' => 95], ['title' => 'Sub materi tambahan', 'jp' => 1, 'score' => 90]]],
+];
+$res = $tp->api('tp.final.save', ['classId' => $tpClass, 'enrollmentId' => $e1, 'structure' => $structure]);
+t('nilai akhir lengkap tersimpan, rata-rata 94,8', !empty($res['ok']) && $res['data']['status'] === 'lengkap' && abs($res['data']['average'] - 94.8) < 0.001 && abs($res['data']['totalJp'] - 11) < 0.001, json_encode($res['data'] ?? $res['message']));
+t('keterangan (predikat) terisi', ($res['data']['predicate'] ?? '') !== '');
+$tpl = (string) $pdo->query("SELECT structure FROM final_templates WHERE course_id = $tpCourse")->fetchColumn();
+t('struktur otomatis menjadi template kursus (tanpa nilai)', $tpl !== '' && strpos($tpl, 'score') === false && strpos($tpl, 'Sub materi tambahan') !== false);
+
+$res = $tp->api('tp.final.get', ['classId' => $tpClass, 'enrollmentId' => $e2]);
+t('siswa lain memakai template (nilai kosong)', ($res['data']['source'] ?? '') === 'template' && count($res['data']['structure'][1]['items'] ?? []) === 3 && array_key_exists('score', $res['data']['structure'][0]['items'][0] ?? []) && $res['data']['structure'][0]['items'][0]['score'] === null, json_encode($res['data']['source'] ?? $res['message']));
+$partial = $structure;
+$partial[1]['items'][2]['score'] = null;
+$res = $tp->api('tp.final.save', ['classId' => $tpClass, 'enrollmentId' => $e2, 'structure' => $partial]);
+t('nilai belum lengkap menjadi draf tanpa rata-rata', !empty($res['ok']) && $res['data']['status'] === 'draf' && $res['data']['average'] === null, json_encode($res['data'] ?? $res['message']));
+t('nilai di luar 0-100 ditolak', empty($tp->api('tp.final.save', ['classId' => $tpClass, 'enrollmentId' => $e2, 'structure' => array_replace_recursive($structure, [0 => ['items' => [0 => ['score' => 120]]]])])['ok']));
+t('materi tanpa sub materi ditolak', empty($tp->api('tp.final.save', ['classId' => $tpClass, 'enrollmentId' => $e2, 'structure' => [['title' => 'Kosong', 'items' => []]]])['ok']));
+$res = $tp->api('tp.final.send', ['classId' => $tpClass]);
+t('kirim ditolak selama ada siswa belum lengkap', empty($res['ok']) && strpos($res['message'] ?? '', '1 siswa') !== false, $res['message'] ?? '');
+
+// Template diubah: siswa lama tetap memakai strukturnya (opsi A)
+$res = $tp->api('tp.final.save', ['classId' => $tpClass, 'enrollmentId' => $e2, 'structure' => $structure]);
+t('siswa kedua lengkap', ($res['data']['status'] ?? '') === 'lengkap');
+$changed = $structure;
+$changed[0]['title'] = 'MICROSOFT WORD 2021';
+$changed[0]['items'][] = ['title' => 'Mail merge', 'jp' => 2, 'score' => 96];
+$res = $tp->api('tp.final.save', ['classId' => $tpClass, 'enrollmentId' => $e2, 'structure' => $changed]);
+$res = $tp->api('tp.final.get', ['classId' => $tpClass, 'enrollmentId' => $e1]);
+t('struktur siswa lama tidak ikut berubah (opsi A)', ($res['data']['structure'][0]['title'] ?? '') === 'MICROSOFT WORD' && count($res['data']['structure'][0]['items'] ?? []) === 2);
+$res = $tp->api('tp.final.list', ['classId' => $tpClass]);
+t('template terbaru dipakai (6 sub materi)', ($res['data']['template']['items'] ?? 0) === 6, json_encode($res['data']['template'] ?? null));
+
+$res = $tp->api('tp.final.send', ['classId' => $tpClass]);
+t('kirim nilai akhir berhasil bila semua lengkap', !empty($res['ok']), $res['message'] ?? '');
+t('kirim dua kali ditolak', empty($tp->api('tp.final.send', ['classId' => $tpClass])['ok']));
+t('nilai tidak bisa diubah setelah dikirim', empty($tp->api('tp.final.save', ['classId' => $tpClass, 'enrollmentId' => $e1, 'structure' => $structure])['ok']));
+$res = $tp->api('tp.final.get', ['classId' => $tpClass, 'enrollmentId' => $e1]);
+t('data terkirim ditandai sentAt', !empty($res['data']['sentAt']));
+
+foreach (['instructor/angkatan.php', 'instructor/kurikulum.php', 'instructor/penilaian.php'] as $pg) {
+    $r = $tp->get("/$pg");
+    t("halaman $pg memuat tentor-app.css dan tp-core", $r['code'] === 200 && strpos($r['body'], 'tentor-app.css') !== false && strpos($r['body'], 'tp-core.js') !== false);
+}
+t('sidebar tentor memuat menu baru', strpos($tp->get('/instructor/dashboard.php')['body'], 'instructor/penilaian.php') !== false);
+
+// Bersihkan data uji portal tentor
+$pdo->exec("DELETE FROM classes WHERE id IN ($tpClass, $tpClass2)");
+$pdo->exec("DELETE FROM users WHERE email LIKE 'tp-siswa%@example.com'");
+$pdo->exec("DELETE FROM courses WHERE id = $tpCourse");
+
+
+// ============================================================
+echo "\n== Publikasi kursus (struktur judul, salin, angkatan baru)\n";
+$cpTentor = (int) $pdo->query("SELECT id FROM users WHERE email = 'ahmad@example.com'")->fetchColumn();
+reset_rl();
+$cpLogin = function (string $label) use ($base, $accounts, $demoPass): Client {
+    $cl = new Client($base);
+    $cl->api('auth.login', ['email' => $accounts[$label][0], 'password' => $demoPass]);
+    return $cl;
+};
+$cpAdmin = $cpLogin('admin');
+$cpOps = $cpLogin('karyawan-operasional');
+$cpMarketing = $cpLogin('karyawan-marketing');
+$cpTentorClient = $cpLogin('instruktur');
+
+t('cp.get ditolak tanpa login', empty((new Client($base))->api('cp.get', ['courseId' => 1])['ok']));
+t('cp.get ditolak untuk tentor', empty($cpTentorClient->api('cp.get', ['courseId' => 1])['ok']));
+t('cp.get ditolak untuk marketing', empty($cpMarketing->api('cp.get', ['courseId' => 1])['ok']));
+
+$res = $cpAdmin->api('course.create', ['title' => 'MS Office 12', 'category' => 'Uji', 'description' => 'Uji publikasi', 'price' => 900000, 'instructorId' => $cpTentor]);
+$cpCourse = (int) ($res['data']['id'] ?? 0);
+t('kursus uji publikasi dibuat', $cpCourse > 0, $res['message'] ?? json_encode($res));
+
+$res = $cpAdmin->api('cp.get', ['courseId' => $cpCourse]);
+t('cp.get ok tanpa snapshot', !empty($res['ok']) && !isset($res['snapshot']), $res['message'] ?? '');
+t('kursus kosong: belum bisa publikasi', ($res['data']['canPublish'] ?? true) === false && ($res['data']['totals']['lessons'] ?? -1) === 0);
+t('saran angkatan pertama = judul kursus berangka', ($res['data']['suggest']['name'] ?? '') === 'MS Office 12', $res['data']['suggest']['name'] ?? '');
+t('publikasi kosong ditolak server', empty($cpAdmin->api('course.status', ['id' => $cpCourse, 'status' => 'published'])['ok']));
+
+// Simpan struktur
+$structure = [
+    ['title' => 'Microsoft Word', 'lessons' => [['title' => 'Format teks'], ['title' => 'Sisipkan gambar']]],
+    ['title' => 'Microsoft Excel', 'lessons' => [['title' => 'Rumus dasar'], ['title' => 'Fungsi IF']]],
+];
+$res = $cpOps->api('cp.structure.save', ['courseId' => $cpCourse, 'modules' => $structure]);
+t('operasional boleh menyusun struktur', !empty($res['ok']) && ($res['data']['totals']['lessons'] ?? 0) === 4, $res['message'] ?? '');
+t('struktur siap publikasi', !empty($res['data']['canPublish']), json_encode($res['data']['checklist'] ?? []));
+$m1 = $res['data']['modules'][0] ?? [];
+$m2 = $res['data']['modules'][1] ?? [];
+t('nomor sesi berurutan lintas modul', ($m2['lessons'][0]['number'] ?? 0) === 3 && ($m2['lessons'][1]['number'] ?? 0) === 4);
+t('judul kosong ditolak', empty($cpAdmin->api('cp.structure.save', ['courseId' => $cpCourse, 'modules' => [['title' => '', 'lessons' => []]]])['ok']));
+t('judul materi kosong ditolak', empty($cpAdmin->api('cp.structure.save', ['courseId' => $cpCourse, 'modules' => [['title' => 'X', 'lessons' => [['title' => ' ']]]]])['ok']));
+t('id materi asing ditolak', empty($cpAdmin->api('cp.structure.save', ['courseId' => $cpCourse, 'modules' => [['title' => 'X', 'lessons' => [['id' => 99999999, 'title' => 'Y']]]]])['ok']));
+
+// Rename + reorder + tambah, id lama dipertahankan
+$l = fn($mod, $i) => ['id' => $mod['lessons'][$i]['id'], 'title' => $mod['lessons'][$i]['title']];
+$structure2 = [
+    ['id' => $m2['id'], 'title' => 'Microsoft Excel', 'lessons' => [$l($m2, 0), $l($m2, 1), ['title' => 'Grafik']]],
+    ['id' => $m1['id'], 'title' => 'Microsoft Word (revisi)', 'lessons' => [$l($m1, 1), $l($m1, 0)]],
+];
+$res = $cpAdmin->api('cp.structure.save', ['courseId' => $cpCourse, 'modules' => $structure2]);
+$mods = $res['data']['modules'] ?? [];
+t('urutan modul & materi berubah, id tetap', !empty($res['ok']) && ($mods[0]['id'] ?? 0) === $m2['id'] && ($mods[1]['title'] ?? '') === 'Microsoft Word (revisi)' && ($mods[1]['lessons'][0]['title'] ?? '') === 'Sisipkan gambar', $res['message'] ?? '');
+t('materi baru ditambahkan (total 5)', ($res['data']['totals']['lessons'] ?? 0) === 5);
+
+// Isi tentor terdeteksi
+$excelLesson = (int) $mods[0]['lessons'][0]['id'];
+$pdo->prepare("INSERT INTO lesson_details (lesson_id, objective, duration_jp) VALUES (?, 'Memahami rumus', 2)")->execute([$excelLesson]);
+$res = $cpAdmin->api('cp.get', ['courseId' => $cpCourse]);
+t('materi yang diisi tentor ditandai terisi', ($res['data']['totals']['filled'] ?? 0) === 1 && $res['data']['modules'][0]['lessons'][0]['filled'] === true);
+
+// Hapus materi
+$trim = [
+    ['id' => $m2['id'], 'title' => 'Microsoft Excel', 'lessons' => [$l($m2, 0), $l($m2, 1)]],
+    ['id' => $m1['id'], 'title' => 'Microsoft Word', 'lessons' => [$l($m1, 1), $l($m1, 0)]],
+];
+$res = $cpAdmin->api('cp.structure.save', ['courseId' => $cpCourse, 'modules' => $trim]);
+t('hapus materi lewat daftar baru', !empty($res['ok']) && ($res['data']['totals']['lessons'] ?? 0) === 4, $res['message'] ?? '');
+t('isi tentor materi yang dipertahankan tetap ada', ($res['data']['totals']['filled'] ?? 0) === 1);
+
+// Angkatan sebelum publikasi ditolak
+$res = $cpAdmin->api('cp.angkatan.create', ['courseId' => $cpCourse, 'periodStart' => '2027-02-01', 'quota' => 10, 'weekdays' => [1, 3], 'startTime' => '09:00', 'endTime' => '11:00']);
+t('angkatan sebelum publikasi ditolak', empty($res['ok']), $res['message'] ?? '');
+
+// Publikasi
+$res = $cpAdmin->api('course.status', ['id' => $cpCourse, 'status' => 'published']);
+t('kursus berstruktur dapat dipublikasikan', !empty($res['ok']), $res['message'] ?? '');
+
+// Angkatan baru
+$base1 = ['courseId' => $cpCourse, 'periodStart' => '2027-02-01', 'quota' => 12, 'weekdays' => [1, 3], 'startTime' => '09:00', 'endTime' => '11:00', 'jp' => 2, 'location' => 'Bandung'];
+t('angkatan tanpa hari belajar ditolak', empty($cpOps->api('cp.angkatan.create', array_merge($base1, ['weekdays' => []]))['ok']));
+t('angkatan jam terbalik ditolak', empty($cpOps->api('cp.angkatan.create', array_merge($base1, ['startTime' => '11:00', 'endTime' => '09:00']))['ok']));
+t('angkatan kuota 0 ditolak', empty($cpOps->api('cp.angkatan.create', array_merge($base1, ['quota' => 0]))['ok']));
+$res = $cpOps->api('cp.angkatan.create', $base1);
+$cpClass = (int) ($res['data']['createdClassId'] ?? 0);
+t('operasional membuat angkatan 1 (nama otomatis)', !empty($res['ok']) && $cpClass > 0 && ($res['data']['createdSessions'] ?? 0) === 4, $res['message'] ?? '');
+$row = $pdo->query("SELECT * FROM classes WHERE id = $cpClass")->fetch();
+t('angkatan memakai tentor kursus dan status open', $row && (int) $row['instructor_id'] === $cpTentor && $row['status'] === 'open' && $row['name'] === 'MS Office 12', json_encode($row));
+$ses = $pdo->query("SELECT session_number, title, session_date, DAYOFWEEK(session_date) AS dow FROM class_sessions WHERE class_id = $cpClass ORDER BY session_number")->fetchAll();
+t('4 sesi dibuat, judul = materi ke-N', count($ses) === 4 && $ses[0]['title'] === 'Rumus dasar' && $ses[3]['title'] === 'Format teks', json_encode($ses));
+t('tanggal sesi: Senin & Rabu mulai 1 Feb 2027', ($ses[0]['session_date'] ?? '') === '2027-02-01' && ($ses[1]['session_date'] ?? '') === '2027-02-03' && ($ses[2]['session_date'] ?? '') === '2027-02-08', json_encode(array_column($ses, 'session_date')));
+t('akhir periode = tanggal sesi terakhir', ($row['period_end'] ?? '') === ($ses[3]['session_date'] ?? 'x'), $row['period_end'] ?? '');
+$vstatus = $pdo->query("SELECT status FROM curriculum_versions WHERE id = " . (int) $row['curriculum_version_id'])->fetchColumn();
+t('kurikulum bersama TIDAK dikunci saat angkatan dibuat', $vstatus === 'published', (string) $vstatus);
+t('tentor diberi notifikasi angkatan baru', (int) $pdo->query("SELECT COUNT(*) FROM notifications WHERE type = 'angkatan_baru' AND entity_id = $cpClass")->fetchColumn() === 1);
+t('nama ganda ditolak', empty($cpOps->api('cp.angkatan.create', array_merge($base1, ['name' => 'MS Office 12']))['ok']));
+
+$res = $cpAdmin->api('cp.get', ['courseId' => $cpCourse]);
+t('saran berikutnya = MS Office 13', ($res['data']['suggest']['name'] ?? '') === 'MS Office 13', $res['data']['suggest']['name'] ?? '');
+t('bawaan form mengikuti angkatan terakhir (Sen & Rab, 12 kuota)', ($res['data']['suggest']['defaults']['weekdays'] ?? []) === [1, 3] && ($res['data']['suggest']['defaults']['quota'] ?? 0) === 12, json_encode($res['data']['suggest']['defaults'] ?? []));
+
+$res = $cpAdmin->api('cp.angkatan.create', array_merge($base1, ['periodStart' => '2027-06-07']));
+$cpClass2 = (int) ($res['data']['createdClassId'] ?? 0);
+t('angkatan 2 dibuat otomatis bernama MS Office 13', !empty($res['ok']) && (string) $pdo->query("SELECT name FROM classes WHERE id = $cpClass2")->fetchColumn() === 'MS Office 13', $res['message'] ?? '');
+
+// Tentor melihat angkatan baru & dapat mengisi (kurikulum bersama, tidak terkunci)
+$res = $cpTentorClient->api('tp.curriculum.courses');
+$mine = array_values(array_filter($res['data']['courses'] ?? $res['data'] ?? [], fn($c) => (int) ($c['courseId'] ?? 0) === $cpCourse));
+t('tentor melihat kursus angkatan baru di portalnya', count($mine) === 1, json_encode(array_keys($res['data'] ?? [])));
+$res = $cpTentorClient->api('tp.curriculum.get', ['courseId' => $cpCourse]);
+$cpVerId = (int) ($res['data']['version']['id'] ?? $res['data']['versions'][0]['id'] ?? 0);
+t('tentor dapat membuka kurikulum angkatan baru', !empty($res['ok']), $res['message'] ?? '');
+
+// Sesi terkunci melindungi struktur
+$pdo->exec("UPDATE classes SET status = 'ongoing' WHERE id = $cpClass");
+$pdo->exec("UPDATE class_sessions SET status = 'confirmed' WHERE class_id = $cpClass AND session_number = 1");
+$cur = $cpAdmin->api('cp.get', ['courseId' => $cpCourse])['data']['modules'] ?? [];
+t('sesi 1 ditandai terkunci', ($cur[0]['lessons'][0]['locked'] ?? false) === true);
+$try = $cur; $try[0]['lessons'][0]['title'] = 'Diganti';
+t('ubah judul sesi terkunci ditolak', empty($cpAdmin->api('cp.structure.save', ['courseId' => $cpCourse, 'modules' => $try])['ok']));
+$try = $cur; array_shift($try[0]['lessons']);
+t('hapus sesi terkunci ditolak', empty($cpAdmin->api('cp.structure.save', ['courseId' => $cpCourse, 'modules' => $try])['ok']));
+$try = $cur; $try[0]['title'] = 'Excel Lanjut';
+$res = $cpAdmin->api('cp.structure.save', ['courseId' => $cpCourse, 'modules' => $try]);
+t('ubah judul modul tetap boleh', !empty($res['ok']), $res['message'] ?? '');
+// Judul sesi yang belum berjalan ikut tersinkron ke jadwal
+$try = $res['data']['modules']; $try[1]['lessons'][1]['title'] = 'Format teks lanjutan';
+$res = $cpAdmin->api('cp.structure.save', ['courseId' => $cpCourse, 'modules' => $try]);
+$syn = $pdo->query("SELECT title FROM class_sessions WHERE class_id = $cpClass AND session_number = 4")->fetchColumn();
+t('judul sesi terjadwal ikut diperbarui', !empty($res['ok']) && $syn === 'Format teks lanjutan', (string) $syn . ' | ' . ($res['message'] ?? ''));
+
+// Salin struktur
+$res = $cpAdmin->api('course.create', ['title' => 'Kursus Salinan Uji', 'category' => 'Uji', 'description' => 'Uji', 'price' => 500000, 'instructorId' => $cpTentor]);
+$cpCopy = (int) ($res['data']['id'] ?? 0);
+$res = $cpAdmin->api('cp.get', ['courseId' => $cpCopy]);
+t('kursus lain muncul sebagai sumber salin', in_array($cpCourse, array_column($res['data']['copySources'] ?? [], 'id'), true));
+$res = $cpOps->api('cp.structure.copy', ['courseId' => $cpCopy, 'fromCourseId' => $cpCourse]);
+t('salin struktur: 2 modul, 4 materi, tanpa isi tentor', !empty($res['ok']) && ($res['data']['totals']['modules'] ?? 0) === 2 && ($res['data']['totals']['lessons'] ?? 0) === 4 && ($res['data']['totals']['filled'] ?? -1) === 0, $res['message'] ?? '');
+t('salin ke kursus berisi ditolak', empty($cpOps->api('cp.structure.copy', ['courseId' => $cpCopy, 'fromCourseId' => $cpCourse])['ok']));
+t('salin dari diri sendiri ditolak', empty($cpOps->api('cp.structure.copy', ['courseId' => $cpCourse, 'fromCourseId' => $cpCourse])['ok']));
+
+// Halaman
+foreach (['admin' => ['admin/course-publish.php?id=' . $cpCourse, $cpAdmin], 'karyawan-operasional' => ['employee/operasional/kursus-publikasi.php?id=' . $cpCourse, $cpOps]] as $who => [$pg, $cl]) {
+    $r = $cl->get("/$pg");
+    t("halaman publikasi ($who) memuat css & js", $r['code'] === 200 && strpos($r['body'], 'course-publish.css') !== false && strpos($r['body'], 'course-publish.js') !== false && strpos($r['body'], 'cpbTree') !== false, (string) $r['code']);
+}
+t('courses.js mengarah ke halaman publikasi', strpos($cpAdmin->get('/assets/js/pages/admin/courses.js')['body'], 'course-publish.php') !== false);
+
+// Bersihkan
+$pdo->exec("DELETE FROM classes WHERE id IN ($cpClass, $cpClass2)");
+$pdo->exec("DELETE FROM courses WHERE id IN ($cpCourse, $cpCopy)");
 
 proc_terminate($srv);
 if (!$hadLock) { @unlink($lock); }

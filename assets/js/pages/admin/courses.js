@@ -24,9 +24,10 @@
         var b = [];
         b.push('<button type="button" class="btn btn-ghost" data-act="edit" title="Ubah"><i class="bi bi-pencil"></i></button>');
         if (course.status === 'published') {
+            b.push('<button type="button" class="btn btn-ghost" data-act="structure" title="Struktur materi dan angkatan"><i class="bi bi-diagram-3"></i> Struktur &amp; angkatan</button>');
             b.push('<button type="button" class="btn btn-ghost" data-act="draft" title="Kembalikan ke Draft"><i class="bi bi-eye-slash"></i> Draft</button>');
         } else if (course.status === 'draft') {
-            b.push('<button type="button" class="btn btn-ghost" data-act="publish" title="Publikasikan"><i class="bi bi-send-check"></i> Publikasi</button>');
+            b.push('<button type="button" class="btn btn-ghost" data-act="publish" title="Susun modul dan materi, lalu publikasikan"><i class="bi bi-send-check"></i> Publikasi</button>');
         } else {
             b.push('<button type="button" class="btn btn-ghost" data-act="draft" title="Aktifkan kembali sebagai Draft"><i class="bi bi-arrow-counterclockwise"></i> Aktifkan</button>');
         }
@@ -206,6 +207,12 @@
 
     // ---------- Aksi baris ----------
 
+    function publishPagePath() {
+        return window.location.pathname.indexOf('/employee/operasional/') !== -1
+            ? 'employee/operasional/kursus-publikasi.php'
+            : 'admin/course-publish.php';
+    }
+
     function runStatus(course, status, question) {
         if (!confirm(question)) return;
         var result = ELIPS.api.call('course.status', { id: course.id, status: status });
@@ -223,7 +230,10 @@
         switch (button.getAttribute('data-act')) {
             case 'edit': openModal(course.id); break;
             case 'publish':
-                runStatus(course, 'published', 'Publikasikan kursus "' + course.title + '"? Kursus akan tampil di pendaftaran publik.');
+            case 'structure':
+                // Publikasi dilakukan di halaman publikasi: admin menyusun modul &
+                // judul materi (isinya diisi tentor), lalu mempublikasikan kursus.
+                window.location.href = ELIPS.basePathPrefix() + publishPagePath() + '?id=' + course.id;
                 break;
             case 'draft':
                 runStatus(course, 'draft', course.status === 'archived'
