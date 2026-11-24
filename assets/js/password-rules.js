@@ -25,13 +25,22 @@
         list.innerHTML = RULES.map(function (rule) {
             return '<li data-rule="' + rule.key + '"><i class="bi bi-circle" aria-hidden="true"></i><span>' + rule.label + '</span></li>';
         }).join('');
+        var meter = document.createElement('div');
+        meter.className = 'pw-meter';
+        meter.setAttribute('aria-hidden', 'true');
+        meter.innerHTML = '<span></span>';
+        list.parentNode.insertBefore(meter, list);
         function update() {
+            var score = 0;
             RULES.forEach(function (rule) {
                 var item = list.querySelector('[data-rule="' + rule.key + '"]');
                 var ok = rule.test(input.value);
+                if (ok) score++;
                 item.classList.toggle('is-ok', ok);
                 item.querySelector('i').className = 'bi ' + (ok ? 'bi-check-circle-fill' : 'bi-circle');
             });
+            meter.setAttribute('data-level', String(score));
+            meter.firstChild.style.width = (score * 20) + '%';
         }
         input.addEventListener('input', update);
         update();

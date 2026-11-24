@@ -2,23 +2,74 @@
 /* ============================================================
    ELIPS LMS - finance.css
    Halaman Pembayaran (admin/Keuangan) dan kartu tagihan siswa.
+   Gaya: bersih, minimalis, hidup (transisi halus, status pill).
    ============================================================ */
 
+:root {
+    --fin-ease: cubic-bezier(0.22, 1, 0.36, 1);
+    --fin-line: #f0e6db;
+    --fin-soft: #fbf7f2;
+    --fin-orange: #e98c1e;
+}
+
+@keyframes fin-rise {
+    from { opacity: 0; transform: translateY(14px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fin-modal-in {
+    from { opacity: 0; transform: translateY(18px) scale(0.97); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes fin-fade {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+@keyframes fin-dot {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.35; }
+}
+
+@keyframes fin-bar {
+    from { transform: scaleX(0); }
+    to   { transform: scaleX(1); }
+}
+
+/* ---------- Status pill ---------- */
 .fin-badge {
-    display: inline-block;
-    padding: 0.15rem 0.6rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0.22rem 0.7rem;
     border-radius: 999px;
     font-size: 0.75rem;
     font-weight: 700;
+    line-height: 1.3;
+    white-space: nowrap;
 }
 
-.fin-badge-unpaid { background: #fee2e2; color: #b91c1c; }
-.fin-badge-partial { background: #fef9c3; color: #854d0e; }
-.fin-badge-paid { background: #dcfce7; color: #166534; }
-.fin-badge-pending { background: #dbeafe; color: #1e40af; }
-.fin-badge-verified { background: #dcfce7; color: #166534; }
-.fin-badge-rejected { background: #fee2e2; color: #b91c1c; }
-.fin-badge-void { background: #e5e7eb; color: #374151; }
+.fin-badge::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+}
+
+.fin-badge-unpaid   { background: #fff1f1; color: #c62828; }
+.fin-badge-partial  { background: #fff8e1; color: #a16207; }
+.fin-badge-paid     { background: #ecfdf3; color: #15803d; }
+.fin-badge-pending  { background: #eff6ff; color: #1d4ed8; }
+.fin-badge-verified { background: #ecfdf3; color: #15803d; }
+.fin-badge-rejected { background: #fff1f1; color: #c62828; }
+.fin-badge-void     { background: #f1f1f1; color: #5f6368; }
+
+.fin-badge-pending::before,
+.fin-badge-unpaid::before {
+    animation: fin-dot 1.8s ease-in-out infinite;
+}
 
 .fin-number {
     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -26,47 +77,82 @@
     letter-spacing: 0.02em;
 }
 
+/* ---------- Ringkasan ---------- */
 .fin-summary {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
     gap: 0.75rem;
-    margin-bottom: 1rem;
+    margin-bottom: 1.1rem;
 }
 
 .fin-summary > div {
-    padding: 0.7rem 0.9rem;
-    border: 1px solid var(--border, #e5e7eb);
-    border-radius: 10px;
-    background: var(--bg-secondary, #f9fafb);
+    padding: 0.8rem 1rem;
+    border: 0;
+    border-radius: 14px;
+    background: var(--fin-soft);
+    box-shadow: inset 0 0 0 1px var(--fin-line);
+    transition: transform 0.25s var(--fin-ease), box-shadow 0.25s;
+    animation: fin-rise 0.4s var(--fin-ease) both;
+}
+
+.fin-summary > div:nth-child(2) { animation-delay: 0.05s; }
+.fin-summary > div:nth-child(3) { animation-delay: 0.1s; }
+.fin-summary > div:nth-child(4) { animation-delay: 0.15s; }
+
+.fin-summary > div:hover {
+    transform: translateY(-2px);
+    box-shadow: inset 0 0 0 1px #f3d2a8, 0 8px 20px -10px rgba(233, 140, 30, 0.35);
 }
 
 .fin-summary span {
     display: block;
-    color: var(--text-secondary, #6b7280);
-    font-size: 0.75rem;
+    color: #8c7a6e;
+    font-size: 0.7rem;
     font-weight: 700;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
 }
 
 .fin-summary strong {
     display: block;
-    margin-top: 0.15rem;
-    font-size: 1rem;
+    margin-top: 0.2rem;
+    font-size: 1.05rem;
+    font-variant-numeric: tabular-nums;
     overflow-wrap: anywhere;
 }
 
 .fin-h3 {
-    margin: 1.25rem 0 0.5rem;
-    font-size: 1rem;
-    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 1.4rem 0 0.6rem;
+    font-size: 0.95rem;
+    font-weight: 800;
 }
 
+.fin-h3::before {
+    content: '';
+    width: 4px;
+    height: 16px;
+    border-radius: 4px;
+    background: linear-gradient(180deg, #f5a742, var(--fin-orange));
+}
+
+/* ---------- Baris pembayaran ---------- */
 .fin-pay {
-    padding: 0.75rem 0.9rem;
-    margin-bottom: 0.6rem;
-    border: 1px solid var(--border, #e5e7eb);
-    border-radius: 10px;
+    padding: 0.85rem 1rem;
+    margin-bottom: 0.65rem;
+    border: 1px solid var(--fin-line);
+    border-radius: 14px;
+    background: #fff;
+    transition: border-color 0.2s, box-shadow 0.25s, transform 0.25s var(--fin-ease);
+    animation: fin-rise 0.35s var(--fin-ease) both;
+}
+
+.fin-pay:hover {
+    border-color: #f3d2a8;
+    box-shadow: 0 10px 24px -14px rgba(74, 38, 10, 0.25);
+    transform: translateY(-1px);
 }
 
 .fin-pay-head {
@@ -78,17 +164,17 @@
 }
 
 .fin-pay-meta {
-    margin-top: 0.25rem;
-    color: var(--text-secondary, #6b7280);
+    margin-top: 0.3rem;
+    color: #8c7a6e;
     font-size: 0.8125rem;
-    line-height: 1.5;
+    line-height: 1.55;
 }
 
 .fin-pay-actions {
     display: flex;
     gap: 0.5rem;
     flex-wrap: wrap;
-    margin-top: 0.6rem;
+    margin-top: 0.7rem;
 }
 
 .fin-form-grid {
@@ -101,27 +187,85 @@
     display: flex;
     gap: 0.6rem;
     flex-wrap: wrap;
-    margin: 0.25rem 0 0.5rem;
+    margin: 0.25rem 0 0.6rem;
 }
 
 .fin-empty {
-    padding: 1rem;
+    padding: 1.4rem 1rem;
+    border: 1px dashed #e8d5c2;
+    border-radius: 14px;
+    background: var(--fin-soft);
     text-align: center;
-    color: var(--text-secondary, #6b7280);
+    color: #8c7a6e;
 }
 
-/* Kartu tagihan di dashboard siswa */
-.bill-card {
-    margin-bottom: 1rem;
-    padding: 1rem 1.25rem;
-    border: 1px solid var(--border, #e5e7eb);
-    border-left: 4px solid #facc15;
+/* ---------- Tombol di area keuangan ---------- */
+.fin-actions .btn,
+.fin-pay-actions .btn,
+#finModal .btn,
+#finActionModal .btn,
+#finBankModal .btn,
+#billModal .btn {
     border-radius: 12px;
-    background: #fff;
+    transition: transform 0.2s var(--fin-ease), box-shadow 0.2s, background 0.2s, border-color 0.2s;
 }
 
-.bill-card.is-paid {
-    border-left-color: #16a34a;
+.fin-actions .btn:hover,
+.fin-pay-actions .btn:hover,
+#finModal .btn:hover,
+#finActionModal .btn:hover,
+#finBankModal .btn:hover,
+#billModal .btn:hover {
+    transform: translateY(-1px);
+}
+
+.fin-actions .btn:active,
+.fin-pay-actions .btn:active,
+#finModal .btn:active,
+#finActionModal .btn:active,
+#finBankModal .btn:active,
+#billModal .btn:active {
+    transform: translateY(0) scale(0.98);
+}
+
+.fin-actions .btn-primary:hover,
+#finModal .btn-primary:hover,
+#finActionModal .btn-primary:hover,
+#finBankModal .btn-primary:hover,
+#billModal .btn-primary:hover {
+    box-shadow: 0 8px 18px -8px rgba(233, 140, 30, 0.6);
+}
+
+/* ---------- Kartu tagihan siswa ---------- */
+.bill-card {
+    position: relative;
+    margin-bottom: 1rem;
+    padding: 1.15rem 1.3rem;
+    border: 1px solid var(--fin-line);
+    border-radius: 18px;
+    background: #fff;
+    overflow: hidden;
+    box-shadow: 0 1px 2px rgba(74, 38, 10, 0.04);
+    transition: transform 0.3s var(--fin-ease), box-shadow 0.3s, border-color 0.3s;
+    animation: fin-rise 0.5s var(--fin-ease) both;
+}
+
+.bill-card::before {
+    content: '';
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 4px;
+    background: linear-gradient(180deg, #fde047, #f59e0b);
+}
+
+.bill-card.is-paid::before {
+    background: linear-gradient(180deg, #4ade80, #16a34a);
+}
+
+.bill-card:hover {
+    transform: translateY(-3px);
+    border-color: #f3d2a8;
+    box-shadow: 0 18px 36px -18px rgba(74, 38, 10, 0.28);
 }
 
 .bill-head {
@@ -133,31 +277,61 @@
 }
 
 .bill-title {
-    font-weight: 700;
-}
-
-.bill-sub {
-    color: var(--text-secondary, #6b7280);
-    font-size: 0.875rem;
-}
-
-.bill-remaining {
-    font-size: 1.25rem;
     font-weight: 800;
 }
 
+.bill-sub {
+    color: #8c7a6e;
+    font-size: 0.85rem;
+}
+
+.bill-remaining {
+    font-size: 1.35rem;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    color: #b2660a;
+}
+
+.bill-card.is-paid .bill-remaining {
+    color: #15803d;
+}
+
+.bill-progress {
+    position: relative;
+    height: 8px;
+    margin-top: 0.9rem;
+    border-radius: 999px;
+    background: #f5ebdf;
+    overflow: hidden;
+}
+
+.bill-progress > span {
+    position: absolute;
+    inset: 0 auto 0 0;
+    border-radius: inherit;
+    background: linear-gradient(90deg, #f5a742, var(--fin-orange));
+    transform-origin: left;
+    animation: fin-bar 0.9s var(--fin-ease) 0.2s both;
+}
+
+.bill-card.is-paid .bill-progress > span {
+    background: linear-gradient(90deg, #4ade80, #16a34a);
+}
+
 .bill-bank {
-    margin-top: 0.75rem;
-    padding: 0.65rem 0.85rem;
-    border-radius: 10px;
-    background: var(--bg-secondary, #f9fafb);
+    margin-top: 0.85rem;
+    padding: 0.75rem 0.95rem;
+    border-radius: 14px;
+    background: var(--fin-soft);
+    box-shadow: inset 0 0 0 1px var(--fin-line);
     font-size: 0.875rem;
-    line-height: 1.5;
+    line-height: 1.55;
 }
 
 .bill-history {
-    margin-top: 0.75rem;
+    margin-top: 0.85rem;
     font-size: 0.875rem;
+    overflow-x: auto;
 }
 
 .bill-history table {
@@ -165,20 +339,106 @@
     border-collapse: collapse;
 }
 
+.bill-history th {
+    color: #8c7a6e;
+    font-size: 0.72rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
 .bill-history th,
 .bill-history td {
-    padding: 0.4rem 0.5rem;
-    border-bottom: 1px solid var(--border, #e5e7eb);
+    padding: 0.5rem 0.55rem;
+    border-bottom: 1px solid var(--fin-line);
     text-align: left;
 }
 
+.bill-history tbody tr {
+    transition: background 0.2s;
+}
+
+.bill-history tbody tr:hover {
+    background: var(--fin-soft);
+}
+
 .bill-number {
-    margin-top: 0.6rem;
-    padding: 0.6rem 0.85rem;
-    border-radius: 10px;
-    background: #dcfce7;
+    margin-top: 0.75rem;
+    padding: 0.7rem 0.95rem;
+    border-radius: 14px;
+    background: linear-gradient(135deg, #ecfdf3, #dcfce7);
     color: #166534;
     font-weight: 700;
+}
+
+/* ---------- Modal: satu kolom + gaya modern ---------- */
+#finModal .attendance-modal-body,
+#finActionModal .attendance-modal-body,
+#finBankModal .attendance-modal-body,
+#billModal .attendance-modal-body {
+    display: block;
+}
+
+#finModal.attendance-modal,
+#finActionModal.attendance-modal,
+#finBankModal.attendance-modal,
+#billModal.attendance-modal {
+    background: rgba(40, 24, 12, 0.45);
+    -webkit-backdrop-filter: blur(6px);
+    backdrop-filter: blur(6px);
+    animation: fin-fade 0.25s ease both;
+}
+
+#finModal .attendance-modal-card,
+#finActionModal .attendance-modal-card,
+#finBankModal .attendance-modal-card,
+#billModal .attendance-modal-card {
+    border: 0;
+    border-radius: 22px;
+    box-shadow: 0 40px 90px -30px rgba(40, 24, 12, 0.5);
+    animation: fin-modal-in 0.4s var(--fin-ease) both;
+}
+
+#finModal .attendance-modal-card {
+    max-height: 92vh;
+    overflow-y: auto;
+}
+
+#finModal .attendance-modal-title,
+#finActionModal .attendance-modal-title,
+#finBankModal .attendance-modal-title,
+#billModal .attendance-modal-title {
+    font-weight: 800;
+}
+
+#finModal .attendance-modal-close,
+#finActionModal .attendance-modal-close,
+#finBankModal .attendance-modal-close,
+#billModal .attendance-modal-close {
+    transition: transform 0.3s var(--fin-ease), background 0.2s;
+}
+
+#finModal .attendance-modal-close:hover,
+#finActionModal .attendance-modal-close:hover,
+#finBankModal .attendance-modal-close:hover,
+#billModal .attendance-modal-close:hover {
+    transform: rotate(90deg);
+}
+
+#finModal .form-input,
+#finActionModal .form-input,
+#finBankModal .form-input,
+#billModal .form-input {
+    border-radius: 12px;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+#finModal .form-input:focus,
+#finActionModal .form-input:focus,
+#finBankModal .form-input:focus,
+#billModal .form-input:focus {
+    border-color: var(--fin-orange);
+    box-shadow: 0 0 0 4px rgba(233, 140, 30, 0.15);
+    outline: none;
 }
 
 @media (max-width: 640px) {
@@ -187,15 +447,18 @@
     }
 }
 
-/* Isi modal berupa satu kolom (bukan grid dua kolom bawaan modal absensi). */
-#finModal .attendance-modal-body,
-#finActionModal .attendance-modal-body,
-#finBankModal .attendance-modal-body,
-#billModal .attendance-modal-body {
-    display: block;
-}
-
-#finModal .attendance-modal-card {
-    max-height: 92vh;
-    overflow-y: auto;
+@media (prefers-reduced-motion: reduce) {
+    .fin-summary > div,
+    .fin-pay,
+    .bill-card,
+    .bill-progress > span,
+    .fin-badge::before,
+    #finModal, #finActionModal, #finBankModal, #billModal,
+    #finModal .attendance-modal-card,
+    #finActionModal .attendance-modal-card,
+    #finBankModal .attendance-modal-card,
+    #billModal .attendance-modal-card {
+        animation: none !important;
+        transition: none !important;
+    }
 }

@@ -87,7 +87,7 @@ CREATE TABLE IF NOT EXISTS `courses` (
     `category_id` INT UNSIGNED NULL,
     `description` TEXT NOT NULL,
     `instructor_id` INT UNSIGNED NULL,
-    `status` ENUM('draft', 'published') NOT NULL DEFAULT 'draft',
+    `status` ENUM('draft', 'published', 'archived') NOT NULL DEFAULT 'draft',
     `location` VARCHAR(150) NOT NULL DEFAULT '',
     `start_date` DATE NULL,
     `meetings` INT UNSIGNED NOT NULL DEFAULT 0,

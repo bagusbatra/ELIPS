@@ -45,6 +45,10 @@ function elips_dispatch(string $action, array $payload): array
             return elips_action_course_delete($payload);
         case 'course.status':
             return elips_action_course_status($payload);
+        case 'course.image':
+            return elips_action_course_image($payload);
+        case 'system.resetData':
+            return elips_action_system_reset_data($payload);
         case 'course.classes':
             return elips_action_course_classes($payload);
         case 'course.register':
@@ -950,7 +954,8 @@ function elips_action_user_assign_courses(array $p): array
 
 function elips_action_course_create(array $p): array
 {
-    $actor = elips_require_admin();
+    $actor = elips_require_academic_access();
+    elips_migrate_course_archive(elips_db());
     $title = trim((string) ($p['title'] ?? ''));
     $category = trim((string) ($p['category'] ?? ''));
     $description = trim((string) ($p['description'] ?? ''));
@@ -961,13 +966,17 @@ function elips_action_course_create(array $p): array
     if (!$instructorId) return elips_fail('Pilih satu instruktur untuk kursus ini.');
     if (!elips_is_active_instructor($instructorId)) return elips_fail('Instruktur harus berstatus aktif.');
 
+    [$extra, $extraError] = elips_course_extra_fields($p, null);
+    if ($extra === null) return elips_fail($extraError);
+
     $instructor = elips_user_row($instructorId);
     $categoryId = elips_resolve_category_id(isset($p['categoryId']) ? (int) $p['categoryId'] : null, $category);
     $stmt = elips_db()->prepare(
-        "INSERT INTO courses (title, category, category_id, description, instructor_id, status, created_at)
-         VALUES (?, ?, ?, ?, ?, 'draft', UTC_TIMESTAMP())"
+        "INSERT INTO courses (title, category, category_id, description, instructor_id, status, price, discount_price, location, start_date, meetings, created_at)
+         VALUES (?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, UTC_TIMESTAMP())"
     );
-    $stmt->execute([$title, $category, $categoryId, $description, $instructorId]);
+    $stmt->execute([$title, $category, $categoryId, $description, $instructorId,
+        $extra['price'], $extra['discount_price'], $extra['location'], $extra['start_date'], $extra['meetings']]);
     $id = (int) elips_db()->lastInsertId();
 
     // Setiap kursus baru dimulai dengan versi kurikulum 1.0 (draft) agar
@@ -988,7 +997,7 @@ function elips_action_course_create(array $p): array
 
 function elips_action_course_update(array $p): array
 {
-    $actor = elips_require_admin();
+    $actor = elips_require_academic_access();
     $id = (int) ($p['id'] ?? 0);
     $data = elips_payload_array($p, 'data');
 
@@ -1017,10 +1026,19 @@ function elips_action_course_update(array $p): array
     if ((string) $course['description'] !== $description) $changes[] = 'deskripsi';
     if ($previousInstructorId !== $nextInstructorId) $changes[] = 'instruktur';
 
+    [$extra, $extraError] = elips_course_extra_fields($data, $course);
+    if ($extra === null) return elips_fail($extraError);
+    if ((float) $course['price'] !== $extra['price'] || (float) $course['discount_price'] !== $extra['discount_price']) $changes[] = 'harga';
+    if ((string) $course['location'] !== $extra['location']) $changes[] = 'lokasi';
+    if ((string) ($course['start_date'] ?? '') !== (string) ($extra['start_date'] ?? '')) $changes[] = 'tanggal mulai';
+    if ((int) $course['meetings'] !== $extra['meetings']) $changes[] = 'jumlah pertemuan';
+
     $stmt = elips_db()->prepare(
-        'UPDATE courses SET title = ?, category = ?, category_id = ?, description = ?, instructor_id = ?, updated_at = UTC_TIMESTAMP() WHERE id = ?'
+        'UPDATE courses SET title = ?, category = ?, category_id = ?, description = ?, instructor_id = ?,
+                price = ?, discount_price = ?, location = ?, start_date = ?, meetings = ?, updated_at = UTC_TIMESTAMP() WHERE id = ?'
     );
-    $stmt->execute([$title, $category, $categoryId, $description, $nextInstructorId, $id]);
+    $stmt->execute([$title, $category, $categoryId, $description, $nextInstructorId,
+        $extra['price'], $extra['discount_price'], $extra['location'], $extra['start_date'], $extra['meetings'], $id]);
 
     if ($previousInstructorId !== $nextInstructorId) {
         elips_sync_content_owners();
@@ -1042,26 +1060,18 @@ function elips_action_course_update(array $p): array
 
 function elips_action_course_delete(array $p): array
 {
-    $actor = elips_require_admin();
+    $actor = elips_require_academic_access();
     $id = (int) ($p['id'] ?? 0);
     $course = elips_course_row($id);
     if (!$course) return elips_fail('Kursus tidak ditemukan.');
 
     $db = elips_db();
-    $stmt = $db->prepare('SELECT COUNT(*) FROM classes WHERE course_id = ?');
-    $stmt->execute([$id]);
-    if ((int) $stmt->fetchColumn() > 0) {
-        return elips_fail('Kursus tidak dapat dihapus karena sudah memiliki kelas/angkatan. Arsipkan kursus atau selesaikan kelas terlebih dahulu.');
+    $usage = elips_course_usage($id);
+    if ($usage['classes'] > 0 || $usage['enrollments'] > 0 || $usage['certificates'] > 0 || $usage['registrations'] > 0) {
+        return elips_fail('Kursus ini sudah pernah dipakai (kelas, pendaftaran, siswa, atau sertifikat) sehingga tidak dapat dihapus. Arsipkan saja.');
     }
-    $stmt = $db->prepare('SELECT COUNT(*) FROM enrollments WHERE course_id = ?');
-    $stmt->execute([$id]);
-    if ((int) $stmt->fetchColumn() > 0) {
-        return elips_fail('Kursus tidak dapat dihapus karena masih memiliki enrollment peserta.');
-    }
-    $stmt = $db->prepare('SELECT COUNT(*) FROM certificates WHERE course_id = ?');
-    $stmt->execute([$id]);
-    if ((int) $stmt->fetchColumn() > 0) {
-        return elips_fail('Kursus tidak dapat dihapus karena memiliki riwayat sertifikat.');
+    if ($course['image'] !== '') {
+        elips_course_remove_image_file((string) $course['image']);
     }
 
     $stmt = $db->prepare('DELETE FROM courses WHERE id = ?');
@@ -1081,17 +1091,21 @@ function elips_action_course_delete(array $p): array
 
 function elips_action_course_status(array $p): array
 {
-    $actor = elips_require_admin();
+    $actor = elips_require_academic_access();
     $id = (int) ($p['id'] ?? 0);
     $status = (string) ($p['status'] ?? '');
 
-    if (!in_array($status, ['draft', 'published'], true)) {
+    if (!in_array($status, ['draft', 'published', 'archived'], true)) {
         return elips_fail('Status kursus tidak valid.');
     }
+    elips_migrate_course_archive(elips_db());
 
     $course = elips_course_row($id);
     if (!$course) return elips_fail('Kursus tidak ditemukan.');
     $previousStatus = $course['status'];
+    if ($status === 'published' && (float) $course['price'] <= 0) {
+        return elips_fail('Isi harga kursus terlebih dahulu sebelum dipublikasikan.');
+    }
 
     if ($status === 'published') {
         if (!elips_is_active_instructor($course['instructor_id'] === null ? null : (int) $course['instructor_id'])) {
@@ -1120,13 +1134,15 @@ function elips_action_course_status(array $p): array
 
     if ($previousStatus !== $status) {
         elips_audit(
-            $status === 'published' ? 'publish' : 'unpublish',
+            $status === 'published' ? 'publish' : ($status === 'archived' ? 'archive' : 'unpublish'),
             'course',
             $id,
             $course['title'],
             $status === 'published'
                 ? 'Mempublikasikan kursus "' . $course['title'] . '".'
-                : 'Mengembalikan kursus "' . $course['title'] . '" ke Draft.',
+                : ($status === 'archived'
+                    ? 'Mengarsipkan kursus "' . $course['title'] . '".'
+                    : 'Mengembalikan kursus "' . $course['title'] . '" ke Draft.'),
             $actor
         );
         if ($status === 'published') {
@@ -1135,7 +1151,8 @@ function elips_action_course_status(array $p): array
     }
 
     return elips_ok(
-        $status === 'published' ? 'Kursus berhasil dipublikasikan.' : 'Kursus dikembalikan ke Draft.',
+        $status === 'published' ? 'Kursus berhasil dipublikasikan.'
+            : ($status === 'archived' ? 'Kursus diarsipkan dan tidak tampil lagi di pendaftaran.' : 'Kursus dikembalikan ke Draft.'),
         elips_course_public($id)
     );
 }
@@ -1144,7 +1161,7 @@ function elips_action_course_status(array $p): array
 
 function elips_action_curriculum_create(array $p): array
 {
-    $actor = elips_require_admin();
+    $actor = elips_require_academic_access();
     $courseId = (int) ($p['courseId'] ?? 0);
     $course = elips_course_row($courseId);
     if (!$course) return elips_fail('Kursus tidak ditemukan.');
@@ -1195,7 +1212,7 @@ function elips_action_curriculum_create(array $p): array
 
 function elips_action_curriculum_update(array $p): array
 {
-    $actor = elips_require_admin();
+    $actor = elips_require_academic_access();
     $id = (int) ($p['id'] ?? 0);
     $data = elips_payload_array($p, 'data');
     $version = elips_curriculum_version_row($id);
@@ -1244,7 +1261,7 @@ function elips_action_curriculum_update(array $p): array
 
 function elips_action_curriculum_publish(array $p): array
 {
-    $actor = elips_require_admin();
+    $actor = elips_require_academic_access();
     $id = (int) ($p['id'] ?? 0);
     $version = elips_curriculum_version_row($id);
     if (!$version) return elips_fail('Versi kurikulum tidak ditemukan.');
@@ -1278,7 +1295,7 @@ function elips_action_curriculum_publish(array $p): array
 
 function elips_action_curriculum_clone(array $p): array
 {
-    $actor = elips_require_admin();
+    $actor = elips_require_academic_access();
     $sourceId = (int) ($p['id'] ?? $p['sourceId'] ?? 0);
     $source = elips_curriculum_version_row($sourceId);
     if (!$source) return elips_fail('Versi kurikulum sumber tidak ditemukan.');
@@ -1371,7 +1388,7 @@ function elips_action_curriculum_clone(array $p): array
 
 function elips_action_curriculum_retire(array $p): array
 {
-    $actor = elips_require_admin();
+    $actor = elips_require_academic_access();
     $id = (int) ($p['id'] ?? 0);
     $version = elips_curriculum_version_row($id);
     if (!$version) return elips_fail('Versi kurikulum tidak ditemukan.');
@@ -1395,7 +1412,7 @@ function elips_action_curriculum_retire(array $p): array
 
 function elips_action_curriculum_delete(array $p): array
 {
-    $actor = elips_require_admin();
+    $actor = elips_require_academic_access();
     $id = (int) ($p['id'] ?? 0);
     $version = elips_curriculum_version_row($id);
     if (!$version) return elips_fail('Versi kurikulum tidak ditemukan.');
@@ -1508,10 +1525,11 @@ function elips_generate_class_code(int $courseId, string $name): string
 
 function elips_action_class_create(array $p): array
 {
-    $actor = elips_require_admin();
+    $actor = elips_require_academic_access();
     $courseId = (int) ($p['courseId'] ?? 0);
     $course = elips_course_row($courseId);
     if (!$course) return elips_fail('Kursus tidak ditemukan.');
+    if ($course['status'] === 'archived') return elips_fail('Kursus ini diarsipkan. Aktifkan kembali (Draft) sebelum membuat kelas baru.');
 
     $versionId = (int) ($p['curriculumVersionId'] ?? 0);
     $version = elips_curriculum_version_row($versionId);
@@ -1624,7 +1642,7 @@ function elips_action_class_create(array $p): array
 
 function elips_action_class_update(array $p): array
 {
-    $actor = elips_require_admin();
+    $actor = elips_require_academic_access();
     $id = (int) ($p['id'] ?? 0);
     $data = elips_payload_array($p, 'data');
     $class = elips_class_row($id);
@@ -1734,7 +1752,7 @@ function elips_apply_class_instructor(int $classId, ?int $instructorId, string $
 
 function elips_action_class_assign_instructor(array $p): array
 {
-    $actor = elips_require_admin();
+    $actor = elips_require_academic_access();
     $id = (int) ($p['id'] ?? 0);
     $instructorId = (int) ($p['instructorId'] ?? 0);
     $class = elips_class_row($id);
@@ -1772,7 +1790,7 @@ function elips_action_class_assign_instructor(array $p): array
 
 function elips_action_class_status(array $p): array
 {
-    $actor = elips_require_admin();
+    $actor = elips_require_academic_access();
     $id = (int) ($p['id'] ?? 0);
     $status = (string) ($p['status'] ?? '');
     $allowed = ['draft', 'open', 'ready', 'ongoing', 'completed', 'cancelled', 'archived'];
@@ -1801,7 +1819,7 @@ function elips_action_class_status(array $p): array
 
 function elips_action_class_delete(array $p): array
 {
-    $actor = elips_require_admin();
+    $actor = elips_require_academic_access();
     $id = (int) ($p['id'] ?? 0);
     $class = elips_class_row($id);
     if (!$class) return elips_fail('Kelas tidak ditemukan.');
@@ -8196,4 +8214,6 @@ function elips_action_notification_clear(): array
 // Role student (peserta) dibuat kemudian melalui aksi convert di bawah.
 
 require_once __DIR__ . '/registrations.php';
+require_once __DIR__ . '/academic.php';
+require_once __DIR__ . '/maintenance.php';
 require_once __DIR__ . '/attendance_rules.php';

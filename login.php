@@ -4,7 +4,7 @@ require_once __DIR__ . '/includes/bootstrap.php';
 $page = [
     'title' => 'Masuk - ELIPS LMS',
     'body_class' => 'auth-page',
-    'css' => ['auth'],
+    'css' => ['auth', 'activation'],
     'scripts' => ['@crud', 'ui'],
 ];
 layout('page', $page);

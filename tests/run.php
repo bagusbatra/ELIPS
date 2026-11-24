@@ -948,6 +948,128 @@ t('login.php menampilkan akun demo di mode development', strpos($login, 'data-de
 $act = $anon->get('/activate.php')['body'];
 t('activate.php memuat langkah biodata & sandi', strpos($act, 'actBioForm') !== false && strpos($act, 'actPwForm') !== false);
 
+
+// ============================================================
+// Kelola kursus: admin + karyawan Operasional
+// ============================================================
+echo "\n[Kelola kursus]\n";
+$ops = new Client($base);
+$ops->api('auth.login', ['email' => 'agus.karyawan@example.com', 'password' => 'elips123']);
+$instrId = (int) $pdo->query("SELECT id FROM users WHERE role = 'instruktur' AND status = 'aktif' ORDER BY id LIMIT 1")->fetchColumn();
+$crs = ['title' => 'Uji Kursus Ops', 'category' => 'Pelatihan', 'description' => 'x', 'instructorId' => $instrId,
+        'price' => 1500000, 'discountPrice' => 1200000, 'location' => 'Online', 'startDate' => '2026-12-15', 'meetings' => 8];
+
+$res = $keu->api('course.create', $crs);
+t('karyawan Keuangan tidak boleh membuat kursus', empty($res['ok']));
+$res = $mkt->api('course.create', $crs);
+t('karyawan Marketing tidak boleh membuat kursus', empty($res['ok']));
+$res = $clients['instruktur']->api('course.create', $crs);
+t('instruktur tidak boleh membuat kursus', empty($res['ok']));
+
+$res = $ops->api('course.create', $crs);
+t('karyawan Operasional boleh membuat kursus', !empty($res['ok']), $res['message'] ?? '');
+$cid = (int) ($res['data']['id'] ?? 0);
+t('kursus baru menyimpan harga, diskon, lokasi, pertemuan', ($res['data']['price'] ?? 0) == 1500000 && ($res['data']['discountPrice'] ?? 0) == 1200000
+    && ($res['data']['location'] ?? '') === 'Online' && ($res['data']['meetings'] ?? 0) === 8 && ($res['data']['startDate'] ?? '') === '2026-12-15');
+t('kursus baru berstatus draft', ($res['data']['status'] ?? '') === 'draft');
+
+$res = $ops->api('course.create', array_merge($crs, ['title' => 'Uji Harga Negatif', 'price' => -5]));
+t('harga negatif ditolak', empty($res['ok']));
+$res = $ops->api('course.create', array_merge($crs, ['title' => 'Uji Diskon Besar', 'discountPrice' => 2000000]));
+t('diskon >= harga ditolak', empty($res['ok']));
+$res = $ops->api('course.create', array_merge($crs, ['title' => 'Uji Tanggal', 'startDate' => 'bukan-tanggal']));
+t('tanggal mulai tidak valid ditolak', empty($res['ok']));
+
+$res = $ops->api('course.update', ['id' => $cid, 'data' => ['price' => 1800000, 'location' => 'Bandung']]);
+t('operasional boleh mengubah harga kursus', !empty($res['ok']) && ($res['data']['price'] ?? 0) == 1800000 && ($res['data']['location'] ?? '') === 'Bandung', $res['message'] ?? '');
+t('ubah sebagian tidak menghapus field lain', ($res['data']['meetings'] ?? 0) === 8 && ($res['data']['discountPrice'] ?? 0) == 1200000);
+
+// Publikasi: butuh harga & materi
+$free = $ops->api('course.create', ['title' => 'Uji Tanpa Harga', 'category' => 'Pelatihan', 'instructorId' => $instrId]);
+$freeId = (int) ($free['data']['id'] ?? 0);
+$res = $ops->api('course.status', ['id' => $freeId, 'status' => 'published']);
+t('publikasi tanpa harga ditolak', empty($res['ok']) && stripos($res['message'] ?? '', 'harga') !== false, $res['message'] ?? '');
+$res = $ops->api('course.status', ['id' => $cid, 'status' => 'published']);
+t('publikasi tanpa modul & materi ditolak', empty($res['ok']), $res['message'] ?? '');
+
+// Modul + materi oleh operasional
+$res = $ops->api('module.create', ['courseId' => $cid, 'data' => ['title' => 'Modul Uji']]);
+t('operasional boleh menambah modul', !empty($res['ok']), $res['message'] ?? '');
+$mid = (int) ($res['data']['id'] ?? 0);
+$res = $ops->api('lesson.create', ['courseId' => $cid, 'moduleId' => $mid, 'data' => ['title' => 'Materi Uji', 'type' => 'text', 'content' => 'isi']]);
+t('operasional boleh menambah materi', !empty($res['ok']), $res['message'] ?? '');
+$res = $keu->api('module.create', ['courseId' => $cid, 'data' => ['title' => 'Modul Terlarang']]);
+t('karyawan Keuangan tidak boleh menambah modul', empty($res['ok']));
+
+$res = $ops->api('course.status', ['id' => $cid, 'status' => 'published']);
+t('operasional boleh mempublikasikan kursus lengkap', !empty($res['ok']) && ($res['data']['status'] ?? '') === 'published', $res['message'] ?? '');
+
+// Kurikulum & kelas oleh operasional
+$verId = (int) ($res['data']['curriculumVersionId'] ?? 0);
+$res = $ops->api('class.create', ['courseId' => $cid, 'curriculumVersionId' => $verId, 'name' => 'Angkatan Uji Ops', 'quota' => 3, 'status' => 'open']);
+t('operasional boleh membuat kelas', !empty($res['ok']), $res['message'] ?? '');
+$clsId = (int) ($res['data']['id'] ?? 0);
+$res = $keu->api('class.create', ['courseId' => $cid, 'curriculumVersionId' => $verId, 'name' => 'Kelas Terlarang']);
+t('karyawan Keuangan tidak boleh membuat kelas', empty($res['ok']));
+$res = $ops->api('curriculum.clone', ['id' => $verId]);
+t('operasional boleh menduplikasi kurikulum', !empty($res['ok']), $res['message'] ?? '');
+
+// Kursus pakai: tidak bisa dihapus, hanya diarsipkan
+$res = $ops->api('course.delete', ['id' => $cid]);
+t('kursus yang punya kelas tidak bisa dihapus', empty($res['ok']));
+$res = $ops->api('course.status', ['id' => $cid, 'status' => 'archived']);
+t('operasional boleh mengarsipkan kursus', !empty($res['ok']) && ($res['data']['status'] ?? '') === 'archived', $res['message'] ?? '');
+$res = $anon->api('course.classes', ['courseId' => $cid]);
+t('kursus arsip tidak tampil di pendaftaran publik', empty($res['ok']));
+$res = $ops->api('class.create', ['courseId' => $cid, 'curriculumVersionId' => $verId, 'name' => 'Kelas Di Arsip']);
+t('kelas baru pada kursus arsip ditolak', empty($res['ok']));
+$res = $ops->api('course.status', ['id' => $cid, 'status' => 'draft']);
+t('kursus arsip bisa diaktifkan kembali sebagai draft', !empty($res['ok']) && ($res['data']['status'] ?? '') === 'draft');
+
+// Kursus riwayat pendaftaran tidak boleh dihapus walau tanpa kelas
+$reg = $ops->api('course.create', ['title' => 'Uji Hapus Bersih', 'category' => 'Pelatihan', 'instructorId' => $instrId, 'price' => 100000]);
+$cleanId = (int) ($reg['data']['id'] ?? 0);
+$res = $ops->api('course.delete', ['id' => $cleanId]);
+t('kursus draft yang belum dipakai bisa dihapus', !empty($res['ok']), $res['message'] ?? '');
+$reg = $ops->api('course.create', ['title' => 'Uji Riwayat Daftar', 'category' => 'Pelatihan', 'instructorId' => $instrId, 'price' => 100000]);
+$histId = (int) ($reg['data']['id'] ?? 0);
+$pdo->exec("INSERT INTO course_registrations (course_id, course_title, name, email, phone, status) VALUES ($histId, 'Uji Riwayat Daftar', 'R', 'riwayat@example.com', '0811', 'baru')");
+$res = $ops->api('course.delete', ['id' => $histId]);
+t('kursus dengan riwayat pendaftaran tidak bisa dihapus', empty($res['ok']));
+
+// Gambar
+$img = make_jpeg(77, 640, 480);
+$res = $ops->api('course.image', ['id' => $cid, 'dataUrl' => $img]);
+$imgPath = $res['data']['image'] ?? '';
+t('operasional boleh mengunggah gambar kursus', !empty($res['ok']) && strpos($imgPath, 'assets/uploads/courses/') === 0, $res['message'] ?? '');
+t('berkas gambar tersimpan & bisa dibuka', $imgPath !== '' && is_file($root . '/' . $imgPath) && $anon->get('/' . $imgPath)['code'] === 200);
+$res = $ops->api('course.image', ['id' => $cid, 'dataUrl' => 'data:text/html;base64,' . base64_encode('<script>x</script>')]);
+t('unggah non-gambar ditolak', empty($res['ok']));
+$res = $ops->api('course.image', ['id' => $cid, 'dataUrl' => 'data:image/png;base64,' . base64_encode('bukan png')]);
+t('gambar rusak ditolak', empty($res['ok']));
+$res = $keu->api('course.image', ['id' => $cid, 'dataUrl' => $img]);
+t('karyawan Keuangan tidak boleh mengunggah gambar kursus', empty($res['ok']));
+$res = $ops->api('course.image', ['id' => $cid, 'remove' => true]);
+clearstatcache();
+t('gambar kursus bisa dihapus & berkas ikut terhapus', !empty($res['ok']) && ($res['data']['image'] ?? 'x') === '' && !is_file($root . '/' . $imgPath), json_encode([$res['message'] ?? '', $res['data']['image'] ?? null, is_file($root . '/' . $imgPath)]));
+
+// Halaman
+foreach (['employee/operasional/kursus.php', 'employee/operasional/akademik.php'] as $pg) {
+    $r = $ops->get('/' . $pg);
+    t("halaman $pg terbuka untuk Operasional", $r['code'] === 200 && strpos($r['body'], 'dashboard-main') !== false, (string) $r['code']);
+    $r = $keu->get('/' . $pg);
+    t("halaman $pg tertutup untuk Keuangan", $r['code'] !== 200);
+}
+$ra = $adm->get('/admin/courses.php');
+t('halaman admin/courses.php terbuka untuk admin', $ra['code'] === 200, $ra['code'] . ' ' . $ra['loc'] . ' ' . substr(strip_tags($ra['body']), 0, 150));
+t('halaman admin/courses.php tertutup untuk Operasional', $ops->get('/admin/courses.php')['code'] !== 200);
+
+// Bersihkan
+$pdo->exec("DELETE FROM course_registrations WHERE course_id = $histId");
+$pdo->exec("DELETE FROM classes WHERE course_id = $cid");
+foreach ([$cid, $freeId, $histId] as $d) { if ($d) { $pdo->exec("DELETE FROM courses WHERE id = $d"); } }
+foreach (glob($root . '/assets/uploads/courses/*') ?: [] as $f) { if (basename($f) !== '.htaccess') { @unlink($f); } }
+
 // Bersihkan data uji bagian ini
 $pdo->exec("DELETE FROM classes WHERE code IN ('UJI-ACT-01','UJI-ACT-02','UJI-ACT-03')");
 $pdo->exec("UPDATE courses SET price = 0, discount_price = 0 WHERE id IN (1, 2)");

@@ -1,3 +1,4 @@
+// Direktori: assets/js/pages/admin/settings.js
 // ELIPS LMS - skrip halaman admin/settings.php
 // Diekstrak dari inline <script>; URL relatif terhadap halaman.
 let editingBranchId = null;
@@ -227,9 +228,64 @@ function resetPredicateRanges() {
     if (result.ok) renderPredicates();
 }
 
+// ---------- FUNGSI SEMENTARA: reset seluruh data (api/maintenance.php) ----------
+var RESET_PHRASE = 'HAPUS SEMUA DATA';
+
+function initResetData() {
+    var modal = document.getElementById('resetDataModal');
+    if (!modal) return;
+    var phrase = document.getElementById('resetPhrase');
+    var password = document.getElementById('resetPassword');
+    var confirmBtn = document.getElementById('resetDataConfirm');
+    var error = document.getElementById('resetDataError');
+
+    function showError(message) {
+        error.textContent = message || '';
+        error.hidden = !message;
+    }
+    function refresh() {
+        confirmBtn.disabled = phrase.value.trim() !== RESET_PHRASE || password.value === '';
+    }
+    function open() {
+        phrase.value = '';
+        password.value = '';
+        document.getElementById('resetKeepSettings').checked = false;
+        showError('');
+        refresh();
+        modal.hidden = false;
+        password.focus();
+    }
+    function close() { modal.hidden = true; }
+
+    document.getElementById('resetDataOpen').addEventListener('click', open);
+    document.getElementById('resetDataCancel').addEventListener('click', close);
+    modal.addEventListener('click', function (e) { if (e.target === modal) close(); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !modal.hidden) close(); });
+    phrase.addEventListener('input', refresh);
+    password.addEventListener('input', refresh);
+
+    confirmBtn.addEventListener('click', function () {
+        showError('');
+        confirmBtn.disabled = true;
+        var result = ELIPS.api.call('system.resetData', {
+            password: password.value,
+            confirm: phrase.value.trim(),
+            keepSettings: document.getElementById('resetKeepSettings').checked
+        });
+        if (!result.ok) {
+            showError(result.message);
+            refresh();
+            return;
+        }
+        close();
+        ELIPS.toast(result.message);
+        setTimeout(function () { window.location.reload(); }, 1200);
+    });
+}
+
 document.addEventListener('DOMContentLoaded', function () {
     ELIPS.requireRole('admin');
     renderBranches();
     renderPredicates();
+    initResetData();
 });
-

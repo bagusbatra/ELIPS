@@ -1,39 +1,57 @@
 /* Direktori: assets/css/badges.css */
 /* ============================================================
    ELIPS LMS - badges.css
-   Angka notifikasi pada menu sidebar.
-   Merah = perlu ditangani, kuning = menunggu pelunasan.
+   Badge angka di sidebar: merah = perlu ditindaklanjuti,
+   kuning = tagihan belum lunas. Berdenyut halus saat > 0.
    ============================================================ */
 
-.dashboard-nav-link .nav-badge {
+@keyframes nav-badge-pulse {
+    0%   { box-shadow: 0 0 0 0 var(--nb-glow); }
+    70%  { box-shadow: 0 0 0 7px transparent; }
+    100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+@keyframes nav-badge-in {
+    from { transform: scale(0.4); opacity: 0; }
+    to   { transform: scale(1); opacity: 1; }
+}
+
+.nav-badge {
+    --nb-glow: rgba(239, 68, 68, 0.45);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 22px;
+    height: 22px;
     margin-left: auto;
-    min-width: 1.4rem;
-    height: 1.4rem;
-    padding: 0 0.45rem;
+    padding: 0 7px;
     border-radius: 999px;
-    font-size: 0.75rem;
-    font-weight: 700;
-    line-height: 1.4rem;
-    text-align: center;
-    color: #ffffff;
-    background: #dc2626;
+    background: #ef4444;
+    color: #fff;
+    font-size: 0.72rem;
+    font-weight: 800;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    animation: nav-badge-in 0.35s cubic-bezier(0.22, 1, 0.36, 1) both, nav-badge-pulse 2.4s ease-out 0.4s infinite;
 }
 
-.dashboard-nav-link .nav-badge[hidden] {
-    display: none;
+.nav-badge-red {
+    background: linear-gradient(145deg, #f87171, #dc2626);
 }
 
-.dashboard-nav-link .nav-badge-red {
-    background: #dc2626;
-    color: #ffffff;
-}
-
-.dashboard-nav-link .nav-badge-yellow {
-    background: #facc15;
-    color: #422006;
+.nav-badge-yellow {
+    --nb-glow: rgba(250, 204, 21, 0.55);
+    background: linear-gradient(145deg, #fde047, #f5b800);
+    color: #5b3d00;
 }
 
 /* Atribut hidden harus menang atas display bawaan tombol/form. */
 [hidden] {
     display: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .nav-badge {
+        animation: none;
+    }
 }

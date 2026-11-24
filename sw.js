@@ -12,7 +12,7 @@
 
 'use strict';
 
-const CACHE_VERSION = 'v6-aktivasi-pembayaran';
+const CACHE_VERSION = 'v9-reset-data';
 const STATIC_CACHE = 'elips-static-' + CACHE_VERSION;
 const OFFLINE_URL = './offline.php';
 

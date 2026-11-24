@@ -1,10 +1,12 @@
 <?php
+// Direktori: admin/settings.php
 require_once __DIR__ . '/../includes/bootstrap.php';
 $page = [
     'page_script' => 'admin/settings',
     'roles' => ['admin'],
     'title' => 'Pengaturan - ELIPS LMS',
     'area' => 'admin',
+    'css' => ['danger-zone'],
     'scripts' => ['@crud', 'crud-academic', 'ui'],
     'sidebar' => 'admin',
 ];
@@ -179,10 +181,56 @@ layout('app', $page);
                     </div>
                 </div>
             </div>
+
+            <!-- FUNGSI SEMENTARA: reset data (lihat api/maintenance.php) -->
+            <div class="dashboard-section dz-section">
+                <div class="dashboard-section-header">
+                    <div>
+                        <h2 class="dashboard-section-title dz-title"><i class="bi bi-exclamation-triangle-fill"></i> Zona Berbahaya</h2>
+                        <p class="dz-note">Fungsi sementara untuk masa uji. Tidak dapat dibatalkan.</p>
+                    </div>
+                </div>
+                <div class="dashboard-section-body dz-body">
+                    <div>
+                        <strong>Hapus semua data</strong>
+                        <p>Menghapus seluruh siswa, tentor, karyawan, kursus, kelas, tagihan, pembayaran, nilai, sertifikat, notifikasi, log, dan berkas unggahan. Hanya akun admin yang tetap ada.</p>
+                    </div>
+                    <button type="button" class="btn dz-btn" id="resetDataOpen"><i class="bi bi-trash3"></i> Hapus Semua Data</button>
+                </div>
+            </div>
         </main>
     </div>
 
     <!-- Modal Cabang -->
+        <div id="resetDataModal" class="dz-modal" hidden>
+            <div class="dz-card" role="dialog" aria-modal="true" aria-labelledby="resetDataTitle">
+                <div class="dz-icon"><i class="bi bi-exclamation-triangle-fill"></i></div>
+                <h3 id="resetDataTitle">Hapus semua data?</h3>
+                <p class="dz-lead">Semua data akan terhapus permanen dan <strong>tidak bisa dikembalikan</strong>. Hanya akun admin yang tetap ada. Disarankan membuat cadangan database terlebih dahulu.</p>
+
+                <p class="dz-error" id="resetDataError" hidden></p>
+
+                <label class="dz-check">
+                    <input type="checkbox" id="resetKeepSettings">
+                    <span>Pertahankan pengaturan (rekening bank, kategori, cabang, predikat &amp; skema nilai)</span>
+                </label>
+
+                <div class="form-group">
+                    <label class="form-label" for="resetPassword">Kata sandi admin</label>
+                    <input type="password" id="resetPassword" class="form-input" autocomplete="current-password">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="resetPhrase">Ketik <code>HAPUS SEMUA DATA</code> untuk melanjutkan</label>
+                    <input type="text" id="resetPhrase" class="form-input" autocomplete="off" spellcheck="false">
+                </div>
+
+                <div class="dz-actions">
+                    <button type="button" class="btn btn-ghost" id="resetDataCancel">Batal</button>
+                    <button type="button" class="btn dz-btn dz-btn-solid" id="resetDataConfirm" disabled><i class="bi bi-trash3"></i> Hapus Permanen</button>
+                </div>
+            </div>
+        </div>
+
     <div id="branchModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; padding: 1rem;">
         <div style="background: white; border-radius: var(--radius-lg); max-width: 600px; width: 100%; max-height: 90vh; overflow-y: auto;">
             <div style="padding: 1.5rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between;">

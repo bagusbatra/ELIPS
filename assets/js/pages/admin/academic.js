@@ -1,3 +1,4 @@
+// Direktori: assets/js/pages/admin/academic.js
 // ELIPS LMS - skrip halaman admin/academic.php
 // Diekstrak dari inline <script>; URL relatif terhadap halaman.
 let editingVersionId = null;
@@ -1120,7 +1121,13 @@ function closeRecapModal() {
 }
 
 document.addEventListener('DOMContentLoaded', function () {
-    if (!ELIPS.requireRole('admin')) return;
+    // Admin atau karyawan divisi Operasional (server tetap memeriksa ulang).
+    var user = ELIPS.employee && ELIPS.employee.guardEmployee
+        ? ELIPS.employee.guardEmployee(['operasional'])
+        : ELIPS.requireRole('admin');
+    if (!user) return;
+    if (user.role === 'karyawan' && ELIPS.employee.initEmployeeShell) {
+        ELIPS.employee.initEmployeeShell(user, { toggleId: 'opsSidebarToggle', backdropId: 'opsSidebarBackdrop' });
+    }
     renderAll();
 });
-

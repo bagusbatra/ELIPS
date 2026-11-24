@@ -1,4 +1,5 @@
 <?php
+// Direktori: api/migrations.php
 declare(strict_types=1);
 
 // ============================================================
@@ -53,6 +54,12 @@ function elips_migrate_activation_schema(): void
     if (elips_migrate_is_current($db)) {
         $done = true;
         return;
+    }
+
+    // courses.status: tambah 'archived'.
+    $courseCol = $db->query("SHOW COLUMNS FROM courses LIKE 'status'")->fetch();
+    if ($courseCol && strpos((string) $courseCol['Type'], "'archived'") === false) {
+        $db->exec("ALTER TABLE courses MODIFY status ENUM('draft', 'published', 'archived') NOT NULL DEFAULT 'draft'");
     }
 
     // users.status: tambah 'menunggu'.
@@ -206,7 +213,11 @@ function elips_migrate_is_current(PDO $db): bool
         "SELECT COLUMN_TYPE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE()
          AND TABLE_NAME = 'users' AND COLUMN_NAME = 'status'"
     )->fetchColumn();
-    return strpos($type, "'menunggu'") !== false;
+    $courseType = (string) $db->query(
+        "SELECT COLUMN_TYPE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE()
+         AND TABLE_NAME = 'courses' AND COLUMN_NAME = 'status'"
+    )->fetchColumn();
+    return strpos($type, "'menunggu'") !== false && strpos($courseType, "'archived'") !== false;
 }
 
 /**

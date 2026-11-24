@@ -1,0 +1,193 @@
+/* Direktori: assets/css/danger-zone.css */
+/* ============================================================
+   ELIPS LMS - danger-zone.css
+   Bagian "Zona Berbahaya" (reset data) di Pengaturan admin.
+   Fungsi sementara; hapus file ini bersama api/maintenance.php.
+   ============================================================ */
+
+@keyframes dz-in {
+    from { opacity: 0; transform: translateY(16px) scale(0.97); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes dz-fade {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+@keyframes dz-shake {
+    0%, 100% { transform: translateX(0); }
+    25%, 75% { transform: translateX(-5px); }
+    50%      { transform: translateX(5px); }
+}
+
+.dz-section {
+    border: 1px solid #fecaca;
+    background: linear-gradient(180deg, #fff8f8, #fff);
+}
+
+.dz-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #b91c1c;
+}
+
+.dz-note {
+    margin: 0.25rem 0 0;
+    font-size: 0.875rem;
+    color: #8c7a6e;
+}
+
+.dz-body {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.25rem;
+    flex-wrap: wrap;
+}
+
+.dz-body p {
+    margin: 0.25rem 0 0;
+    max-width: 560px;
+    font-size: 0.875rem;
+    color: #6b5a4f;
+}
+
+.dz-btn {
+    border: 1px solid #dc2626;
+    border-radius: 12px;
+    background: #fff;
+    color: #dc2626;
+    font-weight: 700;
+    transition: background 0.2s, color 0.2s, transform 0.2s, box-shadow 0.2s;
+}
+
+.dz-btn:hover:not(:disabled) {
+    background: #dc2626;
+    color: #fff;
+    transform: translateY(-1px);
+    box-shadow: 0 10px 20px -10px rgba(220, 38, 38, 0.6);
+}
+
+.dz-btn-solid {
+    background: #dc2626;
+    color: #fff;
+}
+
+.dz-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.dz-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 1200;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    background: rgba(40, 12, 12, 0.55);
+    -webkit-backdrop-filter: blur(6px);
+    backdrop-filter: blur(6px);
+    animation: dz-fade 0.25s ease both;
+}
+
+.dz-modal:not([hidden]) {
+    display: flex;
+}
+
+.dz-modal[hidden] {
+    display: none !important;
+}
+
+.dz-card {
+    width: 100%;
+    max-width: 480px;
+    max-height: 92vh;
+    overflow-y: auto;
+    padding: 1.6rem;
+    border-radius: 22px;
+    background: #fff;
+    box-shadow: 0 40px 90px -30px rgba(40, 12, 12, 0.6);
+    animation: dz-in 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.dz-card h3 {
+    margin: 0.4rem 0 0.5rem;
+    font-size: 1.25rem;
+    font-weight: 800;
+}
+
+.dz-icon {
+    display: grid;
+    place-items: center;
+    width: 52px;
+    height: 52px;
+    border-radius: 16px;
+    background: #fef2f2;
+    color: #dc2626;
+    font-size: 1.5rem;
+}
+
+.dz-lead {
+    margin: 0 0 1rem;
+    color: #6b5a4f;
+    font-size: 0.9rem;
+    line-height: 1.55;
+}
+
+.dz-error {
+    margin: 0 0 1rem;
+    padding: 0.65rem 0.85rem;
+    border: 1px solid #fecaca;
+    border-radius: 12px;
+    background: #fef2f2;
+    color: #b91c1c;
+    font-size: 0.875rem;
+    animation: dz-shake 0.4s ease;
+}
+
+.dz-error[hidden] {
+    display: none;
+}
+
+.dz-check {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.6rem;
+    margin-bottom: 1rem;
+    padding: 0.7rem 0.85rem;
+    border-radius: 12px;
+    background: #fbf7f2;
+    font-size: 0.85rem;
+    cursor: pointer;
+}
+
+.dz-check input {
+    margin-top: 0.2rem;
+    accent-color: #e98c1e;
+}
+
+.dz-card .form-input {
+    border-radius: 12px;
+}
+
+.dz-card .form-input:focus {
+    border-color: #dc2626;
+    box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.14);
+    outline: none;
+}
+
+.dz-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.6rem;
+    margin-top: 1.2rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .dz-modal, .dz-card, .dz-error {
+        animation: none !important;
+    }
+}

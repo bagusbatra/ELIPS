@@ -50,17 +50,19 @@
         var paid = inv.status === 'paid';
         var pendingNote = inv.pendingCount > 0
             ? '<div class="bill-sub">' + inv.pendingCount + ' bukti pembayaran sedang diverifikasi admin.</div>' : '';
+        var pct = inv.amountDue > 0 ? Math.max(0, Math.min(100, Math.round(inv.amountPaid / inv.amountDue * 100))) : 0;
+        var bar = '<div class="bill-progress" title="' + pct + '% terbayar"><span style="width:' + pct + '%"></span></div>';
         var html = '<div class="bill-card' + (paid ? ' is-paid' : '') + '"><div class="bill-head"><div>'
             + '<div class="bill-title">' + esc(inv.courseTitle) + '</div>'
             + '<div class="bill-sub">' + esc(inv.className) + ' · Total ' + rp(inv.amountDue) + ' · Terbayar ' + rp(inv.amountPaid) + '</div>'
             + pendingNote + '</div>';
         if (paid) {
-            html += '<span class="fin-badge fin-badge-paid">Lunas</span></div>';
+            html += '<span class="fin-badge fin-badge-paid">Lunas</span></div>' + bar;
             if (inv.studentNumber) {
                 html += '<div class="bill-number"><i class="bi bi-person-vcard"></i> No. Siswa: <span class="fin-number">' + esc(inv.studentNumber) + '</span></div>';
             }
         } else {
-            html += '<div style="text-align:right"><div class="bill-sub">Sisa tagihan</div><div class="bill-remaining">' + rp(inv.remaining) + '</div></div></div>'
+            html += '<div style="text-align:right"><div class="bill-sub">Sisa tagihan</div><div class="bill-remaining">' + rp(inv.remaining) + '</div></div></div>' + bar
                 + bankHtml(bank)
                 + '<div style="margin-top:.75rem"><button type="button" class="btn btn-primary" data-upload="' + inv.id + '"><i class="bi bi-upload"></i> Unggah bukti pembayaran</button></div>';
         }

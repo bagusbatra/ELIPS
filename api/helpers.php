@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+// Direktori: api/helpers.php
+
 // ============================================================
 // ELIPS LMS - helper backend: respons, sesi, validasi, audit,
 // notifikasi, dan sinkronisasi data turunan.
@@ -676,6 +678,9 @@ function elips_can_manage_class(array $class, array $actor): bool
     if ($actor['role'] === 'admin') {
         return true;
     }
+    if ($actor['role'] === 'karyawan' && ($actor['division'] ?? '') === 'operasional') {
+        return true;
+    }
     return $actor['role'] === 'instruktur'
         && $class['instructor_id'] !== null
         && (int) $class['instructor_id'] === (int) $actor['id'];
@@ -704,6 +709,9 @@ function elips_is_active_instructor(?int $id): bool
 function elips_can_manage_course(array $course, array $actor): bool
 {
     if ($actor['role'] === 'admin') {
+        return true;
+    }
+    if ($actor['role'] === 'karyawan' && ($actor['division'] ?? '') === 'operasional') {
         return true;
     }
     return $actor['role'] === 'instruktur'
