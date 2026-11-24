@@ -6,7 +6,7 @@ $page = [
     'roles' => ['admin'],
     'title' => 'Kelola Kursus - ELIPS LMS',
     'area' => 'admin',
-    'css' => ['admin-registrations', 'academic'],
+    'css' => ['admin-registrations', 'academic', 'course-angkatan'],
     'scripts' => ['@crud', 'ui', 'employee/shared/common'],
     'sidebar' => 'admin',
 ];

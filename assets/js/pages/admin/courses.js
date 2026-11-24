@@ -14,6 +14,12 @@
     var $ = function (id) { return document.getElementById(id); };
     var rp = function (n) { return 'Rp ' + Math.round(Number(n) || 0).toLocaleString('id-ID'); };
     var LABEL = { published: 'Dipublikasi', draft: 'Draft', archived: 'Arsip' };
+    var CLASS_STATUS = [
+        ['draft', 'Draft'], ['open', 'Pendaftaran'], ['ready', 'Siap mulai'], ['ongoing', 'Berjalan'],
+        ['completed', 'Selesai'], ['cancelled', 'Batal'], ['archived', 'Arsip']
+    ];
+    var expanded = {};       // id kursus -> true/false (bila belum diatur: terbuka untuk kursus published)
+    var editingClassId = null;
 
     function imageStyle(course) {
         if (!course.image) return '';
@@ -76,10 +82,139 @@
                 + '<div class="crs-meta">' + esc(c.category) + (c.location ? ' · ' + esc(c.location) : '') + '</div></div></div></td>'
                 + '<td>' + (c.instructorName ? esc(c.instructorName) : '<span class="crs-meta">Belum ditugaskan</span>') + '</td>'
                 + '<td class="crs-price">' + price + '</td>'
-                + '<td><span class="crs-meta">' + (c.modules || 0) + ' modul · ' + (c.lessons || 0) + ' materi<br>' + (c.classes || 0) + ' kelas · ' + (c.enrollments || 0) + ' peserta</span></td>'
+                + '<td><span class="crs-meta">' + (c.modules || 0) + ' modul · ' + (c.lessons || 0) + ' materi<br>' + (c.classes || 0) + ' angkatan · ' + (c.enrollments || 0) + ' peserta</span>'
+                + '<br><button type="button" class="cka-toggle' + (isOpen(c) ? ' is-open' : '') + '" data-act="toggle-cls"><i class="bi bi-chevron-down"></i> Angkatan</button></td>'
                 + '<td><span class="crs-pill crs-pill-' + esc(c.status) + '">' + (LABEL[c.status] || esc(c.status)) + '</span></td>'
-                + '<td><div class="crs-actions">' + actionButtons(c) + '</div></td></tr>';
+                + '<td><div class="crs-actions">' + actionButtons(c) + '</div></td></tr>'
+                + (isOpen(c) ? classRows(c) : '');
         }).join('');
+    }
+
+
+    // ---------- Angkatan di bawah kursus ----------
+
+    function isOpen(course) {
+        return expanded[course.id] === undefined ? course.status === 'published' : !!expanded[course.id];
+    }
+
+    function fmtDate(v) {
+        var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(v || ''));
+        if (!m) return '-';
+        var mon = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'][Number(m[2]) - 1];
+        return Number(m[3]) + ' ' + mon + ' ' + m[1];
+    }
+
+    function sessionCount(classId) {
+        var list = ELIPS.getClassSessions ? ELIPS.getClassSessions() : [];
+        return list.filter(function (s) { return Number(s.classId) === Number(classId) && s.status !== 'rescheduled'; }).length;
+    }
+
+    function tentorOptions(selectedId) {
+        var opts = ['<option value="">-- Belum ada --</option>'];
+        ELIPS.getUsersByRole('instruktur').filter(function (u) { return u.status === 'aktif' || u.id === selectedId; })
+            .forEach(function (u) {
+                opts.push('<option value="' + u.id + '"' + (u.id === selectedId ? ' selected' : '') + '>' + esc(u.name) + '</option>');
+            });
+        return opts.join('');
+    }
+
+    function classRows(course) {
+        var classes = ELIPS.getClassesByCourse(course.id).slice().sort(function (a, b) {
+            return String(b.periodStart || '').localeCompare(String(a.periodStart || '')) || b.id - a.id;
+        });
+        var canAdd = course.status === 'published';
+        var html = '<tr class="cka-row" data-course="' + course.id + '"><td colspan="6"><div class="cka-wrap">'
+            + '<div class="cka-head"><strong>Angkatan ' + esc(course.title) + '</strong>'
+            + (canAdd
+                ? '<button type="button" class="btn btn-primary" data-act="cls-new"><i class="bi bi-plus-circle"></i> Angkatan baru</button>'
+                : '<span class="crs-meta">Publikasikan kursus untuk membuat angkatan.</span>')
+            + '</div>';
+        if (!classes.length) {
+            return html + '<div class="cka-empty">Belum ada angkatan.</div></div></td></tr>';
+        }
+        html += '<div class="cka-list">';
+        classes.forEach(function (k) {
+            var statusOpts = CLASS_STATUS.map(function (s) {
+                return '<option value="' + s[0] + '"' + (s[0] === k.status ? ' selected' : '') + '>' + s[1] + '</option>';
+            }).join('');
+            var locked = k.status === 'archived';
+            var active = k.activeEnrollmentCount || 0;
+            var full = k.quota > 0 && active >= k.quota;
+            var sessions = sessionCount(k.id);
+            html += '<div class="cka-item" data-class="' + k.id + '">'
+                + '<div><div class="cka-name">' + esc(k.name) + '</div><div class="cka-sub">' + esc(k.code) + '</div></div>'
+                + '<select class="form-input" data-f="cls-tentor" aria-label="Tentor"' + (locked ? ' disabled' : '') + '>' + tentorOptions(k.instructorId) + '</select>'
+                + '<select class="form-input" data-f="cls-status" aria-label="Status"' + (locked ? ' disabled' : '') + '>' + statusOpts + '</select>'
+                + '<div><div class="cka-name' + (full ? ' cka-full' : '') + '">' + active + (k.quota > 0 ? ' / ' + k.quota : '') + '</div><div class="cka-sub">peserta' + (full ? ' · penuh' : '') + '</div></div>'
+                + '<div><div class="cka-sub">' + fmtDate(k.periodStart) + (k.periodEnd ? ' – ' + fmtDate(k.periodEnd) : '') + '</div>'
+                + '<div class="cka-sub">' + (sessions ? sessions + ' sesi terjadwal' : 'jadwal belum dibuat') + '</div></div>'
+                + '<div class="cka-actions"><button type="button" class="btn btn-ghost" data-act="cls-edit" title="Ubah angkatan"' + (locked ? ' disabled' : '') + '><i class="bi bi-pencil"></i> Ubah</button></div>'
+                + '</div>';
+        });
+        return html + '</div></div></td></tr>';
+    }
+
+    function showClassError(message) {
+        var el = $('clsError');
+        el.textContent = message || '';
+        el.hidden = !message;
+    }
+
+    function openClassModal(classId) {
+        var k = ELIPS.getClassById(classId);
+        if (!k) return;
+        editingClassId = classId;
+        showClassError('');
+        $('clsModalSub').textContent = k.courseTitle + ' · ' + k.code;
+        $('clsName').value = k.name || '';
+        $('clsStart').value = k.periodStart || '';
+        $('clsEnd').value = k.periodEnd || '';
+        $('clsQuota').value = k.quota || '';
+        $('clsTentor').innerHTML = tentorOptions(k.instructorId);
+        $('clsLocation').value = k.location || '';
+        $('clsRoom').value = k.room || '';
+        $('clsModal').hidden = false;
+        $('clsName').focus();
+    }
+
+    function closeClassModal() {
+        $('clsModal').hidden = true;
+        editingClassId = null;
+    }
+
+    function saveClass() {
+        showClassError('');
+        var btn = $('clsSaveBtn');
+        btn.disabled = true;
+        var result = ELIPS.api.call('class.update', {
+            id: editingClassId,
+            data: {
+                name: $('clsName').value.trim(),
+                periodStart: $('clsStart').value,
+                periodEnd: $('clsEnd').value,
+                quota: $('clsQuota').value === '' ? 0 : Number($('clsQuota').value),
+                instructorId: parseInt($('clsTentor').value, 10) || 0,
+                location: $('clsLocation').value.trim(),
+                room: $('clsRoom').value.trim()
+            }
+        });
+        btn.disabled = false;
+        if (!result.ok) { showClassError(result.message); return; }
+        closeClassModal();
+        ELIPS.toast(result.message || 'Angkatan diperbarui.');
+        render();
+    }
+
+    function onClassChange(event) {
+        var field = event.target.getAttribute('data-f');
+        if (field !== 'cls-tentor' && field !== 'cls-status') return;
+        var item = event.target.closest('.cka-item');
+        var classId = Number(item.getAttribute('data-class'));
+        var result = field === 'cls-status'
+            ? ELIPS.api.call('class.status', { id: classId, status: event.target.value })
+            : ELIPS.api.call('class.update', { id: classId, data: { instructorId: parseInt(event.target.value, 10) || 0 } });
+        ELIPS.toast(result.message || (result.ok ? 'Tersimpan.' : 'Gagal menyimpan.'));
+        render();   // kembalikan tampilan ke data server bila ditolak
     }
 
     // ---------- Modal ----------
@@ -224,10 +359,26 @@
         var button = event.target.closest('[data-act]');
         if (!button) return;
         var row = button.closest('tr');
+        var act = button.getAttribute('data-act');
+
+        if (row.classList.contains('cka-row')) {
+            var parent = ELIPS.getCourseById(Number(row.getAttribute('data-course')));
+            if (act === 'cls-new' && parent) {
+                window.location.href = ELIPS.basePathPrefix() + publishPagePath() + '?id=' + parent.id + '&new=1';
+            } else if (act === 'cls-edit') {
+                openClassModal(Number(button.closest('.cka-item').getAttribute('data-class')));
+            }
+            return;
+        }
+
         var course = ELIPS.getCourseById(Number(row.getAttribute('data-id')));
         if (!course) return;
 
-        switch (button.getAttribute('data-act')) {
+        switch (act) {
+            case 'toggle-cls':
+                expanded[course.id] = !isOpen(course);
+                render();
+                break;
             case 'edit': openModal(course.id); break;
             case 'publish':
             case 'structure':
@@ -278,6 +429,11 @@
         $('courseModal').addEventListener('click', function (e) { if (e.target === this) closeModal(); });
         document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !$('courseModal').hidden) closeModal(); });
         $('coursesTableBody').addEventListener('click', onRowAction);
+        $('coursesTableBody').addEventListener('change', onClassChange);
+        $('clsModalClose').addEventListener('click', closeClassModal);
+        $('clsCancelBtn').addEventListener('click', closeClassModal);
+        $('clsSaveBtn').addEventListener('click', saveClass);
+        $('clsModal').addEventListener('click', function (e) { if (e.target === this) closeClassModal(); });
         $('searchCourse').addEventListener('input', render);
         $('crsTabs').addEventListener('click', function (e) {
             var tab = e.target.closest('.crs-tab');

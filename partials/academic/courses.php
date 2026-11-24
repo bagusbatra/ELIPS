@@ -139,3 +139,54 @@
                 </div>
             </div>
         </div>
+
+        <!-- Modal Ubah Angkatan -->
+        <div id="clsModal" class="attendance-modal crs-modal" hidden>
+            <div class="attendance-modal-card">
+                <div class="attendance-modal-header">
+                    <div>
+                        <h3 class="attendance-modal-title" id="clsModalTitle">Ubah Angkatan</h3>
+                        <p class="attendance-modal-subtitle" id="clsModalSub"></p>
+                    </div>
+                    <button type="button" class="attendance-modal-close" id="clsModalClose" aria-label="Tutup"><i class="bi bi-x-lg"></i></button>
+                </div>
+                <div class="attendance-modal-body">
+                    <p class="reg-inline-error" id="clsError" hidden></p>
+                    <div class="form-group">
+                        <label class="form-label" for="clsName">Nama angkatan *</label>
+                        <input type="text" id="clsName" class="form-input" maxlength="150">
+                    </div>
+                    <div class="crs-grid">
+                        <div class="form-group">
+                            <label class="form-label" for="clsStart">Tanggal mulai</label>
+                            <input type="date" id="clsStart" class="form-input">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="clsEnd">Tanggal selesai</label>
+                            <input type="date" id="clsEnd" class="form-input">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="clsQuota">Kuota peserta</label>
+                            <input type="number" id="clsQuota" class="form-input" min="0">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="clsTentor">Tentor</label>
+                            <select id="clsTentor" class="form-input"></select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="clsLocation">Lokasi</label>
+                            <input type="text" id="clsLocation" class="form-input" maxlength="150">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="clsRoom">Ruang</label>
+                            <input type="text" id="clsRoom" class="form-input" maxlength="100">
+                        </div>
+                    </div>
+                    <small class="form-hint">Jadwal tiap sesi diatur di menu Kalender &amp; Jadwal. Mengganti tentor dicatat pada riwayat tentor angkatan.</small>
+                </div>
+                <div class="attendance-modal-actions">
+                    <button type="button" class="btn btn-ghost" id="clsCancelBtn">Batal</button>
+                    <button type="button" class="btn btn-primary" id="clsSaveBtn"><i class="bi bi-check2"></i> Simpan</button>
+                </div>
+            </div>
+        </div>

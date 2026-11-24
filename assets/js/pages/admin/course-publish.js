@@ -641,7 +641,11 @@
             if (dirty) { e.preventDefault(); e.returnValue = ''; }
         });
 
-        load().catch(function (err) {
+        load().then(function () {
+            if (new URLSearchParams(window.location.search).get('new') === '1' && server.course.status === 'published') {
+                openAngkatan();
+            }
+        }).catch(function (err) {
             $('cpbTitle').textContent = 'Gagal memuat';
             $('cpbError').innerHTML = '<p class="cpb-note">' + esc(err.message) + '</p>';
         });

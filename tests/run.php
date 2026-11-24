@@ -1509,6 +1509,10 @@ foreach (['admin' => ['admin/course-publish.php?id=' . $cpCourse, $cpAdmin], 'ka
     $r = $cl->get("/$pg");
     t("halaman publikasi ($who) memuat css & js", $r['code'] === 200 && strpos($r['body'], 'course-publish.css') !== false && strpos($r['body'], 'course-publish.js') !== false && strpos($r['body'], 'cpbTree') !== false, (string) $r['code']);
 }
+foreach (['admin/courses.php' => $cpAdmin, 'employee/operasional/kursus.php' => $cpOps] as $pg => $cl) {
+    t("halaman $pg memuat course-angkatan.css dan modal ubah angkatan", strpos($cl->get("/$pg")['body'], 'course-angkatan.css') !== false && strpos($cl->get("/$pg")['body'], 'clsModal') !== false);
+}
+t('courses.js memuat daftar angkatan per kursus', strpos($cpAdmin->get('/assets/js/pages/admin/courses.js')['body'], 'cls-edit') !== false);
 t('courses.js mengarah ke halaman publikasi', strpos($cpAdmin->get('/assets/js/pages/admin/courses.js')['body'], 'course-publish.php') !== false);
 
 // Bersihkan
