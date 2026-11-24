@@ -1,10 +1,11 @@
+// Direktori: assets/js/pages/instructor/dashboard.js
 // ELIPS LMS - skrip halaman instructor/dashboard.php
 // Diekstrak dari inline <script>; URL relatif terhadap halaman.
 document.addEventListener('DOMContentLoaded', function () {
     const instructor = ELIPS.requireRole('instruktur');
     if (!instructor) return;
 
-    const name = instructor.name || 'Instruktur';
+    const name = instructor.name || 'Tentor';
     document.getElementById('instructorName').textContent = name;
     document.getElementById('instructorAvatar').textContent = name.substring(0, 2).toUpperCase();
     document.getElementById('instructorGreeting').textContent = 'Selamat datang, ' + name + '! Berikut ringkasan kursus dan peserta Anda.';
@@ -479,7 +480,7 @@ function renderCourses(summary) {
             '<tr><td colspan="5" style="text-align: center; padding: 2.5rem 1rem; color: var(--text-secondary);">',
             '  <i class="bi bi-journal-x" style="display: block; font-size: 2.5rem; opacity: .45; margin-bottom: .75rem;"></i>',
             '  <div style="font-weight: 600; color: var(--text-primary); margin-bottom: .25rem;">Belum ada kursus yang ditugaskan</div>',
-            '  <div style="font-size: .875rem;">Hubungi Admin agar Anda ditugaskan sebagai instruktur pada sebuah kursus.</div>',
+            '  <div style="font-size: .875rem;">Hubungi Admin agar Anda ditugaskan sebagai tentor pada sebuah kursus.</div>',
             '</td></tr>'
         ].join('');
         return;
@@ -586,4 +587,3 @@ function renderNotice(summary) {
     document.getElementById('instructorNoticeText').textContent = notices.join(' ');
     document.getElementById('instructorNotice').style.display = 'flex';
 }
-

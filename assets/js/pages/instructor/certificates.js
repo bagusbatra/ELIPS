@@ -1,3 +1,4 @@
+// Direktori: assets/js/pages/instructor/certificates.js
 // ELIPS LMS - skrip halaman instructor/certificates.php
 // Diekstrak dari inline <script>; URL relatif terhadap halaman.
 let currentInstructor = null;
@@ -12,7 +13,7 @@ document.addEventListener('DOMContentLoaded', function () {
     currentInstructor = ELIPS.requireRole('instruktur');
     if (!currentInstructor) return;
 
-    const name = currentInstructor.name || 'Instruktur';
+    const name = currentInstructor.name || 'Tentor';
     document.getElementById('instructorName').textContent = name;
     document.getElementById('instructorAvatar').textContent = name.substring(0, 2).toUpperCase();
 
@@ -163,4 +164,3 @@ function createDraftCertificate(enrollmentId) {
     ELIPS.toast(result.message);
     renderAll();
 }
-

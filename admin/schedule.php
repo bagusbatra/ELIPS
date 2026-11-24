@@ -1,4 +1,5 @@
 <?php
+// Direktori: admin/schedule.php
 require_once __DIR__ . '/../includes/bootstrap.php';
 $page = [
     'page_script' => 'admin/schedule',
@@ -46,7 +47,7 @@ layout('app', $page);
                         <select id="classFilter" class="form-input" onchange="changeClass()"></select>
                     </div>
                     <div class="form-group" style="min-width: 200px;">
-                        <label class="form-label">Instruktur</label>
+                        <label class="form-label">Tentor</label>
                         <select id="instructorFilter" class="form-input" onchange="renderAllViews()"></select>
                     </div>
                     <div class="form-group" style="min-width: 180px;">

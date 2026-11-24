@@ -12,7 +12,7 @@
 
 'use strict';
 
-const CACHE_VERSION = 'v9-reset-data';
+const CACHE_VERSION = 'v11-tentor-aktivasi';
 const STATIC_CACHE = 'elips-static-' + CACHE_VERSION;
 const OFFLINE_URL = './offline.php';
 

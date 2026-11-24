@@ -1,3 +1,4 @@
+// Direktori: assets/js/crud-tasks.js
 // ============================================================
 // ELIPS LMS - crud-tasks.js
 // Tugas, pengumpulan, penilaian/revisi, ujian, dan hasil ujian.
@@ -1089,7 +1090,7 @@
             return failure('Tugas belum dibuka.');
         }
         if (assignment.type === 'in_class_practice') {
-            return failure('Tugas praktik kelas dicatat langsung oleh instruktur.');
+            return failure('Tugas praktik kelas dicatat langsung oleh tentor.');
         }
 
         const textAnswer = String(data.textAnswer || '').trim();
@@ -1099,7 +1100,7 @@
 
         const existing = ELIPS.getSubmissionByEnrollment(assignment.id, context.enrollment.id);
         if (existing && ['reviewed', 'accepted'].indexOf(existing.status) !== -1) {
-            return failure('Pengumpulan ini sudah dinilai. Tunggu instruktur membuka revisi.');
+            return failure('Pengumpulan ini sudah dinilai. Tunggu tentor membuka revisi.');
         }
 
         const existingFiles = existing ? ELIPS.getSubmissionFilesBySubmission(existing.id) : [];

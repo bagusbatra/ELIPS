@@ -1,8 +1,9 @@
+// Direktori: assets/js/pages/admin/notifications.js
 // ELIPS LMS - skrip halaman admin/notifications.php
 // Diekstrak dari inline <script>; URL relatif terhadap halaman.
 function roleLabel(role) {
     if (role === 'admin') return 'Admin';
-    if (role === 'instruktur') return 'Instruktur';
+    if (role === 'instruktur') return 'Tentor';
     if (role === 'peserta') return 'Peserta';
     return 'Sistem';
 }
@@ -194,4 +195,3 @@ document.addEventListener('DOMContentLoaded', function () {
     document.getElementById('exportNotifications').addEventListener('click', exportCsv);
     document.getElementById('clearNotifications').addEventListener('click', clearOutbox);
 });
-

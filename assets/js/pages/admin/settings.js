@@ -231,6 +231,18 @@ function resetPredicateRanges() {
 // ---------- FUNGSI SEMENTARA: reset seluruh data (api/maintenance.php) ----------
 var RESET_PHRASE = 'HAPUS SEMUA DATA';
 
+// Buang sisa data demo lama di browser (localStorage "elips_*") agar tidak
+// tampil kembali bila aplikasi sempat jatuh ke mode lokal.
+function clearStaleLocalData() {
+    try {
+        Object.keys(localStorage).forEach(function (key) {
+            if (key.indexOf('elips_') === 0 && key !== 'elips_session') {
+                localStorage.removeItem(key);
+            }
+        });
+    } catch (err) { /* abaikan */ }
+}
+
 function initResetData() {
     var modal = document.getElementById('resetDataModal');
     if (!modal) return;
@@ -279,6 +291,7 @@ function initResetData() {
         }
         close();
         ELIPS.toast(result.message);
+        clearStaleLocalData();
         setTimeout(function () { window.location.reload(); }, 1200);
     });
 }

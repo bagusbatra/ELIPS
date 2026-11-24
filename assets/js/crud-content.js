@@ -1,6 +1,7 @@
+// Direktori: assets/js/crud-content.js
 // ============================================================
 // ELIPS LMS - crud-content.js
-// CRUD modul dan materi pada kursus yang diampu instruktur.
+// CRUD modul dan materi pada kursus yang diampu tentor.
 // ============================================================
 
 (function (ELIPS) {

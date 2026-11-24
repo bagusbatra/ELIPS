@@ -1070,6 +1070,124 @@ $pdo->exec("DELETE FROM classes WHERE course_id = $cid");
 foreach ([$cid, $freeId, $histId] as $d) { if ($d) { $pdo->exec("DELETE FROM courses WHERE id = $d"); } }
 foreach (glob($root . '/assets/uploads/courses/*') ?: [] as $f) { if (basename($f) !== '.htaccess') { @unlink($f); } }
 
+
+// ============================================================
+// Akun tentor: dibuat admin (nama saja) -> link -> biodata + berkas -> sandi
+// ============================================================
+echo "\n[Akun tentor]\n";
+$pdf = static fn(string $extra = ''): string => 'data:application/pdf;base64,' . base64_encode("%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n" . $extra);
+$jpg = make_jpeg(91);
+$tok = static fn(string $link): string => preg_match('/token=([a-f0-9]{64})/', $link, $m) ? $m[1] : '';
+
+t('karyawan tidak boleh menambah tentor', empty($keu->api('tutor.create', ['name' => 'X'])['ok']));
+t('nama tentor wajib diisi', empty($adm->api('tutor.create', ['name' => '  '])['ok']));
+$res = $adm->api('tutor.create', ['name' => 'Tentor Uji Aktivasi']);
+t('admin menambah tentor hanya dengan nama', !empty($res['ok']), $res['message'] ?? '');
+$tid = (int) ($res['data']['id'] ?? 0);
+t('akun tentor berstatus menunggu dan role instruktur', ($res['data']['status'] ?? '') === 'menunggu' && ($res['data']['role'] ?? '') === 'instruktur');
+$placeholder = (string) ($res['data']['email'] ?? '');
+$x = new Client($base);
+$r = $x->api('auth.login', ['identifier' => $placeholder, 'email' => $placeholder, 'password' => 'apa-saja']);
+t('akun tentor belum bisa dipakai masuk', empty($r['ok']));
+
+t('karyawan tidak boleh membuat link tentor', empty($keu->api('tutor.sendActivation', ['userId' => $tid])['ok']));
+$res = $adm->api('tutor.sendActivation', ['userId' => $tid]);
+t('admin membuat link aktivasi tentor', !empty($res['ok']) && strpos($res['data']['link'] ?? '', 'activate-tentor.php?token=') !== false, $res['message'] ?? '');
+$token = $tok((string) ($res['data']['link'] ?? ''));
+t('link berisi pesan WhatsApp', strpos($res['data']['waUrl'] ?? '', 'https://wa.me/?text=') === 0);
+$old = $token;
+$res = $adm->api('tutor.sendActivation', ['userId' => $tid]);
+$token = $tok((string) ($res['data']['link'] ?? ''));
+t('kirim ulang mencabut link lama', empty((new Client($base))->api('tutor.activationInfo', ['token' => $old])['ok']) && !empty((new Client($base))->api('tutor.activationInfo', ['token' => $token])['ok']));
+t('token ngawur ditolak', empty((new Client($base))->api('tutor.activationInfo', ['token' => 'abc'])['ok']));
+
+$pub = new Client($base);
+$info = $pub->api('tutor.activationInfo', ['token' => $token]);
+t('info aktivasi memuat nama tentor', ($info['data']['name'] ?? '') === 'Tentor Uji Aktivasi');
+
+$profile = ['fullName' => 'Tentor Uji Aktivasi, S.Pd.', 'birthPlace' => 'Bandung', 'birthDate' => '1990-05-17',
+    'address' => 'Jl. Merdeka No. 1, Bandung', 'phone' => '081355500123', 'email' => 'tentor.uji@example.com'];
+$strong = 'Rahasia#2026';
+
+$res = $pub->api('tutor.activationComplete', ['token' => $token, 'profile' => $profile, 'password' => $strong, 'passwordConfirm' => $strong]);
+t('aktivasi tanpa berkas ditolak', empty($res['ok']) && stripos($res['message'] ?? '', 'CV') !== false, $res['message'] ?? '');
+
+$up = static fn(array $o) => $pub->api('tutor.document.upload', $o + ['token' => $token]);
+t('jenis berkas tidak valid ditolak', empty($up(['kind' => 'foto', 'fileName' => 'a.pdf', 'dataUrl' => $pdf()])['ok']));
+t('berkas non PDF/JPG/PNG ditolak', empty($up(['kind' => 'cv', 'fileName' => 'a.html', 'dataUrl' => 'data:text/html;base64,' . base64_encode('<script>1</script>')])['ok']));
+t('PDF palsu ditolak', empty($up(['kind' => 'cv', 'fileName' => 'a.pdf', 'dataUrl' => 'data:application/pdf;base64,' . base64_encode('bukan pdf')])['ok']));
+t('gambar palsu ditolak', empty($up(['kind' => 'ktp', 'fileName' => 'a.jpg', 'dataUrl' => 'data:image/jpeg;base64,' . base64_encode('bukan gambar')])['ok']));
+t('berkas > 3 MB ditolak', empty($up(['kind' => 'cv', 'fileName' => 'besar.pdf', 'dataUrl' => $pdf(str_repeat('A', 3 * 1024 * 1024))])['ok']));
+t('upload dengan token salah ditolak', empty((new Client($base))->api('tutor.document.upload', ['token' => str_repeat('a', 64), 'kind' => 'cv', 'fileName' => 'a.pdf', 'dataUrl' => $pdf()])['ok']));
+
+t('unggah CV', !empty($up(['kind' => 'cv', 'fileName' => 'cv.pdf', 'dataUrl' => $pdf()])['ok']));
+$r = $up(['kind' => 'cv', 'fileName' => 'cv-baru.pdf', 'dataUrl' => $pdf('v2')]);
+$cvCount = count(array_filter($r['data']['documents'] ?? [], fn($d) => $d['kind'] === 'cv'));
+t('unggah CV lagi menggantikan yang lama', !empty($r['ok']) && $cvCount === 1);
+t('unggah KTP (JPG)', !empty($up(['kind' => 'ktp', 'fileName' => 'ktp.jpg', 'dataUrl' => $jpg])['ok']));
+
+$res = $pub->api('tutor.activationComplete', ['token' => $token, 'profile' => $profile, 'password' => $strong, 'passwordConfirm' => $strong]);
+t('aktivasi tanpa ijazah ditolak', empty($res['ok']) && stripos($res['message'] ?? '', 'Ijazah') !== false);
+t('unggah ijazah', !empty($up(['kind' => 'ijazah', 'fileName' => 'ijazah.pdf', 'dataUrl' => $pdf()])['ok']));
+$res = $pub->api('tutor.activationComplete', ['token' => $token, 'profile' => $profile, 'password' => $strong, 'passwordConfirm' => $strong]);
+t('aktivasi tanpa sertifikat ditolak', empty($res['ok']) && stripos($res['message'] ?? '', 'sertifikat') !== false);
+t('sertifikat wajib diberi nama', empty($up(['kind' => 'sertifikat', 'fileName' => 's.pdf', 'dataUrl' => $pdf()])['ok']));
+$r = $up(['kind' => 'sertifikat', 'label' => 'Sertifikat TOEFL', 'fileName' => 'toefl.pdf', 'dataUrl' => $pdf()]);
+t('unggah sertifikat pertama', !empty($r['ok']));
+$r = $up(['kind' => 'sertifikat', 'label' => 'Sertifikat Pelatihan', 'fileName' => 'p.jpg', 'dataUrl' => $jpg]);
+$certs = array_values(array_filter($r['data']['documents'] ?? [], fn($d) => $d['kind'] === 'sertifikat'));
+t('sertifikat bisa ditambah lagi', count($certs) === 2);
+$res = $pub->api('tutor.document.remove', ['token' => $token, 'id' => $certs[1]['id'] ?? 0]);
+t('sertifikat bisa dihapus', !empty($res['ok']) && count(array_filter($res['data']['documents'], fn($d) => $d['kind'] === 'sertifikat')) === 1);
+
+foreach ([['fullName', ''], ['birthPlace', ''], ['birthDate', ''], ['address', ''], ['phone', ''], ['email', ''], ['email', 'bukan-email'], ['birthDate', '2999-01-01'], ['phone', '123']] as [$k, $v]) {
+    $res = $pub->api('tutor.activationComplete', ['token' => $token, 'profile' => array_merge($profile, [$k => $v]), 'password' => $strong, 'passwordConfirm' => $strong]);
+    t("aktivasi ditolak bila $k = '" . $v . "'", empty($res['ok']), $res['message'] ?? '');
+}
+$res = $pub->api('tutor.activationComplete', ['token' => $token, 'profile' => $profile, 'password' => 'lemah', 'passwordConfirm' => 'lemah']);
+t('sandi lemah ditolak', empty($res['ok']));
+$res = $pub->api('tutor.activationComplete', ['token' => $token, 'profile' => $profile, 'password' => $strong, 'passwordConfirm' => 'Beda#2026x']);
+t('konfirmasi sandi harus sama', empty($res['ok']));
+$res = $pub->api('tutor.activationComplete', ['token' => $token, 'profile' => array_merge($profile, ['email' => 'admin@example.com']), 'password' => $strong, 'passwordConfirm' => $strong]);
+t('email yang dipakai akun lain ditolak', empty($res['ok']));
+
+$res = $pub->api('tutor.activationComplete', ['token' => $token, 'profile' => $profile, 'password' => $strong, 'passwordConfirm' => $strong]);
+t('tentor menyelesaikan aktivasi', !empty($res['ok']), $res['message'] ?? '');
+t('diarahkan ke dashboard tentor', ($res['data']['redirect'] ?? '') === 'instructor/dashboard.php');
+$row = $pdo->query("SELECT * FROM users WHERE id = $tid")->fetch();
+t('akun aktif dengan email & telepon baru', $row['status'] === 'aktif' && $row['email'] === 'tentor.uji@example.com' && $row['name'] === 'Tentor Uji Aktivasi, S.Pd.' && $row['role'] === 'instruktur');
+t('biodata tentor tersimpan', (int) $pdo->query("SELECT COUNT(*) FROM tutor_profiles WHERE user_id = $tid AND birth_place = 'Bandung' AND completed_at IS NOT NULL")->fetchColumn() === 1);
+$page = $pub->get('/instructor/dashboard.php');
+t('tentor langsung masuk dashboard tentor', $page['code'] === 200, (string) $page['code']);
+t('link tidak bisa dipakai dua kali', empty($pub->api('tutor.activationComplete', ['token' => $token, 'profile' => $profile, 'password' => $strong, 'passwordConfirm' => $strong])['ok']));
+t('link sekali pakai tak bisa unggah lagi', empty($up(['kind' => 'cv', 'fileName' => 'a.pdf', 'dataUrl' => $pdf()])['ok']));
+
+$fresh = new Client($base);
+$r = $fresh->api('auth.login', ['identifier' => 'tentor.uji@example.com', 'email' => 'tentor.uji@example.com', 'password' => $strong]);
+t('tentor bisa login dengan email aktif', !empty($r['ok']), $r['message'] ?? '');
+
+$res = $adm->api('tutor.sendActivation', ['userId' => $tid]);
+t('link untuk tentor yang sudah aktif ditolak', empty($res['ok']));
+
+// Admin melihat berkas
+$prof = $adm->api('tutor.profile', ['userId' => $tid]);
+t('admin melihat biodata & berkas tentor', !empty($prof['ok']) && ($prof['data']['profile']['birthPlace'] ?? '') === 'Bandung' && count($prof['data']['documents'] ?? []) === 4, json_encode($prof['message'] ?? ''));
+t('karyawan tidak boleh melihat profil tentor', empty($keu->api('tutor.profile', ['userId' => $tid])['ok']));
+$docId = (int) ($prof['data']['documents'][0]['id'] ?? 0);
+$f = $adm->get('/api/index.php?action=tutor.document&id=' . $docId);
+t('admin dapat membuka berkas', $f['code'] === 200 && strncmp($f['body'], '%PDF-', 5) === 0, (string) $f['code']);
+$f = $fresh->get('/api/index.php?action=tutor.document&id=' . $docId);
+t('tentor pemilik dapat membuka berkasnya', $f['code'] === 200);
+$f = $keu->get('/api/index.php?action=tutor.document&id=' . $docId);
+t('pengguna lain tidak dapat membuka berkas tentor', $f['code'] === 403, (string) $f['code']);
+$f = (new Client($base))->get('/api/index.php?action=tutor.document&id=' . $docId);
+t('tanpa login tidak dapat membuka berkas tentor', $f['code'] === 403, (string) $f['code']);
+$f = $adm->get('/storage/tutor-docs/');
+t('folder berkas tentor tidak bisa dibuka langsung', $f['code'] !== 200 || strpos($f['body'], '%PDF') === false);
+
+$pdo->exec("DELETE FROM users WHERE id = $tid");
+foreach (glob($root . '/storage/tutor-docs/*') ?: [] as $fl) { if (basename($fl) !== '.htaccess') { @unlink($fl); } }
+
 // Bersihkan data uji bagian ini
 $pdo->exec("DELETE FROM classes WHERE code IN ('UJI-ACT-01','UJI-ACT-02','UJI-ACT-03')");
 $pdo->exec("UPDATE courses SET price = 0, discount_price = 0 WHERE id IN (1, 2)");

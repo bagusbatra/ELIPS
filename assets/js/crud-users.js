@@ -1,6 +1,7 @@
+// Direktori: assets/js/crud-users.js
 // ============================================================
 // ELIPS LMS - crud-users.js
-// CRUD pengguna dan penugasan instruktur ke kursus.
+// CRUD pengguna dan penugasan tentor ke kursus.
 // ============================================================
 
 (function (ELIPS) {
@@ -217,8 +218,8 @@
             return ELIPS.api.call('user.assignCourses', { instructorId: instructorId, courseIds: courseIds || [] });
         }
         const instructor = ELIPS.getUserById(instructorId);
-        if (!instructor || instructor.role !== 'instruktur') return failure('Pilih akun instruktur yang valid.');
-        if (instructor.status !== 'aktif') return failure('Instruktur harus berstatus aktif.');
+        if (!instructor || instructor.role !== 'instruktur') return failure('Pilih akun tentor yang valid.');
+        if (instructor.status !== 'aktif') return failure('Tentor harus berstatus aktif.');
 
         const selected = (courseIds || []).map(Number).filter(Boolean);
         const courses = ELIPS.getCourses();
@@ -249,7 +250,7 @@
                 action: 'assign',
                 entity: 'course',
                 entityLabel: instructor.name,
-                detail: 'Memperbarui ' + changed + ' penugasan kursus untuk instruktur "' + instructor.name + '".'
+                detail: 'Memperbarui ' + changed + ' penugasan kursus untuk tentor "' + instructor.name + '".'
             });
         }
         return success(changed + ' penugasan kursus diperbarui.', { changed: changed });

@@ -1,4 +1,5 @@
 <?php
+// Direktori: admin/enrollment.php
 require_once __DIR__ . '/../includes/bootstrap.php';
 $page = [
     'page_script' => 'admin/enrollment',
@@ -84,7 +85,7 @@ layout('app', $page);
                             <tr>
                                 <th>Peserta</th>
                                 <th>Kursus</th>
-                                <th>Instruktur</th>
+                                <th>Tentor</th>
                                 <th>Tanggal Penugasan</th>
                                 <th>Ditugaskan Oleh</th>
                                 <th>Status</th>

@@ -22,14 +22,14 @@ function userStatusBadge(status) {
 
 function roleBadge(role) {
     if (role === 'admin') return '<span class="badge" style="background: #fee2e2; color: #991b1b;">Admin</span>';
-    if (role === 'instruktur') return '<span class="badge badge-warning">Instruktur</span>';
+    if (role === 'instruktur') return '<span class="badge badge-warning">Tentor</span>';
     if (role === 'karyawan') return '<span class="badge" style="background: #e0e7ff; color: #3730a3;">Karyawan</span>';
     return '<span class="badge badge-primary">Peserta</span>';
 }
 
 function userRoleLabel(role) {
     if (role === 'admin') return 'Admin';
-    if (role === 'instruktur') return 'Instruktur';
+    if (role === 'instruktur') return 'Tentor';
     if (role === 'karyawan') return 'Karyawan';
     return 'Peserta';
 }
@@ -45,7 +45,22 @@ function closeUserTypeModal() {
 function chooseUserRole(role) {
     if (['admin', 'instruktur', 'peserta', 'karyawan'].indexOf(role) === -1) role = 'peserta';
     closeUserTypeModal();
+    if (role === 'instruktur') {
+        openTentorModal();
+        return;
+    }
     openUserModal(null, role);
+}
+
+// Email sementara tentor yang belum aktivasi tidak ditampilkan.
+function displayEmail(user) {
+    const email = user.email || '';
+    if (/@pending\.invalid$/i.test(email)) return '<span style="color: var(--text-secondary);">Belum diisi</span>';
+    return '<span>' + ELIPS.escapeHtml(email) + '</span>';
+}
+
+function isPendingTentor(user) {
+    return user.role === 'instruktur' && user.status === 'menunggu';
 }
 
 function renderUsers() {
@@ -65,11 +80,11 @@ function renderUsers() {
             '    <div class="dashboard-avatar" style="width: 36px; height: 36px; font-size: 0.875rem;">' + ELIPS.escapeHtml((user.name || 'U').substring(0, 2).toUpperCase()) + '</div>',
             '    <div class="table-course-info">',
             '      <div class="table-course-title">' + ELIPS.escapeHtml(user.name) + '</div>',
-            user.role === 'instruktur' ? '      <div class="table-course-meta">' + assignedCourses.length + ' kursus diampu</div>' : '',
+            user.role === 'instruktur' ? '      <div class="table-course-meta">' + (isPendingTentor(user) ? 'Belum melengkapi data' : assignedCourses.length + ' kursus diampu') + '</div>' : '',
             '    </div>',
             '  </div>',
             '</td>',
-            '<td><span>' + ELIPS.escapeHtml(user.email) + '</span></td>',
+            '<td>' + displayEmail(user) + '</td>',
             '<td>' + roleBadge(user.role) + '</td>',
             '<td>' + (user.role === 'karyawan' && user.division
                 ? '<span class="badge" style="background: #ecfccb; color: #3f6212;">' + ELIPS.escapeHtml(ELIPS.divisionLabel(user.division)) + '</span>'
@@ -78,8 +93,10 @@ function renderUsers() {
             '<td><span style="color: var(--text-secondary);">' + ELIPS.escapeHtml(user.createdAt || '-') + '</span></td>',
             '<td>',
             '  <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">',
-            user.role === 'instruktur' ? '    <button class="btn btn-ghost" style="padding: 0.375rem 0.625rem; font-size: 0.8125rem;" title="Tugaskan ke kursus" onclick="openAssignModal(' + user.id + ')"><i class="bi bi-journal-check"></i></button>' : '',
-            '    <button class="btn btn-ghost" style="padding: 0.375rem 0.625rem; font-size: 0.8125rem;" onclick="openUserModal(' + user.id + ')"><i class="bi bi-pencil"></i></button>',
+            isPendingTentor(user) ? '    <button class="btn btn-primary" style="padding: 0.375rem 0.625rem; font-size: 0.8125rem;" title="Buat link aktivasi untuk tentor" data-act="tentor-link" onclick="openTentorLink(' + user.id + ')"><i class="bi bi-send"></i> Kirim link</button>' : '',
+            user.role === 'instruktur' && !isPendingTentor(user) ? '    <button class="btn btn-ghost" style="padding: 0.375rem 0.625rem; font-size: 0.8125rem;" title="Lihat data dan berkas" data-act="tentor-docs" onclick="openTentorDocs(' + user.id + ')"><i class="bi bi-folder2-open"></i></button>' : '',
+            user.role === 'instruktur' && !isPendingTentor(user) ? '    <button class="btn btn-ghost" style="padding: 0.375rem 0.625rem; font-size: 0.8125rem;" title="Tugaskan ke kursus" onclick="openAssignModal(' + user.id + ')"><i class="bi bi-journal-check"></i></button>' : '',
+            isPendingTentor(user) ? '' : '    <button class="btn btn-ghost" style="padding: 0.375rem 0.625rem; font-size: 0.8125rem;" onclick="openUserModal(' + user.id + ')"><i class="bi bi-pencil"></i></button>',
             passwordRequests[user.id] ? '    <button class="btn btn-primary" style="padding: 0.375rem 0.625rem; font-size: 0.8125rem;" title="Siswa meminta reset sandi" onclick="openResetModal(' + user.id + ')"><i class="bi bi-key"></i> Reset Sandi</button>' : '',
             '    <button class="btn btn-ghost" style="padding: 0.375rem 0.625rem; font-size: 0.8125rem;" title="Reset perangkat" onclick="resetUserDevice(' + user.id + ')"><i class="bi bi-phone"></i></button>',
             '    <button class="btn btn-ghost" style="padding: 0.375rem 0.625rem; font-size: 0.8125rem; color: var(--danger);" onclick="deleteUser(' + user.id + ')"><i class="bi bi-trash"></i></button>',
@@ -244,7 +261,7 @@ function saveAssignment() {
 
 function filterUsers(role) {
     const rows = document.querySelectorAll('#usersTableBody tr');
-    const buttons = document.querySelectorAll('#filterAll, #filterAdmin, #filterInstruktur, #filterPeserta, #filterKaryawan');
+    const buttons = document.querySelectorAll('#filterAll, #filterAdmin, #filterTentor, #filterPeserta, #filterKaryawan');
     buttons.forEach(function (btn) {
         btn.classList.remove('btn-primary');
         btn.classList.add('btn-ghost');
@@ -347,4 +364,120 @@ function dismissResetRequest() {
     }
     ELIPS.toast('Permintaan ditutup.');
     closeResetModal();
+}
+
+
+// ---------- Akun tentor: dibuat admin (nama saja), dilengkapi tentor lewat link ----------
+
+let currentTentorId = null;
+
+function openTentorModal() {
+    document.getElementById('tentorName').value = '';
+    document.getElementById('tentorModal').style.display = 'flex';
+    document.getElementById('tentorName').focus();
+}
+
+function closeTentorModal() {
+    document.getElementById('tentorModal').style.display = 'none';
+}
+
+function saveTentor(event) {
+    if (event) event.preventDefault();
+    const name = document.getElementById('tentorName').value.trim();
+    if (!name) {
+        ELIPS.toast('Nama tentor wajib diisi.');
+        return;
+    }
+    const btn = document.getElementById('tentorSaveBtn');
+    btn.disabled = true;
+    const result = ELIPS.api.call('tutor.create', { name: name });
+    btn.disabled = false;
+    if (!result.ok) {
+        ELIPS.toast(result.message || 'Gagal menyimpan tentor.');
+        return;
+    }
+    closeTentorModal();
+    renderUsers();
+    ELIPS.toast('Akun tentor dibuat (belum aktif). Kirim link aktivasi agar tentor melengkapi data.');
+}
+
+function openTentorLink(userId) {
+    const user = ELIPS.getUserById(userId);
+    if (!user) return;
+    const result = ELIPS.api.call('tutor.sendActivation', { userId: userId });
+    if (!result.ok) {
+        ELIPS.toast(result.message || 'Gagal membuat link aktivasi.');
+        return;
+    }
+    const data = result.data || {};
+    currentTentorId = userId;
+    document.getElementById('tentorLinkInfo').innerHTML = 'Kirim link ini ke <strong>' + ELIPS.escapeHtml(user.name)
+        + '</strong>. Link sekali pakai' + (data.expiresAt ? ' dan berlaku sampai ' + ELIPS.escapeHtml(ELIPS.formatDate(data.expiresAt)) : '')
+        + '. Membuat link baru akan membatalkan link sebelumnya.';
+    document.getElementById('tentorLinkInput').value = data.link || '';
+    const wa = document.getElementById('tentorWaBtn');
+    wa.href = data.waUrl || '#';
+    wa.hidden = !data.waUrl;
+    document.getElementById('tentorLinkModal').style.display = 'flex';
+}
+
+function closeTentorLinkModal() {
+    document.getElementById('tentorLinkModal').style.display = 'none';
+    document.getElementById('tentorLinkInput').value = '';
+    currentTentorId = null;
+}
+
+function copyTentorLink() {
+    const input = document.getElementById('tentorLinkInput');
+    if (!input.value) return;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(input.value).then(function () { ELIPS.toast('Link disalin.'); });
+    } else {
+        input.select();
+        try { document.execCommand('copy'); } catch (err) { /* abaikan */ }
+        ELIPS.toast('Link disalin.');
+    }
+}
+
+function tentorField(label, value) {
+    return '<div style="display: flex; flex-direction: column; gap: 0.125rem;"><span style="font-size: 0.75rem; color: var(--text-secondary);">'
+        + ELIPS.escapeHtml(label) + '</span><span>' + (value ? ELIPS.escapeHtml(value) : '-') + '</span></div>';
+}
+
+function openTentorDocs(userId) {
+    const result = ELIPS.api.call('tutor.profile', { userId: userId });
+    if (!result.ok) {
+        ELIPS.toast(result.message || 'Gagal memuat data tentor.');
+        return;
+    }
+    const data = result.data || {};
+    const p = data.profile;
+    const base = ELIPS.basePathPrefix();
+    document.getElementById('tentorDocsTitle').textContent = 'Data ' + ((data.user && data.user.name) || 'Tentor');
+    let html = '';
+    if (p) {
+        html += '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">'
+            + tentorField('Nama lengkap', p.fullName) + tentorField('Tempat lahir', p.birthPlace)
+            + tentorField('Tanggal lahir', p.birthDate) + tentorField('No. telepon / WhatsApp', p.phone)
+            + tentorField('Email aktif', p.email) + tentorField('Alamat lengkap', p.address) + '</div>';
+    } else {
+        html += '<p style="color: var(--text-secondary);">Tentor belum melengkapi data.</p>';
+    }
+    const docs = data.documents || [];
+    html += '<h4 style="font-size: 1rem; font-weight: 600; margin: 0 0 0.75rem;">Berkas</h4>';
+    if (!docs.length) {
+        html += '<p style="color: var(--text-secondary);">Belum ada berkas.</p>';
+    } else {
+        html += '<div style="display: flex; flex-direction: column; gap: 0.5rem;">' + docs.map(function (d) {
+            return '<a class="tutor-doc-link" href="' + base + 'api/index.php?action=tutor.document&id=' + encodeURIComponent(d.id) + '" target="_blank" rel="noopener noreferrer">'
+                + '<i class="bi bi-file-earmark-text"></i><span><strong>' + ELIPS.escapeHtml(d.label || d.kindLabel) + '</strong>'
+                + '<small>' + ELIPS.escapeHtml(d.fileName) + '</small></span><i class="bi bi-box-arrow-up-right"></i></a>';
+        }).join('') + '</div>';
+    }
+    document.getElementById('tentorDocsBody').innerHTML = html;
+    document.getElementById('tentorDocsModal').style.display = 'flex';
+}
+
+function closeTentorDocsModal() {
+    document.getElementById('tentorDocsModal').style.display = 'none';
 }

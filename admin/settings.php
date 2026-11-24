@@ -96,7 +96,7 @@ layout('app', $page);
                         </div>
                         <div class="form-group">
                             <label class="form-label">Jabatan Penandatangan 1</label>
-                            <input type="text" class="form-input" value="Instruktur">
+                            <input type="text" class="form-input" value="Tentor">
                         </div>
                         <div class="form-group">
                             <label class="form-label">Nama Penandatangan 2</label>

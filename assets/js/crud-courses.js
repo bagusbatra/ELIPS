@@ -1,3 +1,4 @@
+// Direktori: assets/js/crud-courses.js
 // ============================================================
 // ELIPS LMS - crud-courses.js
 // CRUD kursus dan aturan Draft/Publish.
@@ -22,8 +23,8 @@
 
         if (!title) return failure('Judul kursus wajib diisi.');
         if (!category) return failure('Kategori kursus wajib diisi.');
-        if (!instructorId) return failure('Pilih satu instruktur untuk kursus ini.');
-        if (!isActiveInstructor(instructorId)) return failure('Instruktur harus berstatus aktif.');
+        if (!instructorId) return failure('Pilih satu tentor untuk kursus ini.');
+        if (!isActiveInstructor(instructorId)) return failure('Tentor harus berstatus aktif.');
 
         const instructor = ELIPS.getUserById(instructorId);
         const courses = ELIPS.getCourses();
@@ -83,7 +84,7 @@
             entityId: course.id,
             entityLabel: course.title,
             actorId: data.actorId,
-            detail: 'Membuat kursus "' + course.title + '" (Draft) dengan instruktur ' + instructor.name + '.'
+            detail: 'Membuat kursus "' + course.title + '" (Draft) dengan tentor ' + instructor.name + '.'
         });
         return success('Kursus baru berhasil ditambahkan dan berstatus Draft.', course);
     }
@@ -102,8 +103,8 @@
 
         if (!title) return failure('Judul kursus wajib diisi.');
         if (!category) return failure('Kategori kursus wajib diisi.');
-        if (!nextInstructorId) return failure('Pilih satu instruktur untuk kursus ini.');
-        if (!isActiveInstructor(nextInstructorId)) return failure('Instruktur harus berstatus aktif.');
+        if (!nextInstructorId) return failure('Pilih satu tentor untuk kursus ini.');
+        if (!isActiveInstructor(nextInstructorId)) return failure('Tentor harus berstatus aktif.');
 
         const previousInstructorId = course.instructorId;
         const instructor = ELIPS.getUserById(nextInstructorId);
@@ -186,7 +187,7 @@
 
         if (status === 'published') {
             if (!isActiveInstructor(course.instructorId)) {
-                return failure('Tugaskan instruktur aktif sebelum mempublikasikan kursus.');
+                return failure('Tugaskan tentor aktif sebelum mempublikasikan kursus.');
             }
             if (ELIPS.getModulesByCourse(course.id).length === 0 || ELIPS.getLessonsByCourse(course.id).length === 0) {
                 return failure('Tambahkan minimal satu modul dan satu materi sebelum publikasi.');

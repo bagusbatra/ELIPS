@@ -111,7 +111,7 @@ function elips_require_admin(): array
 
 /**
  * Guard absensi harian: hanya admin dan karyawan yang boleh mencatat
- * absensi. Instruktur dan peserta tetap memakai alur LMS masing-masing.
+ * absensi. Tentor dan peserta tetap memakai alur LMS masing-masing.
  */
 function elips_require_attendance_access(): array
 {
@@ -1373,7 +1373,7 @@ function elips_class_module_session_dates(int $classId): array
 
 /**
  * Menghitung status akses materi kelas untuk satu enrollment.
- * $staffPreview = true membuka seluruh konten untuk pratinjau Admin/Instruktur.
+ * $staffPreview = true membuka seluruh konten untuk pratinjau Admin/Tentor.
  */
 function elips_class_material_state(array $class, ?array $enrollment, bool $staffPreview = false): array
 {
@@ -3320,7 +3320,7 @@ function elips_sync_content_owners(): void
 
 function elips_sync_instructor_name(int $instructorId): void
 {
-    // Nama instruktur tidak didenormalisasi di database; dibaca lewat JOIN.
+    // Nama tentor tidak didenormalisasi di database; dibaca lewat JOIN.
     // Fungsi disediakan agar alur bisnis tetap eksplisit.
     if ($instructorId <= 0) {
         return;

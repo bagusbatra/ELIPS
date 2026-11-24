@@ -696,7 +696,7 @@ try {
     $components = [
         [1, 'assignment', 'Tugas', 'Rata-rata nilai tugas kelas.', 30.00, 'weighted', 1, '2026-10-01 08:00:00', '2026-10-01 08:00:00'],
         [2, 'exam', 'Ujian', 'Rata-rata nilai ujian kelas.', 40.00, 'weighted', 2, '2026-10-01 08:00:00', '2026-10-01 08:00:00'],
-        [3, 'manual', 'Praktik & Partisipasi', 'Penilaian langsung oleh instruktur.', 30.00, 'average', 3, '2026-10-01 08:00:00', '2026-10-01 08:00:00'],
+        [3, 'manual', 'Praktik & Partisipasi', 'Penilaian langsung oleh tentor.', 30.00, 'average', 3, '2026-10-01 08:00:00', '2026-10-01 08:00:00'],
     ];
     foreach ($components as $component) {
         $componentStmt->execute($component);
@@ -719,7 +719,7 @@ try {
     elips_backfill_phone_norm($db);
 
     echo "Data demo berhasil dimasukkan.\n";
-    echo "Akun demo: admin@example.com / instruktur / peserta — password: " . $config['demo_password'] . "\n";
+    echo "Akun demo: admin@example.com / tentor / peserta — password: " . $config['demo_password'] . "\n";
     elips_install_lock_write();
     echo "Instalasi selesai.\n";
 } catch (Throwable $e) {

@@ -80,6 +80,7 @@ function elips_action_system_reset_data(array $p): array
     )->fetchAll(PDO::FETCH_COLUMN);
 
     $summary = ['tables' => 0, 'rows' => 0, 'users' => 0, 'files' => 0];
+    $wiped = [];
     $db->exec('SET FOREIGN_KEY_CHECKS = 0');
     try {
         foreach ($tables as $table) {
@@ -92,19 +93,34 @@ function elips_action_system_reset_data(array $p): array
             }
             $summary['rows'] += (int) $db->query("SELECT COUNT(*) FROM `$table`")->fetchColumn();
             $db->exec("TRUNCATE TABLE `$table`");
+            $wiped[] = $table;
             $summary['tables']++;
         }
 
         // Semua akun selain admin dihapus; akun admin (termasuk kata sandinya) tetap.
         $summary['users'] = (int) $db->exec("DELETE FROM users WHERE role <> 'admin'");
         $db->exec("ALTER TABLE users AUTO_INCREMENT = 1");
+    } catch (PDOException $e) {
+        // Tampilkan sebab sebenarnya ke admin (aksi ini hanya untuk admin).
+        error_log('[ELIPS] reset data gagal: ' . $e->getMessage());
+        return elips_fail('Reset data gagal di tengah jalan: ' . $e->getMessage() . ' Jalankan ulang untuk melanjutkan.');
     } finally {
         $db->exec('SET FOREIGN_KEY_CHECKS = 1');
+    }
+
+    // Verifikasi: tidak boleh ada sisa data selain akun admin.
+    $left = (int) $db->query("SELECT COUNT(*) FROM users WHERE role <> 'admin'")->fetchColumn();
+    foreach ($wiped as $table) {
+        $left += (int) $db->query("SELECT COUNT(*) FROM `$table`")->fetchColumn();
+    }
+    if ($left > 0) {
+        return elips_fail('Reset belum bersih: masih ada ' . $left . ' baris tersisa. Jalankan ulang.');
     }
 
     $root = dirname(__DIR__);
     $summary['files'] += elips_reset_clear_dir($root . '/storage/payment-proofs');
     $summary['files'] += elips_reset_clear_dir($root . '/assets/uploads/courses');
+    $summary['files'] += elips_reset_clear_dir($root . '/storage/tutor-docs');
 
     elips_audit(
         'reset', 'system', null, 'Reset data',

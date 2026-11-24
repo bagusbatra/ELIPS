@@ -1,3 +1,4 @@
+// Direktori: assets/js/crud-academic.js
 // ============================================================
 // ELIPS LMS - crud-academic.js
 // CRUD versi kurikulum, kelas/angkatan, penugasan tentor, dan
@@ -930,7 +931,7 @@
             : Number(classItem.instructorId) || 0;
         if (instructorId < 0) instructorId = 0;
         if (instructorId > 0 && !isActiveInstructor(instructorId)) {
-            return failure('Instruktur sesi harus berstatus aktif.');
+            return failure('Tentor sesi harus berstatus aktif.');
         }
 
         const status = String(data.status || 'scheduled');
@@ -2280,7 +2281,7 @@
             enrollment = materialEnrollmentLocal(classItem.id, user.id);
             if (!enrollment) return failure('Anda tidak terdaftar pada kelas ini.');
             if (materialSettingsLocal(classItem.id).requireInstructorApproval) {
-                return failure('Penyelesaian materi perlu dikonfirmasi instruktur.');
+                return failure('Penyelesaian materi perlu dikonfirmasi tentor.');
             }
         }
 

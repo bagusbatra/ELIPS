@@ -1,3 +1,4 @@
+// Direktori: assets/js/pages/instructor/manage-course.js
 // ELIPS LMS - skrip halaman instructor/manage-course.php
 // Diekstrak dari inline <script>; URL relatif terhadap halaman.
 let currentInstructor = null;
@@ -82,7 +83,7 @@ document.addEventListener('DOMContentLoaded', function () {
     currentInstructor = ELIPS.requireRole('instruktur');
     if (!currentInstructor) return;
 
-    const name = currentInstructor.name || 'Instruktur';
+    const name = currentInstructor.name || 'Tentor';
     document.getElementById('instructorName').textContent = name;
     document.getElementById('instructorAvatar').textContent = name.substring(0, 2).toUpperCase();
 
@@ -131,7 +132,7 @@ function renderInstructorCourses() {
             '<tr><td colspan="5" style="text-align: center; padding: 2.5rem 1rem; color: var(--text-secondary);">',
             '  <i class="bi bi-journal-x" style="display: block; font-size: 2.5rem; opacity: .45; margin-bottom: .75rem;"></i>',
             '  <div style="font-weight: 600; color: var(--text-primary); margin-bottom: .25rem;">Belum ada kursus yang ditugaskan</div>',
-            '  <div style="font-size: .875rem;">Admin akan menugaskan Anda sebagai instruktur pada sebuah kursus.</div>',
+            '  <div style="font-size: .875rem;">Admin akan menugaskan Anda sebagai tentor pada sebuah kursus.</div>',
             '</td></tr>'
         ].join('');
         return;
@@ -376,7 +377,7 @@ function renderClassMaterialSettings(classItem, panel) {
         '  </div>',
         '</div>',
         '<label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; margin-top: 0.75rem;">',
-        '  <input type="checkbox" id="classAccessApproval" style="width: auto;"> Wajib persetujuan instruktur untuk menandai selesai',
+        '  <input type="checkbox" id="classAccessApproval" style="width: auto;"> Wajib persetujuan tentor untuk menandai selesai',
         '</label>',
         '<div style="margin-top: 0.75rem;">',
         '  <button class="btn btn-outline" onclick="saveClassMaterialSettings()"><i class="bi bi-save"></i> Simpan Pengaturan</button>',
@@ -1500,4 +1501,3 @@ function saveExamResultRow(examId, enrollmentId) {
         renderTasks();
     }
 }
-

@@ -1,3 +1,4 @@
+// Direktori: assets/js/pages/admin/audit.js
 // ELIPS LMS - skrip halaman admin/audit.php
 // Diekstrak dari inline <script>; URL relatif terhadap halaman.
 const ACTION_BADGE = {
@@ -15,7 +16,7 @@ const ACTION_BADGE = {
 
 function roleLabel(role) {
     if (role === 'admin') return 'Admin';
-    if (role === 'instruktur') return 'Instruktur';
+    if (role === 'instruktur') return 'Tentor';
     if (role === 'peserta') return 'Peserta';
     return 'Sistem';
 }
@@ -213,4 +214,3 @@ document.addEventListener('DOMContentLoaded', function () {
     document.getElementById('exportAudit').addEventListener('click', exportCsv);
     document.getElementById('clearAudit').addEventListener('click', clearLogs);
 });
-

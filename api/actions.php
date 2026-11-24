@@ -47,6 +47,20 @@ function elips_dispatch(string $action, array $payload): array
             return elips_action_course_status($payload);
         case 'course.image':
             return elips_action_course_image($payload);
+        case 'tutor.create':
+            return elips_action_tutor_create($payload);
+        case 'tutor.sendActivation':
+            return elips_action_tutor_send_activation($payload);
+        case 'tutor.profile':
+            return elips_action_tutor_profile($payload);
+        case 'tutor.activationInfo':
+            return elips_action_tutor_activation_info($payload);
+        case 'tutor.document.upload':
+            return elips_action_tutor_document_upload($payload);
+        case 'tutor.document.remove':
+            return elips_action_tutor_document_remove($payload);
+        case 'tutor.activationComplete':
+            return elips_action_tutor_activation_complete($payload);
         case 'system.resetData':
             return elips_action_system_reset_data($payload);
         case 'course.classes':
@@ -902,10 +916,10 @@ function elips_action_user_assign_courses(array $p): array
     $instructor = elips_user_row($instructorId);
 
     if (!$instructor || $instructor['role'] !== 'instruktur') {
-        return elips_fail('Pilih akun instruktur yang valid.');
+        return elips_fail('Pilih akun tentor yang valid.');
     }
     if ($instructor['status'] !== 'aktif') {
-        return elips_fail('Instruktur harus berstatus aktif.');
+        return elips_fail('Tentor harus berstatus aktif.');
     }
 
     $selected = [];
@@ -942,7 +956,7 @@ function elips_action_user_assign_courses(array $p): array
             'course',
             null,
             $instructor['name'],
-            'Memperbarui ' . $changed . ' penugasan kursus untuk instruktur "' . $instructor['name'] . '".',
+            'Memperbarui ' . $changed . ' penugasan kursus untuk tentor "' . $instructor['name'] . '".',
             $actor
         );
     }
@@ -963,8 +977,8 @@ function elips_action_course_create(array $p): array
 
     if ($title === '') return elips_fail('Judul kursus wajib diisi.');
     if ($category === '') return elips_fail('Kategori kursus wajib diisi.');
-    if (!$instructorId) return elips_fail('Pilih satu instruktur untuk kursus ini.');
-    if (!elips_is_active_instructor($instructorId)) return elips_fail('Instruktur harus berstatus aktif.');
+    if (!$instructorId) return elips_fail('Pilih satu tentor untuk kursus ini.');
+    if (!elips_is_active_instructor($instructorId)) return elips_fail('Tentor harus berstatus aktif.');
 
     [$extra, $extraError] = elips_course_extra_fields($p, null);
     if ($extra === null) return elips_fail($extraError);
@@ -988,7 +1002,7 @@ function elips_action_course_create(array $p): array
         'course',
         $id,
         $title,
-        'Membuat kursus "' . $title . '" (Draft) dengan instruktur ' . $instructor['name'] . '.',
+        'Membuat kursus "' . $title . '" (Draft) dengan tentor ' . $instructor['name'] . '.',
         $actor
     );
 
@@ -1011,8 +1025,8 @@ function elips_action_course_update(array $p): array
 
     if ($title === '') return elips_fail('Judul kursus wajib diisi.');
     if ($category === '') return elips_fail('Kategori kursus wajib diisi.');
-    if (!$nextInstructorId) return elips_fail('Pilih satu instruktur untuk kursus ini.');
-    if (!elips_is_active_instructor($nextInstructorId)) return elips_fail('Instruktur harus berstatus aktif.');
+    if (!$nextInstructorId) return elips_fail('Pilih satu tentor untuk kursus ini.');
+    if (!elips_is_active_instructor($nextInstructorId)) return elips_fail('Tentor harus berstatus aktif.');
 
     $previousInstructorId = $course['instructor_id'] === null ? null : (int) $course['instructor_id'];
     $instructor = elips_user_row($nextInstructorId);
@@ -1109,7 +1123,7 @@ function elips_action_course_status(array $p): array
 
     if ($status === 'published') {
         if (!elips_is_active_instructor($course['instructor_id'] === null ? null : (int) $course['instructor_id'])) {
-            return elips_fail('Tugaskan instruktur aktif sebelum mempublikasikan kursus.');
+            return elips_fail('Tugaskan tentor aktif sebelum mempublikasikan kursus.');
         }
         $version = elips_ensure_curriculum_version($id, (int) $actor['id']);
         $stmt = elips_db()->prepare('SELECT COUNT(*) FROM modules WHERE curriculum_version_id = ?');
@@ -2178,7 +2192,7 @@ function elips_session_normalize(array $class, array $p, int $sessionNumber): ar
         $instructorId = (int) ($class['instructor_id'] ?? 0);
     }
     if ($instructorId > 0 && !elips_is_active_instructor($instructorId)) {
-        throw new ElipsError('Instruktur sesi harus berstatus aktif.');
+        throw new ElipsError('Tentor sesi harus berstatus aktif.');
     }
 
     $plannedJp = max(0, (float) ($p['plannedJp'] ?? 0));
@@ -3681,7 +3695,7 @@ function elips_action_material_progress(array $p): array
 
         $settings = elips_class_material_settings_public($classId);
         if ($settings['requireInstructorApproval']) {
-            return elips_fail('Penyelesaian materi perlu dikonfirmasi instruktur.');
+            return elips_fail('Penyelesaian materi perlu dikonfirmasi tentor.');
         }
     }
 
@@ -4475,7 +4489,7 @@ function elips_action_assignment_submit(array $p): array
         return elips_fail('Tugas belum dibuka.');
     }
     if ($assignment['type'] === 'in_class_practice') {
-        return elips_fail('Tugas praktik kelas dicatat langsung oleh instruktur.');
+        return elips_fail('Tugas praktik kelas dicatat langsung oleh tentor.');
     }
 
     $data = elips_payload_array($p, 'data');
@@ -4486,7 +4500,7 @@ function elips_action_assignment_submit(array $p): array
 
     $existingRow = elips_assignment_submission_for($assignmentId, (int) $enrollment['id']);
     if ($existingRow && in_array($existingRow['status'], ['reviewed', 'accepted'], true)) {
-        return elips_fail('Pengumpulan ini sudah dinilai. Tunggu instruktur membuka revisi.');
+        return elips_fail('Pengumpulan ini sudah dinilai. Tunggu tentor membuka revisi.');
     }
 
     $existingFiles = $existingRow ? elips_submission_files_for((int) $existingRow['id'], true) : [];
@@ -8216,4 +8230,5 @@ function elips_action_notification_clear(): array
 require_once __DIR__ . '/registrations.php';
 require_once __DIR__ . '/academic.php';
 require_once __DIR__ . '/maintenance.php';
+require_once __DIR__ . '/tutors.php';
 require_once __DIR__ . '/attendance_rules.php';

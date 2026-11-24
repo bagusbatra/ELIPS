@@ -1,3 +1,4 @@
+// Direktori: assets/js/pages/admin/certificates.js
 // ELIPS LMS - skrip halaman admin/certificates.php
 // Diekstrak dari inline <script>; URL relatif terhadap halaman.
 function renderAdminCerts() {
@@ -12,7 +13,7 @@ function renderAdminCerts() {
 
     tbody.innerHTML = '';
     if (certificates.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--text-secondary);">Belum ada sertifikat. Sertifikat dibuat otomatis saat instruktur memberi nilai.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--text-secondary);">Belum ada sertifikat. Sertifikat dibuat otomatis saat tentor memberi nilai.</td></tr>';
         return;
     }
 
@@ -86,4 +87,3 @@ document.addEventListener('DOMContentLoaded', function () {
     if (!ELIPS.requireRole('admin')) return;
     renderAdminCerts();
 });
-

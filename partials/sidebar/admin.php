@@ -23,6 +23,10 @@ try {
             <i class="bi bi-speedometer2"></i>
             <span>Dashboard</span>
         </a>
+            <a href="<?= url('admin/courses.php') ?>" class="dashboard-nav-link<?= nav_active('admin/courses.php') ?>">
+            <i class="bi bi-journal-bookmark"></i>
+            <span>Kelola Kursus</span>
+        </a>
         <a href="<?= url('admin/registrations.php') ?>" class="dashboard-nav-link<?= nav_active('admin/registrations.php') ?>">
             <i class="bi bi-person-plus"></i>
             <span>Pendaftaran Siswa</span>
@@ -37,10 +41,6 @@ try {
             <i class="bi bi-people"></i>
             <span>Kelola Pengguna</span>
             <span class="nav-badge nav-badge-red" data-badge="resetRequests" data-count="<?= (int) $__badges['resetRequests'] ?>"<?= $__badges['resetRequests'] > 0 ? '' : ' hidden' ?> title="Permintaan reset sandi"><?= (int) $__badges['resetRequests'] ?></span>
-        </a>
-        <a href="<?= url('admin/courses.php') ?>" class="dashboard-nav-link<?= nav_active('admin/courses.php') ?>">
-            <i class="bi bi-journal-bookmark"></i>
-            <span>Kelola Kursus</span>
         </a>
         <a href="<?= url('admin/academic.php') ?>" class="dashboard-nav-link<?= nav_active('admin/academic.php') ?>">
             <i class="bi bi-diagram-3"></i>

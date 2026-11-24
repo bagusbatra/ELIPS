@@ -6,6 +6,7 @@ $page = [
     'roles' => ['admin'],
     'title' => 'Kelola Pengguna - ELIPS LMS',
     'area' => 'admin',
+    'css' => ['tutor'],
     'scripts' => ['@crud', 'ui'],
     'sidebar' => 'admin',
 ];
@@ -16,7 +17,7 @@ layout('app', $page);
                 <div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;">
                     <div>
                         <h1 class="dashboard-title">Kelola Pengguna</h1>
-                        <p class="dashboard-subtitle">Tambah Admin, Instruktur, Peserta, atau Karyawan. Instruktur juga bisa langsung ditugaskan ke kursus.</p>
+                        <p class="dashboard-subtitle">Tambah Admin, Tentor, Peserta, atau Karyawan. Tentor juga bisa langsung ditugaskan ke kursus.</p>
                     </div>
                     <button class="btn btn-primary" onclick="openUserTypeModal()">
                         <i class="bi bi-person-plus"></i>
@@ -32,7 +33,7 @@ layout('app', $page);
                         <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
                             <button class="btn btn-primary" id="filterAll" onclick="filterUsers('all')">Semua</button>
                             <button class="btn btn-ghost" id="filterAdmin" onclick="filterUsers('admin')">Admin</button>
-                            <button class="btn btn-ghost" id="filterInstruktur" onclick="filterUsers('instruktur')">Instruktur</button>
+                            <button class="btn btn-ghost" id="filterTentor" onclick="filterUsers('instruktur')">Tentor</button>
                             <button class="btn btn-ghost" id="filterPeserta" onclick="filterUsers('peserta')">Peserta</button>
                             <button class="btn btn-ghost" id="filterKaryawan" onclick="filterUsers('karyawan')">Karyawan</button>
                         </div>
@@ -87,7 +88,7 @@ layout('app', $page);
                         <i class="bi bi-easel"></i>
                     </span>
                     <span class="user-role-choice-info">
-                        <span class="user-role-choice-title">Instruktur</span>
+                        <span class="user-role-choice-title">Tentor</span>
                         <span class="user-role-choice-desc">Mengelola modul, materi, dan memberi nilai pada kursus yang diampu.</span>
                     </span>
                     <i class="bi bi-chevron-right" style="color: var(--text-light);"></i>
@@ -143,7 +144,7 @@ layout('app', $page);
                     <select id="userRole" class="form-input" onchange="syncDivisionField()">
                         <option value="peserta">Peserta</option>
                         <option value="karyawan">Karyawan</option>
-                        <option value="instruktur">Instruktur</option>
+                        <option value="instruktur">Tentor</option>
                         <option value="admin">Admin</option>
                     </select>
                 </div>
@@ -178,7 +179,65 @@ layout('app', $page);
         </div>
     </div>
 
-    <!-- Modal Assign Instruktur ke Kursus -->
+    <!-- Modal Tambah Tentor (hanya nama) -->
+    <div id="tentorModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; padding: 1rem;">
+        <form id="tentorForm" style="background: white; border-radius: var(--radius-lg); max-width: 460px; width: 100%;" onsubmit="saveTentor(event)">
+            <div style="padding: 1.5rem; border-bottom: 1px solid var(--border); display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem;">
+                <div>
+                    <h3 style="font-size: 1.25rem; font-weight: 600;">Tambah Tentor</h3>
+                    <p style="font-size: 0.875rem; color: var(--text-secondary); margin-top: 0.25rem;">Cukup isi nama. Biodata dan berkas dilengkapi tentor sendiri lewat link aktivasi.</p>
+                </div>
+                <button type="button" onclick="closeTentorModal()" aria-label="Tutup" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--text-secondary); line-height: 1;">
+                    <i class="bi bi-x"></i>
+                </button>
+            </div>
+            <div style="padding: 1.5rem;">
+                <div class="form-group">
+                    <label class="form-label" for="tentorName">Nama Tentor *</label>
+                    <input type="text" id="tentorName" class="form-input" maxlength="150" placeholder="Masukkan nama tentor" autocomplete="off" required>
+                </div>
+            </div>
+            <div style="padding: 1.5rem; border-top: 1px solid var(--border); display: flex; gap: 0.75rem; justify-content: flex-end;">
+                <button type="button" class="btn btn-ghost" onclick="closeTentorModal()">Batal</button>
+                <button type="submit" class="btn btn-primary" id="tentorSaveBtn">Simpan</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Modal Link Aktivasi Tentor -->
+    <div id="tentorLinkModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; padding: 1rem;">
+        <div style="background: white; border-radius: var(--radius-lg); max-width: 520px; width: 100%; padding: 1.5rem;">
+            <h3 style="font-size: 1.25rem; font-weight: 600; margin: 0 0 0.5rem;">Link Aktivasi Tentor</h3>
+            <p id="tentorLinkInfo" style="color: var(--text-secondary); margin: 0 0 1rem;"></p>
+            <div class="form-group">
+                <label class="form-label" for="tentorLinkInput" id="tentorLinkLabel">Link aktivasi</label>
+                <input type="text" id="tentorLinkInput" class="form-input" readonly onclick="this.select()">
+            </div>
+            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; justify-content: flex-end; margin-top: 1rem;">
+                <button class="btn btn-ghost" type="button" onclick="closeTentorLinkModal()">Tutup</button>
+                <button class="btn btn-ghost" type="button" onclick="copyTentorLink()"><i class="bi bi-clipboard"></i> Salin</button>
+                <a class="btn btn-primary" id="tentorWaBtn" href="#" target="_blank" rel="noopener noreferrer"><i class="bi bi-whatsapp"></i> Kirim lewat WhatsApp</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Data & Berkas Tentor -->
+    <div id="tentorDocsModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; padding: 1rem;">
+        <div style="background: white; border-radius: var(--radius-lg); max-width: 600px; width: 100%; max-height: 90vh; overflow-y: auto;">
+            <div style="padding: 1.5rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between;">
+                <h3 style="font-size: 1.25rem; font-weight: 600;" id="tentorDocsTitle">Data Tentor</h3>
+                <button type="button" onclick="closeTentorDocsModal()" aria-label="Tutup" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--text-secondary);">
+                    <i class="bi bi-x"></i>
+                </button>
+            </div>
+            <div id="tentorDocsBody" style="padding: 1.5rem;"></div>
+            <div style="padding: 1rem 1.5rem; border-top: 1px solid var(--border); display: flex; justify-content: flex-end;">
+                <button class="btn btn-ghost" type="button" onclick="closeTentorDocsModal()">Tutup</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Assign Tentor ke Kursus -->
     <div id="resetModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; padding: 1rem;">
         <div style="background: var(--bg-primary, #fff); border-radius: var(--radius-lg, 14px); width: 100%; max-width: 480px; padding: 1.5rem;">
             <h3 style="font-size: 1.25rem; font-weight: 600; margin: 0 0 0.75rem;">Reset Sandi Siswa</h3>
@@ -200,17 +259,17 @@ layout('app', $page);
     <div id="assignModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; padding: 1rem;">
         <div style="background: white; border-radius: var(--radius-lg); max-width: 560px; width: 100%; max-height: 90vh; overflow-y: auto;">
             <div style="padding: 1.5rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between;">
-                <h3 style="font-size: 1.25rem; font-weight: 600;">Tugaskan Instruktur ke Kursus</h3>
+                <h3 style="font-size: 1.25rem; font-weight: 600;">Tugaskan Tentor ke Kursus</h3>
                 <button onclick="closeAssignModal()" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--text-secondary);">
                     <i class="bi bi-x"></i>
                 </button>
             </div>
             <div style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem;">
-                <div><strong>Instruktur:</strong> <span id="assignInstructorName"></span></div>
+                <div><strong>Tentor:</strong> <span id="assignInstructorName"></span></div>
                 <div class="form-group">
                     <label class="form-label">Pilih Kursus yang Diampu</label>
                     <div id="assignCourseList" style="display: flex; flex-direction: column; gap: 0.5rem; padding: 0.75rem; border: 1px solid var(--border); border-radius: var(--radius); max-height: 260px; overflow-y: auto;"></div>
-                    <small class="form-hint">1 kursus hanya boleh memiliki 1 instruktur. Memilih kursus di sini akan menggantikan instruktur sebelumnya bila ada.</small>
+                    <small class="form-hint">1 kursus hanya boleh memiliki 1 tentor. Memilih kursus di sini akan menggantikan tentor sebelumnya bila ada.</small>
                 </div>
             </div>
             <div style="padding: 1.5rem; border-top: 1px solid var(--border); display: flex; gap: 0.75rem; justify-content: flex-end;">

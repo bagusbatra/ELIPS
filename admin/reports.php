@@ -1,4 +1,5 @@
 <?php
+// Direktori: admin/reports.php
 require_once __DIR__ . '/../includes/bootstrap.php';
 $page = [
     'page_script' => 'admin/reports',
@@ -82,7 +83,7 @@ layout('app', $page);
                             <tr>
                                 <th>Peserta</th>
                                 <th>Kursus</th>
-                                <th>Instruktur</th>
+                                <th>Tentor</th>
                                 <th>Progres</th>
                                 <th>Terakhir Akses</th>
                                 <th>Status</th>

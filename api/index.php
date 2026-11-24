@@ -60,6 +60,9 @@ try {
     }
 
     // Bukti pembayaran: berkas, bukan JSON.
+    if ($action === 'tutor.document') {
+        elips_tutor_document_send((int) ($_GET['id'] ?? 0));
+    }
     if ($action === 'payment.proof') {
         elips_payment_proof_send((int) ($_GET['id'] ?? 0));
     }
@@ -72,6 +75,8 @@ try {
         'activation.info', 'password.forgot', 'password.requests', 'password.reset.issue',
         'password.request.dismiss', 'password.reset.info', 'password.reset.complete',
         'payment.mine', 'payment.submit', 'payment.invoices', 'payment.invoice', 'payment.record',
+        'tutor.sendActivation', 'tutor.profile', 'tutor.activationInfo', 'tutor.document.upload',
+        'tutor.document.remove', 'tutor.activationComplete',
         'payment.markPaid', 'payment.verify', 'payment.void', 'payment.settings.get', 'payment.settings.save',
     ];
     if ($result['ok'] && !in_array($action, $noSnapshot, true)) {

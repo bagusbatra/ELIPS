@@ -1,3 +1,4 @@
+// Direktori: assets/js/attendance.js
 // ============================================================
 // ELIPS LMS - attendance.js
 // Modul absensi harian bersama untuk dashboard Admin dan halaman
@@ -18,7 +19,7 @@
     const GPS_REQUIRED_MESSAGE = 'Lokasi GPS wajib aktif untuk melakukan absensi.';
     const ROLE_LABELS = {
         admin: 'Admin',
-        instruktur: 'Instruktur',
+        instruktur: 'Tentor',
         peserta: 'Peserta',
         karyawan: 'Karyawan'
     };

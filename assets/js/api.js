@@ -1,3 +1,4 @@
+// Direktori: assets/js/api.js
 // ============================================================
 // ELIPS LMS - api.js
 // Jembatan antara UI sinkron dan backend PHP/MySQL.
@@ -146,6 +147,17 @@
         if (window.console && console.warn) {
             console.warn('[ELIPS] Backend tidak tersedia, memakai localStorage:', api.error);
         }
+        // Mode server yang gagal terhubung tidak boleh diam-diam menampilkan
+        // data lama dari browser: beri tanda yang jelas (kecuali mode demo lokal,
+        // yang memuat seed.js).
+        document.addEventListener('DOMContentLoaded', function () {
+            if (document.querySelector('script[src*="seed"]')) return;
+            const bar = document.createElement('div');
+            bar.setAttribute('role', 'alert');
+            bar.style.cssText = 'position:fixed;left:0;right:0;top:0;z-index:2000;padding:.6rem 1rem;background:#b91c1c;color:#fff;font:600 14px/1.4 system-ui,sans-serif;text-align:center;';
+            bar.textContent = 'Server tidak dapat dihubungi' + (api.error ? ' (' + api.error + ')' : '') + '. Data yang tampil adalah salinan lama di browser ini, bukan data sebenarnya.';
+            document.body.appendChild(bar);
+        });
         return;
     }
 

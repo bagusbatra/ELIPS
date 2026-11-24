@@ -1,4 +1,5 @@
 <?php
+// Direktori: admin/dashboard.php
 require_once __DIR__ . '/../includes/bootstrap.php';
 $page = [
     'page_script' => 'admin/dashboard',
@@ -178,7 +179,7 @@ layout('app', $page);
                                     <span>ahmad@example.com</span>
                                 </td>
                                 <td>
-                                    <span class="badge badge-warning">Instruktur</span>
+                                    <span class="badge badge-warning">Tentor</span>
                                 </td>
                                 <td>
                                     <span class="badge badge-success">Aktif</span>
@@ -238,7 +239,7 @@ layout('app', $page);
                         <thead>
                             <tr>
                                 <th>Kursus</th>
-                                <th>Instruktur</th>
+                                <th>Tentor</th>
                                 <th>Peserta</th>
                                 <th>Status</th>
                             </tr>
