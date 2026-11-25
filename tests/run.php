@@ -1301,15 +1301,50 @@ $row = array_values(array_filter($res['data']['classes'] ?? [], fn($x) => $x['id
 t('kartu penilaian: 1 perlu dinilai, akhir terkunci', $row && $row['pending'] === 1 && $row['finalState'] === 'locked', json_encode($row));
 
 // Penilaian akhir
-$res = $tp->api('tp.final.list', ['classId' => $tpClass]);
-t('penilaian akhir terkunci sebelum semua sesi dikonfirmasi', empty($res['ok']) && strpos($res['message'] ?? '', '2 dari 4') !== false, $res['message'] ?? '');
-$pdo->exec("UPDATE class_sessions SET status = 'confirmed' WHERE class_id = $tpClass");
-$res = $tp->api('tp.final.list', ['classId' => $tpClass]);
-t('penilaian akhir terbuka setelah semua dikonfirmasi', !empty($res['ok']) && count($res['data']['students'] ?? []) === 2, $res['message'] ?? '');
-t('template awal dari kurikulum (4 sub materi)', ($res['data']['template']['source'] ?? '') === 'curriculum' && ($res['data']['template']['items'] ?? 0) === 4);
-
 $e1 = $tpEnroll[0]['enrollment'];
 $e2 = $tpEnroll[1]['enrollment'];
+$res = $tp->api('tp.final.list', ['classId' => $tpClass]);
+t('penilaian akhir: daftar siswa tampil walau materi belum dikonfirmasi', !empty($res['ok']) && count($res['data']['students'] ?? []) === 2, $res['message'] ?? '');
+t('penilaian akhir: siswa belum siap (materi 0 dari N)', ($res['data']['students'][0]['materi']['ready'] ?? true) === false && ($res['data']['students'][0]['materi']['total'] ?? 0) > 0 && ($res['data']['gate']['studentsReady'] ?? -1) === 0, json_encode($res['data']['gate'] ?? null));
+t('penilaian akhir: progres kehadiran & tugas per siswa', isset($res['data']['students'][0]['attendance']['present'], $res['data']['students'][0]['tasks']['total']));
+$resGet = $tp->api('tp.final.get', ['classId' => $tpClass, 'enrollmentId' => $e1]);
+t('rapor siswa bisa dilihat saat materi belum dikonfirmasi, tetapi tidak bisa disimpan', !empty($resGet['ok']) && ($resGet['data']['gate']['canEdit'] ?? true) === false && empty($tp->api('tp.final.save', ['classId' => $tpClass, 'enrollmentId' => $e1, 'structure' => $resGet['data']['structure']])['ok']));
+t('kirim nilai akhir ditolak saat materi belum dikonfirmasi', empty($tp->api('tp.final.send', ['classId' => $tpClass])['ok']));
+$tpVersion = (int) $pdo->query("SELECT curriculum_version_id FROM classes WHERE id = $tpClass")->fetchColumn();
+$pdo->exec("INSERT IGNORE INTO class_lesson_progress (class_id, enrollment_id, student_id, lesson_id, completed_by)
+            SELECT $tpClass, e.id, e.student_id, l.id, 1 FROM enrollments e JOIN lessons l ON l.curriculum_version_id = $tpVersion WHERE e.class_id = $tpClass AND e.id = $e1");
+$res = $tp->api('tp.final.list', ['classId' => $tpClass]);
+$byE = [];
+foreach ($res['data']['students'] ?? [] as $stu) { $byE[$stu['enrollmentId']] = $stu; }
+t('materi siswa 1 terkonfirmasi semua: siap dinilai, siswa 2 belum', ($byE[$e1]['materi']['ready'] ?? false) === true && ($byE[$e2]['materi']['ready'] ?? true) === false && ($res['data']['gate']['studentsReady'] ?? 0) === 1, json_encode($res['data']['gate'] ?? null));
+t('kartu angkatan: akhir masih terkunci sebelum admin menutup pembelajaran', (array_values(array_filter($tp->api('tp.grading.classes')['data']['classes'] ?? [], fn($x) => $x['id'] === $tpClass))[0]['finalState'] ?? '') === 'locked');
+$resGate = $tp->api('tp.final.get', ['classId' => $tpClass, 'enrollmentId' => $e1]);
+t('materi lengkap tetapi pembelajaran belum ditutup: tidak bisa diisi', ($resGate['data']['gate']['canEdit'] ?? true) === false && strpos($resGate['data']['gate']['reason'] ?? '', 'menutup pembelajaran') !== false, json_encode($resGate['data']['gate'] ?? null));
+t('simpan nilai akhir ditolak sebelum pembelajaran ditutup', empty($tp->api('tp.final.save', ['classId' => $tpClass, 'enrollmentId' => $e1, 'structure' => $resGate['data']['structure']])['ok']));
+$pdo->exec("UPDATE classes SET status = 'completed', completed_at = UTC_TIMESTAMP() WHERE id = $tpClass");
+t('kartu angkatan: akhir terbuka setelah admin menutup & ada siswa siap', (array_values(array_filter($tp->api('tp.grading.classes')['data']['classes'] ?? [], fn($x) => $x['id'] === $tpClass))[0]['finalState'] ?? '') === 'open');
+$resGate = $tp->api('tp.final.get', ['classId' => $tpClass, 'enrollmentId' => $e1]);
+t('setelah ditutup, siswa dengan materi lengkap bisa diisi', ($resGate['data']['gate']['canEdit'] ?? false) === true);
+$resGate2 = $tp->api('tp.final.get', ['classId' => $tpClass, 'enrollmentId' => $e2]);
+t('setelah ditutup, siswa dengan materi belum lengkap tetap terkunci', ($resGate2['data']['gate']['canEdit'] ?? true) === false && strpos($resGate2['data']['gate']['reason'] ?? '', 'dikonfirmasi') !== false);
+$res = $tp->api('tp.final.list', ['classId' => $tpClass]);
+t('sub materi mengikuti penugasan: hanya pertemuan bertugas (1 dari 4)', ($res['data']['template']['source'] ?? '') === 'assignments' && ($res['data']['template']['items'] ?? 0) === 1, json_encode($res['data']['template'] ?? null));
+$scoresSeen = [];
+foreach ([$e1, $e2] as $eid) {
+    $g = $tp->api('tp.final.get', ['classId' => $tpClass, 'enrollmentId' => $eid]);
+    $scoresSeen[] = $g['data']['structure'][0]['items'][0]['score'] ?? null;
+}
+t('nilai sub materi terisi otomatis dari nilai tugas siswa', in_array(88.5, $scoresSeen, true) && count(array_filter($scoresSeen, fn($x) => $x === null)) >= 1, json_encode($scoresSeen));
+$resList = $tp->api('tp.final.list', ['classId' => $tpClass]);
+$filledSeen = array_map(fn($x) => $x['filled'] . '/' . $x['count'], $resList['data']['students'] ?? []);
+t('daftar menampilkan sub materi terisi sesuai tugas (1/1 dan 0/1)', in_array('1/1', $filledSeen, true) && in_array('0/1', $filledSeen, true), json_encode($filledSeen));
+$asgBackup = $pdo->query("SELECT id, status FROM assignments WHERE class_id = $tpClass")->fetchAll(PDO::FETCH_KEY_PAIR);
+$pdo->exec("UPDATE assignments SET status = 'draft' WHERE class_id = $tpClass");
+$res = $tp->api('tp.final.list', ['classId' => $tpClass]);
+t('angkatan tanpa tugas terbit: susunan dari kurikulum (4 sub materi)', ($res['data']['template']['source'] ?? '') === 'curriculum' && ($res['data']['template']['items'] ?? 0) === 4);
+$pdo->exec("INSERT IGNORE INTO class_lesson_progress (class_id, enrollment_id, student_id, lesson_id, completed_by)
+            SELECT $tpClass, e.id, e.student_id, l.id, 1 FROM enrollments e JOIN lessons l ON l.curriculum_version_id = $tpVersion WHERE e.class_id = $tpClass AND e.id = $e2");
+
 $res = $tp->api('tp.final.get', ['classId' => $tpClass, 'enrollmentId' => $e1]);
 t('struktur awal: 2 materi', count($res['data']['structure'] ?? []) === 2 && ($res['data']['source'] ?? '') === 'curriculum', json_encode($res['message'] ?? ''));
 $structure = [
@@ -1344,6 +1379,7 @@ $res = $tp->api('tp.final.get', ['classId' => $tpClass, 'enrollmentId' => $e1]);
 t('struktur siswa lama tidak ikut berubah (opsi A)', ($res['data']['structure'][0]['title'] ?? '') === 'MICROSOFT WORD' && count($res['data']['structure'][0]['items'] ?? []) === 2);
 $res = $tp->api('tp.final.list', ['classId' => $tpClass]);
 t('template terbaru dipakai (6 sub materi)', ($res['data']['template']['items'] ?? 0) === 6, json_encode($res['data']['template'] ?? null));
+foreach ($asgBackup as $aid => $ast) { $pdo->exec("UPDATE assignments SET status = '$ast' WHERE id = " . (int) $aid); }
 
 $res = $tp->api('tp.final.send', ['classId' => $tpClass]);
 t('kirim nilai akhir berhasil bila semua lengkap', !empty($res['ok']), $res['message'] ?? '');
@@ -1503,6 +1539,74 @@ $res = $cpOps->api('cp.structure.copy', ['courseId' => $cpCopy, 'fromCourseId' =
 t('salin struktur: 2 modul, 4 materi, tanpa isi tentor', !empty($res['ok']) && ($res['data']['totals']['modules'] ?? 0) === 2 && ($res['data']['totals']['lessons'] ?? 0) === 4 && ($res['data']['totals']['filled'] ?? -1) === 0, $res['message'] ?? '');
 t('salin ke kursus berisi ditolak', empty($cpOps->api('cp.structure.copy', ['courseId' => $cpCopy, 'fromCourseId' => $cpCourse])['ok']));
 t('salin dari diri sendiri ditolak', empty($cpOps->api('cp.structure.copy', ['courseId' => $cpCourse, 'fromCourseId' => $cpCourse])['ok']));
+
+
+// ---- Status angkatan otomatis & tutup pembelajaran
+$pastStart = (new DateTimeImmutable('-3 days', new DateTimeZone('Asia/Jakarta')))->format('Y-m-d');
+$res = $cpOps->api('cp.angkatan.create', array_merge($base1, ['periodStart' => $pastStart]));
+$lcClass = (int) ($res['data']['createdClassId'] ?? 0);
+t('angkatan dengan tanggal mulai sudah lewat langsung Berlangsung', !empty($res['ok']) && (string) $pdo->query("SELECT status FROM classes WHERE id = $lcClass")->fetchColumn() === 'ongoing', $res['message'] ?? '');
+$lcCourse = $cpCourse;
+$pub = (new Client($base))->api('course.classes', ['courseId' => $lcCourse]);
+t('angkatan Berlangsung tidak tampil di pendaftaran publik', !in_array($lcClass, array_column($pub['data'] ?? [], 'id'), true));
+$res = (new Client($base))->api('course.register', ['courseId' => $lcCourse, 'classId' => $lcClass, 'name' => 'Telat Daftar', 'birthPlace' => 'X', 'birthDate' => '2000-01-01', 'address' => 'Jl. X No. 1', 'phone' => '081200000099', 'email' => 'telat@example.com']);
+t('pendaftaran ke angkatan Berlangsung ditolak', empty($res['ok']), $res['message'] ?? '');
+foreach (['open', 'ready', 'ongoing', 'draft', 'completed'] as $manual) {
+    t("status manual '$manual' ditolak", empty($cpAdmin->api('class.status', ['id' => $lcClass, 'status' => $manual])['ok']));
+}
+$endBefore = (string) $pdo->query("SELECT period_end FROM classes WHERE id = $lcClass")->fetchColumn();
+$lastSes = (string) $pdo->query("SELECT MAX(session_date) FROM class_sessions WHERE class_id = $lcClass")->fetchColumn();
+t('perkiraan selesai = tanggal sesi terakhir', $endBefore === $lastSes, "$endBefore / $lastSes");
+$cpAdmin->api('class.update', ['id' => $lcClass, 'data' => ['periodEnd' => '2099-01-01', 'quota' => 15]]);
+t('tanggal selesai tidak bisa diubah manual', (string) $pdo->query("SELECT period_end FROM classes WHERE id = $lcClass")->fetchColumn() === $endBefore);
+$pdo->exec("UPDATE class_sessions SET session_date = DATE_ADD(session_date, INTERVAL 7 DAY) WHERE class_id = $lcClass AND session_number = 4");
+$cpAdmin->api('cp.get', ['courseId' => $lcCourse]);
+t('perkiraan selesai ikut bergeser bila jadwal digeser', (string) $pdo->query("SELECT period_end FROM classes WHERE id = $lcClass")->fetchColumn() === (string) $pdo->query("SELECT MAX(session_date) FROM class_sessions WHERE class_id = $lcClass")->fetchColumn());
+
+// Tutup pembelajaran
+t('tutup ditolak untuk marketing', empty($cpMarketing->api('class.close', ['id' => $lcClass])['ok']));
+t('tutup ditolak untuk tentor', empty($cpTentorClient->api('class.close', ['id' => $lcClass])['ok']));
+t('angkatan Pendaftaran tidak bisa ditutup', empty($cpOps->api('class.close', ['id' => $cpClass2])['ok']));
+$res = $cpOps->api('class.close', ['id' => $lcClass]);
+t('tutup meminta konfirmasi bila ada yang belum selesai', empty($res['ok']) && !empty($res['data']['needsConfirm']) && count($res['data']['warnings'] ?? []) >= 1, json_encode($res));
+t('status tetap Berlangsung sebelum dikonfirmasi', (string) $pdo->query("SELECT status FROM classes WHERE id = $lcClass")->fetchColumn() === 'ongoing');
+$res = $cpOps->api('class.close', ['id' => $lcClass, 'confirm' => true]);
+t('operasional menutup pembelajaran (Selesai)', !empty($res['ok']) && ($res['data']['status'] ?? '') === 'completed' && !empty($res['data']['completedAt']), $res['message'] ?? '');
+t('penutupan dicatat siapa & kapan', (int) $pdo->query("SELECT completed_by FROM classes WHERE id = $lcClass")->fetchColumn() > 0);
+t('tutup dua kali ditolak', empty($cpOps->api('class.close', ['id' => $lcClass, 'confirm' => true])['ok']));
+t('status Selesai tidak diubah otomatis', (string) $pdo->query("SELECT status FROM classes WHERE id = $lcClass")->fetchColumn() === 'completed');
+t('angkatan Selesai hanya lihat (ubah ditolak)', empty($cpAdmin->api('class.update', ['id' => $lcClass, 'data' => ['quota' => 30]])['ok']));
+t('tentor tetap bisa melihat daftar nilai akhir angkatan Selesai', !empty($cpTentorClient->api('tp.final.list', ['classId' => $lcClass])['ok']));
+t('tentor tetap bisa melihat detail angkatan Selesai', !empty($cpTentorClient->api('tp.class.detail', ['classId' => $lcClass])['ok']));
+
+// Buka kembali
+t('buka kembali tanpa alasan ditolak', empty($cpAdmin->api('class.reopen', ['id' => $lcClass, 'reason' => ' '])['ok']));
+t('buka kembali ditolak untuk tentor', empty($cpTentorClient->api('class.reopen', ['id' => $lcClass, 'reason' => 'x'])['ok']));
+t('buka kembali ditolak untuk angkatan yang belum Selesai', empty($cpAdmin->api('class.reopen', ['id' => $cpClass2, 'reason' => 'x'])['ok']));
+$res = $cpAdmin->api('class.reopen', ['id' => $lcClass, 'reason' => 'Ada sesi susulan']);
+t('admin membuka kembali angkatan Selesai', !empty($res['ok']) && ($res['data']['status'] ?? '') === 'ongoing', $res['message'] ?? '');
+t('buka kembali tercatat di audit', (int) $pdo->query("SELECT COUNT(*) FROM audit_logs WHERE entity = 'class' AND detail LIKE '%Ada sesi susulan%'")->fetchColumn() === 1);
+
+// Geser tanggal mulai ke depan
+$future = (new DateTimeImmutable('+20 days', new DateTimeZone('Asia/Jakarta')))->format('Y-m-d');
+$pdo->exec("UPDATE class_sessions SET status = 'confirmed' WHERE class_id = $lcClass AND session_number = 1");
+t('geser mulai ke depan ditolak bila sudah ada sesi terkonfirmasi', empty($cpAdmin->api('class.update', ['id' => $lcClass, 'data' => ['periodStart' => $future]])['ok']));
+$pdo->exec("UPDATE class_sessions SET status = 'scheduled' WHERE class_id = $lcClass");
+$res = $cpAdmin->api('class.update', ['id' => $lcClass, 'data' => ['periodStart' => $future]]);
+$cpAdmin->api('cp.get', ['courseId' => $lcCourse]);
+t('geser mulai ke depan: kembali ke Pendaftaran', !empty($res['ok']) && (string) $pdo->query("SELECT status FROM classes WHERE id = $lcClass")->fetchColumn() === 'open', $res['message'] ?? '');
+$pdo->exec("UPDATE classes SET status = 'ongoing', period_start = '$pastStart' WHERE id = $lcClass");
+$pdo->exec("UPDATE classes SET status = 'draft', period_start = NULL WHERE id = $cpClass2");
+$cpAdmin->api('cp.get', ['courseId' => $lcCourse]);
+t('status Draft lama tanpa tanggal mulai menjadi Pendaftaran', (string) $pdo->query("SELECT status FROM classes WHERE id = $cpClass2")->fetchColumn() === 'open');
+$pdo->exec("UPDATE classes SET status = 'ready', period_start = '$pastStart' WHERE id = $cpClass2");
+$cpAdmin->api('cp.get', ['courseId' => $lcCourse]);
+t('status Siap lama dengan tanggal lewat menjadi Berlangsung', (string) $pdo->query("SELECT status FROM classes WHERE id = $cpClass2")->fetchColumn() === 'ongoing');
+$pdo->exec("DELETE FROM classes WHERE id = $lcClass");
+
+$cpJs = (string) file_get_contents(__DIR__ . '/../assets/js/pages/admin/course-publish.js');
+t('tombol publikasi dikunci bila struktur kosong/belum disimpan', strpos($cpJs, 'function publishBlockReason') !== false && strpos($cpJs, 'btn.disabled = reason') !== false);
+t('tombol angkatan baru dikunci sebelum publikasi', strpos($cpJs, 'btn.disabled = !ready') !== false);
 
 // Halaman
 foreach (['admin' => ['admin/course-publish.php?id=' . $cpCourse, $cpAdmin], 'karyawan-operasional' => ['employee/operasional/kursus-publikasi.php?id=' . $cpCourse, $cpOps]] as $who => [$pg, $cl]) {

@@ -166,6 +166,7 @@ function elips_snapshot(): array
             'notes' => $row['notes'],
             'enrollmentCount' => (int) $row['enrollment_count'],
             'activeEnrollmentCount' => (int) $row['active_count'],
+            'completedAt' => !empty($row['completed_at']) ? elips_iso($row['completed_at']) : null,
             'createdBy' => $row['created_by'] === null ? null : (int) $row['created_by'],
             'updatedBy' => $row['updated_by'] === null ? null : (int) $row['updated_by'],
             'createdAt' => elips_iso($row['created_at']),

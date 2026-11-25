@@ -118,15 +118,38 @@
 
         var actions = $('cpbHeadActions');
         if (c.status === 'draft') {
-            actions.innerHTML = '<button type="button" class="btn btn-primary" id="cpbPublish"><i class="bi bi-send-check"></i> Publikasikan kursus</button>';
-            var btn = $('cpbPublish');
-            if (!server.canPublish) btn.title = 'Lengkapi daftar kesiapan lebih dulu.';
-            btn.addEventListener('click', publish);
+            actions.innerHTML = '<button type="button" class="btn btn-primary" id="cpbPublish"><i class="bi bi-send-check"></i> Publikasikan kursus</button>' +
+                '<p class="cpb-action-hint" id="cpbPublishHint" hidden></p>';
+            $('cpbPublish').addEventListener('click', publish);
+            refreshPublishBtn();
         } else if (c.status === 'published') {
-            actions.innerHTML = '<button type="button" class="btn btn-ghost" id="cpbUnpublish"><i class="bi bi-eye-slash"></i> Kembalikan ke Draft</button>';
+            actions.innerHTML = '<button type="button" class="btn btn-ghost cpb-btn-outline" id="cpbUnpublish"><i class="bi bi-eye-slash"></i> Kembalikan ke Draft</button>';
             $('cpbUnpublish').addEventListener('click', unpublish);
         } else {
             actions.innerHTML = '';
+        }
+    }
+
+    // Tombol publikasi aktif hanya bila syarat terpenuhi dan struktur sudah tersimpan.
+    function publishBlockReason() {
+        var t = totals();
+        if (t.modules === 0 || t.lessons === 0) return 'Tambahkan minimal satu modul dan satu materi.';
+        if (dirty) return 'Simpan struktur terlebih dahulu.';
+        var missing = server.checklist.filter(function (i) { return !i.ok; });
+        if (missing.length) return 'Lengkapi: ' + missing.map(function (i) { return i.label.toLowerCase(); }).join(', ') + '.';
+        return '';
+    }
+
+    function refreshPublishBtn() {
+        var btn = $('cpbPublish');
+        if (!btn) return;
+        var reason = publishBlockReason();
+        var hint = $('cpbPublishHint');
+        btn.disabled = reason !== '';
+        btn.title = reason;
+        if (hint) {
+            hint.hidden = reason === '';
+            hint.textContent = reason;
         }
     }
 
@@ -223,26 +246,28 @@
         var note = $('cpbAngkatanNote');
         var ready = c.status === 'published';
         btn.disabled = !ready;
+        btn.title = ready ? '' : 'Publikasikan kursus terlebih dahulu.';
+        btn.innerHTML = '<i class="bi ' + (ready ? 'bi-plus-circle' : 'bi-lock') + '"></i> Buat angkatan baru';
         note.hidden = ready;
-        note.textContent = c.status === 'archived'
+        note.innerHTML = '<i class="bi bi-info-circle"></i><span>' + esc(c.status === 'archived'
             ? 'Kursus diarsipkan. Aktifkan kembali di Kelola Kursus.'
-            : 'Publikasikan kursus lebih dulu, setelah itu angkatan bisa dibuat.';
+            : 'Publikasikan kursus lebih dulu, setelah itu angkatan bisa dibuat.') + '</span>';
 
         var list = $('cpbAngkatan');
         if (!server.angkatan.length) {
-            list.innerHTML = '<p class="cpb-muted">Belum ada angkatan.</p>';
+            list.innerHTML = '<div class="cpb-ang-empty"><i class="bi bi-people"></i><span>Belum ada angkatan.</span></div>';
             return;
         }
-        var label = { draft: 'Draft', open: 'Pendaftaran', ready: 'Siap mulai', ongoing: 'Berjalan', completed: 'Selesai', cancelled: 'Batal', archived: 'Arsip' };
+        var label = { draft: 'Pendaftaran', open: 'Pendaftaran', ready: 'Pendaftaran', ongoing: 'Berlangsung', completed: 'Selesai', cancelled: 'Arsip', archived: 'Arsip' };
         list.innerHTML = server.angkatan.map(function (a) {
-            var tone = a.status === 'ongoing' ? 'green' : a.status === 'open' ? 'amber' : a.status === 'ready' ? 'blue' : 'gray';
+            var tone = a.status === 'ongoing' ? 'green' : (a.status === 'open' || a.status === 'draft' || a.status === 'ready') ? 'amber' : 'gray';
             var sessionText = a.sessions + ' sesi';
             if (a.missingSessions > 0 && a.sessions > 0) sessionText += ' (kurang ' + a.missingSessions + ')';
             if (a.sessions === 0) sessionText = 'jadwal belum dibuat';
             return '<div class="cpb-ang"><div class="cpb-ang-top"><strong>' + esc(a.name) + '</strong>' +
-                '<span class="cpb-badge cpb-badge--' + tone + '">' + esc(label[a.status] || a.status) + '</span></div>' +
+                '<span class="cpb-badge cpb-badge--' + tone + '">' + esc(label[a.status] || a.status) + '</span></div>' + (a.overdue ? '<div class="cpb-muted" style="color:#b91c1c;font-weight:600">Lewat perkiraan, belum ditutup</div>' : '') +
                 '<div class="cpb-muted">' + esc(a.instructorName || 'Tentor belum dipilih') + ' · ' + a.students + '/' + a.quota + ' peserta</div>' +
-                '<div class="cpb-muted">' + fmtDate(a.periodStart) + (a.periodEnd ? ' – ' + fmtDate(a.periodEnd) : '') + ' · ' + esc(sessionText) + '</div></div>';
+                '<div class="cpb-muted">' + 'Mulai ' + fmtDate(a.periodStart) + (a.periodEnd ? ' · ' + (a.status === 'completed' ? 'ditutup ' + fmtDate(a.completedAt || a.periodEnd) : 'perkiraan selesai ' + fmtDate(a.periodEnd)) : '') + ' · ' + esc(sessionText) + '</div></div>';
         }).join('');
     }
 
@@ -259,6 +284,7 @@
         dirty = true;
         renderSaveBar();
         updateCount();
+        refreshPublishBtn();
     }
 
     // ---------- Edit struktur ----------
@@ -509,7 +535,6 @@
         $('angJp').value = d.jp;
         $('angLocation').value = d.location;
         $('angRoom').value = d.room;
-        $('angStatus').value = 'open';
         $('angTentor').innerHTML = server.tentors.map(function (t) {
             return '<option value="' + t.id + '"' + (t.id === server.course.instructorId ? ' selected' : '') + '>' + esc(t.name) + '</option>';
         }).join('');
@@ -566,7 +591,6 @@
             startTime: $('angFrom').value,
             endTime: $('angTo').value,
             jp: Number($('angJp').value) || 0,
-            status: $('angStatus').value,
             location: $('angLocation').value,
             room: $('angRoom').value,
             generateSessions: true
@@ -612,6 +636,7 @@
             dirty = false;
             renderTree();
             renderSaveBar();
+            refreshPublishBtn();
         });
         $('cpbPasteBtn').addEventListener('click', function () { openModal('cpbPasteModal'); $('cpbPasteText').focus(); });
         $('cpbPasteText').addEventListener('input', pastePreview);

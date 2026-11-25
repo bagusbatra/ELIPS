@@ -141,7 +141,7 @@ function elips_cp_payload(int $courseId): array
 
     $stmt = $db->prepare(
         "SELECT c.id, c.code, c.name, c.status, c.period_start, c.period_end, c.quota, c.location, c.room,
-                c.instructor_id, u.name AS instructor_name,
+                c.instructor_id, c.completed_at, u.name AS instructor_name,
                 (SELECT COUNT(*) FROM class_sessions cs WHERE cs.class_id = c.id AND cs.status <> 'rescheduled') AS sessions,
                 (SELECT COUNT(*) FROM enrollments e WHERE e.class_id = c.id AND e.status IN ('active', 'pending')) AS students
          FROM classes c
@@ -166,6 +166,8 @@ function elips_cp_payload(int $courseId): array
             'sessions' => (int) $row['sessions'],
             'missingSessions' => max(0, $lessonTotal - (int) $row['sessions']),
             'instructorName' => (string) ($row['instructor_name'] ?? ''),
+            'completedAt' => $row['completed_at'] ? substr((string) $row['completed_at'], 0, 10) : null,
+            'overdue' => $row['status'] === 'ongoing' && $row['period_end'] && substr((string) $row['period_end'], 0, 10) < elips_class_today(),
         ];
     }
 
@@ -594,11 +596,6 @@ function elips_action_cp_angkatan_create(array $p): array
     if ($quota <= 0) {
         return elips_fail('Kuota peserta harus lebih dari 0.');
     }
-    $status = (string) ($p['status'] ?? 'open');
-    if (!in_array($status, ['draft', 'open'], true)) {
-        return elips_fail('Angkatan baru hanya dapat berstatus Draft atau Open.');
-    }
-
     $lessons = elips_tp_lessons($versionId);
     $generate = !array_key_exists('generateSessions', $p) || !empty($p['generateSessions']);
     $dates = [];
@@ -644,6 +641,7 @@ function elips_action_cp_angkatan_create(array $p): array
 
     $periodEnd = $dates ? end($dates) : elips_normalize_date($p['periodEnd'] ?? null);
 
+    elips_ensure_class_close_schema();
     $db->beginTransaction();
     try {
         $stmt = $db->prepare(
@@ -655,7 +653,7 @@ function elips_action_cp_angkatan_create(array $p): array
         $stmt->execute([
             $code, $name, $courseId, $versionId, $instructorId, $periodStart, $periodEnd, $quota,
             trim((string) ($p['location'] ?? '')), trim((string) ($p['room'] ?? '')),
-            $generate ? round($jp * count($lessons), 2) : 0, $status,
+            $generate ? round($jp * count($lessons), 2) : 0, 'open',
             (int) $actor['id'], (int) $actor['id'],
         ]);
         $classId = (int) $db->lastInsertId();
@@ -717,6 +715,7 @@ function elips_action_cp_angkatan_create(array $p): array
         ]);
     }
 
+    elips_sync_class_status();   // tanggal mulai sudah lewat -> langsung Berlangsung
     $data = elips_cp_payload($courseId);
     $data['createdClassId'] = $classId;
     $data['createdSessions'] = $sessionCount;

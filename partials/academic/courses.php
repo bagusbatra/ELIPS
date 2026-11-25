@@ -162,8 +162,8 @@
                             <input type="date" id="clsStart" class="form-input">
                         </div>
                         <div class="form-group">
-                            <label class="form-label" for="clsEnd">Tanggal selesai</label>
-                            <input type="date" id="clsEnd" class="form-input">
+                            <label class="form-label">Perkiraan selesai</label>
+                            <div class="form-input" id="clsEnd" style="background:#faf6f1;color:#6b5a4d;"></div>
                         </div>
                         <div class="form-group">
                             <label class="form-label" for="clsQuota">Kuota peserta</label>
@@ -182,7 +182,7 @@
                             <input type="text" id="clsRoom" class="form-input" maxlength="100">
                         </div>
                     </div>
-                    <small class="form-hint">Jadwal tiap sesi diatur di menu Kalender &amp; Jadwal. Mengganti tentor dicatat pada riwayat tentor angkatan.</small>
+                    <small class="form-hint">Status otomatis: Pendaftaran sebelum tanggal mulai, Berlangsung setelahnya, Selesai hanya lewat Tutup pembelajaran. Perkiraan selesai dihitung dari jadwal sesi (diatur di Kalender &amp; Jadwal).</small>
                 </div>
                 <div class="attendance-modal-actions">
                     <button type="button" class="btn btn-ghost" id="clsCancelBtn">Batal</button>

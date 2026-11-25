@@ -202,6 +202,22 @@ function elips_tp_class(int $classId, array $user): array
     return $row;
 }
 
+/** Angkatan yang sudah ditutup admin hanya bisa dilihat tentor. */
+function elips_tp_assert_writable(array $class): void
+{
+    if (($class['status'] ?? '') === 'completed') {
+        throw new ElipsError('Pembelajaran angkatan ini sudah ditutup admin, data hanya bisa dilihat.');
+    }
+}
+
+/** Nilai akhir hanya bisa disimpan/dikirim setelah admin menutup pembelajaran. */
+function elips_tp_assert_final_open(array $class): void
+{
+    if (($class['status'] ?? '') !== 'completed') {
+        throw new ElipsError('Nilai akhir bisa diisi setelah admin menutup pembelajaran angkatan ini.');
+    }
+}
+
 function elips_tp_class_public(array $row): array
 {
     return [
@@ -273,6 +289,7 @@ function elips_tp_summaries(array $classIds): array
             'students' => 0, 'sessionsTotal' => 0, 'sessionsConfirmed' => 0,
             'submissions' => 0, 'pending' => 0, 'graded' => 0, 'average' => null,
             'tasks' => 0, 'finalSent' => false, 'finalComplete' => 0,
+            'studentsReady' => 0, 'lessonsTotal' => 0,
         ];
     }
     if (!$classIds) {
@@ -323,6 +340,28 @@ function elips_tp_summaries(array $classIds): array
         unset($item);
     }
 
+    $stmt = $db->prepare(
+        "SELECT e.class_id, COUNT(*) AS n FROM enrollments e JOIN classes c ON c.id = e.class_id
+         WHERE e.class_id IN ($in) AND e.status IN ('active', 'completed')
+           AND (SELECT COUNT(*) FROM lessons l2 WHERE l2.curriculum_version_id = c.curriculum_version_id) > 0
+           AND (SELECT COUNT(*) FROM class_lesson_progress p JOIN lessons l ON l.id = p.lesson_id
+                WHERE p.enrollment_id = e.id AND l.curriculum_version_id = c.curriculum_version_id)
+               >= (SELECT COUNT(*) FROM lessons l2 WHERE l2.curriculum_version_id = c.curriculum_version_id)
+         GROUP BY e.class_id"
+    );
+    $stmt->execute($classIds);
+    foreach ($stmt->fetchAll() as $row) {
+        $result[(int) $row['class_id']]['studentsReady'] = (int) $row['n'];
+    }
+    $stmt = $db->prepare(
+        "SELECT c.id AS class_id, COUNT(l.id) AS n FROM classes c JOIN lessons l ON l.curriculum_version_id = c.curriculum_version_id
+         WHERE c.id IN ($in) GROUP BY c.id"
+    );
+    $stmt->execute($classIds);
+    foreach ($stmt->fetchAll() as $row) {
+        $result[(int) $row['class_id']]['lessonsTotal'] = (int) $row['n'];
+    }
+
     $stmt = $db->prepare("SELECT class_id FROM final_dispatches WHERE class_id IN ($in)");
     $stmt->execute($classIds);
     foreach ($stmt->fetchAll() as $row) {
@@ -336,12 +375,12 @@ function elips_tp_summaries(array $classIds): array
     return $result;
 }
 
-function elips_tp_final_state(array $summary): string
+function elips_tp_final_state(array $summary, string $classStatus = ''): string
 {
     if ($summary['finalSent']) {
         return 'sent';
     }
-    if ($summary['sessionsTotal'] > 0 && $summary['sessionsConfirmed'] >= $summary['sessionsTotal']) {
+    if ($classStatus === 'completed' && $summary['studentsReady'] > 0) {
         return 'open';
     }
     return 'locked';
@@ -358,8 +397,10 @@ function elips_tp_class_card(array $row, array $summary): array
     $card['pending'] = $summary['pending'];
     $card['graded'] = $summary['graded'];
     $card['average'] = $summary['average'];
-    $card['finalState'] = elips_tp_final_state($summary);
+    $card['finalState'] = elips_tp_final_state($summary, (string) $row['status']);
     $card['finalComplete'] = $summary['finalComplete'];
+    $card['studentsReady'] = $summary['studentsReady'];
+    $card['lessonsTotal'] = $summary['lessonsTotal'];
     return $card;
 }
 
@@ -1129,7 +1170,7 @@ function elips_action_tp_curriculum_save(array $p): array
 function elips_action_tp_grading_classes(array $p): array
 {
     $user = elips_tp_user();
-    $classes = elips_tp_my_classes($user, ['ready', 'ongoing', 'completed']);
+    $classes = elips_tp_my_classes($user, ['open', 'ready', 'ongoing', 'completed']);
     return elips_ok('', ['classes' => $classes]);
 }
 
@@ -1234,7 +1275,7 @@ function elips_action_tp_grading_score(array $p): array
     if (!$sub) {
         return elips_fail('Pengumpulan tidak ditemukan.');
     }
-    elips_tp_class((int) $sub['class_id'], $user);
+    elips_tp_assert_writable(elips_tp_class((int) $sub['class_id'], $user));
 
     $raw = $p['score'] ?? null;
     if ($raw === null || $raw === '' || !is_numeric($raw)) {
@@ -1366,8 +1407,94 @@ function elips_tp_final_default(array $class): array
     return array_values($groups);
 }
 
+/**
+ * Susunan nilai akhir dari penugasan tentor: hanya pertemuan yang punya tugas yang menjadi sub materi.
+ * Bila $enrollmentId diberikan, nilai diisi dari rata-rata nilai tugas siswa (0-100) per sub materi.
+ * @return array|null null bila angkatan belum punya penugasan terbit.
+ */
+function elips_tp_final_from_assignments(array $class, ?int $enrollmentId = null): ?array
+{
+    $db = elips_db();
+    $classId = (int) $class['id'];
+    $stmt = $db->prepare("SELECT id, lesson_id, title, max_score FROM assignments WHERE class_id = ? AND status IN ('published', 'closed') ORDER BY id ASC");
+    $stmt->execute([$classId]);
+    $assignments = $stmt->fetchAll();
+    if (!$assignments) {
+        return null;
+    }
+
+    $scores = [];
+    if ($enrollmentId) {
+        $stmt = $db->prepare(
+            'SELECT s.assignment_id, s.score FROM submissions s JOIN assignments a ON a.id = s.assignment_id
+             WHERE a.class_id = ? AND s.enrollment_id = ? AND s.score IS NOT NULL'
+        );
+        $stmt->execute([$classId, $enrollmentId]);
+        foreach ($stmt->fetchAll() as $r) {
+            $scores[(int) $r['assignment_id']] = (float) $r['score'];
+        }
+    }
+    $percent = static function (array $rows) use ($scores): ?float {
+        $vals = [];
+        foreach ($rows as $a) {
+            if (isset($scores[(int) $a['id']]) && (float) $a['max_score'] > 0) {
+                $vals[] = $scores[(int) $a['id']] / (float) $a['max_score'] * 100;
+            }
+        }
+        return $vals ? round(array_sum($vals) / count($vals), 2) : null;
+    };
+
+    $stmt = $db->prepare('SELECT session_number, planned_jp FROM class_sessions WHERE class_id = ?');
+    $stmt->execute([$classId]);
+    $planned = [];
+    foreach ($stmt->fetchAll() as $row) {
+        $planned[(int) $row['session_number']] = (float) $row['planned_jp'];
+    }
+    $lessons = elips_tp_lessons((int) $class['curriculum_version_id']);
+    $details = elips_tp_lesson_details(array_map(static fn ($l) => $l['id'], $lessons));
+    $byLesson = [];
+    $general = [];
+    $known = array_column($lessons, 'id');
+    foreach ($assignments as $a) {
+        if ($a['lesson_id'] !== null && in_array((int) $a['lesson_id'], $known, true)) {
+            $byLesson[(int) $a['lesson_id']][] = $a;
+        } else {
+            $general[] = $a;
+        }
+    }
+
+    $groups = [];
+    foreach ($lessons as $l) {
+        if (empty($byLesson[$l['id']])) {
+            continue;
+        }
+        $mid = $l['module_id'];
+        if (!isset($groups[$mid])) {
+            $groups[$mid] = ['title' => mb_strtoupper((string) $l['module_title']), 'items' => []];
+        }
+        $jp = $details[$l['id']]['durationJp'] ?? null;
+        if ($jp === null) {
+            $jp = $planned[$l['number']] ?? 2.0;
+        }
+        $groups[$mid]['items'][] = ['title' => (string) $l['title'], 'jp' => (float) $jp, 'score' => $percent($byLesson[$l['id']])];
+    }
+    $out = array_values($groups);
+    if ($general) {
+        $items = [];
+        foreach ($general as $a) {
+            $items[] = ['title' => (string) $a['title'], 'jp' => 0.0, 'score' => $percent([$a])];
+        }
+        $out[] = ['title' => 'TUGAS UMUM', 'items' => $items];
+    }
+    return $out;
+}
+
 function elips_tp_final_template(array $class): array
 {
+    $fromTasks = elips_tp_final_from_assignments($class);
+    if ($fromTasks !== null) {
+        return ['source' => 'assignments', 'structure' => $fromTasks];
+    }
     $stmt = elips_db()->prepare('SELECT structure FROM final_templates WHERE course_id = ?');
     $stmt->execute([(int) $class['course_id']]);
     $raw = $stmt->fetchColumn();
@@ -1392,14 +1519,104 @@ function elips_tp_with_empty_scores(array $structure): array
     return $structure;
 }
 
-function elips_tp_final_guard(array $class): array
+/** Siswa boleh dinilai bila semua materi kurikulum sudah dikonfirmasi untuknya. */
+function elips_tp_final_student_guard(array $class, int $enrollmentId): void
 {
-    $classId = (int) $class['id'];
-    $summary = elips_tp_summaries([$classId])[$classId];
-    if (elips_tp_final_state($summary) === 'locked') {
-        throw new ElipsError('Penilaian akhir terbuka setelah semua sesi dikonfirmasi admin (' . $summary['sessionsConfirmed'] . ' dari ' . $summary['sessionsTotal'] . ').');
+    $students = elips_tp_final_students((int) $class['id']);
+    foreach ($students as $st) {
+        if ($st['enrollmentId'] === $enrollmentId) {
+            if (!$st['materi']['ready']) {
+                throw new ElipsError('Materi siswa ini belum selesai dikonfirmasi (' . $st['materi']['done'] . ' dari ' . $st['materi']['total'] . ').');
+            }
+            return;
+        }
     }
-    return $summary;
+}
+
+/** Syarat tingkat angkatan: hanya ditutup admin atau sudah terkirim. Syarat per siswa: materi terkonfirmasi. */
+function elips_tp_final_gate(array $class, array $summary, bool $sent): array
+{
+    $closed = ($class['status'] ?? '') === 'completed';
+    $reason = '';
+    if ($sent) {
+        $reason = 'Nilai akhir sudah dikirim ke operasional dan tidak bisa diubah.';
+    } elseif (!$closed) {
+        $reason = 'Nilai akhir bisa diisi setelah admin menutup pembelajaran angkatan ini.';
+    }
+    return [
+        'sessionsTotal' => (int) $summary['sessionsTotal'],
+        'sessionsConfirmed' => (int) $summary['sessionsConfirmed'],
+        'studentsReady' => (int) $summary['studentsReady'],
+        'students' => (int) $summary['students'],
+        'lessonsTotal' => (int) $summary['lessonsTotal'],
+        'sent' => $sent,
+        'closed' => $closed,
+        'canEdit' => $reason === '',
+        'reason' => $reason,
+    ];
+}
+
+/** Kehadiran dan tugas tiap siswa pada sesi yang sudah dikonfirmasi. @return array<int,array> */
+function elips_tp_final_progress(int $classId): array
+{
+    $db = elips_db();
+    $out = [];
+    $stmt = $db->prepare(
+        "SELECT a.enrollment_id,
+                SUM(a.status IN ('present', 'late')) AS present,
+                SUM(a.status IN ('permission', 'sick', 'excused')) AS permitted,
+                SUM(a.status = 'absent') AS absent
+         FROM attendances a JOIN class_sessions cs ON cs.id = a.session_id
+         WHERE cs.class_id = ? AND cs.status IN ('confirmed', 'completed')
+         GROUP BY a.enrollment_id"
+    );
+    $stmt->execute([$classId]);
+    foreach ($stmt->fetchAll() as $r) {
+        $out[(int) $r['enrollment_id']]['attendance'] = [
+            'present' => (int) $r['present'], 'permitted' => (int) $r['permitted'], 'absent' => (int) $r['absent'],
+        ];
+    }
+    $stmt = $db->prepare('SELECT curriculum_version_id FROM classes WHERE id = ?');
+    $stmt->execute([$classId]);
+    $versionId = (int) $stmt->fetchColumn();
+    $stmt = $db->prepare('SELECT COUNT(*) FROM lessons WHERE curriculum_version_id = ?');
+    $stmt->execute([$versionId]);
+    $lessonsTotal = (int) $stmt->fetchColumn();
+    $stmt = $db->prepare(
+        'SELECT p.enrollment_id, COUNT(*) AS n FROM class_lesson_progress p JOIN lessons l ON l.id = p.lesson_id
+         WHERE p.class_id = ? AND l.curriculum_version_id = ? GROUP BY p.enrollment_id'
+    );
+    $stmt->execute([$classId, $versionId]);
+    foreach ($stmt->fetchAll() as $r) {
+        $out[(int) $r['enrollment_id']]['materiDone'] = (int) $r['n'];
+    }
+    $stmt = $db->prepare("SELECT COUNT(*) FROM assignments WHERE class_id = ? AND status IN ('published', 'closed')");
+    $stmt->execute([$classId]);
+    $tasks = (int) $stmt->fetchColumn();
+    $stmt = $db->prepare(
+        "SELECT s.enrollment_id, COUNT(*) AS submitted, SUM(s.score IS NOT NULL) AS graded,
+                AVG(CASE WHEN s.score IS NOT NULL AND a.max_score > 0 THEN s.score / a.max_score * 100 END) AS avg_score
+         FROM submissions s JOIN assignments a ON a.id = s.assignment_id
+         WHERE a.class_id = ? AND a.status IN ('published', 'closed')
+         GROUP BY s.enrollment_id"
+    );
+    $stmt->execute([$classId]);
+    foreach ($stmt->fetchAll() as $r) {
+        $out[(int) $r['enrollment_id']]['tasks'] = [
+            'total' => $tasks, 'submitted' => (int) $r['submitted'], 'graded' => (int) $r['graded'],
+            'average' => $r['avg_score'] === null ? null : round((float) $r['avg_score'], 1),
+        ];
+    }
+    return ['tasksTotal' => $tasks, 'lessonsTotal' => $lessonsTotal, 'byEnrollment' => $out];
+}
+
+function elips_tp_final_student_gate(array $gate, array $student): array
+{
+    if ($gate['canEdit'] && !$student['materi']['ready']) {
+        $gate['canEdit'] = false;
+        $gate['reason'] = 'Nilai akhir bisa diisi setelah semua materi siswa ini dikonfirmasi (' . $student['materi']['done'] . ' dari ' . $student['materi']['total'] . ').';
+    }
+    return $gate;
 }
 
 function elips_tp_final_students(int $classId): array
@@ -1414,8 +1631,17 @@ function elips_tp_final_students(int $classId): array
     );
     $stmt->execute([$classId]);
     $rows = [];
+    $progress = elips_tp_final_progress($classId);
     foreach ($stmt->fetchAll() as $row) {
+        $prog = $progress['byEnrollment'][(int) $row['enrollment_id']] ?? [];
         $rows[] = [
+            'materi' => [
+                'done' => (int) ($prog['materiDone'] ?? 0),
+                'total' => $progress['lessonsTotal'],
+                'ready' => $progress['lessonsTotal'] > 0 && (int) ($prog['materiDone'] ?? 0) >= $progress['lessonsTotal'],
+            ],
+            'attendance' => $prog['attendance'] ?? ['present' => 0, 'permitted' => 0, 'absent' => 0],
+            'tasks' => $prog['tasks'] ?? ['total' => $progress['tasksTotal'], 'submitted' => 0, 'graded' => 0, 'average' => null],
             'enrollmentId' => (int) $row['enrollment_id'],
             'studentId' => (int) $row['student_id'],
             'name' => (string) $row['name'],
@@ -1434,10 +1660,25 @@ function elips_action_tp_final_list(array $p): array
 {
     $user = elips_tp_user();
     $class = elips_tp_class((int) ($p['classId'] ?? 0), $user);
-    $summary = elips_tp_final_guard($class);
+    $classId = (int) $class['id'];
+    $summary = elips_tp_summaries([$classId])[$classId];
     $template = elips_tp_final_template($class);
     $metrics = elips_tp_final_metrics(elips_tp_with_empty_scores($template['structure']));
     $students = elips_tp_final_students((int) $class['id']);
+    if ($template['source'] === 'assignments') {
+        // Siswa yang belum disimpan: tampilkan sub materi terisi dari nilai tugasnya.
+        foreach ($students as &$st) {
+            if ($st['status'] === 'kosong') {
+                $pre = elips_tp_final_from_assignments($class, $st['enrollmentId']);
+                if ($pre) {
+                    $m = elips_tp_final_metrics($pre);
+                    $st['filled'] = $m['filled'];
+                    $st['count'] = $m['count'];
+                }
+            }
+        }
+        unset($st);
+    }
     $complete = count(array_filter($students, static fn ($s) => $s['status'] === 'lengkap'));
     $draft = count(array_filter($students, static fn ($s) => $s['status'] === 'draf'));
     $stmt = elips_db()->prepare('SELECT sent_at FROM final_dispatches WHERE class_id = ?');
@@ -1445,6 +1686,7 @@ function elips_action_tp_final_list(array $p): array
     $sentAt = $stmt->fetchColumn();
     return elips_ok('', [
         'class' => elips_tp_class_card($class, $summary),
+        'gate' => elips_tp_final_gate($class, $summary, (bool) $sentAt),
         'students' => $students,
         'counts' => ['total' => count($students), 'complete' => $complete, 'draft' => $draft, 'empty' => count($students) - $complete - $draft],
         'template' => ['source' => $template['source'], 'items' => $metrics['count'], 'jp' => $metrics['jp']],
@@ -1458,8 +1700,8 @@ function elips_action_tp_final_get(array $p): array
     $user = elips_tp_user();
     $db = elips_db();
     $class = elips_tp_class((int) ($p['classId'] ?? 0), $user);
-    $summary = elips_tp_final_guard($class);
     $classId = (int) $class['id'];
+    $summary = elips_tp_summaries([$classId])[$classId];
     $enrollmentId = (int) ($p['enrollmentId'] ?? 0);
 
     $students = elips_tp_final_students($classId);
@@ -1480,8 +1722,10 @@ function elips_action_tp_final_get(array $p): array
     $source = 'student';
     if (!is_array($structure) || !$structure) {
         $template = elips_tp_final_template($class);
-        $structure = elips_tp_with_empty_scores($template['structure']);
         $source = $template['source'];
+        $structure = $source === 'assignments'
+            ? (elips_tp_final_from_assignments($class, $enrollmentId) ?? $template['structure'])
+            : elips_tp_with_empty_scores($template['structure']);
     }
 
     $stmt = $db->prepare('SELECT sent_at FROM final_dispatches WHERE class_id = ?');
@@ -1490,6 +1734,7 @@ function elips_action_tp_final_get(array $p): array
 
     return elips_ok('', [
         'class' => elips_tp_class_card($class, $summary),
+        'gate' => elips_tp_final_student_gate(elips_tp_final_gate($class, $summary, (bool) $sentAt), $students[$index]),
         'student' => $students[$index],
         'structure' => $structure,
         'source' => $source,
@@ -1507,9 +1752,10 @@ function elips_action_tp_final_save(array $p): array
     $user = elips_tp_user();
     $db = elips_db();
     $class = elips_tp_class((int) ($p['classId'] ?? 0), $user);
-    elips_tp_final_guard($class);
+    elips_tp_assert_final_open($class);
     $classId = (int) $class['id'];
     $enrollmentId = (int) ($p['enrollmentId'] ?? 0);
+    elips_tp_final_student_guard($class, $enrollmentId);
 
     $stmt = $db->prepare("SELECT student_id FROM enrollments WHERE id = ? AND class_id = ? AND status IN ('active', 'completed')");
     $stmt->execute([$enrollmentId, $classId]);
@@ -1578,7 +1824,7 @@ function elips_action_tp_final_send(array $p): array
     $user = elips_tp_user();
     $db = elips_db();
     $class = elips_tp_class((int) ($p['classId'] ?? 0), $user);
-    elips_tp_final_guard($class);
+    elips_tp_assert_final_open($class);
     $classId = (int) $class['id'];
 
     $stmt = $db->prepare('SELECT 1 FROM final_dispatches WHERE class_id = ?');
@@ -1589,6 +1835,10 @@ function elips_action_tp_final_send(array $p): array
     $students = elips_tp_final_students($classId);
     if (!$students) {
         return elips_fail('Belum ada siswa pada angkatan ini.');
+    }
+    $notReady = array_filter($students, static fn ($s) => !$s['materi']['ready']);
+    if ($notReady) {
+        return elips_fail(count($notReady) . ' siswa belum selesai dikonfirmasi materinya.');
     }
     $incomplete = array_filter($students, static fn ($s) => $s['status'] !== 'lengkap');
     if ($incomplete) {

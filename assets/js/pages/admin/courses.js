@@ -14,10 +14,12 @@
     var $ = function (id) { return document.getElementById(id); };
     var rp = function (n) { return 'Rp ' + Math.round(Number(n) || 0).toLocaleString('id-ID'); };
     var LABEL = { published: 'Dipublikasi', draft: 'Draft', archived: 'Arsip' };
-    var CLASS_STATUS = [
-        ['draft', 'Draft'], ['open', 'Pendaftaran'], ['ready', 'Siap mulai'], ['ongoing', 'Berjalan'],
-        ['completed', 'Selesai'], ['cancelled', 'Batal'], ['archived', 'Arsip']
-    ];
+    // Hanya 3 status angkatan; ditentukan otomatis dari tanggal mulai, 'Selesai' hanya lewat Tutup pembelajaran.
+    var CLASS_BADGE = {
+        open: ['Pendaftaran', 'amber'], ready: ['Pendaftaran', 'amber'], draft: ['Pendaftaran', 'amber'],
+        ongoing: ['Berlangsung', 'green'], completed: ['Selesai', 'gray'],
+        cancelled: ['Arsip', 'gray'], archived: ['Arsip', 'gray']
+    };
     var expanded = {};       // id kursus -> true/false (bila belum diatur: terbuka untuk kursus published)
     var editingClassId = null;
 
@@ -133,22 +135,33 @@
             return html + '<div class="cka-empty">Belum ada angkatan.</div></div></td></tr>';
         }
         html += '<div class="cka-list">';
+        var today = new Date().toISOString().slice(0, 10);
         classes.forEach(function (k) {
-            var statusOpts = CLASS_STATUS.map(function (s) {
-                return '<option value="' + s[0] + '"' + (s[0] === k.status ? ' selected' : '') + '>' + s[1] + '</option>';
-            }).join('');
-            var locked = k.status === 'archived';
+            var badge = CLASS_BADGE[k.status] || [k.status, 'gray'];
+            var done = k.status === 'completed' || k.status === 'archived' || k.status === 'cancelled';
             var active = k.activeEnrollmentCount || 0;
             var full = k.quota > 0 && active >= k.quota;
             var sessions = sessionCount(k.id);
+            var overdue = k.status === 'ongoing' && k.periodEnd && k.periodEnd < today;
+            var dates = k.status === 'completed' && k.completedAt
+                ? 'Mulai ' + fmtDate(k.periodStart) + ' · ditutup ' + fmtDate(k.completedAt)
+                : 'Mulai ' + fmtDate(k.periodStart) + (k.periodEnd ? ' · perkiraan selesai ' + fmtDate(k.periodEnd) : '');
+            var action = '';
+            if (k.status === 'ongoing') {
+                action = '<button type="button" class="btn btn-primary" data-act="cls-close" title="Tutup pembelajaran angkatan ini"><i class="bi bi-flag"></i> Tutup pembelajaran</button>';
+            } else if (k.status === 'completed') {
+                action = '<button type="button" class="btn btn-ghost" data-act="cls-reopen" title="Buka kembali angkatan ini"><i class="bi bi-arrow-counterclockwise"></i> Buka kembali</button>';
+            }
             html += '<div class="cka-item" data-class="' + k.id + '">'
                 + '<div><div class="cka-name">' + esc(k.name) + '</div><div class="cka-sub">' + esc(k.code) + '</div></div>'
-                + '<select class="form-input" data-f="cls-tentor" aria-label="Tentor"' + (locked ? ' disabled' : '') + '>' + tentorOptions(k.instructorId) + '</select>'
-                + '<select class="form-input" data-f="cls-status" aria-label="Status"' + (locked ? ' disabled' : '') + '>' + statusOpts + '</select>'
+                + '<select class="form-input" data-f="cls-tentor" aria-label="Tentor"' + (done ? ' disabled' : '') + '>' + tentorOptions(k.instructorId) + '</select>'
+                + '<div><span class="cka-badge cka-badge-' + badge[1] + '">' + badge[0] + '</span>'
+                + (overdue ? '<div class="cka-warn">Lewat perkiraan, belum ditutup</div>' : '') + '</div>'
                 + '<div><div class="cka-name' + (full ? ' cka-full' : '') + '">' + active + (k.quota > 0 ? ' / ' + k.quota : '') + '</div><div class="cka-sub">peserta' + (full ? ' · penuh' : '') + '</div></div>'
-                + '<div><div class="cka-sub">' + fmtDate(k.periodStart) + (k.periodEnd ? ' – ' + fmtDate(k.periodEnd) : '') + '</div>'
+                + '<div><div class="cka-sub">' + dates + '</div>'
                 + '<div class="cka-sub">' + (sessions ? sessions + ' sesi terjadwal' : 'jadwal belum dibuat') + '</div></div>'
-                + '<div class="cka-actions"><button type="button" class="btn btn-ghost" data-act="cls-edit" title="Ubah angkatan"' + (locked ? ' disabled' : '') + '><i class="bi bi-pencil"></i> Ubah</button></div>'
+                + '<div class="cka-actions">' + action
+                + '<button type="button" class="btn btn-ghost" data-act="cls-edit" title="' + (done ? 'Hanya lihat' : 'Ubah angkatan') + '"><i class="bi bi-' + (done ? 'eye' : 'pencil') + '"></i> ' + (done ? 'Lihat' : 'Ubah') + '</button></div>'
                 + '</div>';
         });
         return html + '</div></div></td></tr>';
@@ -168,7 +181,11 @@
         $('clsModalSub').textContent = k.courseTitle + ' · ' + k.code;
         $('clsName').value = k.name || '';
         $('clsStart').value = k.periodStart || '';
-        $('clsEnd').value = k.periodEnd || '';
+        $('clsEnd').textContent = k.periodEnd ? fmtDate(k.periodEnd) + ' (perkiraan dari jadwal sesi)' : 'Dihitung otomatis dari jadwal sesi';
+        var readOnly = k.status === 'completed' || k.status === 'archived' || k.status === 'cancelled';
+        ['clsName', 'clsStart', 'clsQuota', 'clsTentor', 'clsLocation', 'clsRoom'].forEach(function (id) { $(id).disabled = readOnly; });
+        $('clsSaveBtn').hidden = readOnly;
+        $('clsModalTitle').textContent = readOnly ? 'Lihat Angkatan' : 'Ubah Angkatan';
         $('clsQuota').value = k.quota || '';
         $('clsTentor').innerHTML = tentorOptions(k.instructorId);
         $('clsLocation').value = k.location || '';
@@ -191,7 +208,6 @@
             data: {
                 name: $('clsName').value.trim(),
                 periodStart: $('clsStart').value,
-                periodEnd: $('clsEnd').value,
                 quota: $('clsQuota').value === '' ? 0 : Number($('clsQuota').value),
                 instructorId: parseInt($('clsTentor').value, 10) || 0,
                 location: $('clsLocation').value.trim(),
@@ -205,14 +221,34 @@
         render();
     }
 
+    function closeClass(classId) {
+        var k = ELIPS.getClassById(classId);
+        if (!k || !confirm('Tutup pembelajaran angkatan "' + k.name + '"? Status berubah menjadi Selesai dan tentor hanya dapat melihat datanya.')) return;
+        var result = ELIPS.api.call('class.close', { id: classId });
+        if (!result.ok && result.data && result.data.needsConfirm) {
+            if (!confirm('Masih ada yang belum selesai:\n- ' + result.data.warnings.join('\n- ') + '\n\nTetap tutup pembelajaran?')) return;
+            result = ELIPS.api.call('class.close', { id: classId, confirm: true });
+        }
+        ELIPS.toast(result.message || (result.ok ? 'Pembelajaran ditutup.' : 'Gagal menutup.'));
+        render();
+    }
+
+    function reopenClass(classId) {
+        var k = ELIPS.getClassById(classId);
+        if (!k) return;
+        var reason = prompt('Alasan membuka kembali angkatan "' + k.name + '":');
+        if (reason === null) return;
+        var result = ELIPS.api.call('class.reopen', { id: classId, reason: reason });
+        ELIPS.toast(result.message || (result.ok ? 'Angkatan dibuka kembali.' : 'Gagal membuka kembali.'));
+        render();
+    }
+
     function onClassChange(event) {
         var field = event.target.getAttribute('data-f');
-        if (field !== 'cls-tentor' && field !== 'cls-status') return;
+        if (field !== 'cls-tentor') return;
         var item = event.target.closest('.cka-item');
         var classId = Number(item.getAttribute('data-class'));
-        var result = field === 'cls-status'
-            ? ELIPS.api.call('class.status', { id: classId, status: event.target.value })
-            : ELIPS.api.call('class.update', { id: classId, data: { instructorId: parseInt(event.target.value, 10) || 0 } });
+        var result = ELIPS.api.call('class.update', { id: classId, data: { instructorId: parseInt(event.target.value, 10) || 0 } });
         ELIPS.toast(result.message || (result.ok ? 'Tersimpan.' : 'Gagal menyimpan.'));
         render();   // kembalikan tampilan ke data server bila ditolak
     }
@@ -367,6 +403,10 @@
                 window.location.href = ELIPS.basePathPrefix() + publishPagePath() + '?id=' + parent.id + '&new=1';
             } else if (act === 'cls-edit') {
                 openClassModal(Number(button.closest('.cka-item').getAttribute('data-class')));
+            } else if (act === 'cls-close') {
+                closeClass(Number(button.closest('.cka-item').getAttribute('data-class')));
+            } else if (act === 'cls-reopen') {
+                reopenClass(Number(button.closest('.cka-item').getAttribute('data-class')));
             }
             return;
         }

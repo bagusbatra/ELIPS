@@ -16,7 +16,7 @@ layout('app', $page);
             <header class="tp-head">
                 <div>
                     <h1 class="tp-title">Penilaian</h1>
-                    <p class="tp-sub">Nilai tugas siswa per angkatan. Penilaian akhir terbuka setelah semua sesi dikonfirmasi admin.</p>
+                    <p class="tp-sub">Nilai tugas siswa per angkatan. Data siswa dan progres selalu tampil; nilai akhir aktif setelah admin menutup pembelajaran dan materi siswa terkonfirmasi.</p>
                 </div>
             </header>
 

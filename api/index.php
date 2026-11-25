@@ -67,6 +67,7 @@ try {
         elips_payment_proof_send((int) ($_GET['id'] ?? 0));
     }
 
+    elips_sync_class_status();
     $result = elips_dispatch($action, $payload);
     // Aksi baca-saja / publik / keuangan tidak perlu snapshot penuh
     // (data pembayaran & biodata sengaja tidak ikut snapshot).

@@ -29,7 +29,7 @@ document.addEventListener('DOMContentLoaded', function () {
     TP.data('tp.final.get', { classId: classId, enrollmentId: enrollmentId }).then(function (res) {
         info = res.data;
         ranges = info.ranges || [];
-        readOnly = !!info.sentAt;
+        readOnly = !(info.gate && info.gate.canEdit);
         state = info.structure.map(function (g) {
             return {
                 title: g.title,
@@ -84,16 +84,16 @@ document.addEventListener('DOMContentLoaded', function () {
         $('tpCrumb').innerHTML = '<i class="bi bi-arrow-left"></i> Penilaian akhir ' + TP.esc(c.name);
         $('tpCrumb').href = 'penilaian-akhir.php?id=' + c.id;
         $('tpSub').textContent = c.name + ' · siswa ' + info.position + ' dari ' + info.students.length;
-        $('tpBadge').innerHTML = readOnly ? TP.badge('Terkirim', 'teal') : (s.status === 'lengkap' ? TP.badge('Lengkap', 'teal') : TP.badge('Draf', 'amber'));
+        $('tpBadge').innerHTML = info.sentAt ? TP.badge('Terkirim', 'teal') : readOnly ? TP.badge('Hanya lihat', 'gray') : (s.status === 'lengkap' ? TP.badge('Lengkap', 'teal') : TP.badge('Draf', 'amber'));
         $('tpPrev').disabled = !info.prevId;
         $('tpNext').disabled = !info.nextId;
 
         const notes = {
-            student: '', template: 'Struktur diambil dari template terakhir Anda. Ubah bila perlu, lalu simpan.',
+            student: '', assignments: 'Sub materi disusun dari penugasan Anda; pertemuan tanpa tugas tidak dimasukkan. Nilai diisi dari rata-rata nilai tugas siswa dan bisa Anda ubah. Sub materi yang tidak perlu dinilai bisa dihapus.', template: 'Struktur diambil dari template terakhir Anda. Ubah bila perlu, lalu simpan.',
             curriculum: 'Struktur awal diambil dari kurikulum. Sesuaikan materi, sub materi, dan JP sesuai transkrip.'
         };
         let banner = '';
-        if (readOnly) banner = '<div class="tp-note tp-note--teal" style="margin-bottom:1.25rem"><i class="bi bi-lock"></i><span>Nilai akhir angkatan ini sudah dikirim ke operasional dan tidak bisa diubah.</span></div>';
+        if (readOnly) banner = '<div class="tp-note ' + (info.sentAt ? 'tp-note--teal' : 'tp-note--amber') + '" style="margin-bottom:1.25rem"><i class="bi bi-lock"></i><span>' + TP.esc(info.gate.reason || 'Data hanya bisa dilihat.') + '</span></div>';
         else if (notes[info.source]) banner = '<div class="tp-note" style="margin-bottom:1.25rem"><i class="bi bi-info-circle"></i><span>' + notes[info.source] + '</span></div>';
         $('tpBanner').innerHTML = banner;
 

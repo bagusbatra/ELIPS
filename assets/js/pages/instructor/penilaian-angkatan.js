@@ -51,13 +51,14 @@ document.addEventListener('DOMContentLoaded', function () {
             final += '<div class="tp-note tp-note--teal"><i class="bi bi-check2-circle"></i><span>Nilai akhir sudah dikirim ke operasional.</span></div>' +
                 '<a class="btn btn-ghost" href="penilaian-akhir.php?id=' + c.id + '">Lihat nilai akhir</a>';
         } else if (c.finalState === 'open') {
-            final += '<div class="tp-note tp-note--teal"><i class="bi bi-unlock"></i><span>Semua ' + c.sessionsTotal + ' sesi sudah dikonfirmasi admin.</span></div>' +
+            final += '<div class="tp-note tp-note--teal"><i class="bi bi-unlock"></i><span>' + c.studentsReady + ' dari ' + c.students + ' siswa siap dinilai (semua materi terkonfirmasi).</span></div>' +
                 '<div class="tp-meter"><span>Siswa lengkap</span><span>' + c.finalComplete + ' dari ' + c.students + '</span></div>' +
                 TP.progress(c.finalComplete, c.students, 'teal') +
                 '<a class="btn btn-primary" href="penilaian-akhir.php?id=' + c.id + '">Isi penilaian akhir</a>';
         } else {
-            final += '<div class="tp-note tp-note--amber"><i class="bi bi-lock"></i><span>Belum tersedia. Terbuka setelah semua sesi dikonfirmasi admin (' + c.sessionsConfirmed + ' dari ' + c.sessionsTotal + ').</span></div>' +
-                TP.progress(c.sessionsConfirmed, c.sessionsTotal);
+            final += '<div class="tp-note tp-note--amber"><i class="bi bi-lock"></i><span>Nilai akhir aktif per siswa setelah semua materinya dikonfirmasi admin atau operasional (siap: ' + c.studentsReady + ' dari ' + c.students + ').</span></div>' +
+                TP.progress(c.studentsReady, c.students) +
+                '<a class="btn btn-ghost" href="penilaian-akhir.php?id=' + c.id + '">Lihat siswa &amp; progres</a>';
         }
         $('tpFinal').innerHTML = final;
         TP.animateBars(document);

@@ -94,7 +94,7 @@
         <div class="cpb-modal" id="cpbAngModal" hidden>
             <div class="cpb-modal-box cpb-modal-wide">
                 <h3>Buat angkatan baru</h3>
-                <p class="cpb-muted">Memakai kurikulum yang sama, jadi isi dari tentor otomatis terbawa. Sesi dijadwalkan dari daftar materi.</p>
+                <p class="cpb-muted">Memakai kurikulum yang sama, jadi isi dari tentor otomatis terbawa. Sesi dijadwalkan dari daftar materi. Status otomatis: Pendaftaran sampai tanggal mulai, lalu Berlangsung.</p>
                 <p class="cpb-error" id="cpbAngError" hidden></p>
                 <div class="cpb-form">
                     <div class="cpb-field cpb-span2"><label for="angName">Nama angkatan</label><input id="angName" class="form-input" maxlength="150"></div>
@@ -108,9 +108,6 @@
                     <div class="cpb-field"><label for="angFrom">Jam mulai</label><input id="angFrom" type="time" class="form-input"></div>
                     <div class="cpb-field"><label for="angTo">Jam selesai</label><input id="angTo" type="time" class="form-input"></div>
                     <div class="cpb-field"><label for="angJp">JP per sesi</label><input id="angJp" type="number" min="0" step="0.5" class="form-input"></div>
-                    <div class="cpb-field"><label for="angStatus">Status</label>
-                        <select id="angStatus" class="form-input"><option value="open">Open (terbuka untuk pendaftaran)</option><option value="draft">Draft</option></select>
-                    </div>
                     <div class="cpb-field"><label for="angLocation">Lokasi (opsional)</label><input id="angLocation" class="form-input"></div>
                     <div class="cpb-field"><label for="angRoom">Ruang (opsional)</label><input id="angRoom" class="form-input"></div>
                 </div>

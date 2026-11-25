@@ -9,7 +9,7 @@
 .cka-head { display: flex; align-items: center; justify-content: space-between; gap: .75rem; margin-bottom: .625rem; }
 .cka-head strong { font-size: .8125rem; letter-spacing: .02em; text-transform: uppercase; color: #8c7a6e; }
 .cka-list { display: flex; flex-direction: column; gap: .5rem; }
-.cka-item { display: grid; grid-template-columns: minmax(150px, 1.3fr) minmax(150px, 1fr) 140px 110px minmax(130px, 1fr) auto; gap: .75rem; align-items: center; padding: .625rem .75rem; border: 1px solid #f0e4d8; border-radius: 12px; background: #fff; }
+.cka-item { display: grid; grid-template-columns: minmax(140px, 1.1fr) minmax(140px, 1fr) 130px 100px minmax(170px, 1.2fr) auto; gap: .75rem; align-items: center; padding: .625rem .75rem; border: 1px solid #f0e4d8; border-radius: 12px; background: #fff; }
 .cka-name { font-weight: 700; font-size: .9rem; }
 .cka-sub { font-size: .75rem; color: #8c7a6e; }
 .cka-item .form-input { padding: .3rem .5rem; font-size: .8125rem; border-radius: 8px; }
@@ -27,3 +27,10 @@
     .cka-actions { grid-column: span 2; }
     .cka-wrap { padding-left: 1rem; }
 }
+
+.cka-badge { display: inline-flex; align-items: center; gap: 6px; padding: .22rem .7rem; border-radius: 999px; font-size: .75rem; font-weight: 700; white-space: nowrap; }
+.cka-badge::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.cka-badge-amber { background: #fff3e0; color: #b45309; }
+.cka-badge-green { background: #ecfdf3; color: #15803d; }
+.cka-badge-gray { background: #f1f1f1; color: #5f6368; }
+.cka-warn { margin-top: .25rem; font-size: .7rem; font-weight: 700; color: #b91c1c; }

@@ -61,6 +61,10 @@ function elips_dispatch(string $action, array $payload): array
             return elips_action_tutor_document_remove($payload);
         case 'tutor.activationComplete':
             return elips_action_tutor_activation_complete($payload);
+        case 'class.close':
+            return elips_action_class_close($payload);
+        case 'class.reopen':
+            return elips_action_class_reopen($payload);
         case 'cp.get':
             return elips_action_cp_get($payload);
         case 'cp.structure.save':
@@ -1698,7 +1702,10 @@ function elips_action_class_update(array $p): array
     $class = elips_class_row($id);
     if (!$class) return elips_fail('Kelas tidak ditemukan.');
     if ($class['status'] === 'archived') return elips_fail('Kelas yang sudah diarsipkan tidak dapat diubah.');
+    if ($class['status'] === 'completed') return elips_fail('Angkatan yang sudah Selesai hanya dapat dilihat. Buka kembali dulu bila perlu mengubah.');
 
+    // Tanggal selesai hanya perkiraan dari jadwal sesi; tidak diubah manual.
+    unset($data['periodEnd']);
     $name = array_key_exists('name', $data) ? trim((string) $data['name']) : $class['name'];
     if ($name === '') return elips_fail('Nama kelas wajib diisi.');
 
@@ -1710,8 +1717,17 @@ function elips_action_class_update(array $p): array
     if (array_key_exists('periodEnd', $data) && trim((string) $data['periodEnd']) !== '' && $periodEnd === null) {
         return elips_fail('Tanggal selesai tidak valid.');
     }
+    // Perkiraan selesai ikut bergeser bila tanggal mulai melewatinya; dihitung ulang dari jadwal.
     if ($periodStart !== null && $periodEnd !== null && $periodStart > $periodEnd) {
-        return elips_fail('Tanggal selesai tidak boleh sebelum tanggal mulai.');
+        $periodEnd = null;
+    }
+
+    if ($periodStart !== null && $periodStart > elips_class_today() && $class['status'] === 'ongoing') {
+        $confirmed = elips_db()->prepare("SELECT COUNT(*) FROM class_sessions WHERE class_id = ? AND status IN ('confirmed', 'completed')");
+        $confirmed->execute([$id]);
+        if ((int) $confirmed->fetchColumn() > 0) {
+            return elips_fail('Tanggal mulai tidak bisa digeser ke depan karena sudah ada sesi yang dikonfirmasi.');
+        }
     }
 
     $quota = array_key_exists('quota', $data) ? max(0, (int) $data['quota']) : (int) $class['quota'];
@@ -1845,6 +1861,12 @@ function elips_action_class_status(array $p): array
     $status = (string) ($p['status'] ?? '');
     $allowed = ['draft', 'open', 'ready', 'ongoing', 'completed', 'cancelled', 'archived'];
     if (!in_array($status, $allowed, true)) return elips_fail('Status kelas tidak valid.');
+    if ($status === 'completed') {
+        return elips_fail('Gunakan "Tutup pembelajaran" untuk menyelesaikan angkatan.');
+    }
+    if (in_array($status, ['draft', 'open', 'ready', 'ongoing'], true)) {
+        return elips_fail('Status Pendaftaran/Berlangsung ditentukan otomatis dari tanggal mulai pembelajaran.');
+    }
 
     $class = elips_class_row($id);
     if (!$class) return elips_fail('Kelas tidak ditemukan.');
@@ -8269,4 +8291,5 @@ require_once __DIR__ . '/maintenance.php';
 require_once __DIR__ . '/tutors.php';
 require_once __DIR__ . '/tutor_portal.php';
 require_once __DIR__ . '/course_publish.php';
+require_once __DIR__ . '/class_lifecycle.php';
 require_once __DIR__ . '/attendance_rules.php';
