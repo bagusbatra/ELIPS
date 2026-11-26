@@ -1,4 +1,5 @@
 <?php
+// Direktori: certificate-view.php
 require_once __DIR__ . '/includes/bootstrap.php';
 $page = [
     'page_script' => 'certificate-view',
@@ -31,44 +32,17 @@ layout('page', $page);
                 <a href="<?= url('verify-certificate.php') ?>" class="btn btn-primary"><i class="bi bi-patch-check"></i> Verifikasi Sertifikat</a>
             </div>
 
-            <div id="certFrame" class="certificate-frame">
-                <div class="certificate-image">
-                    <div class="certificate-content">
-                        <div class="certificate-logo">
-                            <i class="bi bi-mortarboard-fill"></i>
-                            <span>ELIPS LMS</span>
-                        </div>
-                        <div class="certificate-title">SERTIFIKAT</div>
-                        <div class="certificate-subtitle">Diberikan Kepada</div>
-                        <div class="certificate-name" id="certName">Budi Santoso</div>
-                        <div class="certificate-text">
-                            Telah berhasil menyelesaikan seluruh materi pelatihan dengan predikat<br>
-                            <strong id="certGrade">LULUS</strong> pada pelatihan
-                        </div>
-                        <div class="certificate-course" id="certCourse">Pelatihan Manajemen Dasar</div>
-                        <div class="certificate-text">yang dilaksanakan secara daring melalui ELIPS LMS</div>
-                        <div class="certificate-footer">
-                            <div class="certificate-signature">
-                                <div class="certificate-signature-line"></div>
-                                <div class="certificate-signature-name" id="certInstructor">Ahmad Fauzi, M.M.</div>
-                                <div class="certificate-signature-title">Instruktur</div>
-                            </div>
-                            <div class="certificate-signature">
-                                <div class="certificate-signature-line"></div>
-                                <div class="certificate-signature-name" id="certAdmin">Administrator</div>
-                                <div class="certificate-signature-title">Administrator</div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="certificate-number" id="certNumber">No. Sertifikat: -</div>
-                </div>
+            <div id="certFrame" class="certificate-frame" style="max-width: 1000px; margin: 0 auto 1.5rem;">
+                <img id="certFront" alt="Sertifikat - halaman depan" style="width: 100%; height: auto; display: block; border-radius: 8px; box-shadow: 0 6px 24px rgba(0,0,0,.12); margin-bottom: 1.25rem;">
+                <img id="certBack" alt="Transkrip nilai - halaman belakang" style="width: 100%; height: auto; display: block; border-radius: 8px; box-shadow: 0 6px 24px rgba(0,0,0,.12);">
             </div>
 
             <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;" id="certActions">
-                <button id="downloadCertBtn" class="btn btn-primary btn-lg">
-                    <i class="bi bi-printer"></i>
-                    Cetak / Simpan PDF
-                </button>
+                <a id="dlPdf" class="btn btn-primary btn-lg" href="#"><i class="bi bi-file-earmark-pdf"></i> Unduh PDF</a>
+                <a id="dlJpg" class="btn btn-outline btn-lg" href="#"><i class="bi bi-file-earmark-image"></i> JPG (depan)</a>
+                <a id="dlPng" class="btn btn-outline btn-lg" href="#"><i class="bi bi-file-earmark-image"></i> PNG (depan)</a>
+                <a id="dlJpgB" class="btn btn-outline btn-lg" href="#"><i class="bi bi-file-earmark-image"></i> JPG (belakang)</a>
+                <a id="dlPngB" class="btn btn-outline btn-lg" href="#"><i class="bi bi-file-earmark-image"></i> PNG (belakang)</a>
                 <a href="<?= url('verify-certificate.php') ?>" class="btn btn-outline btn-lg">
                     <i class="bi bi-patch-check"></i>
                     Verifikasi Sertifikat

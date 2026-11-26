@@ -1388,6 +1388,48 @@ t('nilai tidak bisa diubah setelah dikirim', empty($tp->api('tp.final.save', ['c
 $res = $tp->api('tp.final.get', ['classId' => $tpClass, 'enrollmentId' => $e1]);
 t('data terkirim ditandai sentAt', !empty($res['data']['sentAt']));
 
+// ---- Penerbitan sertifikat ----
+reset_rl();
+$certAdmin = new Client($base);
+$certAdmin->api('auth.login', ['email' => $accounts['admin'][0], 'password' => $demoPass]);
+$certStu = new Client($base);
+$certStu->api('auth.login', ['email' => $accounts['peserta'][0], 'password' => $demoPass]);
+$res = $certAdmin->api('cert.queue');
+$certQ = null;
+foreach ($res['data']['classes'] ?? [] as $qc) { if ((int) $qc['classId'] === $tpClass) { $certQ = $qc; } }
+t('antrean sertifikat memuat angkatan yang nilainya terkirim', $certQ !== null && count($certQ['students']) === 2, json_encode($res['message'] ?? ''));
+t('cert.queue ditolak untuk peserta dan anonim', empty($certStu->api('cert.queue')['ok']) && empty((new Client($base))->api('cert.queue')['ok']));
+t('cert.issue ditolak untuk peserta', empty($certStu->api('cert.issue', ['classId' => $tpClass, 'enrollmentIds' => [$e1]])['ok']));
+$res = $certAdmin->api('cert.issue', ['classId' => $tpClass, 'enrollmentIds' => [$e1, $e2]]);
+t('admin menerbitkan sertifikat peserta', !empty($res['ok']) && ($res['data']['issued'] ?? 0) === 2, json_encode($res));
+t('terbit ulang ditolak', empty($certAdmin->api('cert.issue', ['classId' => $tpClass, 'enrollmentIds' => [$e1]])['ok']));
+$rows = $pdo->query("SELECT * FROM certificates WHERE class_id = $tpClass ORDER BY cert_seq")->fetchAll(PDO::FETCH_ASSOC);
+$yr = date('Y');
+t('format nomor EC / urut / kode / romawi / tahun', count($rows) === 2 && preg_match('#^EC / \d{6} / [A-Z0-9]{1,5} / (I|II|III|IV|V|VI|VII|VIII|IX|X|XI|XII) / ' . $yr . '$#', $rows[0]['certificate_number']) === 1, $rows[0]['certificate_number'] ?? '');
+t('nomor berurutan dan unik', (int) $rows[1]['cert_seq'] === (int) $rows[0]['cert_seq'] + 1 && $rows[0]['certificate_number'] !== $rows[1]['certificate_number']);
+$tok = $rows[0]['public_token'];
+$res = (new Client($base))->api('cert.verify', ['token' => $tok]);
+t('verifikasi publik via token tanpa login', !empty($res['ok']) && $res['data']['certificate']['number'] === $rows[0]['certificate_number'] && !empty($res['data']['certificate']['groups']), json_encode($res['message'] ?? ''));
+t('verifikasi publik via nomor', !empty((new Client($base))->api('cert.verify', ['number' => $rows[0]['certificate_number']])['ok']));
+t('verifikasi token palsu ditolak', empty((new Client($base))->api('cert.verify', ['token' => 'abc123'])['ok']));
+$certId = (int) $rows[0]['id'];
+$pdf = $certAdmin->get("/api/index.php?action=certificate.file&id=$certId&format=pdf");
+t('unduh PDF sertifikat 2 halaman', $pdf['code'] === 200 && substr($pdf['body'], 0, 4) === '%PDF' && substr_count($pdf['body'], '/Type /Page' . "\n") + substr_count($pdf['body'], '/Type /Page ') >= 2, (string) $pdf['code']);
+$png = $certAdmin->get("/api/index.php?action=certificate.file&id=$certId&format=png&side=back");
+t('unduh PNG belakang', $png['code'] === 200 && substr($png['body'], 1, 3) === 'PNG');
+$jpg = $certAdmin->get("/api/index.php?action=certificate.file&id=$certId&format=jpg&side=front");
+t('unduh JPG depan', $jpg['code'] === 200 && substr($jpg['body'], 0, 2) === "\xFF\xD8");
+t('unduh ditolak tanpa login', (new Client($base))->get("/api/index.php?action=certificate.file&id=$certId&format=pdf")['code'] === 403);
+$vp = (new Client($base))->get('/verify-certificate.php?c=' . $tok);
+t('halaman verifikasi publik terbuka tanpa login', $vp['code'] === 200 && strpos($vp['body'], 'verify-certificate') !== false, (string) $vp['code']);
+t('verifikasi.js memakai aksi cert.verify dan token QR', strpos(file_get_contents(__DIR__ . '/../assets/js/pages/verify-certificate.js'), "cert.verify") !== false);
+foreach (['admin/certificate-issue.php' => $certAdmin] as $pg => $cl) {
+    $r = $cl->get("/$pg");
+    t("halaman $pg memuat css & js penerbitan", $r['code'] === 200 && strpos($r['body'], 'certificate-issue.css') !== false && strpos($r['body'], 'certificate-issue.js') !== false && strpos($r['body'], 'cisList') !== false, (string) $r['code']);
+}
+t('sidebar admin memuat Terbit Sertifikat', strpos($certAdmin->get('/admin/dashboard.php')['body'], 'admin/certificate-issue.php') !== false);
+$pdo->exec("DELETE FROM certificates WHERE class_id = $tpClass");
+
 foreach (['instructor/angkatan.php', 'instructor/kurikulum.php', 'instructor/penilaian.php'] as $pg) {
     $r = $tp->get("/$pg");
     t("halaman $pg memuat tentor-app.css dan tp-core", $r['code'] === 200 && strpos($r['body'], 'tentor-app.css') !== false && strpos($r['body'], 'tp-core.js') !== false);

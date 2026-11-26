@@ -31,7 +31,7 @@ layout('page', $page);
                 </div>
                 <div class="verify-body">
                     <div class="verify-form">
-                        <input type="text" id="verifyInput" class="verify-input" placeholder="Contoh: CERT-2026-ABC123" maxlength="40">
+                        <input type="text" id="verifyInput" class="verify-input" placeholder="Contoh: EC / 000001 / AP / XI / 2026" maxlength="60">
                         <button id="verifyBtn" class="btn btn-primary">
                             <i class="bi bi-search"></i>
                             Verifikasi
@@ -42,7 +42,7 @@ layout('page', $page);
                 </div>
             </div>
             <div style="text-align: center; margin-top: 2rem; color: var(--text-secondary); font-size: 0.875rem;">
-                <p>Hanya sertifikat dengan status <strong>Publish</strong> yang dapat diverifikasi.</p>
+                <p>Pindai kode QR pada sertifikat atau masukkan nomor sertifikat untuk memeriksa keasliannya.</p>
             </div>
         </section>
     </main>

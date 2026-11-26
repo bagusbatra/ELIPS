@@ -1,0 +1,29 @@
+/* Direktori: assets/css/certificate-issue.css */
+/* ELIPS LMS - Penerbitan Sertifikat (admin & Operasional). Prefiks: cis- */
+.cis-main { padding: 2rem 2.25rem 6rem; max-width: 1100px; width: 100%; }
+.cis-head { margin-bottom: 1.5rem; }
+.cis-title { font-size: 1.75rem; font-weight: 700; letter-spacing: -.015em; line-height: 1.2; }
+.cis-sub, .cis-muted { font-size: .875rem; color: var(--text-secondary); }
+.cis-sub { margin-top: .25rem; font-size: .9375rem; }
+.cis-list { display: grid; gap: 1.25rem; }
+.cis-card { background: #fff; border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
+.cis-card-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem; padding: 1rem 1.25rem; border-bottom: 1px solid var(--border); }
+.cis-card-title { font-size: 1.0625rem; font-weight: 600; }
+.cis-actions { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+.cis-table { width: 100%; border-collapse: collapse; font-size: .875rem; }
+.cis-table th { text-align: left; padding: .625rem 1.25rem; font-size: .75rem; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--text-secondary); background: #f8fafc; }
+.cis-table td { padding: .75rem 1.25rem; border-top: 1px solid var(--border); vertical-align: middle; }
+.cis-num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cis-chip { display: inline-flex; align-items: center; gap: .25rem; padding: .1875rem .625rem; border-radius: 999px; font-size: .75rem; font-weight: 600; }
+.cis-chip--ok { background: #e1f5ee; color: #0f6e56; }
+.cis-chip--wait { background: #fff3e0; color: #b45f06; }
+.cis-chip--done { background: #e6effa; color: #1d4f91; }
+.cis-links { display: flex; flex-wrap: wrap; gap: .375rem; }
+.cis-links a { font-size: .8125rem; padding: .25rem .625rem; border: 1px solid var(--border); border-radius: 8px; text-decoration: none; color: inherit; }
+.cis-links a:hover { background: #f1f5f9; }
+@media (max-width: 720px) {
+  .cis-main { padding: 1.25rem 1rem 5rem; }
+  .cis-table thead { display: none; }
+  .cis-table tr { display: block; padding: .75rem 1rem; border-top: 1px solid var(--border); }
+  .cis-table td { display: block; padding: .125rem 0; border: 0; }
+}

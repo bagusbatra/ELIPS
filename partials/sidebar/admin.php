@@ -23,24 +23,14 @@ try {
             <i class="bi bi-speedometer2"></i>
             <span>Dashboard</span>
         </a>
-            <a href="<?= url('admin/courses.php') ?>" class="dashboard-nav-link<?= nav_active('admin/courses.php') ?>">
-            <i class="bi bi-journal-bookmark"></i>
-            <span>Kelola Kursus</span>
-        </a>
-        <a href="<?= url('admin/registrations.php') ?>" class="dashboard-nav-link<?= nav_active('admin/registrations.php') ?>">
-            <i class="bi bi-person-plus"></i>
-            <span>Pendaftaran Siswa</span>
-            <span class="nav-badge nav-badge-red" data-badge="registrationsNew" data-count="<?= (int) $__badges['registrationsNew'] ?>"<?= $__badges['registrationsNew'] > 0 ? '' : ' hidden' ?>><?= (int) $__badges['registrationsNew'] ?></span>
-        </a>
-        <a href="<?= url('admin/payments.php') ?>" class="dashboard-nav-link<?= nav_active('admin/payments.php') ?>">
-            <i class="bi bi-cash-coin"></i>
-            <span>Pembayaran</span>
-            <span class="nav-badge nav-badge-yellow" data-badge="unpaidInvoices" data-count="<?= (int) $__badges['unpaidInvoices'] ?>"<?= $__badges['unpaidInvoices'] > 0 ? '' : ' hidden' ?> title="Siswa aktif belum lunas"><?= (int) $__badges['unpaidInvoices'] ?></span>
-        </a>
         <a href="<?= url('admin/users.php') ?>" class="dashboard-nav-link<?= nav_active('admin/users.php') ?>">
             <i class="bi bi-people"></i>
             <span>Kelola Pengguna</span>
             <span class="nav-badge nav-badge-red" data-badge="resetRequests" data-count="<?= (int) $__badges['resetRequests'] ?>"<?= $__badges['resetRequests'] > 0 ? '' : ' hidden' ?> title="Permintaan reset sandi"><?= (int) $__badges['resetRequests'] ?></span>
+        </a>
+        <a href="<?= url('admin/courses.php') ?>" class="dashboard-nav-link<?= nav_active('admin/courses.php') ?>">
+            <i class="bi bi-journal-bookmark"></i>
+            <span>Kelola Kursus</span>
         </a>
         <a href="<?= url('admin/academic.php') ?>" class="dashboard-nav-link<?= nav_active('admin/academic.php') ?>">
             <i class="bi bi-diagram-3"></i>
@@ -53,6 +43,20 @@ try {
         <a href="<?= url('admin/enrollment.php') ?>" class="dashboard-nav-link<?= nav_active('admin/enrollment.php') ?>">
             <i class="bi bi-person-check"></i>
             <span>Penugasan Siswa</span>
+        </a>
+        <a href="<?= url('admin/registrations.php') ?>" class="dashboard-nav-link<?= nav_active('admin/registrations.php') ?>">
+            <i class="bi bi-person-plus"></i>
+            <span>Pendaftaran Siswa</span>
+            <span class="nav-badge nav-badge-red" data-badge="registrationsNew" data-count="<?= (int) $__badges['registrationsNew'] ?>"<?= $__badges['registrationsNew'] > 0 ? '' : ' hidden' ?>><?= (int) $__badges['registrationsNew'] ?></span>
+        </a>
+        <a href="<?= url('admin/payments.php') ?>" class="dashboard-nav-link<?= nav_active('admin/payments.php') ?>">
+            <i class="bi bi-cash-coin"></i>
+            <span>Pembayaran</span>
+            <span class="nav-badge nav-badge-yellow" data-badge="unpaidInvoices" data-count="<?= (int) $__badges['unpaidInvoices'] ?>"<?= $__badges['unpaidInvoices'] > 0 ? '' : ' hidden' ?> title="Siswa aktif belum lunas"><?= (int) $__badges['unpaidInvoices'] ?></span>
+        </a>
+        <a href="<?= url('admin/certificate-issue.php') ?>" class="dashboard-nav-link<?= nav_active('admin/certificate-issue.php') ?>">
+            <i class="bi bi-patch-check"></i>
+            <span>Terbit Sertifikat</span>
         </a>
         <a href="<?= url('admin/certificates.php') ?>" class="dashboard-nav-link<?= nav_active('admin/certificates.php') ?>">
             <i class="bi bi-award"></i>

@@ -63,6 +63,9 @@ try {
     if ($action === 'tutor.document') {
         elips_tutor_document_send((int) ($_GET['id'] ?? 0));
     }
+    if ($action === 'certificate.file') {
+        elips_certificate_file_send((int) ($_GET['id'] ?? 0), (string) ($_GET['format'] ?? 'pdf'), (string) ($_GET['side'] ?? 'front'));
+    }
     if ($action === 'payment.proof') {
         elips_payment_proof_send((int) ($_GET['id'] ?? 0));
     }
@@ -78,6 +81,7 @@ try {
         'payment.mine', 'payment.submit', 'payment.invoices', 'payment.invoice', 'payment.record',
         'tutor.sendActivation', 'tutor.profile', 'tutor.activationInfo', 'tutor.document.upload',
         'tutor.document.remove', 'tutor.activationComplete',
+        'cert.queue', 'cert.issue', 'cert.mine', 'cert.verify',
         'payment.markPaid', 'payment.verify', 'payment.void', 'payment.settings.get', 'payment.settings.save',
     ];
     // Portal tentor (tp.*) dan halaman publikasi (cp.*) memuat datanya sendiri per halaman, tanpa snapshot.

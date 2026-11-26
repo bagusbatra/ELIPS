@@ -15,6 +15,7 @@
         <a href="<?= url('employee/operasional/tentor.php') ?>" class="dashboard-nav-link<?= nav_active('employee/operasional/tentor.php') ?>"><i class="bi bi-easel"></i><span>Tentor</span></a>
         <a href="<?= url('employee/operasional/kursus.php') ?>" class="dashboard-nav-link<?= nav_active('employee/operasional/kursus.php') ?>"><i class="bi bi-collection"></i><span>Kursus</span></a>
         <a href="<?= url('employee/operasional/akademik.php') ?>" class="dashboard-nav-link<?= nav_active('employee/operasional/akademik.php') ?>"><i class="bi bi-journal-bookmark"></i><span>Kurikulum &amp; Kelas</span></a>
+        <a href="<?= url('employee/operasional/penerbitan-sertifikat.php') ?>" class="dashboard-nav-link<?= nav_active('employee/operasional/penerbitan-sertifikat.php') ?>"><i class="bi bi-patch-check"></i><span>Terbit Sertifikat</span></a>
         <a href="<?= url('employee/operasional/jadwal.php') ?>" class="dashboard-nav-link<?= nav_active('employee/operasional/jadwal.php') ?>"><i class="bi bi-calendar-week"></i><span>Kalender &amp; Jadwal</span></a>
     </nav>
 </aside>

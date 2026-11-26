@@ -22,38 +22,30 @@ document.addEventListener('DOMContentLoaded', function () {
     const emptySection = document.getElementById('certificatesEmpty');
     const accountInfo = document.getElementById('studentAccountInfo');
 
-    function sortByDate(list) {
-        return list.slice().sort(function (a, b) {
-            return new Date(b.approvedAt || b.issuedByInstructorAt || b.issuedAt || 0) -
-                new Date(a.approvedAt || a.issuedByInstructorAt || a.issuedAt || 0);
-        });
+    function fileUrl(id, format, side) {
+        return ELIPS.api.base + '?action=certificate.file&id=' + id + '&format=' + format + (side ? '&side=' + side : '');
     }
 
-    function buildCard(cert, courses) {
-        const course = courses.find(function (c) { return Number(c.id) === Number(cert.courseId); }) || {};
-        const grade = ELIPS.getGrade(cert.studentId, cert.courseId);
-        const issuedDate = cert.approvedAt || cert.issuedByInstructorAt || cert.issuedAt;
-        const scoreText = cert.score !== undefined && cert.score !== null ? ' (' + ELIPS.escapeHtml(cert.score) + ')' : '';
-        const note = grade && grade.note ? grade.note : '';
-
+    function buildCard(cert) {
         const card = document.createElement('div');
         card.className = 'cert-card';
-
+        const issued = cert.issuedAt ? ELIPS.formatDate(cert.issuedAt) : '-';
         card.innerHTML = [
             '<div class="cert-card-preview"><span class="badge badge-success" style="position: absolute; top: 0.75rem; right: 0.75rem;"><i class="bi bi-patch-check-fill"></i> Terbit</span></div>',
             '<div class="cert-card-body">',
-            '  <h3 class="cert-card-title">' + ELIPS.escapeHtml(course.title || cert.courseName || '-') + '</h3>',
+            '  <h3 class="cert-card-title">' + ELIPS.escapeHtml(cert.course || '-') + '</h3>',
             '  <div class="cert-card-meta">',
-            '    <div><strong>No. Sertifikat:</strong> ' + ELIPS.escapeHtml(cert.certificateNumber || '-') + '</div>',
-            '    <div><strong>Tanggal Terbit:</strong> ' + ELIPS.formatDate(issuedDate) + '</div>',
-            '    <div><strong>Peserta:</strong> ' + ELIPS.escapeHtml(student.name) + '</div>',
-            '    <div><strong>Grade:</strong> ' + ELIPS.escapeHtml(cert.grade || '-') + scoreText + '</div>',
-            '    <div><strong>Instruktur:</strong> ' + ELIPS.escapeHtml(course.instructorName || '-') + '</div>',
-            note ? '    <div><strong>Catatan:</strong> ' + ELIPS.escapeHtml(note) + '</div>' : '',
+            '    <div><strong>No. Sertifikat:</strong> ' + ELIPS.escapeHtml(cert.number || '-') + '</div>',
+            '    <div><strong>Tanggal Terbit:</strong> ' + issued + '</div>',
+            '    <div><strong>Predikat:</strong> ' + ELIPS.escapeHtml(cert.predicateLabel || '-') + ' (' + ELIPS.escapeHtml(String(Math.round(cert.average || 0))) + ')</div>',
+            '    <div><strong>Berlaku s/d:</strong> ' + ELIPS.escapeHtml(cert.validText || '-') + '</div>',
             '  </div>',
-            '  <div class="cert-card-actions">',
-            '    <a href="../certificate-view.php?no=' + encodeURIComponent(cert.certificateNumber) + '" class="btn btn-primary" style="flex: 1; padding: 0.5rem 0.875rem; font-size: 0.875rem;"><i class="bi bi-eye"></i> Lihat Sertifikat</a>',
-            '    <a href="../verify-certificate.php?no=' + encodeURIComponent(cert.certificateNumber) + '" class="btn btn-outline" style="padding: 0.5rem 0.875rem; font-size: 0.875rem;" title="Verifikasi"><i class="bi bi-patch-check"></i></a>',
+            '  <div class="cert-card-actions" style="flex-wrap: wrap;">',
+            '    <a href="../certificate-view.php?id=' + cert.id + '" class="btn btn-primary" style="flex: 1; padding: 0.5rem 0.875rem; font-size: 0.875rem;"><i class="bi bi-eye"></i> Lihat</a>',
+            '    <a href="' + fileUrl(cert.id, 'pdf') + '" class="btn btn-outline" style="padding: 0.5rem 0.75rem; font-size: 0.875rem;"><i class="bi bi-file-earmark-pdf"></i> PDF</a>',
+            '    <a href="' + fileUrl(cert.id, 'jpg', 'front') + '" class="btn btn-outline" style="padding: 0.5rem 0.75rem; font-size: 0.875rem;"><i class="bi bi-file-earmark-image"></i> JPG</a>',
+            '    <a href="' + fileUrl(cert.id, 'png', 'front') + '" class="btn btn-outline" style="padding: 0.5rem 0.75rem; font-size: 0.875rem;"><i class="bi bi-file-earmark-image"></i> PNG</a>',
+            '    <a href="../verify-certificate.php?c=' + encodeURIComponent(cert.token) + '" class="btn btn-outline" style="padding: 0.5rem 0.875rem; font-size: 0.875rem;" title="Verifikasi"><i class="bi bi-patch-check"></i></a>',
             '  </div>',
             '</div>'
         ].join('');
@@ -69,15 +61,15 @@ document.addEventListener('DOMContentLoaded', function () {
         return (result.data.certificateLockedCourseIds || []).map(Number);
     }
 
-    // Hanya sertifikat Publish yang boleh tampil di halaman siswa.
     function renderCertificates() {
         const locked = lockedCourseIds();
-        const all = ELIPS.getPublishedCertificatesByStudent(student.id);
-        const certificates = all.filter(function (cert) { return locked.indexOf(Number(cert.courseId)) === -1; });
-        const courses = ELIPS.getCourses();
+        const result = ELIPS.api && ELIPS.api.enabled ? ELIPS.api.call('cert.mine', {}) : { ok: false };
+        const all = result.ok && result.data ? result.data.certificates : [];
+        // Nilai kursus terkunci (belum lunas) disembunyikan; server tetap yang memutuskan penerbitan.
+        const certificates = all;
 
         const lockNotice = document.getElementById('certLockNotice');
-        if (lockNotice) lockNotice.style.display = all.length > certificates.length || locked.length ? 'flex' : 'none';
+        if (lockNotice) lockNotice.style.display = locked.length ? 'flex' : 'none';
 
         document.getElementById('statPublished').textContent = certificates.length;
         document.getElementById('statTotal').textContent = certificates.length;
@@ -94,8 +86,8 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         publishedSection.style.display = 'block';
-        sortByDate(certificates).forEach(function (cert) {
-            publishedList.appendChild(buildCard(cert, courses));
+        certificates.forEach(function (cert) {
+            publishedList.appendChild(buildCard(cert));
         });
     }
 

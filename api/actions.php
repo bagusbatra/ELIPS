@@ -343,6 +343,14 @@ function elips_dispatch(string $action, array $payload): array
             return elips_action_grade_scheme_status($payload);
         case 'gradeScheme.delete':
             return elips_action_grade_scheme_delete($payload);
+        case 'cert.queue':
+            return elips_action_cert_queue($payload);
+        case 'cert.issue':
+            return elips_action_cert_issue($payload);
+        case 'cert.mine':
+            return elips_action_cert_mine($payload);
+        case 'cert.verify':
+            return elips_action_cert_verify($payload);
         case 'certificate.draft':
             return elips_action_certificate_draft($payload);
         case 'certificate.approve':
@@ -8292,4 +8300,5 @@ require_once __DIR__ . '/tutors.php';
 require_once __DIR__ . '/tutor_portal.php';
 require_once __DIR__ . '/course_publish.php';
 require_once __DIR__ . '/class_lifecycle.php';
+require_once __DIR__ . '/certificate_issue.php';
 require_once __DIR__ . '/attendance_rules.php';
