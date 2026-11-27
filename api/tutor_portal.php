@@ -241,6 +241,7 @@ function elips_tp_class_public(array $row): array
 /** Daftar sesi (lesson) satu versi kurikulum, bernomor urut 1..n. */
 function elips_tp_lessons(int $versionId): array
 {
+    elips_ensure_module_lessons($versionId);
     $stmt = elips_db()->prepare(
         'SELECT l.id, l.module_id, l.title, m.title AS module_title
          FROM lessons l

@@ -45,6 +45,7 @@ function elips_cp_version(array $course, int $actorId): array
 function elips_cp_tree(int $versionId): array
 {
     elips_ensure_tp_schema();
+    elips_ensure_module_lessons($versionId);
     $db = elips_db();
 
     $stmt = $db->prepare('SELECT id, title FROM modules WHERE curriculum_version_id = ? ORDER BY sort_order ASC, id ASC');
@@ -55,7 +56,7 @@ function elips_cp_tree(int $versionId): array
     }
 
     $stmt = $db->prepare(
-        "SELECT l.id, l.module_id, l.title,
+        "SELECT l.id, l.module_id, l.title, l.auto_generated,
                 CASE WHEN COALESCE(d.objective, '') <> ''
                        OR EXISTS (SELECT 1 FROM lesson_materials lm WHERE lm.lesson_id = l.id)
                        OR EXISTS (SELECT 1 FROM lesson_tasks lt WHERE lt.lesson_id = l.id)
@@ -75,6 +76,7 @@ function elips_cp_tree(int $versionId): array
             'id' => (int) $row['id'],
             'title' => (string) $row['title'],
             'filled' => (int) $row['filled'] === 1,
+            'auto' => (int) $row['auto_generated'] === 1,
         ];
     }
 
@@ -227,7 +229,7 @@ function elips_cp_payload(int $courseId): array
     }
 
     $priceOk = (float) $course['price'] > 0;
-    $structureOk = $lessonTotal > 0;
+    $structureOk = count($tree) > 0;
 
     return [
         'course' => [
@@ -243,7 +245,7 @@ function elips_cp_payload(int $courseId): array
         'totals' => ['modules' => count($tree), 'lessons' => $lessonTotal, 'filled' => $filled],
         'checklist' => [
             ['key' => 'price', 'label' => 'Harga kursus diisi', 'ok' => $priceOk, 'hint' => 'Ubah kursus di Kelola Kursus untuk mengisi harga.'],
-            ['key' => 'structure', 'label' => 'Struktur modul & materi dibuat', 'ok' => $structureOk, 'hint' => 'Tambahkan minimal satu modul dan satu materi.'],
+            ['key' => 'structure', 'label' => 'Modul (pertemuan) dibuat', 'ok' => $structureOk, 'hint' => 'Tambahkan minimal satu modul.'],
         ],
         'canPublish' => $priceOk && $structureOk,
         'angkatan' => $classes,
@@ -285,11 +287,16 @@ function elips_action_cp_structure_save(array $p): array
     $stmt = $db->prepare('SELECT id FROM modules WHERE curriculum_version_id = ?');
     $stmt->execute([$versionId]);
     $existingModules = array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
-    $stmt = $db->prepare('SELECT id, title FROM lessons WHERE curriculum_version_id = ?');
+    elips_ensure_module_lessons($versionId);
+    $stmt = $db->prepare('SELECT id, title, auto_generated FROM lessons WHERE curriculum_version_id = ?');
     $stmt->execute([$versionId]);
     $existingLessons = [];
+    $autoIds = [];
     foreach ($stmt->fetchAll() as $row) {
         $existingLessons[(int) $row['id']] = (string) $row['title'];
+        if ((int) $row['auto_generated'] === 1) {
+            $autoIds[(int) $row['id']] = true;
+        }
     }
 
     // Normalisasi + validasi masukan.
@@ -338,6 +345,9 @@ function elips_action_cp_structure_save(array $p): array
             }
             $lessons[] = ['id' => $lid, 'title' => $lt];
             $lessonTotal++;
+        }
+        if (count($lessons) === 1 && isset($autoIds[$lessons[0]['id']])) {
+            $lessons[0]['title'] = mb_substr(elips_module_topic($title), 0, 200);
         }
         $modules[] = ['id' => $mid, 'title' => $title, 'lessons' => $lessons];
     }
@@ -448,6 +458,7 @@ function elips_action_cp_structure_save(array $p): array
         $db->rollBack();
         throw $e;
     }
+    elips_ensure_module_lessons($versionId);
 
     elips_audit(
         'update',

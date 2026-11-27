@@ -1477,6 +1477,22 @@ $structure = [
     ['title' => 'Microsoft Word', 'lessons' => [['title' => 'Format teks'], ['title' => 'Sisipkan gambar']]],
     ['title' => 'Microsoft Excel', 'lessons' => [['title' => 'Rumus dasar'], ['title' => 'Fungsi IF']]],
 ];
+// Modul = pertemuan; materi opsional. Modul tanpa materi tetap bisa dipublikasikan.
+$rc = $cpAdmin->api('course.create', ['title' => 'Uji Modul Saja', 'category' => 'Uji', 'description' => 'x', 'price' => 500000]);
+$mcId = (int) ($rc['data']['id'] ?? 0);
+$rs = $cpAdmin->api('cp.structure.save', ['courseId' => $mcId, 'modules' => [['title' => 'Pertemuan 1: Dasar', 'lessons' => []], ['title' => 'Pertemuan 2: Lanjut', 'lessons' => []]]]);
+t('struktur modul tanpa materi tersimpan', !empty($rs['ok']), $rs['message'] ?? '');
+$tr = $rs['data']['modules'] ?? [];
+t('modul tanpa materi mendapat materi bawaan tersembunyi', count($tr) === 2 && !empty($tr[0]['lessons'][0]['auto']) && $tr[0]['lessons'][0]['title'] === 'Dasar', json_encode($tr[0] ?? []));
+t('checklist hanya butuh modul + harga', !empty($rs['data']['canPublish']));
+$rp = $cpAdmin->api('course.status', ['id' => $mcId, 'status' => 'published']);
+t('publikasi tanpa materi sungguhan berhasil', !empty($rp['ok']), $rp['message'] ?? '');
+$rl = $cpAdmin->api('cp.structure.save', ['courseId' => $mcId, 'modules' => [
+    ['id' => (int) $tr[0]['id'], 'title' => 'Pertemuan 1: Dasar', 'lessons' => [['id' => (int) $tr[0]['lessons'][0]['id'], 'title' => 'Dasar'], ['title' => 'Latihan tambahan']]],
+    ['id' => (int) $tr[1]['id'], 'title' => 'Pertemuan 2: Lanjut', 'lessons' => [['id' => (int) $tr[1]['lessons'][0]['id'], 'title' => 'Lanjut']]],
+]]);
+t('materi opsional ditambahkan, materi bawaan jadi materi biasa', !empty($rl['ok']) && empty($rl['data']['modules'][0]['lessons'][0]['auto']) && count($rl['data']['modules'][0]['lessons']) === 2, $rl['message'] ?? '');
+
 $res = $cpOps->api('cp.structure.save', ['courseId' => $cpCourse, 'modules' => $structure]);
 t('operasional boleh menyusun struktur', !empty($res['ok']) && ($res['data']['totals']['lessons'] ?? 0) === 4, $res['message'] ?? '');
 t('struktur siap publikasi', !empty($res['data']['canPublish']), json_encode($res['data']['checklist'] ?? []));

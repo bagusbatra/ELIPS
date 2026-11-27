@@ -1174,12 +1174,10 @@ function elips_action_course_status(array $p): array
         $stmt = elips_db()->prepare('SELECT COUNT(*) FROM modules WHERE curriculum_version_id = ?');
         $stmt->execute([(int) $version['id']]);
         $moduleCount = (int) $stmt->fetchColumn();
-        $stmt = elips_db()->prepare('SELECT COUNT(*) FROM lessons WHERE curriculum_version_id = ?');
-        $stmt->execute([(int) $version['id']]);
-        $lessonCount = (int) $stmt->fetchColumn();
-        if ($moduleCount === 0 || $lessonCount === 0) {
-            return elips_fail('Tambahkan minimal satu modul dan satu materi sebelum publikasi.');
+        if ($moduleCount === 0) {
+            return elips_fail('Tambahkan minimal satu modul sebelum publikasi.');
         }
+        elips_ensure_module_lessons((int) $version['id']);
         if ($version['status'] === 'draft') {
             $stmt = elips_db()->prepare(
                 "UPDATE curriculum_versions SET status = 'published', updated_by = ?, updated_at = UTC_TIMESTAMP() WHERE id = ?"
@@ -1330,12 +1328,10 @@ function elips_action_curriculum_publish(array $p): array
     $stmt = $db->prepare('SELECT COUNT(*) FROM modules WHERE curriculum_version_id = ?');
     $stmt->execute([$id]);
     $moduleCount = (int) $stmt->fetchColumn();
-    $stmt = $db->prepare('SELECT COUNT(*) FROM lessons WHERE curriculum_version_id = ?');
-    $stmt->execute([$id]);
-    $lessonCount = (int) $stmt->fetchColumn();
-    if ($moduleCount === 0 || $lessonCount === 0) {
-        return elips_fail('Tambahkan minimal satu modul dan satu materi sebelum mempublikasikan versi.');
+    if ($moduleCount === 0) {
+        return elips_fail('Tambahkan minimal satu modul sebelum mempublikasikan versi.');
     }
+    elips_ensure_module_lessons($id);
 
     $stmt = $db->prepare("UPDATE curriculum_versions SET status = 'published', updated_by = ?, updated_at = UTC_TIMESTAMP() WHERE id = ?");
     $stmt->execute([(int) $actor['id'], $id]);

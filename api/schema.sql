@@ -155,6 +155,7 @@ CREATE TABLE IF NOT EXISTS `lessons` (
     `title` VARCHAR(200) NOT NULL,
     `type` ENUM('text', 'video', 'file', 'link') NOT NULL DEFAULT 'text',
     `content` LONGTEXT NOT NULL,
+    `auto_generated` TINYINT(1) NOT NULL DEFAULT 0,
     `sort_order` INT UNSIGNED NOT NULL DEFAULT 1,
     `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `updated_at` DATETIME NULL,

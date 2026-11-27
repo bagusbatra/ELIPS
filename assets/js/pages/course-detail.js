@@ -198,9 +198,7 @@ document.addEventListener('DOMContentLoaded', function () {
     document.getElementById('courseInstructor').textContent = course.instructorName || 'Belum ditugaskan';
 
     const structure = ELIPS.getCourseStructure(course.id);
-    let totalLessons = 0;
-    structure.forEach(function (item) { totalLessons += item.lessons.length; });
-    document.getElementById('courseMeta').textContent = structure.length + ' Modul • ' + totalLessons + ' Pelajaran';
+    document.getElementById('courseMeta').textContent = structure.length + ' Modul';
 
     // Informasi katalog tambahan dari courses (lihat seed-all.php).
     const heroImage = document.getElementById('courseImage');
@@ -233,71 +231,25 @@ document.addEventListener('DOMContentLoaded', function () {
         priceNow.textContent = rupiah(price);
     }
 
-    // Hak akses materi: hanya peserta yang terdaftar aktif di kursus ini
-    // (plus admin/instruktur) yang boleh membuka seluruh modul.
     const enrollment = user ? ELIPS.getEnrollment(user.id, course.id) : null;
     const isEnrolled = !!(enrollment && enrollment.status === 'active');
     const isAdmin = !!(user && user.role === 'admin');
     const isInstructor = !!(user && user.role === 'instruktur' && course.instructorId === user.id);
-    const canOpenAllModules = (!!user && user.role === 'peserta' && isEnrolled) || isAdmin || isInstructor;
-    const freeModuleCount = 2;
 
-    // Modul & pelajaran: accordion. Pengunjung hanya melihat 2 modul pertama;
-    // sisanya disembunyikan denganPlaceholder bergradasi agar jumlah modul tetap terlihat.
-    const visibleStructure = canOpenAllModules ? structure : structure.slice(0, freeModuleCount);
-    const hiddenModuleCount = structure.length - visibleStructure.length;
-
+    // Daftar modul (pertemuan) tampil datar tanpa buka-tutup. Materi hanya dapat
+    // diakses lewat dashboard siswa.
     const moduleHint = document.getElementById('moduleHint');
-    if (moduleHint && hiddenModuleCount > 0) {
-        moduleHint.innerHTML = '<strong>' + ELIPS.escapeHtml(course.title) + '</strong>';
-    }
+    if (moduleHint) moduleHint.innerHTML = '<strong>' + ELIPS.escapeHtml(course.title) + '</strong>';
 
     if (structure.length === 0) {
-        modulesList.innerHTML = '<p class="lp-detail-empty">Tentor belum menambahkan modul untuk kursus ini.</p>';
+        modulesList.innerHTML = '<p class="lp-detail-empty">Modul untuk kursus ini belum ditambahkan.</p>';
     } else {
-        const moduleHtml = visibleStructure.map(function (item, index) {
-            const panelId = 'module-panel-' + index;
-            const lessons = item.lessons.map(function (lesson) {
-                const icon = lesson.type === 'video' ? iconPlay : iconFile;
-                return '<div class="lp-lesson">' + icon + '<span>' + ELIPS.escapeHtml(lesson.title) + '</span></div>';
-            }).join('');
-            return '<div class="lp-module">' +
-                '<button class="lp-module-head" type="button" aria-expanded="false" aria-controls="' + panelId + '">' +
+        modulesList.innerHTML = structure.map(function (item) {
+            return '<div class="lp-module lp-module--flat"><div class="lp-module-head lp-module-head--static">' +
                 '<span class="lp-module-info">' + iconFolder + '<span class="lp-module-title">' + ELIPS.escapeHtml(item.module.title) + '</span></span>' +
-                '<span class="lp-module-right"><span class="lp-module-count">' + item.lessons.length + ' Pelajaran</span>' + iconChevron + '</span>' +
-                '</button>' +
-                '<div class="lp-lessons" id="' + panelId + '" hidden>' + lessons + '</div>' +
-                '</div>';
+                '</div></div>';
         }).join('');
-
-        const hiddenModules = canOpenAllModules ? [] : structure.slice(freeModuleCount);
-        const teaserHtml = hiddenModules.length > 0
-            ? '<div class="lp-modules-teaser">' +
-                hiddenModules.map(function (item) {
-                    return '<div class="lp-ghost-module">' + iconFolder +
-                        '<span class="lp-ghost-title">' + ELIPS.escapeHtml(item.module.title) + '</span>' +
-                        '<span class="lp-ghost-count">' + item.lessons.length + ' Pelajaran</span>' +
-                        '</div>';
-                }).join('') +
-                '</div>' +
-                '<div class="lp-modules-lock-note">' + iconLock +
-                '<span><strong>' + hiddenModuleCount + ' modul lainnya terkunci</strong>' +
-                '<small>Ikuti pelatihan ini untuk membuka seluruh materi.</small></span>' +
-                '</div>'
-            : '';
-
-        modulesList.innerHTML = moduleHtml + teaserHtml;
     }
-
-    modulesList.addEventListener('click', function (event) {
-        const head = event.target.closest('.lp-module-head');
-        if (!head) return;
-        const panel = document.getElementById(head.getAttribute('aria-controls'));
-        const willOpen = !head.closest('.lp-module').classList.contains('is-open');
-        head.closest('.lp-module').classList.toggle('is-open', willOpen);
-        head.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
-        if (panel) panel.hidden = !willOpen;
-    });
 
     // Tombol aksi: belum login -> Daftar Sekarang.
     if (!user) {

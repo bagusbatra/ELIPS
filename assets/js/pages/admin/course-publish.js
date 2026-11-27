@@ -133,7 +133,7 @@
     // Tombol publikasi aktif hanya bila syarat terpenuhi dan struktur sudah tersimpan.
     function publishBlockReason() {
         var t = totals();
-        if (t.modules === 0 || t.lessons === 0) return 'Tambahkan minimal satu modul dan satu materi.';
+        if (t.modules === 0) return 'Tambahkan minimal satu modul.';
         if (dirty) return 'Simpan struktur terlebih dahulu.';
         var missing = server.checklist.filter(function (i) { return !i.ok; });
         if (missing.length) return 'Lengkapi: ' + missing.map(function (i) { return i.label.toLowerCase(); }).join(', ') + '.';
@@ -165,20 +165,23 @@
         var pct = t.lessons > 0 ? Math.round(t.filled / t.lessons * 100) : 0;
         html += '<div class="cpb-step ' + (t.lessons > 0 && t.filled === t.lessons ? 'is-ok' : '') + '">' +
             '<span class="cpb-step-ico"><i class="bi bi-person-workspace"></i></span>' +
-            '<div style="flex:1"><strong>Isi materi oleh tentor</strong><span>' + t.filled + ' dari ' + t.lessons + ' materi terisi</span>' +
+            '<div style="flex:1"><strong>Isi pertemuan oleh tentor</strong><span>' + t.filled + ' dari ' + t.lessons + ' pertemuan terisi</span>' +
             '<div class="cpb-bar"><i style="width:' + pct + '%"></i></div></div></div>';
         $('cpbSteps').innerHTML = html;
     }
 
     function totals() {
-        var l = 0;
-        draft.forEach(function (m) { l += m.lessons.length; });
-        return { modules: draft.length, lessons: l };
+        var l = 0, real = 0;
+        draft.forEach(function (m) {
+            l += m.lessons.length;
+            m.lessons.forEach(function (x) { if (!x.auto) real++; });
+        });
+        return { modules: draft.length, lessons: l, real: real };
     }
 
     function updateCount() {
         var t = totals();
-        $('cpbCount').textContent = t.modules + ' modul · ' + t.lessons + ' materi (sesi)';
+        $('cpbCount').textContent = t.modules + ' modul (pertemuan)' + (t.real ? ' · ' + t.real + ' materi' : '');
     }
 
     function renderTree() {
@@ -204,8 +207,20 @@
                 '<button type="button" class="cpb-icon-btn danger" data-act="m-del" title="Hapus modul"' + (m.lessons.some(function (l) { return l.locked; }) ? ' disabled' : '') + '><i class="bi bi-trash"></i></button>' +
                 '</div><div class="cpb-lessons">';
 
+            var autoLesson = m.lessons.filter(function (l) { return l.auto; })[0];
+            if (autoLesson) {
+                if (autoLesson.locked) {
+                    html += '<div class="cpb-module-state"><span class="cpb-fill cpb-fill--lock"><i class="bi bi-lock"></i> Terkunci</span></div>';
+                } else if (autoLesson.id && autoLesson.filled) {
+                    html += '<div class="cpb-module-state"><span class="cpb-fill cpb-fill--ok"><i class="bi bi-check2"></i> Terisi tentor</span></div>';
+                } else {
+                    html += '<div class="cpb-module-state"><span class="cpb-fill cpb-fill--empty">Menunggu tentor</span></div>';
+                }
+            }
+
             m.lessons.forEach(function (l, li) {
                 number++;
+                if (l.auto) return;
                 var prev = m.lessons[li - 1];
                 var next = m.lessons[li + 1];
                 var fill;
@@ -226,7 +241,7 @@
                     '</div>';
             });
 
-            html += '<button type="button" class="cpb-add-lesson" data-act="l-add"><i class="bi bi-plus"></i> Tambah materi</button></div></div>';
+            html += '<button type="button" class="cpb-add-lesson" data-act="l-add"><i class="bi bi-plus"></i> Tambah materi (opsional)</button></div></div>';
         });
         tree.innerHTML = html;
 
@@ -276,7 +291,7 @@
         bar.hidden = !dirty;
         if (dirty) {
             var t = totals();
-            $('cpbSaveText').textContent = t.modules + ' modul · ' + t.lessons + ' materi';
+            $('cpbSaveText').textContent = t.modules + ' modul' + (t.real ? ' · ' + t.real + ' materi' : '');
         }
     }
 
@@ -361,6 +376,7 @@
                 draft[mi].lessons.splice(li, 1);
                 break;
             case 'l-add':
+                draft[mi].lessons.forEach(function (x) { x.auto = false; });
                 draft[mi].lessons.push({ id: 0, title: '', filled: false, locked: false, lockedBy: [] });
                 focusNext = { m: mi, l: draft[mi].lessons.length - 1 };
                 break;
@@ -371,7 +387,7 @@
     }
 
     function addModule() {
-        draft.push({ id: 0, title: '', lessons: [{ id: 0, title: '', filled: false, locked: false, lockedBy: [] }] });
+        draft.push({ id: 0, title: '', lessons: [] });
         focusNext = { m: draft.length - 1, l: null };
         markDirty();
         renderTree();

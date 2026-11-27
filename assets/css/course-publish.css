@@ -171,3 +171,4 @@
     .cpb-head-actions .btn { width: 100%; justify-content: center; }
     .cpb-action-hint { max-width: none; text-align: left; }
 }
+.cpb-module-state { display: flex; padding: .125rem 0 .5rem 2.5rem; }

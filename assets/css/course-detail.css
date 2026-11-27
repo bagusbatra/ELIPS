@@ -995,3 +995,7 @@ body.lp-modal-open {
     color: #991b1b;
     font-size: 0.875rem;
 }
+
+/* Modul tampil datar (tanpa buka-tutup); materi hanya di dashboard siswa. */
+.landing .lp-module-head--static { cursor: default; }
+.landing .lp-module-head--static:hover { background: transparent; }

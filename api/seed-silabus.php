@@ -8,11 +8,14 @@ declare(strict_types=1);
 //   php api/seed-silabus.php                  buat semua kursus (Draft)
 //   php api/seed-silabus.php --dry-run        hanya tampilkan rencana, tanpa menulis
 //   php api/seed-silabus.php --only=excel     hanya kursus yang judulnya memuat "excel"
+//   php api/seed-silabus.php --replace        buat ulang kursus yang sudah ada (hanya yang belum
+//                                             punya angkatan/pendaftar), mis. setelah struktur berubah
 //
 // Data silabus: api/seed-data/silabus-kursus.json (disusun dari PDF silabus).
 // Tiap kursus dibuat sebagai Draft dengan: judul, kategori, deskripsi + tujuan
-// pembelajaran, jumlah pertemuan sesuai silabus, satu modul "Rencana Pertemuan"
-// berisi satu materi per pertemuan (sasaran, materi, latihan ada di isi materi).
+// pembelajaran, jumlah pertemuan sesuai silabus, dan satu MODUL per pertemuan
+// ("Pertemuan N: topik"). Sasaran, materi, dan latihan dari silabus disimpan sebagai
+// isi materi bawaan; materi tambahan bersifat opsional dan diisi tentor.
 // Harga, gambar, dan lokasi diisi admin di Kelola Kursus; tentor ditetapkan
 // saat membuat angkatan. Idempoten: kursus dengan judul yang sama dilewati.
 // ============================================================
@@ -24,6 +27,7 @@ require_once __DIR__ . '/helpers.php';
 
 $args = array_slice($argv ?? [], 1);
 $dry = in_array('--dry-run', $args, true);
+$replace = in_array('--replace', $args, true);
 $only = '';
 foreach ($args as $a) {
     if (strpos($a, '--only=') === 0) {
@@ -76,12 +80,22 @@ foreach ($data as $c) {
     $exists->execute([$title]);
     $lessons = $c['lessons'];
     $meetings = (int) ($c['meetings'] ?? count($lessons));
-    if ($exists->fetchColumn() !== false) {
-        printf("  lewati   %-34s sudah ada\n", $title);
-        $skipped++;
-        continue;
+    $existingId = $exists->fetchColumn();
+    if ($existingId !== false) {
+        $used = $db->prepare(
+            'SELECT (SELECT COUNT(*) FROM classes WHERE course_id = ?) + (SELECT COUNT(*) FROM enrollments WHERE course_id = ?)'
+        );
+        $used->execute([(int) $existingId, (int) $existingId]);
+        if (!$replace || (int) $used->fetchColumn() > 0) {
+            printf("  lewati   %-34s %s\n", $title, $replace ? 'sudah punya angkatan/pendaftar' : 'sudah ada');
+            $skipped++;
+            continue;
+        }
+        if (!$dry) {
+            $db->prepare('DELETE FROM courses WHERE id = ?')->execute([(int) $existingId]);
+        }
     }
-    printf("  %s %-34s %2d pertemuan  [%s]\n", $dry ? 'rencana ' : 'buat    ', $title, $meetings, $c['category']);
+    printf("  %s %-34s %2d pertemuan/modul  [%s]\n", $dry ? 'rencana ' : 'buat    ', $title, $meetings, $c['category']);
     if ($dry) {
         $created++;
         $totalLessons += count($lessons);
@@ -103,21 +117,26 @@ foreach ($data as $c) {
         $courseId = (int) $db->lastInsertId();
         $version = elips_ensure_curriculum_version($courseId, null);
 
-        $db->prepare(
+        elips_ensure_lesson_auto_column();
+        $insModule = $db->prepare(
             'INSERT INTO modules (course_id, curriculum_version_id, instructor_id, title, description, sort_order, created_at)
-             VALUES (?, ?, NULL, ?, "", 1, UTC_TIMESTAMP())'
-        )->execute([$courseId, (int) $version['id'], 'Rencana Pertemuan']);
-        $moduleId = (int) $db->lastInsertId();
-
+             VALUES (?, ?, NULL, ?, "", ?, UTC_TIMESTAMP())'
+        );
+        // Tiap pertemuan = satu modul. Rincian silabus disimpan sebagai isi materi bawaan
+        // (disembunyikan di struktur, hanya terlihat di dashboard siswa/tentor).
         $insLesson = $db->prepare(
-            "INSERT INTO lessons (module_id, course_id, curriculum_version_id, instructor_id, title, type, content, sort_order, created_at)
-             VALUES (?, ?, ?, NULL, ?, 'text', ?, ?, UTC_TIMESTAMP())"
+            "INSERT INTO lessons (module_id, course_id, curriculum_version_id, instructor_id, title, type, content, auto_generated, sort_order, created_at)
+             VALUES (?, ?, ?, NULL, ?, 'text', ?, 1, 1, UTC_TIMESTAMP())"
         );
         foreach ($lessons as $i => $l) {
+            $insModule->execute([
+                $courseId, (int) $version['id'],
+                mb_substr('Pertemuan ' . ($i + 1) . ': ' . $l['title'], 0, 200), $i + 1,
+            ]);
+            $moduleId = (int) $db->lastInsertId();
             $insLesson->execute([
                 $moduleId, $courseId, (int) $version['id'],
-                mb_substr('Pertemuan ' . ($i + 1) . ': ' . $l['title'], 0, 200),
-                seed_lesson_content($l), $i + 1,
+                mb_substr((string) $l['title'], 0, 200), seed_lesson_content($l),
             ]);
         }
         $db->commit();
@@ -131,7 +150,7 @@ foreach ($data as $c) {
 }
 
 printf(
-    "\nSelesai%s: %d kursus %s (%d materi), %d dilewati.\n",
+    "\nSelesai%s: %d kursus %s (%d modul), %d dilewati.\n",
     $dry ? ' (dry-run)' : '', $created, $dry ? 'akan dibuat' : 'dibuat', $totalLessons, $skipped
 );
 if (!$dry && $created > 0) {
