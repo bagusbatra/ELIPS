@@ -1665,7 +1665,7 @@ t('status Siap lama dengan tanggal lewat menjadi Berlangsung', (string) $pdo->qu
 $pdo->exec("DELETE FROM classes WHERE id = $lcClass");
 
 $cpJs = (string) file_get_contents(__DIR__ . '/../assets/js/pages/admin/course-publish.js');
-t('tombol publikasi dikunci bila struktur kosong/belum disimpan', strpos($cpJs, 'function publishBlockReason') !== false && strpos($cpJs, 'btn.disabled = reason') !== false);
+t('tombol publikasi dinamis: modul, simpan, harga, lalu publikasi', strpos($cpJs, 'function nextPublishStep') !== false && strpos($cpJs, "'price'") !== false && strpos($cpJs, 'function formBox') !== false && strpos($cpJs, 'btn.disabled = false') !== false);
 t('tombol angkatan baru dikunci sebelum publikasi', strpos($cpJs, 'btn.disabled = !ready') !== false);
 
 // Halaman

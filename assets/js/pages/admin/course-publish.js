@@ -80,6 +80,54 @@
         });
     }
 
+    /** Modal isian singkat. fields: [{name,label,type,placeholder,value,required,hint}] -> Promise<{name:value}|null> */
+    function formBox(title, text, fields, okLabel) {
+        return new Promise(function (resolve) {
+            var overlay = document.createElement('div');
+            overlay.className = 'cpb-modal';
+            overlay.setAttribute('role', 'dialog');
+            var rows = fields.map(function (f) {
+                return '<div class="cpb-field"><label for="cpbF_' + f.name + '">' + esc(f.label) + '</label>' +
+                    '<input id="cpbF_' + f.name + '" class="form-input" type="' + (f.type || 'text') + '"' +
+                    (f.type === 'number' ? ' min="0" step="1000"' : ' maxlength="200"') +
+                    ' placeholder="' + esc(f.placeholder || '') + '" value="' + esc(f.value == null ? '' : f.value) + '">' +
+                    (f.hint ? '<small class="cpb-muted">' + esc(f.hint) + '</small>' : '') + '</div>';
+            }).join('');
+            overlay.innerHTML = '<div class="cpb-modal-box" style="max-width:440px"><h3>' + esc(title) + '</h3>' +
+                '<p class="cpb-muted">' + esc(text) + '</p>' + rows +
+                '<p class="cpb-muted" id="cpbFormErr" style="color:#b91c1c" hidden></p>' +
+                '<div class="cpb-modal-actions"><button type="button" class="btn btn-ghost" data-act="no">Batal</button>' +
+                '<button type="button" class="btn btn-primary" data-act="yes">' + esc(okLabel || 'Lanjutkan') + '</button></div></div>';
+            function close(v) { document.removeEventListener('keydown', onKey); overlay.remove(); resolve(v); }
+            function onKey(e) { if (e.key === 'Escape') close(null); }
+            function submit() {
+                var out = {};
+                for (var i = 0; i < fields.length; i++) {
+                    var f = fields[i];
+                    var v = overlay.querySelector('#cpbF_' + f.name).value.trim();
+                    if (f.required && v === '') {
+                        var err = overlay.querySelector('#cpbFormErr');
+                        err.textContent = f.label + ' wajib diisi.';
+                        err.hidden = false;
+                        overlay.querySelector('#cpbF_' + f.name).focus();
+                        return;
+                    }
+                    out[f.name] = v;
+                }
+                close(out);
+            }
+            overlay.addEventListener('click', function (e) {
+                var act = e.target.getAttribute && e.target.getAttribute('data-act');
+                if (act === 'yes') submit();
+                else if (act === 'no' || e.target === overlay) close(null);
+            });
+            overlay.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); submit(); } });
+            document.addEventListener('keydown', onKey);
+            document.body.appendChild(overlay);
+            overlay.querySelector('input').focus();
+        });
+    }
+
     // ---------- Pemuatan ----------
 
     function load() {
@@ -130,27 +178,31 @@
         }
     }
 
-    // Tombol publikasi aktif hanya bila syarat terpenuhi dan struktur sudah tersimpan.
-    function publishBlockReason() {
-        var t = totals();
-        if (t.modules === 0) return 'Tambahkan minimal satu modul.';
-        if (dirty) return 'Simpan struktur terlebih dahulu.';
-        var missing = server.checklist.filter(function (i) { return !i.ok; });
-        if (missing.length) return 'Lengkapi: ' + missing.map(function (i) { return i.label.toLowerCase(); }).join(', ') + '.';
-        return '';
+    // Tombol publikasi selalu aktif dan dinamis: bila ada syarat yang belum terpenuhi,
+    // klik membuka isian yang diperlukan (modul, harga) lalu otomatis lanjut publikasi.
+    function nextPublishStep() {
+        if (draft.length === 0) return 'module';
+        if (dirty) return 'save';
+        var priceItem = server.checklist.filter(function (i) { return i.key === 'price'; })[0];
+        if (priceItem && !priceItem.ok) return 'price';
+        return 'publish';
     }
 
     function refreshPublishBtn() {
         var btn = $('cpbPublish');
         if (!btn) return;
-        var reason = publishBlockReason();
+        var step = nextPublishStep();
+        var map = {
+            module: ['bi-plus-circle', 'Tambah modul &amp; publikasikan', 'Belum ada modul. Klik untuk menambah modul pertama.'],
+            save: ['bi-save', 'Simpan &amp; publikasikan', 'Ada perubahan struktur yang belum disimpan.'],
+            price: ['bi-cash-coin', 'Atur harga &amp; publikasikan', 'Harga kursus belum diisi. Klik untuk mengisinya.'],
+            publish: ['bi-send-check', 'Publikasikan kursus', '']
+        }[step];
+        btn.innerHTML = '<i class="bi ' + map[0] + '"></i> ' + map[1];
+        btn.title = map[2];
+        btn.disabled = false;
         var hint = $('cpbPublishHint');
-        btn.disabled = reason !== '';
-        btn.title = reason;
-        if (hint) {
-            hint.hidden = reason === '';
-            hint.textContent = reason;
-        }
+        if (hint) { hint.hidden = true; hint.textContent = ''; }
     }
 
     function renderSteps() {
@@ -499,18 +551,38 @@
     }
 
     function publish() {
-        if (dirty) {
-            toast('Simpan struktur dulu, lalu publikasikan.');
+        var step = nextPublishStep();
+        if (step === 'module') {
+            formBox('Tambah modul pertama', 'Setiap modul adalah satu pertemuan. Modul lain bisa ditambah setelahnya.',
+                [{ name: 'title', label: 'Judul modul', placeholder: 'Pertemuan 1: Pengenalan', required: true }], 'Tambah & lanjut').then(function (v) {
+                if (!v) return;
+                draft.push({ id: 0, title: v.title, lessons: [] });
+                markDirty();
+                renderTree();
+                save().then(function (ok) { if (ok) publish(); });
+            });
             return;
         }
-        if (!server.canPublish) {
-            var missing = server.checklist.filter(function (i) { return !i.ok; }).map(function (i) { return i.label; });
-            toast('Belum siap: ' + missing.join(', ') + '.');
+        if (step === 'save') {
+            save().then(function (ok) { if (ok) publish(); });
+            return;
+        }
+        if (step === 'price') {
+            formBox('Atur harga kursus', 'Kursus perlu harga sebelum dipublikasikan.', [
+                { name: 'price', label: 'Harga awal (Rp)', type: 'number', placeholder: '1200000', required: true },
+                { name: 'discountPrice', label: 'Harga diskon (Rp, jika ada)', type: 'number', placeholder: 'Kosongkan bila tidak ada' }
+            ], 'Simpan & lanjut').then(function (v) {
+                if (!v) return;
+                call('course.update', { id: courseId, data: { price: Number(v.price), discountPrice: v.discountPrice === '' ? 0 : Number(v.discountPrice) } })
+                    .then(function () { return load(); })
+                    .then(function () { publish(); })
+                    .catch(function (err) { toast(err.message); });
+            });
             return;
         }
         var empty = server.totals.lessons - server.totals.filled;
         var text = 'Kursus akan tampil di pendaftaran publik.' +
-            (empty > 0 ? ' ' + empty + ' materi belum diisi tentor; tentor tetap bisa melengkapinya setelah publikasi.' : '');
+            (empty > 0 ? ' ' + empty + ' pertemuan belum diisi tentor; tentor tetap bisa melengkapinya setelah publikasi.' : '');
         confirmBox('Publikasikan "' + server.course.title + '"?', text, 'Publikasikan').then(function (ok) {
             if (ok) setStatus('published').catch(function (err) { toast(err.message); });
         });
