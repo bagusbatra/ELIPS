@@ -532,16 +532,13 @@
         $('angQuota').value = d.quota;
         $('angFrom').value = d.startTime;
         $('angTo').value = d.endTime;
-        $('angJp').value = d.jp;
         $('angLocation').value = d.location;
-        $('angRoom').value = d.room;
-        $('angTentor').innerHTML = server.tentors.map(function (t) {
+        $('angTentor').innerHTML = (server.course.instructorId ? '' : '<option value="">-- Pilih tentor --</option>') + server.tentors.map(function (t) {
             return '<option value="' + t.id + '"' + (t.id === server.course.instructorId ? ' selected' : '') + '>' + esc(t.name) + '</option>';
         }).join('');
         selectedDays = {};
         (d.weekdays.length ? d.weekdays : [1, 3]).forEach(function (n) { selectedDays[n] = true; });
         dayChips();
-        angPreview();
         openModal('cpbAngModal');
         $('angName').focus();
     }
@@ -565,16 +562,6 @@
         return out;
     }
 
-    function angPreview() {
-        var n = server.totals.lessons;
-        var dates = previewDates(n);
-        var box = $('angPreview');
-        if (!n) { box.textContent = 'Kurikulum belum memiliki materi.'; return; }
-        if (!dates.length) { box.textContent = 'Pilih tanggal mulai dan minimal satu hari belajar untuk melihat jadwal.'; return; }
-        box.innerHTML = '<strong>' + n + ' sesi</strong> dijadwalkan otomatis, dari ' + fmtDate(dates[0]) + ' sampai ' +
-            fmtDate(dates[dates.length - 1]) + '. Sesi ke-N mengikuti materi ke-N, tanggal bisa diubah nanti di menu Jadwal.';
-    }
-
     function submitAngkatan() {
         var err = $('cpbAngError');
         err.hidden = true;
@@ -590,9 +577,9 @@
             weekdays: days,
             startTime: $('angFrom').value,
             endTime: $('angTo').value,
-            jp: Number($('angJp').value) || 0,
+            jp: 2,
             location: $('angLocation').value,
-            room: $('angRoom').value,
+            room: '',
             generateSessions: true
         }).then(function (body) {
             closeModal('cpbAngModal');
@@ -651,9 +638,7 @@
             var n = Number(b.getAttribute('data-day'));
             selectedDays[n] = !selectedDays[n];
             dayChips();
-            angPreview();
         });
-        $('angStart').addEventListener('change', angPreview);
 
         document.querySelectorAll('.cpb-modal [data-close]').forEach(function (b) {
             b.addEventListener('click', function () { b.closest('.cpb-modal').hidden = true; });

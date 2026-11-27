@@ -94,16 +94,10 @@
                         <label class="form-label" for="courseTitle">Judul kursus *</label>
                         <input type="text" id="courseTitle" class="form-input" maxlength="200" placeholder="Masukkan judul kursus">
                     </div>
-                    <div class="crs-grid">
-                        <div class="form-group">
-                            <label class="form-label" for="courseCategory">Kategori *</label>
-                            <input type="text" id="courseCategory" class="form-input" list="courseCategoryList" placeholder="Pelatihan / Soft Skill">
-                            <datalist id="courseCategoryList"></datalist>
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label" for="courseInstructor">Tentor * (satu kursus, satu tentor)</label>
-                            <select id="courseInstructor" class="form-input"></select>
-                        </div>
+                    <div class="form-group">
+                        <label class="form-label" for="courseCategory">Kategori *</label>
+                        <input type="text" id="courseCategory" class="form-input" list="courseCategoryList" placeholder="Pelatihan / Soft Skill">
+                        <datalist id="courseCategoryList"></datalist>
                     </div>
                     <div class="form-group">
                         <label class="form-label" for="courseDesc">Deskripsi</label>
@@ -111,26 +105,21 @@
                     </div>
                     <div class="crs-grid">
                         <div class="form-group">
-                            <label class="form-label" for="coursePrice">Harga (Rp) *</label>
+                            <label class="form-label" for="coursePrice">Harga awal (Rp) *</label>
                             <input type="number" id="coursePrice" class="form-input" min="0" step="1000" placeholder="1200000">
                         </div>
                         <div class="form-group">
-                            <label class="form-label" for="courseDiscount">Harga diskon (Rp)</label>
+                            <label class="form-label" for="courseDiscount">Harga diskon (Rp) <span class="form-hint" style="display:inline">(jika ada)</span></label>
                             <input type="number" id="courseDiscount" class="form-input" min="0" step="1000" placeholder="Kosongkan bila tidak ada">
                         </div>
                         <div class="form-group">
                             <label class="form-label" for="courseMeetings">Jumlah pertemuan</label>
                             <input type="number" id="courseMeetings" class="form-input" min="0" max="999" placeholder="12">
                         </div>
-                        <div class="form-group">
-                            <label class="form-label" for="courseStart">Perkiraan mulai</label>
-                            <input type="date" id="courseStart" class="form-input">
-                        </div>
                     </div>
                     <div class="form-group">
                         <label class="form-label" for="courseLocation">Lokasi</label>
                         <input type="text" id="courseLocation" class="form-input" maxlength="150" placeholder="Online / Cabang Bandung">
-                        <small class="form-hint">Harga diisi per kursus. Kursus baru selalu berstatus Draft; publikasi memerlukan harga, tentor aktif, dan minimal satu modul dengan satu materi.</small>
                     </div>
                 </div>
                 <div class="attendance-modal-actions">
@@ -182,7 +171,6 @@
                             <input type="text" id="clsRoom" class="form-input" maxlength="100">
                         </div>
                     </div>
-                    <small class="form-hint">Status otomatis: Pendaftaran sebelum tanggal mulai, Berlangsung setelahnya, Selesai hanya lewat Tutup pembelajaran. Perkiraan selesai dihitung dari jadwal sesi (diatur di Kalender &amp; Jadwal).</small>
                 </div>
                 <div class="attendance-modal-actions">
                     <button type="button" class="btn btn-ghost" id="clsCancelBtn">Batal</button>

@@ -122,7 +122,11 @@
             }
 
             const published = ELIPS.getCourses()
-                .filter(function (c) { return c.status === 'published'; })
+                .filter(function (c) {
+                    if (c.status !== 'published') return false;
+                    // Pengunjung belum login: kursus tanpa kelas yang dibuka tidak ditampilkan.
+                    return user || !(c.openClasses === 0);
+                })
                 .map(function (course) { return { course: course, stamp: startDateStamp(course) }; })
                 .sort(function (a, b) {
                     function group(item) {

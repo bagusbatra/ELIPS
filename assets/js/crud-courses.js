@@ -23,8 +23,7 @@
 
         if (!title) return failure('Judul kursus wajib diisi.');
         if (!category) return failure('Kategori kursus wajib diisi.');
-        if (!instructorId) return failure('Pilih satu tentor untuk kursus ini.');
-        if (!isActiveInstructor(instructorId)) return failure('Tentor harus berstatus aktif.');
+        if (instructorId && !isActiveInstructor(instructorId)) return failure('Tentor harus berstatus aktif.');
 
         const instructor = ELIPS.getUserById(instructorId);
         const courses = ELIPS.getCourses();
@@ -103,8 +102,7 @@
 
         if (!title) return failure('Judul kursus wajib diisi.');
         if (!category) return failure('Kategori kursus wajib diisi.');
-        if (!nextInstructorId) return failure('Pilih satu tentor untuk kursus ini.');
-        if (!isActiveInstructor(nextInstructorId)) return failure('Tentor harus berstatus aktif.');
+        if (nextInstructorId && nextInstructorId !== course.instructorId && !isActiveInstructor(nextInstructorId)) return failure('Tentor harus berstatus aktif.');
 
         const previousInstructorId = course.instructorId;
         const instructor = ELIPS.getUserById(nextInstructorId);

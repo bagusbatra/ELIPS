@@ -1027,6 +1027,8 @@ $res = $ops->api('course.status', ['id' => $cid, 'status' => 'draft']);
 t('kursus arsip bisa diaktifkan kembali sebagai draft', !empty($res['ok']) && ($res['data']['status'] ?? '') === 'draft');
 
 // Kursus riwayat pendaftaran tidak boleh dihapus walau tanpa kelas
+$noT = $ops->api('course.create', ['title' => 'Uji Tanpa Tentor', 'category' => 'Pelatihan', 'price' => 100000, 'meetings' => 8, 'location' => 'Candi']);
+t('kursus dapat dibuat tanpa tentor', !empty($noT['ok']) && array_key_exists('instructorId', $noT['data'] ?? []) && $noT['data']['instructorId'] === null, json_encode($noT['message'] ?? ''));
 $reg = $ops->api('course.create', ['title' => 'Uji Hapus Bersih', 'category' => 'Pelatihan', 'instructorId' => $instrId, 'price' => 100000]);
 $cleanId = (int) ($reg['data']['id'] ?? 0);
 $res = $ops->api('course.delete', ['id' => $cleanId]);

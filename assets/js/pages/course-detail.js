@@ -303,6 +303,15 @@ document.addEventListener('DOMContentLoaded', function () {
     if (!user) {
         enrollBtnText.textContent = 'Daftar Sekarang';
         enrollBtn.onclick = openDaftarModal;
+        // Belum ada kelas yang dibuka: tombol daftar tidak ditampilkan sama sekali.
+        if (ELIPS.api && ELIPS.api.enabled) {
+            const open = ELIPS.api.call('course.classes', { courseId: course.id });
+            if (open && open.ok && !(open.data || []).length) {
+                enrollBtn.hidden = true;
+                const priceBox = enrollBtn.closest('.lp-detail-cta');
+                if (priceBox) priceBox.classList.add('is-no-class');
+            }
+        }
     } else {
         if (!isEnrolled && !isAdmin && !isInstructor) {
             enrollBtnText.textContent = 'Belum Ditugaskan';

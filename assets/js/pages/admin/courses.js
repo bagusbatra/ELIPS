@@ -275,10 +275,6 @@
         showError('');
         $('courseImageFile').value = '';
 
-        var select = $('courseInstructor');
-        select.innerHTML = '<option value="">-- Pilih tentor --</option>' + ELIPS.getUsersByRole('instruktur')
-            .filter(function (u) { return u.status === 'aktif'; })
-            .map(function (u) { return '<option value="' + u.id + '">' + esc(u.name) + '</option>'; }).join('');
         $('courseCategoryList').innerHTML = (ELIPS.getCategories ? ELIPS.getCategories() : [])
             .map(function (c) { return '<option value="' + esc(c.name) + '"></option>'; }).join('');
 
@@ -290,9 +286,7 @@
         $('coursePrice').value = c && Number(c.price) > 0 ? Math.round(c.price) : '';
         $('courseDiscount').value = c && Number(c.discountPrice) > 0 ? Math.round(c.discountPrice) : '';
         $('courseMeetings').value = c && c.meetings ? c.meetings : '';
-        $('courseStart').value = c && c.startDate ? c.startDate : '';
         $('courseLocation').value = c ? c.location || '' : '';
-        select.value = c ? String(c.instructorId || '') : '';
         setPreview(c && c.image ? ELIPS.basePathPrefix() + c.image : '');
         $('courseModal').hidden = false;
         $('courseTitle').focus();
@@ -341,11 +335,9 @@
             title: $('courseTitle').value.trim(),
             category: $('courseCategory').value.trim(),
             description: $('courseDesc').value.trim(),
-            instructorId: parseInt($('courseInstructor').value, 10) || 0,
             price: $('coursePrice').value === '' ? 0 : Number($('coursePrice').value),
             discountPrice: $('courseDiscount').value === '' ? 0 : Number($('courseDiscount').value),
             meetings: $('courseMeetings').value === '' ? 0 : Number($('courseMeetings').value),
-            startDate: $('courseStart').value,
             location: $('courseLocation').value.trim()
         };
 

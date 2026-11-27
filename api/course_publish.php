@@ -137,7 +137,6 @@ function elips_cp_payload(int $courseId): array
     }
 
     $instructor = $course['instructor_id'] ? elips_user_row((int) $course['instructor_id']) : null;
-    $tentorActive = elips_is_active_instructor($course['instructor_id'] === null ? null : (int) $course['instructor_id']);
 
     $stmt = $db->prepare(
         "SELECT c.id, c.code, c.name, c.status, c.period_start, c.period_end, c.quota, c.location, c.room,
@@ -173,7 +172,7 @@ function elips_cp_payload(int $courseId): array
 
     // Bawaan formulir angkatan baru: ikuti angkatan terakhir.
     $last = $classes ? $classes[0] : null;
-    $defaults = ['quota' => 20, 'location' => '', 'room' => '', 'startTime' => '09:00', 'endTime' => '11:00', 'weekdays' => [], 'jp' => 2];
+    $defaults = ['quota' => 20, 'location' => (string) ($course['location'] ?? ''), 'room' => '', 'startTime' => '09:00', 'endTime' => '11:00', 'weekdays' => [], 'jp' => 2];
     if ($last) {
         $defaults['quota'] = $last['quota'] > 0 ? $last['quota'] : 20;
         $row = $db->prepare('SELECT location, room FROM classes WHERE id = ?');
@@ -244,10 +243,9 @@ function elips_cp_payload(int $courseId): array
         'totals' => ['modules' => count($tree), 'lessons' => $lessonTotal, 'filled' => $filled],
         'checklist' => [
             ['key' => 'price', 'label' => 'Harga kursus diisi', 'ok' => $priceOk, 'hint' => 'Ubah kursus di Kelola Kursus untuk mengisi harga.'],
-            ['key' => 'tentor', 'label' => 'Tentor aktif ditugaskan', 'ok' => $tentorActive, 'hint' => 'Pilih tentor aktif di Kelola Kursus.'],
             ['key' => 'structure', 'label' => 'Struktur modul & materi dibuat', 'ok' => $structureOk, 'hint' => 'Tambahkan minimal satu modul dan satu materi.'],
         ],
-        'canPublish' => $priceOk && $tentorActive && $structureOk,
+        'canPublish' => $priceOk && $structureOk,
         'angkatan' => $classes,
         'suggest' => ['name' => $name, 'defaults' => $defaults],
         'tentors' => $tentors,

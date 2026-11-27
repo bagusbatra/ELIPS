@@ -1025,13 +1025,13 @@ function elips_action_course_create(array $p): array
 
     if ($title === '') return elips_fail('Judul kursus wajib diisi.');
     if ($category === '') return elips_fail('Kategori kursus wajib diisi.');
-    if (!$instructorId) return elips_fail('Pilih satu tentor untuk kursus ini.');
-    if (!elips_is_active_instructor($instructorId)) return elips_fail('Tentor harus berstatus aktif.');
+    // Tentor tidak lagi diwajibkan saat membuat kursus; tentor ditetapkan per angkatan.
+    if ($instructorId && !elips_is_active_instructor($instructorId)) return elips_fail('Tentor harus berstatus aktif.');
+    $instructorId = $instructorId ?: null;
 
     [$extra, $extraError] = elips_course_extra_fields($p, null);
     if ($extra === null) return elips_fail($extraError);
 
-    $instructor = elips_user_row($instructorId);
     $categoryId = elips_resolve_category_id(isset($p['categoryId']) ? (int) $p['categoryId'] : null, $category);
     $stmt = elips_db()->prepare(
         "INSERT INTO courses (title, category, category_id, description, instructor_id, status, price, discount_price, location, start_date, meetings, created_at)
@@ -1050,7 +1050,7 @@ function elips_action_course_create(array $p): array
         'course',
         $id,
         $title,
-        'Membuat kursus "' . $title . '" (Draft) dengan tentor ' . $instructor['name'] . '.',
+        'Membuat kursus "' . $title . '" (Draft).',
         $actor
     );
 
@@ -1070,14 +1070,14 @@ function elips_action_course_update(array $p): array
     $category = array_key_exists('category', $data) ? trim((string) $data['category']) : $course['category'];
     $description = array_key_exists('description', $data) ? trim((string) $data['description']) : $course['description'];
     $nextInstructorId = array_key_exists('instructorId', $data) ? (int) $data['instructorId'] : (int) ($course['instructor_id'] ?? 0);
+    $nextInstructorId = $nextInstructorId ?: null;
 
     if ($title === '') return elips_fail('Judul kursus wajib diisi.');
     if ($category === '') return elips_fail('Kategori kursus wajib diisi.');
-    if (!$nextInstructorId) return elips_fail('Pilih satu tentor untuk kursus ini.');
-    if (!elips_is_active_instructor($nextInstructorId)) return elips_fail('Tentor harus berstatus aktif.');
-
     $previousInstructorId = $course['instructor_id'] === null ? null : (int) $course['instructor_id'];
-    $instructor = elips_user_row($nextInstructorId);
+    if ($nextInstructorId !== null && $nextInstructorId !== $previousInstructorId && !elips_is_active_instructor($nextInstructorId)) {
+        return elips_fail('Tentor harus berstatus aktif.');
+    }
     $categoryId = array_key_exists('categoryId', $data)
         ? elips_resolve_category_id((int) $data['categoryId'], $category)
         : elips_resolve_category_id($course['category_id'] === null ? null : (int) $course['category_id'], $category);
@@ -1170,9 +1170,6 @@ function elips_action_course_status(array $p): array
     }
 
     if ($status === 'published') {
-        if (!elips_is_active_instructor($course['instructor_id'] === null ? null : (int) $course['instructor_id'])) {
-            return elips_fail('Tugaskan tentor aktif sebelum mempublikasikan kursus.');
-        }
         $version = elips_ensure_curriculum_version($id, (int) $actor['id']);
         $stmt = elips_db()->prepare('SELECT COUNT(*) FROM modules WHERE curriculum_version_id = ?');
         $stmt->execute([(int) $version['id']]);

@@ -668,6 +668,65 @@ function elips_ensure_curriculum_version(int $courseId, ?int $actorId = null): a
     return elips_curriculum_version_row((int) elips_db()->lastInsertId());
 }
 
+/**
+ * Setiap modul adalah satu pertemuan (sesi). Materi di dalam modul bersifat opsional
+ * dan diisi tentor. Agar jadwal, progres, dan penilaian tetap berjalan per sesi,
+ * modul tanpa materi otomatis diberi satu "materi bawaan" (auto_generated = 1)
+ * yang disembunyikan dari tampilan struktur. Bila admin menambah materi sungguhan
+ * ke modul itu, materi bawaan menjadi materi biasa.
+ */
+function elips_ensure_lesson_auto_column(): void
+{
+    static $done = false;
+    if ($done) {
+        return;
+    }
+    $db = elips_db();
+    if (!$db->query("SHOW COLUMNS FROM lessons LIKE 'auto_generated'")->fetch()) {
+        $db->exec('ALTER TABLE lessons ADD COLUMN `auto_generated` TINYINT(1) NOT NULL DEFAULT 0');
+    }
+    $done = true;
+}
+
+function elips_module_topic(string $title): string
+{
+    $topic = trim((string) preg_replace('/^\s*(Pertemuan|Modul|BAB)\s*(ke\s*-?\s*)?\d+\s*[:.\-–]\s*/iu', '', $title));
+    return $topic !== '' ? $topic : $title;
+}
+
+function elips_ensure_module_lessons(int $versionId): int
+{
+    elips_ensure_lesson_auto_column();
+    $db = elips_db();
+    $db->prepare(
+        'UPDATE lessons l
+         SET l.auto_generated = 0
+         WHERE l.curriculum_version_id = ? AND l.auto_generated = 1
+           AND (SELECT COUNT(*) FROM (SELECT module_id FROM lessons WHERE curriculum_version_id = ?) x WHERE x.module_id = l.module_id) > 1'
+    )->execute([$versionId, $versionId]);
+
+    $stmt = $db->prepare(
+        'SELECT m.id, m.course_id, m.instructor_id, m.title FROM modules m
+         WHERE m.curriculum_version_id = ?
+           AND NOT EXISTS (SELECT 1 FROM lessons l WHERE l.module_id = m.id)
+         ORDER BY m.sort_order ASC, m.id ASC'
+    );
+    $stmt->execute([$versionId]);
+    $rows = $stmt->fetchAll();
+    $ins = $db->prepare(
+        "INSERT INTO lessons (module_id, course_id, curriculum_version_id, instructor_id, title, type, content, auto_generated, sort_order, created_at)
+         VALUES (?, ?, ?, ?, ?, 'text', '', 1, 1, UTC_TIMESTAMP())"
+    );
+    foreach ($rows as $m) {
+        $ins->execute([
+            (int) $m['id'], (int) $m['course_id'], $versionId,
+            $m['instructor_id'] === null ? null : (int) $m['instructor_id'],
+            mb_substr(elips_module_topic((string) $m['title']), 0, 200),
+        ]);
+    }
+    return count($rows);
+}
+
 function elips_curriculum_is_editable(array $version): bool
 {
     return in_array($version['status'], ['draft', 'published'], true);
@@ -920,6 +979,9 @@ function elips_course_public(int $id): ?array
     $stmt = $db->prepare('SELECT COUNT(*) FROM classes WHERE course_id = ?');
     $stmt->execute([$id]);
     $classCount = (int) $stmt->fetchColumn();
+    $stmt = elips_db()->prepare("SELECT COUNT(*) FROM classes WHERE course_id = ? AND status = 'open'");
+    $stmt->execute([(int) $course['id']]);
+    $openClassCount = (int) $stmt->fetchColumn();
     $stmt = $db->prepare("SELECT COUNT(*) FROM enrollments WHERE course_id = ? AND status IN ('active', 'pending')");
     $stmt->execute([$id]);
     $enrollmentCount = (int) $stmt->fetchColumn();
@@ -936,6 +998,7 @@ function elips_course_public(int $id): ?array
         'curriculumVersionCode' => $version ? $version['code'] : null,
         'curriculumVersionStatus' => $version ? $version['status'] : null,
         'classes' => $classCount,
+        'openClasses' => $openClassCount,
         'enrollments' => $enrollmentCount,
         'modules' => $moduleCount,
         'lessons' => $lessonCount,
